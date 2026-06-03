@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { clerkClient } from "@clerk/nextjs/server";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+export async function POST(req: Request) {
+  // Safe runtime initialization with variables fully loaded
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: "2023-10-16", 
+  });
 
-export async function POST(request: NextRequest) {
-  const body = await request.text();
+  const body = await req.text();
+  // ... the rest of your webhook execution logic stays exactly the same
   const signature = request.headers.get("stripe-signature");
 
   if (!signature) {
