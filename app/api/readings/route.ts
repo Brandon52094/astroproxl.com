@@ -95,7 +95,6 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
           ? "money and finances"
           : "life in general";
 
-  // Anchor to current production date context dynamically
   const currentDateString = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
@@ -246,11 +245,16 @@ export async function POST(request: NextRequest) {
 
     let parsed: { pages: ReadingPage[] };
     try {
-      const cleaned = rawText
-        .replace(/^```(?:json)?\n?/i, "")
-        .replace(/\n?
-```$/i, "")
-        .trim();
+      // Strip any accidental markdown code fences using plain string operations
+      // instead of a regex with backticks (which breaks inside template literals)
+      let cleaned = rawText.trim();
+      if (cleaned.startsWith("```")) {
+        cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
+      }
+      if (cleaned.endsWith("```")) {
+        cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
+      }
+      cleaned = cleaned.trim();
       parsed = JSON.parse(cleaned);
     } catch {
       console.error("[readings] Failed to parse Claude response:", rawText.slice(0, 500));
