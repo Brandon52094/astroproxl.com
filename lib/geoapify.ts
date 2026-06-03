@@ -40,8 +40,10 @@ function mapFeatureToSuggestion(
   feature: NonNullable<GeoapifyFeatureCollection["features"]>[number]
 ): PlaceSuggestion | null {
   const props = feature?.properties;
-  const label = props?.formatted?.trim();
-  if (!label) return null;
+  
+  // Guard both props and label explicitly to satisfy strict type narrowing
+  if (!props || !props.formatted?.trim()) return null;
+  const label = props.formatted.trim();
 
   return {
     id: props.place_id || label,
