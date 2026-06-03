@@ -244,6 +244,33 @@ export default function ReadingIntakeScreen() {
     }
   };
 
+  // Re-fetch when returning from payment — catches paywallsCompleted update
+  useEffect(() => {
+    async function fetchStatus() {
+      try {
+        const response = await fetch("/api/user/credits");
+        const data = await response.json();
+        setUserStatus({
+          firstReadingUsed: data.firstReadingUsed === true,
+          paywallsCompleted: Number(data.paywallsCompleted ?? 0),
+          isSubscribed: data.isSubscribed === true,
+          readingsCompleted: Number(data.readingsCompleted ?? 0),
+          onCooldown: data.onCooldown === true,
+          cooldownExpiresAt: data.cooldownExpiresAt ?? null,
+          canBypass: data.canBypass === true,
+        });
+      } catch {
+        // silent
+      }
+    }
+    // Re-fetch on visibility change (returning from Stripe)
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") fetchStatus();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
@@ -284,7 +311,7 @@ export default function ReadingIntakeScreen() {
         }
       `}</style>
 
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-28 pt-4">
+      <div className="mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-4 pb-28 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -641,7 +668,7 @@ export default function ReadingIntakeScreen() {
       {/* Footer CTA — hidden during cooldown */}
       {!onCooldown && (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-md">
+          <div className="mx-auto w-full max-w-[430px]">
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}

@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { loadReading, loadIntake } from "@/lib/chartStore";
+import { loadReading, loadIntake, clearReading } from "@/lib/chartStore";
 import { getPaywallConfig } from "@/lib/paywallConfig";
 import PaywallScreen from "@/app/components/PayWallScreen";
 import type { StoredReading } from "@/lib/chartStore";
@@ -47,7 +47,7 @@ function ResultsPageInner() {
         setPaywallConfig(getPaywallConfig(paywallsCompleted));
       }
     } catch {
-      // silent — paywall defaults to locked
+      // silent
     }
   }, []);
 
@@ -65,7 +65,7 @@ function ResultsPageInner() {
     }
   }, [fetchCredits]);
 
-  // ── Record reading complete (page 3 done → paywall shown or dismissed) ───
+  // ── Record reading complete ───────────────────────────────────────────────
   const recordReadingComplete = useCallback(async () => {
     if (readingCompleteRecorded) return;
     setReadingCompleteRecorded(true);
@@ -91,6 +91,7 @@ function ResultsPageInner() {
     if (payment === "success") {
       setUnlockedByPayment(true);
       setCurrentPage(4);
+      // Clean URL immediately so a refresh or new reading doesn't re-trigger
       window.history.replaceState({}, "", "/reading/results");
     }
   }, [router, searchParams]);
@@ -128,12 +129,10 @@ function ResultsPageInner() {
     if (currentPage < 4) {
       const nextPage = currentPage + 1;
 
-      // Deduct credits for paid users
       if (credits?.firstReadingUsed && !credits.isSubscribed) {
         await deductCredit(nextPage);
       }
 
-      // Record reading complete when leaving page 3 → paywall
       if (nextPage === 4) {
         await recordReadingComplete();
       }
@@ -141,6 +140,8 @@ function ResultsPageInner() {
       setCurrentPage(nextPage);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
+      // Clear stored reading so next reading starts fresh at page 1
+      clearReading();
       router.push("/reading/intake");
     }
   };
@@ -148,6 +149,7 @@ function ResultsPageInner() {
   // ── Maybe Later — record complete then dismiss ────────────────────────────
   const handleDismiss = async () => {
     await recordReadingComplete();
+    clearReading();
     router.push("/reading/intake");
   };
 
@@ -164,7 +166,7 @@ function ResultsPageInner() {
 
   if (!loaded || !reading) {
     return (
-      <div className="min-h-screen bg-[#050816] flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center bg-[#050816]">
         <div className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
       </div>
     );
@@ -182,8 +184,8 @@ function ResultsPageInner() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050816] text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-32 pt-4">
+    <div className="flex min-h-screen justify-center bg-[#050816] text-slate-100">
+      <div className="flex w-full max-w-[430px] flex-col px-4 pb-32 pt-4">
 
         {/* Header */}
         <header className="mb-6 flex items-center justify-between py-2">
@@ -292,8 +294,8 @@ function ResultsPageInner() {
       </div>
 
       {!showPaywall && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-md">
+        <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
+          <div className="w-full max-w-[430px]">
             <button
               type="button"
               onClick={handleNext}
@@ -312,7 +314,7 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#050816] flex items-center justify-center">
+        <div className="flex h-screen w-full items-center justify-center bg-[#050816]">
           <div className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
         </div>
       }
