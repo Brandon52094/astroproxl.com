@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-sonnet-4-6",
         max_tokens: 4096,
         system: "You are a precision structural astrologer. You output ONLY raw valid JSON with no markdown, no code fences, no explanation, and no text before or after the JSON object. Your entire response must be a single parseable JSON object.",
         messages: [
