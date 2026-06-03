@@ -697,7 +697,7 @@ export default function ReadingIntakeScreen() {
             )}
             <Button
               type="button"
-              onnomClick={handleStartReading}
+              onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
               className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
             >
