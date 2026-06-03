@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 export async function POST(req: Request) {
-  // 1. Safe request-time initialization
+  // 1. Initialize Stripe inside the request scope
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2023-10-16",
+    apiVersion: "2023-10-16", // or your current version
   });
 
   const body = await req.text();
@@ -21,14 +21,25 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
 
-    // Handle your webhook events here...
+    // ==========================================
+    // ⚠️ ERASE ANY EXTRA CLOSING BRACES HERE! 
+    // Your ~170 lines of event tracking live right here:
+    // ==========================================
+    
+    switch (event.type) {
+      case "checkout.session.completed":
+        // Your database full conversion code...
+        break;
+      // ... all other cases
+    }
 
     return NextResponse.json({ received: true });
+
   } catch (err: any) {
     console.error(`[Stripe Webhook Error]: ${err.message}`);
     return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
   }
-}
+} // <--- THIS is the only closing brace that should end your handler!
 
   console.log("[webhook] event type:", event.type, "metadata:", JSON.stringify((event.data.object as any).metadata));
 
