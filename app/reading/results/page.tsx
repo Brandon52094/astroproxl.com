@@ -140,8 +140,14 @@ function ResultsPageInner() {
       setCurrentPage(nextPage);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      // Clear stored reading so next reading starts fresh at page 1
+      // Reset all state and clear reading so next reading starts fresh at page 1
       clearReading();
+      setCurrentPage(1);
+      setUnlockedByPayment(false);
+      setReadingCompleteRecorded(false);
+      setCredits(null);
+      setReading(null);
+      setLoaded(false);
       router.push("/reading/intake");
     }
   };
