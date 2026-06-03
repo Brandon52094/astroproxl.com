@@ -11,9 +11,6 @@ import type { StoredReading } from "@/lib/chartStore";
 import type { PaywallConfig } from "@/lib/paywallConfig";
 
 // ── Payment return flag ───────────────────────────────────────────────────────
-// Written by the checkout handler before redirecting to Stripe.
-// Read once on mount and immediately cleared so it never survives
-// into a subsequent reading session.
 const PAYMENT_FLAG_KEY = "dfp_payment_return";
 
 function setPaymentReturnFlag() {
@@ -53,23 +50,18 @@ function ResultsPageInner() {
 
   const intake = loadIntake();
 
-  // ── Fetch credit + paywall state ──────────────────────────────────────────
   const fetchCredits = useCallback(async () => {
     try {
       const response = await fetch("/api/user/credits");
       const data: Credits = await response.json();
       setCredits(data);
-
       const paywallsCompleted = data.paywallsCompleted ?? 0;
       if (!data.isSubscribed) {
         setPaywallConfig(getPaywallConfig(paywallsCompleted));
       }
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }, []);
 
-  // ── Deduct credits for a page view ────────────────────────────────────────
   const deductCredit = useCallback(async (pageNumber: number) => {
     try {
       await fetch("/api/user/credits", {
@@ -78,66 +70,41 @@ function ResultsPageInner() {
         body: JSON.stringify({ pageNumber }),
       });
       await fetchCredits();
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }, [fetchCredits]);
 
-  // ── Record reading complete ───────────────────────────────────────────────
-  // Only called when user leaves page 4, never on the way TO page 4.
   const recordReadingComplete = useCallback(async () => {
     if (readingCompleteRecorded) return;
     setReadingCompleteRecorded(true);
     try {
       await fetch("/api/user/reading-complete", { method: "POST" });
       await fetchCredits();
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }, [readingCompleteRecorded, fetchCredits]);
 
-  // ── On mount: load reading + handle payment return ────────────────────────
+  // Runs exactly once on mount — empty deps intentional
   useEffect(() => {
     const stored = loadReading();
-    if (!stored) {
-      router.push("/reading/intake");
-      return;
-    }
+    if (!stored) { router.push("/reading/intake"); return; }
     setReading(stored);
     setLoaded(true);
 
-    // Consume the localStorage flag — not the URL param.
-    // The flag is written by handleCheckout before redirecting to Stripe,
-    // so it only exists for a genuine payment return, never for subsequent
-    // client-side navigations back to this page.
     const returningFromPayment = consumePaymentReturnFlag();
     if (returningFromPayment) {
       setUnlockedByPayment(true);
       setCurrentPage(4);
     }
-
-    // Always clean the URL regardless, so ?payment=success never lingers.
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/results");
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // Empty deps: this must run exactly once on mount. router/searchParams
-  // intentionally excluded — re-running on nav changes is what caused the bug.
 
   useEffect(() => { fetchCredits(); }, [fetchCredits]);
+  useEffect(() => { if (unlockedByPayment) fetchCredits(); }, [unlockedByPayment, fetchCredits]);
 
-  useEffect(() => {
-    if (unlockedByPayment) fetchCredits();
-  }, [unlockedByPayment, fetchCredits]);
-
-  // ── Checkout handler ──────────────────────────────────────────────────────
-  // Sets the localStorage flag BEFORE redirecting so it's ready when Stripe
-  // bounces the user back.
   const handleCheckout = async (mode: "one_time" | "subscription") => {
     if (!paywallConfig) return;
-
     setPaymentReturnFlag();
-
     const response = await fetch("/api/stripe/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -147,30 +114,21 @@ function ResultsPageInner() {
         paywallIndex: paywallConfig.paywallIndex,
       }),
     });
-
     const data = await response.json();
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      throw new Error("No checkout URL returned");
-    }
+    if (data.url) window.location.href = data.url;
+    else throw new Error("No checkout URL returned");
   };
 
-  // ── Page navigation + credit deduction ───────────────────────────────────
   const handleNext = async () => {
     if (currentPage < 4) {
       const nextPage = currentPage + 1;
-
       if (credits?.firstReadingUsed && !credits.isSubscribed) {
         await deductCredit(nextPage);
       }
-
-      // recordReadingComplete intentionally NOT called here —
-      // only fires when the user actually leaves page 4 below.
       setCurrentPage(nextPage);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      // Scroll the inner scrollable container back to top
+      document.getElementById("results-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      // User is on page 4 and clicks "Start Another Reading"
       await recordReadingComplete();
       clearReading();
       setCurrentPage(1);
@@ -183,14 +141,12 @@ function ResultsPageInner() {
     }
   };
 
-  // ── Maybe Later — record complete then dismiss ────────────────────────────
   const handleDismiss = async () => {
     await recordReadingComplete();
     clearReading();
     router.push("/reading/intake");
   };
 
-  // ── Derived state ─────────────────────────────────────────────────────────
   const isSubscribed = credits?.isSubscribed ?? false;
   const isPage4 = currentPage === 4;
 
@@ -221,9 +177,16 @@ function ResultsPageInner() {
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-[#050816] text-slate-100">
-      <div className="flex w-full max-w-[430px] flex-col px-4 pb-32 pt-4">
-
+    /*
+      Outer shell: full viewport height, centered, phone-width frame.
+      overflow-hidden on the outer div — scroll happens on the inner div only.
+    */
+    <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
+      {/* Phone frame — scrollable inner column */}
+      <div
+        id="results-scroll"
+        className="flex w-full max-w-[430px] flex-col overflow-y-auto px-4 pb-32 pt-4"
+      >
         {/* Header */}
         <header className="mb-6 flex items-center justify-between py-2">
           <button
@@ -233,7 +196,6 @@ function ResultsPageInner() {
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
-
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
               Direct Future Predictions
@@ -242,7 +204,6 @@ function ResultsPageInner() {
               Page {currentPage} of {totalPages}
             </p>
           </div>
-
           <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[11px] font-medium text-slate-400">
             4/4
           </div>
@@ -260,7 +221,6 @@ function ResultsPageInner() {
           ))}
         </div>
 
-        {/* Payment success banner */}
         {unlockedByPayment && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -271,7 +231,6 @@ function ResultsPageInner() {
           </motion.div>
         )}
 
-        {/* Topic badge */}
         {intake && (
           <div className="mb-4 inline-flex rounded-full border border-teal-400/20 bg-teal-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-teal-200">
             {intake.area}
@@ -305,13 +264,11 @@ function ResultsPageInner() {
                   {page?.title}
                 </h1>
               </div>
-
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
                   {page?.content}
                 </p>
               </div>
-
               {currentPage === 3 && !credits?.firstReadingUsed && (
                 <div className="mt-4 rounded-[20px] border border-amber-300/20 bg-amber-400/[0.06] px-4 py-3">
                   <p className="text-xs leading-5 text-amber-200">
@@ -319,7 +276,6 @@ function ResultsPageInner() {
                   </p>
                 </div>
               )}
-
               {credits && credits.firstReadingUsed && credits.credits > 0 && (
                 <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
                   <span>{credits.credits} credits remaining</span>
@@ -330,6 +286,7 @@ function ResultsPageInner() {
         </AnimatePresence>
       </div>
 
+      {/* Fixed footer CTA — constrained to phone width */}
       {!showPaywall && (
         <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
           <div className="w-full max-w-[430px]">
