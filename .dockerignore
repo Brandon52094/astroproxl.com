@@ -1,0 +1,14 @@
+# Exclude AI Assistant / Agent configurations (fixes BuildKit submodule gitlink conflicts)
+.claude/
+.agents/
+
+# Standard build & dependency artifacts
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Local environment secrets and development logs
+.env*.local
+.env

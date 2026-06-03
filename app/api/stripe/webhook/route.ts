@@ -2,31 +2,33 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 export async function POST(req: Request) {
-  // Safe runtime initialization with variables fully loaded
+  // 1. Safe request-time initialization
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2023-10-16", 
+    apiVersion: "2023-10-16",
   });
 
   const body = await req.text();
-  // ... the rest of your webhook execution logic stays exactly the same
-  const signature = request.headers.get("stripe-signature");
+  const signature = req.headers.get("stripe-signature");
 
   if (!signature) {
-    return NextResponse.json({ error: "No signature" }, { status: 400 });
+    return new NextResponse("Missing stripe-signature header", { status: 400 });
   }
 
-  let event: Stripe.Event;
-
   try {
-    event = stripe.webhooks.constructEvent(
+    const event = stripe.webhooks.constructEvent(
       body,
       signature,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
-  } catch (err) {
-    console.error("[webhook] Signature verification failed:", err);
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+
+    // Handle your webhook events here...
+
+    return NextResponse.json({ received: true });
+  } catch (err: any) {
+    console.error(`[Stripe Webhook Error]: ${err.message}`);
+    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
   }
+}
 
   console.log("[webhook] event type:", event.type, "metadata:", JSON.stringify((event.data.object as any).metadata));
 
