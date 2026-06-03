@@ -144,14 +144,12 @@ export default function ReadingIntakeScreen() {
         const response = await fetch("/api/user/credits");
         const data = await response.json();
 
-        // If the backend says 4, this user has finished their loop.
-        // Treat their client UI view index as 0 so they can select a new category.
         const rawPaywalls = Number(data.paywallsCompleted ?? 0);
         const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
 
         setUserStatus({
           firstReadingUsed: data.firstReadingUsed === true,
-          paywallsCompleted: activePaywallIndex, // sanitized 0 baseline
+          paywallsCompleted: activePaywallIndex,
           isSubscribed: data.isSubscribed === true,
           readingsCompleted: Number(data.readingsCompleted ?? 0),
           onCooldown: data.onCooldown === true,
@@ -164,8 +162,6 @@ export default function ReadingIntakeScreen() {
       }
     }
 
-    // If firstReadingUsed is true but paywallsCompleted is 0,
-    // the webhook may still be processing — poll until it lands.
     (async () => {
       const initialPaywalls = await fetchStatus();
       if (initialPaywalls === 0) {
@@ -189,7 +185,6 @@ export default function ReadingIntakeScreen() {
         const response = await fetch("/api/user/credits");
         const data = await response.json();
 
-        // Same sanitization as the mount effect.
         const rawPaywalls = Number(data.paywallsCompleted ?? 0);
         const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
 
@@ -238,7 +233,6 @@ export default function ReadingIntakeScreen() {
     setIsCreatingReading(true);
     setSubmitError(null);
     try {
-      // 1. CLEAR PREVIOUS SESSION RESIDUE FROM LOCAL STORAGE MATCHES
       clearIntake();
       clearReading();
 
@@ -251,7 +245,6 @@ export default function ReadingIntakeScreen() {
               ? "money"
               : "general";
 
-      // 2. SAVE FRESH INTAKE DATA
       saveIntake({
         topic: topic as "love" | "career" | "money" | "general",
         area: selectedArea,
@@ -263,7 +256,6 @@ export default function ReadingIntakeScreen() {
         timeframeValue: "next-45-days",
       });
 
-      // Deduct 4 credits for page 1 — only after the first free reading
       if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
         await fetch("/api/user/credits", {
           method: "POST",
@@ -308,7 +300,11 @@ export default function ReadingIntakeScreen() {
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#050816] text-slate-100">
+    /*
+      Outer shell: h-screen overflow-y-auto — scrolls within the locked viewport.
+      The fixed footer CTA stays anchored to the bottom of the screen as before.
+    */
+    <div className="h-screen overflow-y-auto bg-[#050816] text-slate-100">
       <style jsx>{`
         @keyframes jxlAmberPulse {
           0%, 100% {
@@ -344,12 +340,12 @@ export default function ReadingIntakeScreen() {
         }
       `}</style>
 
-      <div className="mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-4 pb-28 pt-4">
+      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-28 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex min-h-screen flex-col"
+          className="flex flex-col"
         >
           {/* Header */}
           <header className="mb-6 flex items-center justify-between py-2">
@@ -439,9 +435,7 @@ export default function ReadingIntakeScreen() {
                         transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
                         className={cn(
                           "absolute inset-y-0 left-0 rounded-full",
-                          onCooldown
-                            ? "bg-indigo-400"
-                            : "bg-teal-300"
+                          onCooldown ? "bg-indigo-400" : "bg-teal-300"
                         )}
                         style={{
                           boxShadow: onCooldown
@@ -464,7 +458,6 @@ export default function ReadingIntakeScreen() {
               transition={{ duration: 0.4 }}
               className="relative"
             >
-              {/* Blurred reading categories — pointer-events-none so nothing is clickable */}
               <div className="space-y-3 blur-[5px] pointer-events-none select-none opacity-30">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
@@ -487,7 +480,6 @@ export default function ReadingIntakeScreen() {
                 })}
               </div>
 
-              {/* Overlay — cooldown message + bypass centered over the blurred cards */}
               <div className="absolute inset-0 flex items-center justify-center px-2">
                 <div className={cn(
                   "cooldown-glow w-full rounded-[28px] border border-indigo-400/20 bg-[#050816]/95 px-6 py-6 text-center backdrop-blur-sm"
@@ -621,7 +613,7 @@ export default function ReadingIntakeScreen() {
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* Ask Jxl — unlocks after first paywall */}
+          {/* Ask Jxl */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -629,7 +621,6 @@ export default function ReadingIntakeScreen() {
             className="mt-4 mb-2"
           >
             {(userStatus?.paywallsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
-              // ── Unlocked — tappable card ──────────────────────────────────
               <button
                 type="button"
                 onClick={() => router.push("/jxl")}
@@ -654,7 +645,6 @@ export default function ReadingIntakeScreen() {
                 </div>
               </button>
             ) : (
-              // ── Locked teaser ─────────────────────────────────────────────
               <>
                 <div className="mb-2 flex items-center justify-center">
                   <span className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-400/80">
