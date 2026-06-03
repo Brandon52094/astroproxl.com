@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "app/api/chart-calculate/route.ts": {
+      "includeFiles": "node_modules/swisseph/ephe/**"
+    }
+  }
+}
