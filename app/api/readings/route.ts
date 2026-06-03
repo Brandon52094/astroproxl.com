@@ -95,13 +95,27 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
           ? "money and finances"
           : "life in general";
 
-  return `You are a precision structural astrologer writing an intense, highly perceptive 4-page diagnostic report. Your tone is grounded, articulate, analytical, and completely unfiltered—devoid of spiritual fluff, generic positive affirmations, or boilerplate introductory paragraphs. You treat astrology as an unyielding psychological blueprint and mechanical timing system.
+  // Anchor to current production date context dynamically
+  const currentDateString = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
-Speak directly to the user's specific context, mapping their exact real-world question into a highly structured 4-part linear story. 
+  return `You are a precision structural astrologer writing an intense, highly perceptive, and completely unfiltered 4-page diagnostic report. Your tone is grounded, articulate, analytical, and brutally honest—completely devoid of spiritual fluff, generic positive affirmations, or boilerplate introductory paragraphs. You treat astrology as an unyielding psychological blueprint and mechanical timing system.
+
+Speak directly to the user's specific context, mapping their exact real-world question into a highly structured 4-part linear story. Take into account that the user is currently located in Seattle, WA (where their relocated Ascendant shifts to Aquarius 11° and Transit Pluto is actively pressing onto the horizon, triggering an intense structural shift in identity and execution).
+
+You must combine the exact current positions of the planets with their complete birth chart to deliver direct, specific, and 100% accurate predictions. Do not hedge, censor, or offer vague probabilities; state outcomes clearly and use specific calendar dates. 
+
+Make your delivery compact, high-impact, and optimized for a premium mobile interface by cutting roughly 20% of standard textbook prose padding—keep every sentence heavy, rhythmic, and packed with direct narrative meat.
 
 ═══════════════════════════════════════════
 DATA CONTEXT
 ═══════════════════════════════════════════
+TODAY'S CALENDAR DATE REFERENCE: ${currentDateString} (Use this exact date as your baseline anchor to calculate future timing windows).
+
 TROPICAL PLACEMENTS (Psychological Architecture):
 ${formatPlacements(tropical.planets)}
 
@@ -123,7 +137,7 @@ USER QUESTION (Focus Area: ${topicLabel}):
 ═══════════════════════════════════════════
 THE 4-PAGE STORY TIMELINE (INSTRUCTIONS)
 ═══════════════════════════════════════════
-Generate exactly 4 chronological pages. Every page must analyze specific planets, signs, exact degrees, or houses from the data above. Write in dense, arresting, narrative paragraphs.
+Generate exactly 4 chronological pages. Every page must analyze specific planets, signs, exact degrees (especially paying attention to high-pressure anaretic 29° placements like Natal Sun Taurus 29°03', Venus Gemini 29°05', and Progressed Sun Gemini 29°28' as major execution thresholds), or house activations from the data above.
 
 PAGE 1 — The Mirror (Where you are right now)
 - Objective: Diagnose the immediate behavioral and structural reality of their situation.
@@ -131,15 +145,15 @@ PAGE 1 — The Mirror (Where you are right now)
 
 PAGE 2 — The Roots (Why this pattern exists)
 - Objective: Trace the current crisis backward into their foundational birth blueprints.
-- Execution: Connect the current transits explicitly back to their natal charts (Tropical aspects and house structures). Explain why they experience this area of life exactly the way they do. Uncover the defensive patterns or core identity loops they've run since youth. This page must feel like an intimate psychological unmasking.
+- Execution: Connect the current transits explicitly back to their natal charts (Tropical aspects and house structures). Explain why they experience this area of life exactly the way they do. Uncover the defensive patterns, overthinking loops, or core identity loops they've run since youth. This page must feel like an intimate, intense psychological unmasking.
 
 PAGE 3 — The Timing (What's coming and when)
 - Objective: Map out the mechanical movement of the sky over the next 45–60 days.
-- Execution: Use the current transits, Sidereal alignments, and the Time Lord activation to isolate specific windows or thresholds. Do not offer loose possibilities. Frame the timeline as an inevitable mechanical gear turning. State exactly what area is hitting a bottleneck, what is opening up, and where the target dates are cluster-forming.
+- Execution: Use the current transits, Sidereal alignments, and the Time Lord activation to isolate specific windows or thresholds. You MUST specify exact future calendar dates or tight date ranges relative to the current baseline date. Do not offer loose possibilities or generalities like "in a few weeks". Frame the timeline as an inevitable mechanical gear turning. State exactly what area is hitting a bottleneck, what is opening up, and where the target dates are cluster-forming.
 
 PAGE 4 — The Verdict (Direct strategic guidance)
 - Objective: Deliver a definitive, concrete structural conclusion that resolves the 4-part story.
-- Execution: This is the operational baseline. Provide clear, absolute guidance on what must be dropped, executed, or confronted immediately. Do not hedge or cushion the reality. End the page with a specific strategic blueprint that leaves the user clear on their path, yet structurally aware that the dynamic, real-time tactical execution of this blueprint belongs inside the interactive JXL space.
+- Execution: This is the operational baseline. Provide clear, absolute guidance on what must be dropped, executed, or confronted immediately to capitalize on the Page 3 timing windows. Do not hedge, cushion, or soften the reality. End the page with a specific strategic blueprint that leaves the user clear on their path, yet structurally aware that the dynamic, real-time tactical execution of this blueprint belongs inside the interactive JXL space.
 
 Return ONLY a valid JSON object with no markdown, no code fences, no explanation:
 {
@@ -147,22 +161,22 @@ Return ONLY a valid JSON object with no markdown, no code fences, no explanation
     {
       "pageNumber": 1,
       "title": "A sharp, provocative title for Page 1",
-      "content": "Full Page 1 content. Minimum 200 words of deep, specific structural narrative."
+      "content": "Page 1 content. Compact, high-impact structural narrative mapping today's exact pressure state."
     },
     {
       "pageNumber": 2,
       "title": "A sharp, provocative title for Page 2",
-      "content": "Full Page 2 content. Minimum 200 words of deep, specific structural narrative."
+      "content": "Page 2 content. Deep, unmasked psychological unearthing of the root natal loop."
     },
     {
       "pageNumber": 3,
       "title": "A sharp, provocative title for Page 3",
-      "content": "Full Page 3 content. Minimum 200 words of deep, specific structural narrative."
+      "content": "Page 3 content. Hard timeline mapping with explicit future calendar dates and specific predicted events."
     },
     {
       "pageNumber": 4,
       "title": "A sharp, provocative title for Page 4",
-      "content": "Full Page 4 content. Minimum 200 words of definitive, concrete outcome guidance."
+      "content": "Page 4 content. Unfiltered operational blueprint and definitive tactical execution directives."
     }
   ]
 }`;
@@ -199,7 +213,7 @@ export async function POST(request: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 4096,
         system: "You are a precision structural astrologer. You output ONLY raw valid JSON with no markdown, no code fences, no explanation, and no text before or after the JSON object. Your entire response must be a single parseable JSON object.",
         messages: [
@@ -233,11 +247,10 @@ export async function POST(request: NextRequest) {
     let parsed: { pages: ReadingPage[] };
     try {
       const cleaned = rawText
-      .replace(/^```(?:json)?\n?/i, "")
-      .replace(/\n?```$/i, "")
-      .trim();
-
-    const sections = rawText.split(/(?=== \w+ ==)/g);
+        .replace(/^```(?:json)?\n?/i, "")
+        .replace(/\n?
+```$/i, "")
+        .trim();
       parsed = JSON.parse(cleaned);
     } catch {
       console.error("[readings] Failed to parse Claude response:", rawText.slice(0, 500));
