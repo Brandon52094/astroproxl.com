@@ -233,10 +233,12 @@ export async function POST(request: NextRequest) {
     let parsed: { pages: ReadingPage[] };
     try {
       const cleaned = rawText
-        .replace(/^```(?:json)?\n?/i, "")
-        .replace(/\n?
+      .replace(/^```(?:json)?\n?/i, "")
+      .replace(/\n?
 ```$/i, "")
-        .trim();
+      .trim();
+
+    const sections = rawText.split(/(?=== \w+ ==)/g);
       parsed = JSON.parse(cleaned);
     } catch {
       console.error("[readings] Failed to parse Claude response:", rawText.slice(0, 500));
