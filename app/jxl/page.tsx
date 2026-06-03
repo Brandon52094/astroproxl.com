@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import JxlScreen from "@/components/JxlScreen"; // Adjust this path if your component location differs
+//  Fixed path to point directly to your app directory location
+import JxlScreen from "@/app/components/JxlScreen"; 
 
 export default function JxlPage() {
   return (
