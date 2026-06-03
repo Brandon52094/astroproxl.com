@@ -79,7 +79,6 @@ function formatTimeRemaining(expiresAt: string): string {
 
 export default function ReadingIntakeScreen() {
   const router = useRouter();
-
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [isCreatingReading, setIsCreatingReading] = useState(false);
@@ -152,11 +151,27 @@ export default function ReadingIntakeScreen() {
           cooldownExpiresAt: data.cooldownExpiresAt ?? null,
           canBypass: data.canBypass === true,
         });
+        return Number(data.paywallsCompleted ?? 0);
       } catch {
-        // silent
+        return 0;
       }
     }
-    fetchStatus();
+
+    // Always fetch on mount
+    // If firstReadingUsed is true but paywallsCompleted is 0,
+    // the webhook may still be processing — poll until it lands
+    const initialPaywalls = await fetchStatus();
+    if (initialPaywalls === 0) {
+      let attempts = 0;
+      const poll = async () => {
+        const paywalls = await fetchStatus();
+        attempts++;
+        if (paywalls === 0 && attempts < 6) {
+          setTimeout(poll, 1500);
+        }
+      };
+      setTimeout(poll, 1500);
+    }
   }, []);
 
   const selectedAreaConfig = useMemo(() => {
