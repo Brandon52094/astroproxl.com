@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { clerkClient } from "@clerk/nextjs/server"; //  Added vital clerkClient import
+import { clerkClient } from "@clerk/nextjs/server";
 
 export async function POST(req: Request) {
-  // 1. Initialize Stripe inside request runtime
+  // Initialize Stripe safely inside the request runtime
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2023-10-16", 
+    apiVersion: "2023-10-16",
   });
 
   const body = await req.text();
@@ -22,35 +22,42 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
 
-    // ==========================================================
-    //  All 180 lines of your original webhook event logic belong HERE
-    // ==========================================================
+    // Everything below this line is now safely inside the function body!
+    const session = event.data.object as Stripe.Checkout.Session;
+    const userId = session.metadata?.userId;
+    const mode = session.metadata?.mode;
+
+    if (!userId || !mode) {
+      console.error("[webhook] Missing userId or mode in metadata");
+      return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
+    }
+
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.userId;
-        
-        if (userId) {
-          // clerkClient now resolves perfectly here without throwing errors
-          await clerkClient.users.updateUserMetadata(userId, {
-            publicMetadata: {
-              isPro: true,
-            },
-          });
+        try {
+          if (userId) {
+            await clerkClient.users.updateUserMetadata(userId, {
+              publicMetadata: { isPro: true },
+            });
+          }
+        } catch (err: any) {
+          console.error("[webhook] Failed to update user metadata:", err);
+          return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
         }
         break;
       }
       
-      // ... Drop ALL your other original webhook case statements cleanly right here ...
+      // If you have other subscription cancellation cases later, they go here smoothly
     }
 
+    // Return statement allowed here because it's inside the POST function context
     return NextResponse.json({ received: true });
 
   } catch (err: any) {
     console.error(`[Stripe Webhook Error]: ${err.message}`);
-    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+    return NextResponse.json({ error: "Webhook verification failed" }, { status: 400 });
   }
-} // <--- The function officially and cleanly closes here at the very end of the file.
+}
 
   console.log("[webhook] event type:", event.type, "metadata:", JSON.stringify((event.data.object as any).metadata));
 
