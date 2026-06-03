@@ -16,7 +16,7 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import { saveIntake, loadChart, saveChart, isChartFresh } from "@/lib/chartStore";
+import { saveIntake, loadChart, saveChart, isChartFresh, clearIntake, clearReading } from "@/lib/chartStore";
 
 const AREAS = [
   {
@@ -137,41 +137,81 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
+  // ── Mount effect: fetch status + poll until webhook lands ──────────────────
   useEffect(() => {
-    async function fetchStatus() {
+    async function fetchStatus(): Promise<number> {
       try {
         const response = await fetch("/api/user/credits");
         const data = await response.json();
+
+        // If the backend says 4, this user has finished their loop.
+        // Treat their client UI view index as 0 so they can select a new category.
+        const rawPaywalls = Number(data.paywallsCompleted ?? 0);
+        const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
+
         setUserStatus({
           firstReadingUsed: data.firstReadingUsed === true,
-          paywallsCompleted: Number(data.paywallsCompleted ?? 0),
+          paywallsCompleted: activePaywallIndex, // sanitized 0 baseline
           isSubscribed: data.isSubscribed === true,
           readingsCompleted: Number(data.readingsCompleted ?? 0),
           onCooldown: data.onCooldown === true,
           cooldownExpiresAt: data.cooldownExpiresAt ?? null,
           canBypass: data.canBypass === true,
         });
-        return Number(data.paywallsCompleted ?? 0);
+        return activePaywallIndex;
       } catch {
         return 0;
       }
     }
 
-    // Always fetch on mount
     // If firstReadingUsed is true but paywallsCompleted is 0,
-    // the webhook may still be processing — poll until it lands
-    const initialPaywalls = await fetchStatus();
-    if (initialPaywalls === 0) {
-      let attempts = 0;
-      const poll = async () => {
-        const paywalls = await fetchStatus();
-        attempts++;
-        if (paywalls === 0 && attempts < 6) {
-          setTimeout(poll, 1500);
-        }
-      };
-      setTimeout(poll, 1500);
+    // the webhook may still be processing — poll until it lands.
+    (async () => {
+      const initialPaywalls = await fetchStatus();
+      if (initialPaywalls === 0) {
+        let attempts = 0;
+        const poll = async () => {
+          const paywalls = await fetchStatus();
+          attempts++;
+          if (paywalls === 0 && attempts < 6) {
+            setTimeout(poll, 1500);
+          }
+        };
+        setTimeout(poll, 1500);
+      }
+    })();
+  }, []);
+
+  // ── Visibility effect: re-fetch when returning from Stripe ─────────────────
+  useEffect(() => {
+    async function fetchStatus() {
+      try {
+        const response = await fetch("/api/user/credits");
+        const data = await response.json();
+
+        // Same sanitization as the mount effect.
+        const rawPaywalls = Number(data.paywallsCompleted ?? 0);
+        const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
+
+        setUserStatus({
+          firstReadingUsed: data.firstReadingUsed === true,
+          paywallsCompleted: activePaywallIndex,
+          isSubscribed: data.isSubscribed === true,
+          readingsCompleted: Number(data.readingsCompleted ?? 0),
+          onCooldown: data.onCooldown === true,
+          cooldownExpiresAt: data.cooldownExpiresAt ?? null,
+          canBypass: data.canBypass === true,
+        });
+      } catch {
+        // silent
+      }
     }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") fetchStatus();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
   const selectedAreaConfig = useMemo(() => {
@@ -198,6 +238,10 @@ export default function ReadingIntakeScreen() {
     setIsCreatingReading(true);
     setSubmitError(null);
     try {
+      // 1. CLEAR PREVIOUS SESSION RESIDUE FROM LOCAL STORAGE MATCHES
+      clearIntake();
+      clearReading();
+
       const topic =
         selectedArea === "love"
           ? "love"
@@ -207,6 +251,7 @@ export default function ReadingIntakeScreen() {
               ? "money"
               : "general";
 
+      // 2. SAVE FRESH INTAKE DATA
       saveIntake({
         topic: topic as "love" | "career" | "money" | "general",
         area: selectedArea,
@@ -258,33 +303,6 @@ export default function ReadingIntakeScreen() {
       setIsBypassLoading(false);
     }
   };
-
-  // Re-fetch when returning from payment — catches paywallsCompleted update
-  useEffect(() => {
-    async function fetchStatus() {
-      try {
-        const response = await fetch("/api/user/credits");
-        const data = await response.json();
-        setUserStatus({
-          firstReadingUsed: data.firstReadingUsed === true,
-          paywallsCompleted: Number(data.paywallsCompleted ?? 0),
-          isSubscribed: data.isSubscribed === true,
-          readingsCompleted: Number(data.readingsCompleted ?? 0),
-          onCooldown: data.onCooldown === true,
-          cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-          canBypass: data.canBypass === true,
-        });
-      } catch {
-        // silent
-      }
-    }
-    // Re-fetch on visibility change (returning from Stripe)
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") fetchStatus();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
 
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;

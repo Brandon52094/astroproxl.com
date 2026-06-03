@@ -59,7 +59,10 @@ export async function GET() {
       }
     }
 
-    const canUnlockPage4 = isSubscribed || (paywallsCompleted >= 1 && credits > 0);
+    // ── YOUR MASTER FIX ───────────────────────────────────────────────────────
+    // Removed (paywallsCompleted >= 1) to break the permanent all-access bug.
+    // Access is now dynamically controlled by active credits or subscription status.
+    const canUnlockPage4 = isSubscribed || credits > 0;
 
     return NextResponse.json({
       credits,

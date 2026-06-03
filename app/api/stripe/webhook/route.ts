@@ -30,12 +30,7 @@ export async function POST(request: NextRequest) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.metadata?.userId;
-    const mode = session.metadata?.mode as
-      | "one_time"
-      | "subscription"
-      | "bypass"
-      | "jxl"
-      | undefined;
+    const mode = session.metadata?.mode as "one_time" | "subscription" | "bypass" | "jxl" | undefined;
 
     if (!userId || !mode) {
       console.error("[webhook] Missing userId or mode in metadata");
@@ -48,7 +43,6 @@ export async function POST(request: NextRequest) {
       const meta = user.publicMetadata;
 
       const currentCredits = Number(meta?.credits ?? 0);
-      const currentPaywallsCompleted = Number(meta?.paywallsCompleted ?? 0);
       const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
       const currentJxlSessionsPurchased = Number(meta?.jxlSessionsPurchased ?? 0);
       const paywallIndex = Number(session.metadata?.paywallIndex ?? 0);
@@ -57,12 +51,13 @@ export async function POST(request: NextRequest) {
         const credits = Number(session.metadata?.credits ?? 0);
         const jxlCredits = Number(session.metadata?.jxlCredits ?? 0);
 
+        // NEW FIX: Dropped Math.max. Writing paywallIndex sequentially so the current cycle is preserved.
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
             credits: currentCredits + credits,
             firstReadingUsed: true,
-            paywallsCompleted: Math.max(currentPaywallsCompleted, paywallIndex),
+            paywallsCompleted: paywallIndex, 
             lastPurchaseAt: new Date().toISOString(),
             ...(jxlCredits > 0 ? { jxlCredits: currentJxlCredits + jxlCredits } : {}),
           },
