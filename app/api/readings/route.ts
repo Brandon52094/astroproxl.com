@@ -234,8 +234,7 @@ export async function POST(request: NextRequest) {
     try {
       const cleaned = rawText
       .replace(/^```(?:json)?\n?/i, "")
-      .replace(/\n?
-```$/i, "")
+      .replace(/\n?```$/i, "")
       .trim();
 
     const sections = rawText.split(/(?=== \w+ ==)/g);
