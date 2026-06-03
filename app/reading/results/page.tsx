@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -91,8 +91,10 @@ function ResultsPageInner() {
     if (payment === "success") {
       setUnlockedByPayment(true);
       setCurrentPage(4);
-      // Clean URL immediately so a refresh or new reading doesn't re-trigger
-      window.history.replaceState({}, "", "/reading/results");
+      
+      // FIX PROPART A: Force Next.js router state cache to strip the search query parameters 
+      // natively so that sequential new readings don't inherit the query cache.
+      router.replace("/reading/results");
     }
   }, [router, searchParams]);
 
@@ -140,7 +142,8 @@ function ResultsPageInner() {
       setCurrentPage(nextPage);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      // Reset all state and clear reading so next reading starts fresh at page 1
+      // FIX PROPERTY B: Explicitly flush every local application toggle state 
+      // back to standard zero variables before pushing back to intake menu.
       clearReading();
       setCurrentPage(1);
       setUnlockedByPayment(false);
@@ -148,6 +151,8 @@ function ResultsPageInner() {
       setCredits(null);
       setReading(null);
       setLoaded(false);
+      
+      // Clean redirect route execution path
       router.push("/reading/intake");
     }
   };
