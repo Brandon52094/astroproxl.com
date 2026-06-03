@@ -37,7 +37,7 @@ function buildGeocodeUrl(text: string) {
 }
 
 function mapFeatureToSuggestion(
-  feature: GeoapifyFeatureCollection["features"][number]
+  feature: NonNullable<GeoapifyFeatureCollection["features"]>[number]
 ): PlaceSuggestion | null {
   const props = feature?.properties;
   const label = props?.formatted?.trim();
