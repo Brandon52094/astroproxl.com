@@ -10,6 +10,24 @@ import PaywallScreen from "@/app/components/PayWallScreen";
 import type { StoredReading } from "@/lib/chartStore";
 import type { PaywallConfig } from "@/lib/paywallConfig";
 
+// ── Payment return flag ───────────────────────────────────────────────────────
+// Written by the checkout handler before redirecting to Stripe.
+// Read once on mount and immediately cleared so it never survives
+// into a subsequent reading session.
+const PAYMENT_FLAG_KEY = "dfp_payment_return";
+
+function setPaymentReturnFlag() {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PAYMENT_FLAG_KEY, "1");
+}
+
+function consumePaymentReturnFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  const exists = localStorage.getItem(PAYMENT_FLAG_KEY) === "1";
+  localStorage.removeItem(PAYMENT_FLAG_KEY);
+  return exists;
+}
+
 interface Credits {
   credits: number;
   firstReadingUsed: boolean;
@@ -51,7 +69,7 @@ function ResultsPageInner() {
     }
   }, []);
 
-  // ── Deduct 4 credits for a page view ─────────────────────────────────────
+  // ── Deduct credits for a page view ────────────────────────────────────────
   const deductCredit = useCallback(async (pageNumber: number) => {
     try {
       await fetch("/api/user/credits", {
@@ -66,6 +84,7 @@ function ResultsPageInner() {
   }, [fetchCredits]);
 
   // ── Record reading complete ───────────────────────────────────────────────
+  // Only called when user leaves page 4, never on the way TO page 4.
   const recordReadingComplete = useCallback(async () => {
     if (readingCompleteRecorded) return;
     setReadingCompleteRecorded(true);
@@ -87,16 +106,23 @@ function ResultsPageInner() {
     setReading(stored);
     setLoaded(true);
 
-    const payment = searchParams.get("payment");
-    if (payment === "success") {
+    // Consume the localStorage flag — not the URL param.
+    // The flag is written by handleCheckout before redirecting to Stripe,
+    // so it only exists for a genuine payment return, never for subsequent
+    // client-side navigations back to this page.
+    const returningFromPayment = consumePaymentReturnFlag();
+    if (returningFromPayment) {
       setUnlockedByPayment(true);
       setCurrentPage(4);
-      
-      // FIX PROPART A: Force Next.js router state cache to strip the search query parameters 
-      // natively so that sequential new readings don't inherit the query cache.
-      router.replace("/reading/results");
     }
-  }, [router, searchParams]);
+
+    // Always clean the URL regardless, so ?payment=success never lingers.
+    if (searchParams.get("payment")) {
+      window.history.replaceState({}, "", "/reading/results");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Empty deps: this must run exactly once on mount. router/searchParams
+  // intentionally excluded — re-running on nav changes is what caused the bug.
 
   useEffect(() => { fetchCredits(); }, [fetchCredits]);
 
@@ -105,8 +131,12 @@ function ResultsPageInner() {
   }, [unlockedByPayment, fetchCredits]);
 
   // ── Checkout handler ──────────────────────────────────────────────────────
+  // Sets the localStorage flag BEFORE redirecting so it's ready when Stripe
+  // bounces the user back.
   const handleCheckout = async (mode: "one_time" | "subscription") => {
     if (!paywallConfig) return;
+
+    setPaymentReturnFlag();
 
     const response = await fetch("/api/stripe/checkout", {
       method: "POST",
@@ -135,15 +165,13 @@ function ResultsPageInner() {
         await deductCredit(nextPage);
       }
 
-      if (nextPage === 4) {
-        await recordReadingComplete();
-      }
-
+      // recordReadingComplete intentionally NOT called here —
+      // only fires when the user actually leaves page 4 below.
       setCurrentPage(nextPage);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      // FIX PROPERTY B: Explicitly flush every local application toggle state 
-      // back to standard zero variables before pushing back to intake menu.
+      // User is on page 4 and clicks "Start Another Reading"
+      await recordReadingComplete();
       clearReading();
       setCurrentPage(1);
       setUnlockedByPayment(false);
@@ -151,8 +179,6 @@ function ResultsPageInner() {
       setCredits(null);
       setReading(null);
       setLoaded(false);
-      
-      // Clean redirect route execution path
       router.push("/reading/intake");
     }
   };
