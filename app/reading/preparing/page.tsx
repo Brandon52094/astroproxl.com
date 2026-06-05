@@ -6,8 +6,6 @@ import { useRouter } from "next/navigation";
 import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartStore";
 import type { ReadingPage } from "@/lib/chartStore";
 
-// ─── Loading messages that cycle while generating ─────────────────────────────
-
 const LOADING_MESSAGES = [
   "Reading your natal placements…",
   "Mapping current transits to your chart…",
@@ -15,11 +13,9 @@ const LOADING_MESSAGES = [
   "Identifying your Time Lord…",
   "Tracing the activated house themes…",
   "Cross-referencing tropical and sidereal layers…",
-  "Synthesizing your prediction…",
+  "Synthesizing progressions and solar arcs…",
   "Finalizing your reading…",
 ];
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PreparingPage() {
   const router = useRouter();
@@ -27,24 +23,21 @@ export default function PreparingPage() {
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
 
-  // Cycle through loading messages every 2.8s
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex((prev) =>
         prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
       );
-    }, 2800);
+    }, 2300);
     return () => clearInterval(interval);
   }, []);
 
-  // Generate the reading once on mount
   useEffect(() => {
     if (hasStarted.current) return;
     hasStarted.current = true;
 
     async function generateReading() {
       try {
-        // Load stored data
         const chart = loadChart();
         const intake = loadIntake();
 
@@ -58,7 +51,6 @@ export default function PreparingPage() {
           return;
         }
 
-        // Call the readings API with full chart + intake context
         const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -74,6 +66,10 @@ export default function PreparingPage() {
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
             profection: chart.chartData.profection,
+            // New timing layers — passed through if available
+            progressions: chart.chartData.progressions,
+            solarArcs: chart.chartData.solarArcs,
+            upcomingTrigger: chart.chartData.upcomingTrigger,
           }),
         });
 
@@ -83,7 +79,6 @@ export default function PreparingPage() {
           throw new Error(data.error ?? "Failed to generate reading.");
         }
 
-        // Save generated reading to localStorage
         saveReading({
           id: data.reading.id,
           pages: data.reading.pages as ReadingPage[],
@@ -92,13 +87,10 @@ export default function PreparingPage() {
           generatedAt: new Date().toISOString(),
         });
 
-        // Navigate to results
         router.push("/reading/results");
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Something went wrong. Please try again."
+          err instanceof Error ? err.message : "Something went wrong. Please try again."
         );
       }
     }
@@ -107,7 +99,7 @@ export default function PreparingPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#050816] text-slate-100 flex items-center justify-center">
+    <div className="h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden">
       <div className="mx-auto w-full max-w-md px-6 text-center">
         <AnimatePresence mode="wait">
           {error ? (
@@ -121,9 +113,7 @@ export default function PreparingPage() {
                 <span className="text-2xl">✕</span>
               </div>
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold text-white">
-                  Something went wrong
-                </h1>
+                <h1 className="text-xl font-semibold text-white">Something went wrong</h1>
                 <p className="text-sm leading-6 text-slate-400">{error}</p>
               </div>
               <button
@@ -141,7 +131,6 @@ export default function PreparingPage() {
               transition={{ duration: 0.5 }}
               className="space-y-12"
             >
-              {/* Animated orb */}
               <div className="relative mx-auto h-32 w-32">
                 <motion.div
                   className="absolute inset-0 rounded-full bg-teal-400/20"
@@ -163,18 +152,16 @@ export default function PreparingPage() {
                 </div>
               </div>
 
-              {/* Title */}
               <div className="space-y-3">
                 <h1 className="text-2xl font-semibold tracking-tight text-white">
                   Preparing your reading
                 </h1>
                 <p className="text-sm leading-6 text-slate-400">
-                  Your chart is being analyzed using your natal placements,
-                  current transits, and annual timing patterns.
+                  Your chart is being analyzed using natal placements, current transits,
+                  secondary progressions, and solar arc directions.
                 </p>
               </div>
 
-              {/* Cycling message */}
               <div className="h-6">
                 <AnimatePresence mode="wait">
                   <motion.p
@@ -190,28 +177,25 @@ export default function PreparingPage() {
                 </AnimatePresence>
               </div>
 
-              {/* Progress dots */}
               <div className="flex items-center justify-center gap-2">
                 {LOADING_MESSAGES.map((_, i) => (
                   <motion.div
                     key={i}
                     className={`h-1.5 rounded-full transition-all duration-500 ${
-                      i <= messageIndex
-                        ? "w-6 bg-teal-300"
-                        : "w-1.5 bg-white/10"
+                      i <= messageIndex ? "w-6 bg-teal-300" : "w-1.5 bg-white/10"
                     }`}
                   />
                 ))}
               </div>
 
-              {/* Value-building statement */}
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
                 <p className="text-xs leading-6 text-slate-400">
-                  Your reading combines{" "}
+                  Your reading synthesizes{" "}
                   <span className="text-slate-200">tropical psychology</span>,{" "}
-                  <span className="text-slate-200">sidereal timing</span>, and{" "}
-                  <span className="text-slate-200">annual profection cycles</span>{" "}
-                  — a level of depth most apps don't offer.
+                  <span className="text-slate-200">sidereal timing</span>,{" "}
+                  <span className="text-slate-200">secondary progressions</span>, and{" "}
+                  <span className="text-slate-200">solar arc directions</span>{" "}
+                  — four layers most apps never touch.
                 </p>
               </div>
             </motion.div>

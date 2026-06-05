@@ -39,29 +39,26 @@ export async function GET() {
       onCooldown = Date.now() < expiresAt.getTime();
       cooldownExpiresAt = expiresAt.toISOString();
 
-      // Bypass available once per cooldown cycle
       canBypass = onCooldown && (
         !bypassUsedAt ||
         bypassUsedAt.getTime() < cooldownStartedAt.getTime()
       );
 
-      // Auto-reset if cooldown has naturally expired
+      // Auto-reset if cooldown has naturally expired.
+      // Use undefined instead of null — Clerk rejects null values in publicMetadata.
       if (!onCooldown) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...metadata,
             readingsCompleted: 0,
             paywallsCompleted: 0,
-            cooldownStartedAt: null,
+            cooldownStartedAt: undefined,
             credits: 0,
           },
         });
       }
     }
 
-    // ── YOUR MASTER FIX ───────────────────────────────────────────────────────
-    // Removed (paywallsCompleted >= 1) to break the permanent all-access bug.
-    // Access is now dynamically controlled by active credits or subscription status.
     const canUnlockPage4 = isSubscribed || credits > 0;
 
     return NextResponse.json({
@@ -83,8 +80,6 @@ export async function GET() {
 }
 
 // ── POST /api/user/credits ────────────────────────────────────────────────────
-// Deducts 4 credits per page view (pages 1–4).
-// Only called after firstReadingUsed = true — first reading pages 1–3 are free.
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
