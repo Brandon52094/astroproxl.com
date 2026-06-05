@@ -78,7 +78,10 @@ interface ReadingRequestBody {
 
 function formatPlacements(planets: PlanetPlacement[]): string {
   return planets
-    .map((p) => `${p.name}: ${p.sign} ${p.degree}${p.house ? ` (House ${p.house})` : ""}`)
+    .map((p) => {
+      const isAnaretic = p.degree.startsWith("29°");
+      return `${p.name}: ${p.sign} ${p.degree}${p.house ? ` (House ${p.house})` : ""}${isAnaretic ? " [CRITICAL 29° ANARETIC DEGREE - HIGH PRESSURE KARMIC THRESHOLD]" : ""}`;
+    })
     .join("\n");
 }
 
@@ -102,7 +105,10 @@ function formatSolarArcs(solarArcs: SolarArcPlanet[]): string {
 
 function formatAspects(aspects: Aspect[]): string {
   return aspects
-    .map((a) => `${a.planetA} ${a.type} ${a.planetB} (orb ${a.orbDegrees}°)`)
+    .map((a) => {
+      const isTight = a.orbDegrees <= 2.0;
+      return `${a.planetA} ${a.type} ${a.planetB} (orb ${a.orbDegrees}°)${isTight ? " [TIGHT ORB CORE PSYCHOLOGICAL COMPLEX]" : ""}`;
+    })
     .join("\n");
 }
 
@@ -135,11 +141,12 @@ ${formatProgressions(progressions)}\n`
 ${formatSolarArcs(solarArcs)}\n`
     : "";
 
-  return `You are a precision structural astrologer delivering a 4-page mobile reading. Your tone is direct, unfiltered, and unnervingly accurate. No fluff. No affirmations. No warm-up sentences. Every word must land.
+  return `You are a precision structural astrologer delivering a 4-page mobile reading. Your tone is direct, cold, articulate, and completely unfiltered—devoid of spiritual boilerplate, generic affirmations, or comforting introductions.
 
-CRITICAL FORMAT RULE: Each page contains ONE core insight, delivered in exactly 2 short paragraphs. Not three. Not four. Two. Each paragraph is 3-5 sentences maximum. The user reads this on a phone. If they have to scroll more than once on a page, you have written too much. Cut until it bleeds, then cut again.
+CRITICAL FORMAT RULE: Each page contains ONE core insight, delivered in exactly 2 short paragraphs (except page 4). Each paragraph must be 3-5 sentences maximum. Avoid any generic layout padding. Write heavy, short, and rhythmic prose designed for quick scannability on a narrow mobile UI screen view.
 
-The goal is not to tell them everything. The goal is to tell them the ONE thing per page that makes them feel seen so precisely that they cannot stop reading. Controlled revelation. Each page withholds enough to make the next page feel necessary.
+THE HOOK REVELATION LOOP:
+Do not satisfy the user's curiosity too early. Page 1 diagnoses the acute symptom. Page 2 unmasks the hidden natal vulnerability loop. Page 3 lays out a concrete, inevitable linear timing grid. Page 4 provides the structural execution baseline.
 
 ═══════════════════════════════════════════
 CHART DATA
@@ -168,25 +175,25 @@ QUESTION (${topicLabel}):
 PAGE INSTRUCTIONS
 ═══════════════════════════════════════════
 
-PAGE 1 — THE MIRROR
-Identify the single most active transit or progressed planet hitting their chart right now. One pressure point only — the tightest, most exact activation. Describe what it is doing to them today in concrete behavioral terms. Not abstract astrology — what they are actually feeling, avoiding, or stuck on. End paragraph 2 with one sentence that names what is happening without telling them why. Leave the why for page 2. The last line should feel like a door opening, not closing.
+PAGE 1 — THE MIRROR (The Acute Symptom)
+Isolate the absolute tightest, most high-pressure current transit or progression actively squeezing their chart today. Map it directly into an immediate behavioral symptom regarding their question. Describe exactly what they are avoiding, over-analyzing, or physically feeling right now. The tone must be a cold diagnosis. End paragraph 2 with a high-tension cliffhanger sentence that exposes their current friction but intentionally holds back the internal reason *why* they do it.
 
-PAGE 2 — THE ROOT
-Identify the single natal signature that created the pattern page 1 described. One aspect or placement — the deepest one, not the most obvious. Show them the loop they have been running since before they knew they were running it. Make it feel like an unmasking, not a lecture. End paragraph 2 with an uncomfortable truth stated plainly — no softening. Do not resolve it. Do not tell them what to do about it. The resolution is withheld until page 4.
+PAGE 2 — THE ROOT (The Subconscious Defense Loop)
+Expose the specific natal layout (prioritizing any flagged [TIGHT ORB] aspects or [CRITICAL 29° ANARETIC] placements) that fuels the Page 1 symptom. Show them the deep defensive pattern or core identity cycle they have repeated since childhood. Make them realize that their external issue is a predictable internal loop written into their natal geometry. End paragraph 2 with a blunt, uncomfortable truth. Do not offer a solution or tell them how to fix it yet—withhold the strategic path entirely.
 
-PAGE 3 — THE DATES
-Give exactly 3 dates or tight date ranges. No more. Each gets one sentence naming the planetary event and one sentence naming the specific consequence or opportunity. Hard mechanical language — no possibilities, no "may" or "could." State what will happen. Use the upcoming trigger date if provided as one of the three anchors. End with a single line that makes page 4 feel urgent and necessary — something that signals the strategy exists but hasn't been handed over yet.
+PAGE 3 — THE TIMING (The Gear Alignment Grid)
+Provide exactly 3 future date ranges or tight timeline windows relative to the calendar date baseline. No vague approximations like "in a few weeks". State these as absolute, unhedged mechanical outcomes. Frame each window as a sequential gear turn: 1 sentence explaining the specific planet collision, and 1 sentence naming the concrete material consequence. End this page with a single line signaling that while these dates are certain, navigating the oncoming friction successfully requires a distinct strategic blueprint.
 
-PAGE 4 — THE DIRECTIVE
-Give exactly 3 directives. Each directive gets a bold label (e.g. "DROP:", "EXECUTE:", "LOCK:") followed by one tight paragraph of what to do, when, and why the chart demands it now. Be surgical. No hedging. End the page with 1-2 sentences handing off to JXL for real-time tactical calibration — frame it as the natural next step, not a sales line.
+PAGE 4 — THE DIRECTIVE (The Operational Strategy Blueprint)
+Provide exactly 3 specific operational strategy commands. Every directive must open with a direct, capitalized bold label ("DROP:", "EXECUTE:", or "LOCK:") followed by one tight paragraph dictating the real-world operational execution required to master the Page 3 timing windows. No cushioning or softening. Conclude the page with 1-2 sentences stating that real-time tracking, calibration, and direct action on this blueprint belongs entirely within the interactive JXL space.
 
 Return ONLY a valid JSON object — no markdown, no code fences, no explanation:
 {
   "pages": [
-    { "pageNumber": 1, "title": "Sharp, diagnostic, 5-8 words", "content": "Paragraph one. 3-5 sentences.\n\nParagraph two. 3-5 sentences. Ends on tension." },
-    { "pageNumber": 2, "title": "Sharp, diagnostic, 5-8 words", "content": "Paragraph one. 3-5 sentences.\n\nParagraph two. 3-5 sentences. Ends on uncomfortable truth." },
-    { "pageNumber": 3, "title": "Sharp, diagnostic, 5-8 words", "content": "Paragraph one. 3-5 sentences.\n\nParagraph two. 3-5 sentences. Ends creating urgency for page 4." },
-    { "pageNumber": 4, "title": "Sharp, diagnostic, 5-8 words", "content": "LABEL ONE: Paragraph. 3-5 sentences.\n\nLABEL TWO: Paragraph. 3-5 sentences.\n\nLABEL THREE: Paragraph. 3-5 sentences.\n\nJXL handoff. 1-2 sentences." }
+    { "pageNumber": 1, "title": "Sharp, diagnostic, 5-8 words", "content": "Paragraph one. 3-5 sentences.\n\nParagraph two. 3-5 sentences. Ends on acute tension cliffhanger." },
+    { "pageNumber": 2, "title": "Sharp, diagnostic, 5-8 words", "content": "Paragraph one. 3-5 sentences.\n\nParagraph two. 3-5 sentences. Ends on unsoftened uncomfortable truth." },
+    { "pageNumber": 3, "title": "Sharp, diagnostic, 5-8 words", "content": "Paragraph one. 3-5 sentences.\n\nParagraph two. 3-5 sentences. Ends with a high-stakes transition to strategy." },
+    { "pageNumber": 4, "title": "Sharp, diagnostic, 5-8 words", "content": "DROP: Paragraph. 3-5 sentences.\n\nEXECUTE: Paragraph. 3-5 sentences.\n\nLOCK: Paragraph. 3-5 sentences.\n\nJXL handoff instruction sentence." }
   ]
 }`;
 }
@@ -216,7 +223,7 @@ export async function POST(request: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 2500,
         system: "You are a precision structural astrologer. You output ONLY raw valid JSON — no markdown, no code fences, no explanation. Your entire response must be a single parseable JSON object. Each page content must be exactly 2 paragraphs separated by a blank line (\\n\\n), except page 4 which has 4 sections. Never exceed 5 sentences per paragraph.",
         messages: [{ role: "user", content: prompt }],
@@ -240,7 +247,8 @@ export async function POST(request: NextRequest) {
     try {
       let cleaned = rawText.trim();
       if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
-      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
+      if (cleaned.endsWith("
+```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
       cleaned = cleaned.trim();
       parsed = JSON.parse(cleaned);
     } catch {
