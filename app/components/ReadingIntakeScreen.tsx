@@ -217,8 +217,22 @@ export default function ReadingIntakeScreen() {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
     if (!selectedAreaConfig) return "Choose a reading type";
+    // Show price on button if this reading requires payment
+    if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
+      const prices = ["$2.99", "$3.99", "$4.99", "$4.99"];
+      const idx = Math.min((userStatus.readingsCompleted ?? 0), 3);
+      return `${selectedAreaConfig.cta} — ${prices[idx]}`;
+    }
     return selectedAreaConfig.cta;
-  }, [chartStatus, isCreatingReading, selectedAreaConfig]);
+  }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
+
+  // Needs credits if first reading already used and not subscribed
+  const needsCredits = useMemo(() => {
+    if (!userStatus) return false;
+    if (userStatus.isSubscribed) return false;
+    if (!userStatus.firstReadingUsed) return false; // first reading is free
+    return userStatus.paywallsCompleted >= userStatus.readingsCompleted || false;
+  }, [userStatus]);
 
   const canSubmit = useMemo(() => {
     if (!selectedArea) return false;

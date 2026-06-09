@@ -121,13 +121,8 @@ function ResultsPageInner() {
 
   const isSubscribed = credits?.isSubscribed ?? false;
 
-  // Show paywall if reading is done, user hasn't paid, and has no credits
-  const showPaywall =
-    !unlockedByPayment &&
-    !isSubscribed &&
-    credits !== null &&
-    !credits.canUnlockPage4 &&
-    credits.firstReadingUsed;
+  // Payment is gated at intake — results page always shows the full reading
+  const showPaywall = false;
 
   if (!loaded || !reading) {
     return (

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartStore";
 import type { ReadingPage } from "@/lib/chartStore";
 
@@ -17,11 +17,19 @@ const LOADING_MESSAGES = [
   "Finalizing your reading…",
 ];
 
-export default function PreparingPage() {
+function PreparingPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
+
+  // Clean up ?payment=success param if returning from Stripe
+  useEffect(() => {
+    if (searchParams.get("payment")) {
+      window.history.replaceState({}, "", "/reading/preparing");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -203,5 +211,17 @@ export default function PreparingPage() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function PreparingPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen bg-[#050816] flex items-center justify-center">
+        <div className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
+      </div>
+    }>
+      <PreparingPageInner />
+    </Suspense>
   );
 }
