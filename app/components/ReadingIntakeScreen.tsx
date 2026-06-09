@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -137,31 +137,37 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
-  // ── Mount effect: fetch status + poll until webhook lands ──────────────────
-  useEffect(() => {
-    async function fetchStatus(): Promise<number> {
-      try {
-        const response = await fetch("/api/user/credits");
-        const data = await response.json();
+  // ── Single shared fetchStatus — debounced to prevent Clerk rate limiting ─────
+  const fetchInFlight = useRef(false);
 
-        const rawPaywalls = Number(data.paywallsCompleted ?? 0);
-        const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
-
-        setUserStatus({
-          firstReadingUsed: data.firstReadingUsed === true,
-          paywallsCompleted: activePaywallIndex,
-          isSubscribed: data.isSubscribed === true,
-          readingsCompleted: Number(data.readingsCompleted ?? 0),
-          onCooldown: data.onCooldown === true,
-          cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-          canBypass: data.canBypass === true,
-        });
-        return activePaywallIndex;
-      } catch {
-        return 0;
-      }
+  const fetchStatus = useCallback(async (): Promise<number> => {
+    if (fetchInFlight.current) return 0;
+    fetchInFlight.current = true;
+    try {
+      const response = await fetch("/api/user/credits");
+      const data = await response.json();
+      const rawPaywalls = Number(data.paywallsCompleted ?? 0);
+      const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
+      setUserStatus({
+        firstReadingUsed: data.firstReadingUsed === true,
+        paywallsCompleted: activePaywallIndex,
+        isSubscribed: data.isSubscribed === true,
+        readingsCompleted: Number(data.readingsCompleted ?? 0),
+        onCooldown: data.onCooldown === true,
+        cooldownExpiresAt: data.cooldownExpiresAt ?? null,
+        canBypass: data.canBypass === true,
+      });
+      return activePaywallIndex;
+    } catch {
+      return 0;
+    } finally {
+      // Allow next fetch after 2 seconds minimum gap
+      setTimeout(() => { fetchInFlight.current = false; }, 2000);
     }
+  }, []);
 
+  // ── Mount effect: fetch once + light poll if paywalls still 0 ─────────────
+  useEffect(() => {
     (async () => {
       const initialPaywalls = await fetchStatus();
       if (initialPaywalls === 0) {
@@ -169,45 +175,23 @@ export default function ReadingIntakeScreen() {
         const poll = async () => {
           const paywalls = await fetchStatus();
           attempts++;
-          if (paywalls === 0 && attempts < 6) {
-            setTimeout(poll, 1500);
+          if (paywalls === 0 && attempts < 4) {
+            setTimeout(poll, 3000); // 3s between polls to avoid rate limiting
           }
         };
-        setTimeout(poll, 1500);
+        setTimeout(poll, 3000);
       }
     })();
-  }, []);
+  }, [fetchStatus]);
 
   // ── Visibility effect: re-fetch when returning from Stripe ─────────────────
   useEffect(() => {
-    async function fetchStatus() {
-      try {
-        const response = await fetch("/api/user/credits");
-        const data = await response.json();
-
-        const rawPaywalls = Number(data.paywallsCompleted ?? 0);
-        const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
-
-        setUserStatus({
-          firstReadingUsed: data.firstReadingUsed === true,
-          paywallsCompleted: activePaywallIndex,
-          isSubscribed: data.isSubscribed === true,
-          readingsCompleted: Number(data.readingsCompleted ?? 0),
-          onCooldown: data.onCooldown === true,
-          cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-          canBypass: data.canBypass === true,
-        });
-      } catch {
-        // silent
-      }
-    }
-
     const handleVisibility = () => {
       if (document.visibilityState === "visible") fetchStatus();
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+  }, [fetchStatus]);
 
   const selectedAreaConfig = useMemo(() => {
     return AREAS.find((area) => area.id === selectedArea) ?? null;
