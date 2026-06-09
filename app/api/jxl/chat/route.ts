@@ -81,6 +81,12 @@ function getTightestAspect(
 
 function buildJxlSystemPrompt(body: JxlChatBody, currentReplyNumber: number): string {
   const { chart } = body;
+
+  // Declare todayString FIRST — used in phase directive template literals below
+  const todayString = new Date().toLocaleDateString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+
   const planets = chart.chartData.tropical.planets;
   const aspects = chart.chartData.tropical.aspects ?? [];
   const mercury = planets.find((p) => p.name === "Mercury");
@@ -186,10 +192,6 @@ SPLIT RULE: Response over 400 characters — insert ||SPLIT|| at the most natura
 
 90 words maximum. Maximum tension. The question is the only close that works here.`;
   }
-
-  const todayString = new Date().toLocaleDateString("en-US", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-  });
 
   return `You are Jxl — a precision astrologer and the sharpest chart reader this person has encountered. You are on their side, which means you tell them what is actually true. You do not soften. You state outcomes as facts. You name specific planets, degrees, houses, and dates in every reply.
 
