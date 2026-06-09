@@ -51,7 +51,21 @@ interface JxlChatBody {
   };
 }
 
-function getMercuryTone(mercurySign: string): string {
+// Sister sign map — opposite sign in the zodiac wheel
+const SISTER_SIGNS: Record<string, string> = {
+  aries: "libra", libra: "aries",
+  taurus: "scorpio", scorpio: "taurus",
+  gemini: "sagittarius", sagittarius: "gemini",
+  cancer: "capricorn", capricorn: "cancer",
+  leo: "aquarius", aquarius: "leo",
+  virgo: "pisces", pisces: "virgo",
+};
+
+// Tone is derived from the sister sign of the Moon —
+// the Moon reveals how they receive emotional information;
+// the sister sign is the polarity they're unconsciously seeking.
+function getMoonSisterTone(moonSign: string): string {
+  const sisterSign = SISTER_SIGNS[moonSign.toLowerCase()] ?? moonSign.toLowerCase();
   const tones: Record<string, string> = {
     aries: "Direct and fast. Lead with the point. Short punchy sentences. No buildup.",
     taurus: "Grounded and steady. Concrete sensory language. Build trust before going deep.",
@@ -66,7 +80,7 @@ function getMercuryTone(mercurySign: string): string {
     aquarius: "Sharp and unconventional. Challenge their thinking. Surprise them.",
     pisces: "Intuitive and layered. Let meaning emerge. Use metaphor when it serves precision.",
   };
-  return tones[mercurySign.toLowerCase()] ?? "Clear, direct, and grounded in the chart.";
+  return tones[sisterSign] ?? "Clear, direct, and grounded in the chart.";
 }
 
 function getTightestAspect(
@@ -89,9 +103,9 @@ function buildJxlSystemPrompt(body: JxlChatBody, currentReplyNumber: number): st
 
   const planets = chart.chartData.tropical.planets;
   const aspects = chart.chartData.tropical.aspects ?? [];
-  const mercury = planets.find((p) => p.name === "Mercury");
-  const mercurySign = mercury?.sign ?? "unknown";
-  const mercuryTone = getMercuryTone(mercurySign);
+  const moon = planets.find((p) => p.name === "Moon");
+  const moonSign = moon?.sign ?? "unknown";
+  const mercuryTone = getMoonSisterTone(moonSign);
 
   const planetList = planets
     .map((p) => `${p.name}: ${p.sign} ${p.degree}${p.house ? ` (House ${p.house})` : ""}`)
@@ -243,7 +257,7 @@ LAWS — NEVER BREAK THESE
 7. Never answer more than what was asked. Leave space. The unsaid is where the power lives.
 
 FORMAT: 2 short paragraphs maximum. 2-3 sentences each. No bullets. No headers. No hedging. No explaining.
-TONE (Mercury in ${mercurySign.toUpperCase()}): ${mercuryTone}`;
+TONE (Moon in ${moonSign.toUpperCase()} — sister sign ${(SISTER_SIGNS[moonSign.toLowerCase()] ?? moonSign).toUpperCase()}): ${mercuryTone}`;
 }
 
 export async function POST(request: NextRequest) {
