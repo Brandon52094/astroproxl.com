@@ -33,6 +33,8 @@ export async function POST() {
       publicMetadata: {
         ...metadata,
         readingsCompleted: next,
+        // Always mark first reading as used so paywall triggers on next reading
+        firstReadingUsed: true,
         // Grant JXL credits on first completion so the feature unlocks immediately
         ...(isFirstReading ? { jxlCredits: currentJxlCredits + jxlCreditsToGrant } : {}),
         // Start cooldown when cycle completes (4 readings done)
