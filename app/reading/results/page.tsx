@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, Suspense } from "react";
+import React, { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -44,7 +44,7 @@ function ResultsPageInner() {
   const [credits, setCredits] = useState<Credits | null>(null);
   const [unlockedByPayment, setUnlockedByPayment] = useState(false);
   const [paywallConfig, setPaywallConfig] = useState<PaywallConfig | null>(null);
-  const [readingCompleteRecorded, setReadingCompleteRecorded] = useState(false);
+  const readingCompleteRecorded = useRef(false); // useRef so guard is synchronous
   const [isFinishing, setIsFinishing] = useState(false);
 
   const intake = loadIntake();
@@ -62,13 +62,13 @@ function ResultsPageInner() {
   }, []);
 
   const recordReadingComplete = useCallback(async () => {
-    if (readingCompleteRecorded) return;
-    setReadingCompleteRecorded(true);
+    if (readingCompleteRecorded.current) return;
+    readingCompleteRecorded.current = true; // synchronous — prevents any second call
     try {
       await fetch("/api/user/reading-complete", { method: "POST" });
       await fetchCredits();
     } catch { /* silent */ }
-  }, [readingCompleteRecorded, fetchCredits]);
+  }, [fetchCredits]);
 
   // Runs exactly once on mount
   useEffect(() => {
