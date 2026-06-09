@@ -30,7 +30,13 @@ export async function POST(request: NextRequest) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.metadata?.userId;
-    const mode = session.metadata?.mode as "one_time" | "subscription" | "bypass" | "jxl" | undefined;
+    const mode = session.metadata?.mode as
+      | "one_time"
+      | "subscription"
+      | "bypass"
+      | "jxl"
+      | "subscriber_topup"
+      | undefined;
 
     if (!userId || !mode) {
       console.error("[webhook] Missing userId or mode in metadata");
@@ -47,17 +53,17 @@ export async function POST(request: NextRequest) {
       const currentJxlSessionsPurchased = Number(meta?.jxlSessionsPurchased ?? 0);
       const paywallIndex = Number(session.metadata?.paywallIndex ?? 0);
 
+      // ── One-time reading purchase ───────────────────────────────────────────
       if (mode === "one_time") {
         const credits = Number(session.metadata?.credits ?? 0);
         const jxlCredits = Number(session.metadata?.jxlCredits ?? 0);
 
-        // NEW FIX: Dropped Math.max. Writing paywallIndex sequentially so the current cycle is preserved.
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
             credits: currentCredits + credits,
             firstReadingUsed: true,
-            paywallsCompleted: paywallIndex, 
+            paywallsCompleted: paywallIndex,
             lastPurchaseAt: new Date().toISOString(),
             ...(jxlCredits > 0 ? { jxlCredits: currentJxlCredits + jxlCredits } : {}),
           },
@@ -69,45 +75,65 @@ export async function POST(request: NextRequest) {
           ` to ${userId}. Paywall ${paywallIndex} complete.`
         );
 
+      // ── Subscription ────────────────────────────────────────────────────────
+      // $20/mo — 8 readings (96 credits) + unlimited JXL
+      // jxlUnlimited flag means the JXL chat route skips credit checks
       } else if (mode === "subscription") {
         const stripeSubscriptionId = session.subscription as string;
-        const tier = session.metadata?.tier ?? "unknown";
-        const readingsPerMonth = Number(session.metadata?.readingsPerMonth ?? 3);
-        const jxlSessionsPerMonth = Number(session.metadata?.jxlSessionsPerMonth ?? 3);
-        const readingCredits = readingsPerMonth * 12;
-        const jxlSessionCredits = jxlSessionsPerMonth * 6;
+        const tier = session.metadata?.tier ?? "sub_base";
+        const SUBSCRIPTION_READING_CREDITS = 96; // 8 readings × 12 credits
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
             firstReadingUsed: true,
             isSubscribed: true,
+            jxlUnlimited: true,
             subscriptionId: stripeSubscriptionId,
             subscriptionTier: tier,
             subscriptionStartedAt: new Date().toISOString(),
             paywallsCompleted: 4,
-            credits: currentCredits + readingCredits,
-            jxlCredits: currentJxlCredits + jxlSessionCredits,
+            credits: currentCredits + SUBSCRIPTION_READING_CREDITS,
             lastPurchaseAt: new Date().toISOString(),
           },
         });
 
         console.log(
           `[webhook] subscription — activated ${tier} for ${userId}. ` +
-          `Granted ${readingCredits} reading credits + ${jxlSessionCredits} Jxl credits.`
+          `Granted ${SUBSCRIPTION_READING_CREDITS} reading credits + unlimited JXL.`
         );
 
+      // ── Subscriber top-up ───────────────────────────────────────────────────
+      // Subscriber ran out of 8 monthly readings — $4 for 4 more
+      } else if (mode === "subscriber_topup") {
+        const TOPUP_CREDITS = 48; // 4 readings × 12 credits
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            credits: currentCredits + TOPUP_CREDITS,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] subscriber_topup — granted ${TOPUP_CREDITS} reading credits to ${userId}.`
+        );
+
+      // ── Cooldown bypass ─────────────────────────────────────────────────────
+      // $6 to skip 2-week cooldown and start fresh cycle immediately
+      // Use undefined not null — Clerk rejects null in publicMetadata
       } else if (mode === "bypass") {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
             readingsCompleted: 0,
             paywallsCompleted: 0,
-            cooldownStartedAt: null,
+            cooldownStartedAt: undefined,
             credits: 0,
             jxlCredits: 0,
             jxlSessionsPurchased: 0,
-            jxlCycleStartedAt: null,
+            jxlCycleStartedAt: undefined,
             bypassUsedAt: new Date().toISOString(),
             lastPurchaseAt: new Date().toISOString(),
           },
@@ -115,6 +141,7 @@ export async function POST(request: NextRequest) {
 
         console.log(`[webhook] bypass — full cycle reset for ${userId}.`);
 
+      // ── JXL session purchase ────────────────────────────────────────────────
       } else if (mode === "jxl") {
         const jxlTier = session.metadata?.jxlTier ?? "";
         const jxlReplies = Number(session.metadata?.jxlReplies ?? 6);
@@ -146,6 +173,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Subscription cancelled ──────────────────────────────────────────────────
   if (event.type === "customer.subscription.deleted") {
     const subscription = event.data.object as Stripe.Subscription;
     const userId = subscription.metadata?.userId;
@@ -159,8 +187,9 @@ export async function POST(request: NextRequest) {
           publicMetadata: {
             ...user.publicMetadata,
             isSubscribed: false,
-            subscriptionId: null,
-            subscriptionTier: null,
+            jxlUnlimited: false,
+            subscriptionId: undefined,
+            subscriptionTier: undefined,
             subscriptionCancelledAt: new Date().toISOString(),
           },
         });

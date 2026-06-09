@@ -35,14 +35,13 @@ export default function PaywallScreen({
     }
   };
 
-  // Journey-complete framing on paywall 4
   const headlineText = isJourneyComplete
-    ? "Your reading journey is complete"
-    : "One page ahead";
+    ? "Your final reading this cycle"
+    : "Your next reading is ready";
 
   const subText = isJourneyComplete
-    ? "This is your final page — the most direct prediction in the full reading."
-    : "The most specific and direct page of your reading — the actual prediction, the turning point, and what to do next.";
+    ? "This is your 4th reading — the most direct prediction of the cycle. After this, a 2-week reset begins."
+    : "A full 30-45 day reading with specific dates, root patterns, and direct directives.";
 
   return (
     <motion.div
@@ -54,39 +53,46 @@ export default function PaywallScreen({
     >
       {/* Lock badge */}
       <div className="mb-5 flex items-center gap-2">
-        <Lock className="h-4 w-4 text-amber-300" />
-        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-amber-300">
-          Final Insight
+        <Lock className="h-4 w-4 text-teal-300" />
+        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-teal-300">
+          Next Reading
         </span>
         {isJourneyComplete && (
           <span className="ml-auto rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300">
-            Journey Complete
+            Final in Cycle
           </span>
         )}
       </div>
 
-      {/* Page title */}
-      <h1 className="mb-4 text-2xl font-semibold leading-tight text-white">
-        {readingTitle}
-      </h1>
-
-      {/* Blurred teaser */}
-      <div className="relative mb-6 overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-        <p className="select-none text-sm leading-7 text-slate-300 blur-[5px] line-clamp-4 pointer-events-none">
-          {readingTeaser}
-        </p>
-        <div className="absolute inset-0 rounded-[24px] bg-gradient-to-b from-transparent via-[#050816]/50 to-[#050816]/95" />
-        <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-          <span className="rounded-full border border-amber-300/20 bg-[#050816]/80 px-3 py-1 text-[11px] text-amber-300/80 backdrop-blur-sm">
-            Unlock to read
-          </span>
-        </div>
-      </div>
-
       {/* Framing copy */}
       <div className="mb-5 space-y-1">
-        <p className="text-[15px] font-semibold text-white">{headlineText}</p>
+        <p className="text-[22px] font-semibold leading-tight text-white">{headlineText}</p>
         <p className="text-[13px] leading-5 text-slate-400">{subText}</p>
+      </div>
+
+      {/* What's included */}
+      <div className="mb-6 rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-4 space-y-2">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">What you get</p>
+        <ul className="space-y-2">
+          <li className="flex items-center gap-2 text-[13px] text-slate-300">
+            <Check className="h-3.5 w-3.5 text-teal-300 shrink-0" />
+            Full 30-45 day reading — specific dates and windows
+          </li>
+          <li className="flex items-center gap-2 text-[13px] text-slate-300">
+            <Check className="h-3.5 w-3.5 text-teal-300 shrink-0" />
+            Root pattern diagnosis — why this is happening
+          </li>
+          <li className="flex items-center gap-2 text-[13px] text-slate-300">
+            <Check className="h-3.5 w-3.5 text-teal-300 shrink-0" />
+            DROP / EXECUTE / LOCK directives — what to do now
+          </li>
+          {isJourneyComplete && (
+            <li className="flex items-center gap-2 text-[13px] text-amber-300/80">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              Includes 1 JXL session — live chart conversation
+            </li>
+          )}
+        </ul>
       </div>
 
       {/* Option selector */}
@@ -103,48 +109,25 @@ export default function PaywallScreen({
               : "border-white/10 bg-white/[0.03] hover:border-white/20"
           )}
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "h-4 w-4 rounded-full border-2 transition-all",
-                    selected === "one_time"
-                      ? "border-teal-300 bg-teal-300"
-                      : "border-slate-500 bg-transparent"
-                  )}
-                />
-                <span className="text-[14px] font-semibold text-white">
-                  One-time unlock
-                </span>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "h-4 w-4 rounded-full border-2 transition-all shrink-0",
+                  selected === "one_time"
+                    ? "border-teal-300 bg-teal-300"
+                    : "border-slate-500 bg-transparent"
+                )}
+              />
+              <div>
+                <p className="text-[14px] font-semibold text-white">This reading only</p>
+                <p className="text-[11px] text-slate-400">One-time · no commitment</p>
               </div>
-              <p className="pl-6 text-xs leading-5 text-slate-400">
-                {oneTime.creditsLabel}
-              </p>
-              {!isJourneyComplete && (
-                <ul className="pl-6 space-y-1 pt-1">
-                  <li className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <Check className="h-3 w-3 text-teal-300 shrink-0" />
-                    Unlock page 4 right now
-                  </li>
-                  <li className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <Check className="h-3 w-3 text-teal-300 shrink-0" />
-                    Credits carry into your next reading
-                  </li>
-                </ul>
-              )}
-              {isJourneyComplete && (
-                <p className="pl-6 text-xs text-slate-500 pt-0.5">
-                  No credits — this completes your reading journey
-                </p>
-              )}
             </div>
-            <span
-              className={cn(
-                "shrink-0 text-lg font-bold",
-                selected === "one_time" ? "text-teal-300" : "text-slate-300"
-              )}
-            >
+            <span className={cn(
+              "shrink-0 text-lg font-bold",
+              selected === "one_time" ? "text-teal-300" : "text-slate-300"
+            )}>
               {oneTime.displayPrice}
             </span>
           </div>
@@ -161,73 +144,58 @@ export default function PaywallScreen({
               : "border-white/10 bg-white/[0.03] hover:border-white/20"
           )}
         >
-          {/* Best offer badge */}
           {subscription.isBestOffer && (
             <div className="absolute -top-2.5 left-4">
               <span className="flex items-center gap-1 rounded-full border border-amber-300/40 bg-[#050816] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-300">
                 <Star className="h-2.5 w-2.5 fill-amber-300" />
-                Best offer
+                Best value
               </span>
             </div>
           )}
 
           <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "h-4 w-4 rounded-full border-2 transition-all",
-                    selected === "subscription"
-                      ? "border-amber-300 bg-amber-300"
-                      : "border-slate-500 bg-transparent"
-                  )}
-                />
-                <span className="text-[14px] font-semibold text-white">
-                  {subscription.name}
-                </span>
-              </div>
-              <p className="pl-6 text-xs leading-5 text-slate-400">
-                {subscription.tagline}
-              </p>
-              <ul className="pl-6 space-y-1 pt-1">
-                <li className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                  No paywalls — ever
-                </li>
-                <li className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                  4 full readings per month
-                </li>
-                <li className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                  10 Jxl sessions included
-                </li>
-                {subscription.isBestOffer && (
-                  <li className="flex items-center gap-1.5 text-xs text-amber-300/80">
-                    <Sparkles className="h-3 w-3 shrink-0" />
-                    Lowest price — locked in forever
-                  </li>
+            <div className="flex items-start gap-2">
+              <span
+                className={cn(
+                  "mt-0.5 h-4 w-4 rounded-full border-2 transition-all shrink-0",
+                  selected === "subscription"
+                    ? "border-amber-300 bg-amber-300"
+                    : "border-slate-500 bg-transparent"
                 )}
-              </ul>
+              />
+              <div className="space-y-1">
+                <p className="text-[14px] font-semibold text-white">{subscription.name}</p>
+                <p className="text-[11px] text-slate-400">{subscription.tagline}</p>
+                <ul className="space-y-1 pt-1">
+                  <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Check className="h-3 w-3 text-amber-300 shrink-0" />
+                    Unlimited readings — no paywalls
+                  </li>
+                  <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Check className="h-3 w-3 text-amber-300 shrink-0" />
+                    JXL sessions included every month
+                  </li>
+                  <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Check className="h-3 w-3 text-amber-300 shrink-0" />
+                    No cooldown periods
+                  </li>
+                </ul>
+              </div>
             </div>
-            <span
-              className={cn(
-                "shrink-0 text-lg font-bold",
-                selected === "subscription" ? "text-amber-300" : "text-slate-300"
-              )}
-            >
+            <span className={cn(
+              "shrink-0 text-lg font-bold",
+              selected === "subscription" ? "text-amber-300" : "text-slate-300"
+            )}>
               {subscription.displayPrice}
             </span>
           </div>
         </button>
       </div>
 
-      {/* Paywall progress indicator */}
-      {paywallIndex < 4 && (
-        <p className="mb-4 text-center text-[11px] text-slate-600">
-          Reading {paywallIndex} of 4 · Total if completed: $26.00
-        </p>
-      )}
+      {/* Cycle indicator */}
+      <p className="mb-4 text-center text-[11px] text-slate-600">
+        Reading {paywallIndex} of 4 in your cycle · resets every 2 weeks
+      </p>
 
       {/* CTA */}
       <button
@@ -235,7 +203,7 @@ export default function PaywallScreen({
         onClick={handleContinue}
         disabled={loading}
         className={cn(
-          "h-13 w-full rounded-2xl text-sm font-semibold transition-all",
+          "h-14 w-full rounded-2xl text-sm font-semibold transition-all",
           selected === "subscription"
             ? "bg-amber-300 text-slate-950 hover:bg-amber-200 shadow-lg shadow-amber-500/20"
             : "bg-teal-300 text-slate-950 hover:bg-teal-200 shadow-lg shadow-teal-500/20",
@@ -245,8 +213,8 @@ export default function PaywallScreen({
         {loading
           ? "Loading checkout…"
           : selected === "subscription"
-            ? `Subscribe — ${subscription.displayPrice}`
-            : `Unlock Now — ${oneTime.displayPrice}`}
+            ? "Subscribe — " + subscription.displayPrice
+            : "Get This Reading — " + oneTime.displayPrice}
       </button>
 
       <button

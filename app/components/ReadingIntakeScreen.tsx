@@ -439,7 +439,7 @@ export default function ReadingIntakeScreen() {
           )}
 
           {/* ── Reading cycle progress bar ─────────────────────────────────── */}
-          {userStatus?.firstReadingUsed && (
+          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0) && (
             <div className="mb-6 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
@@ -538,7 +538,7 @@ export default function ReadingIntakeScreen() {
                         disabled={isBypassLoading}
                         className="rounded-2xl bg-indigo-400 px-6 py-2.5 text-[13px] font-semibold text-slate-950 transition hover:bg-indigo-300 disabled:opacity-60"
                       >
-                        {isBypassLoading ? "Loading…" : "Skip cooldown — $4.00"}
+                        {isBypassLoading ? "Loading…" : "Skip cooldown — $6.00"}
                       </button>
                     </div>
                   )}
@@ -647,7 +647,7 @@ export default function ReadingIntakeScreen() {
             transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
             className="mt-4 mb-2"
           >
-            {(userStatus?.paywallsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
+            {(userStatus?.readingsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
               <button
                 type="button"
                 onClick={() => router.push("/jxl")}
