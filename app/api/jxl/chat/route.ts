@@ -401,7 +401,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 350,
+        max_tokens: 450,
         stream: true,
         system: systemPrompt,
         messages: body.messages,
