@@ -313,6 +313,20 @@ export default function ReadingIntakeScreen() {
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
+  // Free reading cooldown timer — shown when user has used their free reading
+  // but the 2-week reset hasn't fired yet (readingsCompleted < 4, firstReadingUsed true)
+  const freeReadingCooldownLine = useMemo(() => {
+    if (!userStatus?.firstReadingUsed) return null;
+    if (onCooldown) return null; // full cooldown shown separately
+    if (!userStatus?.cooldownExpiresAt) return null;
+    const ms = new Date(userStatus.cooldownExpiresAt).getTime() - Date.now();
+    if (ms <= 0) return null;
+    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    if (days > 0) return `Free reading resets in ${days}d ${hours}h`;
+    return `Free reading resets in ${hours}h`;
+  }, [userStatus, onCooldown]);
+
   return (
     /*
       Outer shell: h-screen overflow-y-auto — scrolls within the locked viewport.
@@ -424,6 +438,13 @@ export default function ReadingIntakeScreen() {
               })()}
             </div>
           </section>
+
+          {/* ── Free reading cooldown one-liner ───────────────────────────── */}
+          {freeReadingCooldownLine && (
+            <div className="mb-3 text-[11px] text-slate-500">
+              {freeReadingCooldownLine}
+            </div>
+          )}
 
           {/* ── Reading cycle progress bar ─────────────────────────────────── */}
           {userStatus?.firstReadingUsed && (

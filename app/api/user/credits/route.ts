@@ -34,7 +34,22 @@ export async function GET() {
     let cooldownExpiresAt: string | null = null;
     let canBypass = false;
 
-    if (cooldownStartedAt && readingsCompleted >= 4) {
+    // Cooldown is only active when cooldownStartedAt is set AND readingsCompleted >= 4
+    // If cooldownStartedAt exists but readingsCompleted < 4, it's a stale/broken state
+    // — clear it so the user can access their free reading
+    if (cooldownStartedAt && readingsCompleted < 4) {
+      // Stale cooldown — clear it
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          ...metadata,
+          cooldownStartedAt: undefined,
+          firstReadingUsed: false,
+          readingsCompleted: 0,
+          paywallsCompleted: 0,
+          credits: 0,
+        },
+      });
+    } else if (cooldownStartedAt && readingsCompleted >= 4) {
       const expiresAt = new Date(cooldownStartedAt.getTime() + COOLDOWN_MS);
       onCooldown = Date.now() < expiresAt.getTime();
       cooldownExpiresAt = expiresAt.toISOString();
@@ -55,7 +70,7 @@ export async function GET() {
             paywallsCompleted: 0,
             cooldownStartedAt: undefined,
             credits: 0,
-            firstReadingUsed: false, // free reading refreshes every cycle
+            firstReadingUsed: false,
           },
         });
       }
