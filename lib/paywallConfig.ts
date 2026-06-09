@@ -60,8 +60,8 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
     price: 499,
     displayPrice: "$4.99",
     credits: 12,
-    jxlCredits: 0,
-    creditsLabel: "Unlocks your next reading",
+    jxlCredits: 6,
+    creditsLabel: "Unlocks your reading + 1 JXL session",
     pack: "paywall_3",
   },
   4: {

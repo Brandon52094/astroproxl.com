@@ -45,6 +45,7 @@ export async function GET() {
       );
 
       // Auto-reset if cooldown has naturally expired.
+      // Resets the full cycle including firstReadingUsed so the free reading refreshes.
       // Use undefined instead of null — Clerk rejects null values in publicMetadata.
       if (!onCooldown) {
         await client.users.updateUserMetadata(userId, {
@@ -54,6 +55,7 @@ export async function GET() {
             paywallsCompleted: 0,
             cooldownStartedAt: undefined,
             credits: 0,
+            firstReadingUsed: false, // free reading refreshes every cycle
           },
         });
       }
