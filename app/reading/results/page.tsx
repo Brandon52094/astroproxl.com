@@ -10,7 +10,6 @@ import PaywallScreen from "@/app/components/PayWallScreen";
 import type { StoredReading } from "@/lib/chartStore";
 import type { PaywallConfig } from "@/lib/paywallConfig";
 
-// ── Payment return flag ───────────────────────────────────────────────────────
 const PAYMENT_FLAG_KEY = "dfp_payment_return";
 
 function setPaymentReturnFlag() {
@@ -41,12 +40,12 @@ function ResultsPageInner() {
   const searchParams = useSearchParams();
 
   const [reading, setReading] = useState<StoredReading | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [loaded, setLoaded] = useState(false);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [unlockedByPayment, setUnlockedByPayment] = useState(false);
   const [paywallConfig, setPaywallConfig] = useState<PaywallConfig | null>(null);
   const [readingCompleteRecorded, setReadingCompleteRecorded] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
 
   const intake = loadIntake();
 
@@ -62,17 +61,6 @@ function ResultsPageInner() {
     } catch { /* silent */ }
   }, []);
 
-  const deductCredit = useCallback(async (pageNumber: number) => {
-    try {
-      await fetch("/api/user/credits", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageNumber }),
-      });
-      await fetchCredits();
-    } catch { /* silent */ }
-  }, [fetchCredits]);
-
   const recordReadingComplete = useCallback(async () => {
     if (readingCompleteRecorded) return;
     setReadingCompleteRecorded(true);
@@ -82,7 +70,7 @@ function ResultsPageInner() {
     } catch { /* silent */ }
   }, [readingCompleteRecorded, fetchCredits]);
 
-  // Runs exactly once on mount — empty deps intentional
+  // Runs exactly once on mount
   useEffect(() => {
     const stored = loadReading();
     if (!stored) { router.push("/reading/intake"); return; }
@@ -92,7 +80,6 @@ function ResultsPageInner() {
     const returningFromPayment = consumePaymentReturnFlag();
     if (returningFromPayment) {
       setUnlockedByPayment(true);
-      setCurrentPage(4);
     }
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/results");
@@ -119,26 +106,11 @@ function ResultsPageInner() {
     else throw new Error("No checkout URL returned");
   };
 
-  const handleNext = async () => {
-    if (currentPage < 4) {
-      const nextPage = currentPage + 1;
-      if (credits?.firstReadingUsed && !credits.isSubscribed) {
-        await deductCredit(nextPage);
-      }
-      setCurrentPage(nextPage);
-      // Scroll the inner scrollable container back to top
-      document.getElementById("results-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      await recordReadingComplete();
-      clearReading();
-      setCurrentPage(1);
-      setUnlockedByPayment(false);
-      setReadingCompleteRecorded(false);
-      setCredits(null);
-      setReading(null);
-      setLoaded(false);
-      router.push("/reading/intake");
-    }
+  const handleFinish = async () => {
+    setIsFinishing(true);
+    await recordReadingComplete();
+    clearReading();
+    router.push("/reading/intake");
   };
 
   const handleDismiss = async () => {
@@ -148,14 +120,14 @@ function ResultsPageInner() {
   };
 
   const isSubscribed = credits?.isSubscribed ?? false;
-  const isPage4 = currentPage === 4;
 
+  // Show paywall if reading is done, user hasn't paid, and has no credits
   const showPaywall =
-    isPage4 &&
     !unlockedByPayment &&
     !isSubscribed &&
     credits !== null &&
-    !credits.canUnlockPage4;
+    !credits.canUnlockPage4 &&
+    credits.firstReadingUsed;
 
   if (!loaded || !reading) {
     return (
@@ -165,24 +137,11 @@ function ResultsPageInner() {
     );
   }
 
-  const page = reading.pages.find((p) => p.pageNumber === currentPage);
-  const page4 = reading.pages.find((p) => p.pageNumber === 4);
-  const totalPages = 4;
-
-  const getButtonLabel = () => {
-    if (currentPage === 1) return "Continue to Page 2";
-    if (currentPage === 2) return "Continue to Page 3";
-    if (currentPage === 3) return "Continue to Final Insight";
-    return "Start Another Reading";
-  };
+  const page = reading.pages[0];
+  const page4 = reading.pages[0]; // for paywall teaser
 
   return (
-    /*
-      Outer shell: full viewport height, centered, phone-width frame.
-      overflow-hidden on the outer div — scroll happens on the inner div only.
-    */
     <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
-      {/* Phone frame — scrollable inner column */}
       <div
         id="results-scroll"
         className="flex w-full max-w-[430px] flex-col overflow-y-auto px-4 pb-32 pt-4"
@@ -200,26 +159,10 @@ function ResultsPageInner() {
             <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
               Direct Future Predictions
             </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Page {currentPage} of {totalPages}
-            </p>
+            <p className="mt-1 text-xs text-slate-400">Your Reading</p>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[11px] font-medium text-slate-400">
-            4/4
-          </div>
+          <div className="w-11" />
         </header>
-
-        {/* Progress bar */}
-        <div className="mb-6 flex gap-1.5">
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 flex-1 rounded-full transition-all duration-500 ${
-                i + 1 <= currentPage ? "bg-teal-300" : "bg-white/10"
-              }`}
-            />
-          ))}
-        </div>
 
         {unlockedByPayment && (
           <motion.div
@@ -227,7 +170,7 @@ function ResultsPageInner() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-4 rounded-[18px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-[12px] text-emerald-200"
           >
-            ✓ Payment successful — your final insight is unlocked
+            ✓ Payment successful — your reading is unlocked
           </motion.div>
         )}
 
@@ -242,14 +185,14 @@ function ResultsPageInner() {
             <PaywallScreen
               key="paywall"
               config={paywallConfig}
-              readingTitle={page4?.title ?? "Your Deepest Prediction"}
+              readingTitle={page4?.title ?? "Your Reading"}
               readingTeaser={page4?.content ?? ""}
               onCheckout={handleCheckout}
               onDismiss={handleDismiss}
             />
           ) : (
             <motion.div
-              key={`page-${currentPage}`}
+              key="reading"
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
@@ -257,25 +200,17 @@ function ResultsPageInner() {
               className="flex flex-col"
             >
               <div className="mb-6 space-y-2">
-                <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-teal-200">
-                  {currentPage === 4 ? "Final Insight" : `Page ${currentPage}`}
-                </span>
                 <h1 className="text-2xl font-semibold leading-tight text-white">
                   {page?.title}
                 </h1>
               </div>
+
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
                   {page?.content}
                 </p>
               </div>
-              {currentPage === 3 && !credits?.firstReadingUsed && (
-                <div className="mt-4 rounded-[20px] border border-amber-300/20 bg-amber-400/[0.06] px-4 py-3">
-                  <p className="text-xs leading-5 text-amber-200">
-                    One more page ahead — the deepest and most specific prediction in your reading.
-                  </p>
-                </div>
-              )}
+
               {credits && credits.firstReadingUsed && credits.credits > 0 && (
                 <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
                   <span>{credits.credits} credits remaining</span>
@@ -286,16 +221,16 @@ function ResultsPageInner() {
         </AnimatePresence>
       </div>
 
-      {/* Fixed footer CTA — constrained to phone width */}
       {!showPaywall && (
         <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
           <div className="w-full max-w-[430px]">
             <button
               type="button"
-              onClick={handleNext}
-              className="h-14 w-full rounded-2xl bg-teal-300 text-sm font-semibold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200"
+              onClick={handleFinish}
+              disabled={isFinishing}
+              className="h-14 w-full rounded-2xl bg-teal-300 text-sm font-semibold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:opacity-60"
             >
-              {getButtonLabel()}
+              {isFinishing ? "Finishing…" : "Done"}
             </button>
           </div>
         </div>

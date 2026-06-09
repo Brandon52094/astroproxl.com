@@ -168,9 +168,23 @@ export default function JxlScreen() {
         );
       }
 
-      setMessages((prev) =>
-        prev.map((m) => m.isStreaming ? { ...m, content: fullText, isStreaming: false } : m)
-      );
+      // Check for split marker — renders two bubbles with a natural delay between them
+      const SPLIT_MARKER = "||SPLIT||";
+      if (fullText.includes(SPLIT_MARKER)) {
+        const [partOne, partTwo] = fullText.split(SPLIT_MARKER).map((s: string) => s.trim());
+        // Finalize first bubble
+        setMessages((prev) =>
+          prev.map((m) => m.isStreaming ? { ...m, content: partOne, isStreaming: false } : m)
+        );
+        // Drop second bubble after a natural pause — like a second text arriving
+        setTimeout(() => {
+          setMessages((prev) => [...prev, { role: "assistant", content: partTwo, isStreaming: false }]);
+        }, 1200);
+      } else {
+        setMessages((prev) =>
+          prev.map((m) => m.isStreaming ? { ...m, content: fullText, isStreaming: false } : m)
+        );
+      }
 
       const updated = await fetchSession();
 

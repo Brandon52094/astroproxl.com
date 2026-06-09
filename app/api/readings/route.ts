@@ -54,7 +54,7 @@ interface UpcomingTrigger {
 }
 
 interface ReadingPage {
-  pageNumber: 1 | 2 | 3 | 4;
+  pageNumber: 1;
   title: string;
   content: string;
 }
@@ -122,24 +122,20 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
   const upcomingTriggerBlock = upcomingTrigger
     ? `\nNEXT EXACT ASPECT (Ephemeris-Calculated Hard Date):
 ${upcomingTrigger.transitPlanet} ${upcomingTrigger.aspect} natal ${upcomingTrigger.natalPlanet} — exact within 1° on ${upcomingTrigger.date}
-Use this as one of the named date anchors in Page 3.\n`
+Use this as a named date anchor in the reading.\n`
     : "";
 
   const progressionsBlock = progressions && progressions.length > 0
-    ? `\nSECONDARY PROGRESSIONS (Current):
-${formatProgressions(progressions)}\n`
+    ? `\nSECONDARY PROGRESSIONS (Current):\n${formatProgressions(progressions)}\n`
     : "";
 
   const solarArcsBlock = solarArcs && solarArcs.length > 0
-    ? `\nSOLAR ARC DIRECTIONS (Current):
-${formatSolarArcs(solarArcs)}\n`
+    ? `\nSOLAR ARC DIRECTIONS (Current):\n${formatSolarArcs(solarArcs)}\n`
     : "";
 
   return `You are a precision astrologer with no filter. You are this person's personal astrologer — someone who knows their chart completely and speaks to them directly, without softening, without hedging, without generic language.
 
-You use the exact current positions of the planets combined with their complete birth chart — natal placements, current transits, secondary progressions, and solar arc directions — to deliver direct, specific, and accurate predictions. You state outcomes. You use specific dates. You never offer probabilities. You do not censor or soften. You speak to them as "you" in every sentence. Your delivery is calibrated to what their chart can handle — matching the tone to the specific psychological architecture you see in their placements.
-
-This reading is delivered in 4 pages. Each page has a specific job. Together they tell one complete story — diagnosis, root, dates, verdict.
+You use the exact current positions of the planets combined with their complete birth chart — natal placements, current transits, secondary progressions, and solar arc directions — to deliver one complete, direct, and accurate reading covering the next 30-45 days. You state outcomes. You use specific dates. You never offer probabilities. You do not censor or soften. You speak to them as "you" in every sentence. Your delivery is calibrated to what their chart can handle — matching the tone to the specific psychological architecture you see in their placements.
 
 ═══════════════════════════════════════════
 THEIR CHART DATA
@@ -165,71 +161,44 @@ THEIR QUESTION (${topicLabel}):
 "${question}"
 
 ═══════════════════════════════════════════
-THE 4 PAGES — STRUCTURE AND TONE
+THE READING — STRUCTURE AND TONE
 ═══════════════════════════════════════════
 
-PAGE 1 — "WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL"
-The title must name exactly what they are feeling right now based on their question and chart — not a generic label. Examples: "Why You Feel Stuck Right Now — And It's Real" / "Why Nothing Is Landing Right Now — And It's Real" / "Why You're Pulling Back Right Now — And It's Real."
+You are delivering ONE complete reading. Not 4 pages. One reading that covers everything they need to know for the next 30-45 days.
 
-Open immediately with the single tightest transit or progressed activation hitting their chart today. Name the planets, the degrees, the houses. Tell them what it is doing to their life in concrete, behavioral terms — not abstract astrology. Then in the second paragraph, add one more layer — a second transit or natal confirmation that shows this is not one thing, it is structural. End with 1-2 sentences that name what is happening beneath the surface — something they haven't said out loud yet — but do not explain why. Leave it open. Make them need page 2.
+The reading has four natural sections that flow together as one continuous piece — no headers, no labels, no page numbers. Just one unbroken reading that moves from diagnosis to root to timing to directive.
 
-Length: 2 paragraphs. 4-6 sentences each. Direct. No softening.
+SECTION 1 — WHERE YOU ARE RIGHT NOW (2-3 paragraphs)
+Open with the title: "WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL" — name exactly what they are feeling based on their question and chart. Then diagnose the immediate pressure. Name the single tightest transit or progressed activation hitting their chart today — planet, degree, house. Tell them what it is doing to their life in concrete behavioral terms. Add a second layer — another transit or natal confirmation that shows this is structural, not temporary.
 
-PAGE 2 — THE ROOT NATAL SIGNATURE
-The title names the pattern, not the page. Examples: "The Loop You've Been Running Since Birth" / "The Architecture Behind All Of It" / "Why This Area Of Your Life Has Always Felt Like This."
+SECTION 2 — THE ROOT (1-2 paragraphs)
+Reveal the single natal signature that created the pattern described above. One aspect or placement — the deepest one. Show them the loop they have been running since before they had words for it. Make it feel like recognition. End this section with a plain uncomfortable truth — no softening.
 
-Reveal the single natal signature — one aspect or placement — that created the pattern page 1 described. Show them the loop they have been running since before they had words for it. Connect it explicitly to what page 1 described — "this is why." Then in the second paragraph, show one more natal layer that reinforces the same loop — a second confirmation that makes it feel undeniable. End with a plain statement of the core truth — no softening, no resolution. They should feel seen in a way that is slightly uncomfortable. Do not tell them what to do yet.
+SECTION 3 — THE DATES (named windows)
+Give 3-4 specific dates or tight date windows — each named like a headline: "[DATE] — [WHAT MAKES IT SIGNIFICANT]." For each: one sentence naming the exact planetary event with degrees, one sentence naming the specific consequence or opportunity stated as fact. Use the upcoming ephemeris trigger date if available. End this section with the big picture timing answer — when does this actually shift, what is the turning point date.
 
-Length: 2 paragraphs. 4-6 sentences each. Psychological. Precise. Uncomfortably accurate.
-
-PAGE 3 — THE DATES
-The title names the timeline. Examples: "Three Dates That Change The Equation" / "The Windows Are Already Open" / "What The Sky Is About To Do To Your Situation."
-
-Give exactly 3 specific dates or tight date windows — each one named like a headline: "JUNE 9 — YOUR DATE: [what makes it significant]." For each date: one sentence naming the exact planetary event and degrees, one sentence naming the specific consequence or opportunity in their life — stated as fact, not possibility. Use the upcoming ephemeris trigger date if provided as one of the three anchors. After the three dates, write a closing paragraph (3-4 sentences) that answers the implicit question: "when does this actually shift?" — give them the honest big-picture timing, name the turning point date, and end with a line that makes page 4 feel urgent and necessary.
-
-Length: 3 named date entries + 1 closing paragraph. Direct. Mechanical. Specific degrees and dates throughout.
-
-PAGE 4 — THE VERDICT
-The title is the conclusion. Examples: "What The Chart Is Ordering You To Do" / "Three Moves. No Substitutions." / "The Operational Baseline."
-
-Open with 1-2 sentences that frame the verdict — "The verdict is structural, not motivational. Here is what the chart is ordering." Then give exactly 3 directives, each labeled in caps (e.g. "DROP:", "EXECUTE BY [DATE]:", "LOCK IN BY [DATE]:", "NAME IT:", "TRANSMIT:"). Each directive gets one tight paragraph — what to do, the specific date it must happen by, and why the chart demands it now. Be surgical. Name the planetary event driving each deadline. No hedging. End with 2-3 sentences handing off to JXL — frame it as the natural next step for real-time calibration as each window arrives, not a sales line.
-
-Length: 2-sentence opener + 3 labeled directives (4-5 sentences each) + JXL handoff. Decisive. Surgical. Every deadline named.
+SECTION 4 — WHAT THE CHART IS ORDERING (2-3 paragraphs)
+Three specific directives — each labeled in caps (DROP:, EXECUTE BY [DATE]:, LOCK IN BY [DATE]:). What to do, when, and why the chart demands it now. Specific. Surgical. No hedging. End the reading with 1-2 sentences that open the door to JXL — frame it as "the real-time calibration of this blueprint belongs in a live conversation with your chart" — not a sales line, just the natural next step.
 
 ═══════════════════════════════════════════
 CRITICAL RULES
 ═══════════════════════════════════════════
-- Speak as their personal astrologer in every sentence — never as a report
-- "You" in every sentence. Never "the native," never "one may find," never third person
-- State outcomes as facts. Never "may," "could," "might," "tends to"
-- Name specific degrees, dates, house numbers, and planetary combinations throughout
-- Anaretic 29° placements are forced completion thresholds — name them explicitly
-- Cross-reference transits, natal chart, progressions, and solar arcs on every page
-- Page 1 ends leaving a question open. Page 2 ends on uncomfortable truth. Page 3 ends creating urgency. Page 4 ends on JXL handoff.
-- The four pages together tell one complete story — they must connect and build
+- One unbroken reading — no page numbers, no section headers in the output
+- "You" in every sentence. Never third person.
+- State outcomes as facts. Never "may," "could," "might"
+- Named degrees, dates, house numbers throughout
+- Anaretic 29° placements are forced completion thresholds — name them
+- Cross-reference all four layers: natal, transits, progressions, solar arcs
+- 30-45 day window only — do not go beyond 45 days
+- Reading should feel complete but leave them wanting the live conversation
 
 Return ONLY a valid JSON object — no markdown, no code fences, no explanation:
 {
   "pages": [
     {
       "pageNumber": 1,
-      "title": "Why You Feel [X] Right Now — And It's Real",
-      "content": "Paragraph one. 4-6 sentences diagnosing today's pressure.\n\nParagraph two. 4-6 sentences adding second layer. Final 1-2 sentences open a door without closing it."
-    },
-    {
-      "pageNumber": 2,
-      "title": "The [Pattern Name] Behind All Of It",
-      "content": "Paragraph one. 4-6 sentences revealing the natal root.\n\nParagraph two. 4-6 sentences second natal confirmation. Final sentence is an uncomfortable plain truth."
-    },
-    {
-      "pageNumber": 3,
-      "title": "Three Dates That Change The Equation",
-      "content": "[DATE] — [WHAT MAKES IT SIGNIFICANT]: Sentence naming the planetary event and degrees. Sentence naming the exact consequence.\n\n[DATE] — [WHAT MAKES IT SIGNIFICANT]: Sentence naming the planetary event and degrees. Sentence naming the exact consequence.\n\n[DATE] — [WHAT MAKES IT SIGNIFICANT]: Sentence naming the planetary event and degrees. Sentence naming the exact consequence.\n\nClosing paragraph. 3-4 sentences answering when this shifts. Final line creates urgency for page 4."
-    },
-    {
-      "pageNumber": 4,
-      "title": "What The Chart Is Ordering You To Do",
-      "content": "Framing opener. 1-2 sentences.\n\nDIRECTIVE ONE LABEL: Paragraph. 4-5 sentences with specific date and planetary reasoning.\n\nDIRECTIVE TWO LABEL: Paragraph. 4-5 sentences with specific date and planetary reasoning.\n\nDIRECTIVE THREE LABEL: Paragraph. 4-5 sentences with specific date and planetary reasoning.\n\nJXL handoff. 2-3 sentences framing real-time calibration as the natural next step."
+      "title": "WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL",
+      "content": "The complete reading as one unbroken piece. No headers. No labels except the date anchors and directive labels. Flows naturally from diagnosis through root through dates through directive."
     }
   ]
 }`;
@@ -261,8 +230,8 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 3500,
-        system: "You are a precision astrologer speaking directly and personally to your client. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object. You speak to the person as 'you' in every sentence. You state outcomes as facts, never as possibilities. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate.",
+        max_tokens: 4096,
+        system: "You are a precision astrologer speaking directly and personally to your client. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -292,7 +261,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
     }
 
-    if (!parsed.pages || parsed.pages.length !== 4) {
+    if (!parsed.pages || parsed.pages.length < 1) {
       return NextResponse.json({ error: "Reading structure was incomplete. Please try again." }, { status: 422 });
     }
 

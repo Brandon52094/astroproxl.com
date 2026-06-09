@@ -1,15 +1,14 @@
 // lib/paywallConfig.ts
-// ─── Paywall config ───────────────────────────────────────────────────────────
 
 export type PaywallIndex = 1 | 2 | 3 | 4;
 
 export interface OneTimePack {
   name: string;
   description: string;
-  price: number;        // in cents
+  price: number;
   displayPrice: string;
-  credits: number;      // reading credits
-  jxlCredits: number;   // jxl session credits (6 = 1 full session)
+  credits: number;
+  jxlCredits: number;
   creditsLabel: string;
   pack: string;
 }
@@ -17,7 +16,7 @@ export interface OneTimePack {
 export interface SubscriptionTier {
   name: string;
   tagline: string;
-  price: number;        // in cents
+  price: number;
   displayPrice: string;
   tier: string;
   isBestOffer: boolean;
@@ -32,47 +31,47 @@ export interface PaywallConfig {
   subscription: SubscriptionTier;
 }
 
-// Each pack grants 12 reading credits = 4 credits × 3 pages.
-// Paywall 4 ($8.99) also grants 1 full Jxl session (6 jxlCredits).
+// Reading 1 is free — paywalls trigger on readings 2, 3, 4
+// Gentle crescendo: $2.99 → $3.99 → $4.99
 export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
   1: {
     name: "Unlock Your Reading",
-    description: "Unlock page 4 now + pages 1–3 of your next reading",
+    description: "Full 30-45 day reading with specific dates and directives",
     price: 299,
     displayPrice: "$2.99",
     credits: 12,
     jxlCredits: 0,
-    creditsLabel: "12 credits — unlocks your next full reading",
+    creditsLabel: "Unlocks your next reading",
     pack: "paywall_1",
   },
   2: {
     name: "Unlock Your Reading",
-    description: "Unlock page 4 now + pages 1–3 of your next reading",
-    price: 599,
-    displayPrice: "$5.99",
+    description: "Full 30-45 day reading with specific dates and directives",
+    price: 399,
+    displayPrice: "$3.99",
     credits: 12,
     jxlCredits: 0,
-    creditsLabel: "12 credits — unlocks your next full reading",
+    creditsLabel: "Unlocks your next reading",
     pack: "paywall_2",
   },
   3: {
     name: "Unlock Your Reading",
-    description: "Unlock page 4 now + pages 1–3 of your next reading",
-    price: 799,
-    displayPrice: "$7.99",
+    description: "Full 30-45 day reading with specific dates and directives",
+    price: 499,
+    displayPrice: "$4.99",
     credits: 12,
     jxlCredits: 0,
-    creditsLabel: "12 credits — unlocks your next full reading",
+    creditsLabel: "Unlocks your next reading",
     pack: "paywall_3",
   },
   4: {
-    name: "Complete Your Journey",
-    description: "Unlock your final page 4 + 1 full Jxl session",
-    price: 899,
-    displayPrice: "$8.99",
+    name: "Complete Your Cycle",
+    description: "Full 30-45 day reading + 1 full JXL session",
+    price: 499,
+    displayPrice: "$4.99",
     credits: 12,
-    jxlCredits: 6, // 1 full Jxl session
-    creditsLabel: "12 credits + 1 Jxl session — your journey reward",
+    jxlCredits: 6,
+    creditsLabel: "Unlocks your reading + 1 JXL session",
     pack: "paywall_4",
   },
 };
@@ -80,7 +79,7 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
 export const SUBSCRIPTION_TIERS: Record<PaywallIndex, SubscriptionTier> = {
   1: {
     name: "AstroXL Base",
-    tagline: "3 full readings + 3 Jxl sessions per month",
+    tagline: "3 full readings + 3 JXL sessions per month",
     price: 1900,
     displayPrice: "$19/mo",
     tier: "sub_base",
@@ -90,7 +89,7 @@ export const SUBSCRIPTION_TIERS: Record<PaywallIndex, SubscriptionTier> = {
   },
   2: {
     name: "AstroXL Base",
-    tagline: "3 full readings + 3 Jxl sessions per month",
+    tagline: "3 full readings + 3 JXL sessions per month",
     price: 1900,
     displayPrice: "$19/mo",
     tier: "sub_base",
@@ -100,7 +99,7 @@ export const SUBSCRIPTION_TIERS: Record<PaywallIndex, SubscriptionTier> = {
   },
   3: {
     name: "AstroXL Premium",
-    tagline: "8 full readings + 6 Jxl sessions per month",
+    tagline: "8 full readings + 6 JXL sessions per month",
     price: 4000,
     displayPrice: "$40/mo",
     tier: "sub_premium",
@@ -110,7 +109,7 @@ export const SUBSCRIPTION_TIERS: Record<PaywallIndex, SubscriptionTier> = {
   },
   4: {
     name: "AstroXL Premium",
-    tagline: "8 full readings + 6 Jxl sessions — best value",
+    tagline: "8 full readings + 6 JXL sessions — best value",
     price: 4000,
     displayPrice: "$40/mo",
     tier: "sub_premium",
@@ -123,7 +122,6 @@ export const SUBSCRIPTION_TIERS: Record<PaywallIndex, SubscriptionTier> = {
 export function getPaywallConfig(paywallsCompleted: number): PaywallConfig | null {
   const next = (paywallsCompleted + 1) as PaywallIndex;
   if (!isValidIndex(next)) return null;
-
   return {
     paywallIndex: next,
     isJourneyComplete: next === 4,
@@ -141,7 +139,7 @@ export function getCooldownStatus(lastReadingCompletedAt: Date | null): {
   unlocksAt: Date | null;
 } {
   if (!lastReadingCompletedAt) return { onCooldown: false, unlocksAt: null };
-  const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks
+  const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
   const unlocksAt = new Date(lastReadingCompletedAt.getTime() + COOLDOWN_MS);
   return { onCooldown: Date.now() < unlocksAt.getTime(), unlocksAt };
 }
