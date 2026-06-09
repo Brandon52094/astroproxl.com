@@ -277,12 +277,21 @@ export async function POST(request: NextRequest) {
     let parsed: { pages: ReadingPage[] };
     try {
       let cleaned = rawText.trim();
+      // Strip code fences
       if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
       if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
       cleaned = cleaned.trim();
+      // Find the outermost JSON object boundaries
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      if (start !== -1 && end !== -1 && end > start) {
+        cleaned = cleaned.slice(start, end + 1);
+      }
       parsed = JSON.parse(cleaned);
-    } catch {
-      console.error("[readings] Failed to parse Claude response:", rawText.slice(0, 500));
+    } catch (parseErr) {
+      console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
+      console.error("[readings] Raw response start:", rawText.slice(0, 300));
+      console.error("[readings] Raw response end:", rawText.slice(-200));
       return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
     }
 
