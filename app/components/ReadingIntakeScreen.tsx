@@ -226,14 +226,6 @@ export default function ReadingIntakeScreen() {
     return selectedAreaConfig.cta;
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
 
-  // Needs credits if first reading already used and not subscribed
-  const needsCredits = useMemo(() => {
-    if (!userStatus) return false;
-    if (userStatus.isSubscribed) return false;
-    if (!userStatus.firstReadingUsed) return false; // first reading is free
-    return userStatus.paywallsCompleted >= userStatus.readingsCompleted || false;
-  }, [userStatus]);
-
   const canSubmit = useMemo(() => {
     if (!selectedArea) return false;
     if (chartStatus !== "ready") return false;
