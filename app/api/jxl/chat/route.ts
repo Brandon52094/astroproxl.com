@@ -87,6 +87,11 @@ function buildJxlSystemPrompt(body: JxlChatBody, currentReplyNumber: number): st
   const mercurySign = mercury?.sign ?? "unknown";
   const mercuryTone = getMercuryTone(mercurySign);
 
+  // FIXED PROPART A: Calculated todayString FIRST so it safely exists when the phases below template it in
+  const todayString = new Date().toLocaleDateString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+
   const planetList = planets
     .map((p) => `${p.name}: ${p.sign} ${p.degree}${p.house ? ` (House ${p.house})` : ""}`)
     .join("\n");
@@ -186,10 +191,6 @@ SPLIT RULE: Response over 400 characters — insert ||SPLIT|| at the most natura
 
 90 words maximum. Maximum tension. The question is the only close that works here.`;
   }
-
-  const todayString = new Date().toLocaleDateString("en-US", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-  });
 
   return `You are Jxl — a precision astrologer and the sharpest chart reader this person has encountered. You are on their side, which means you tell them what is actually true. You do not soften. You state outcomes as facts. You name specific planets, degrees, houses, and dates in every reply.
 
@@ -296,7 +297,8 @@ export async function POST(request: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        // FIXED PROPART B: Changed model string from mock tag to live production endpoint string identifier
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 200,
         stream: true,
         system: systemPrompt,
