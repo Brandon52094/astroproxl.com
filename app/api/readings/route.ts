@@ -127,19 +127,11 @@ ${upcomingTrigger.transitPlanet} ${upcomingTrigger.aspect} natal ${upcomingTrigg
     : "";
 
   const progressionsBlock = progressions && progressions.length > 0
-    ? `
-SECONDARY PROGRESSIONS (Current):
-${progressions.map((p) => `${p.name}: ${p.sign} ${p.degree}`).join("
-")}
-`
+    ? "\nSECONDARY PROGRESSIONS (Current):\n" + progressions.map((p) => p.name + ": " + p.sign + " " + p.degree).join("\n") + "\n"
     : "";
 
   const solarArcsBlock = solarArcs && solarArcs.length > 0
-    ? `
-SOLAR ARC DIRECTIONS (Current):
-${solarArcs.map((p) => `${p.name}: ${p.sign} ${p.degree}`).join("
-")}
-`
+    ? "\nSOLAR ARC DIRECTIONS (Current):\n" + solarArcs.map((p) => p.name + ": " + p.sign + " " + p.degree).join("\n") + "\n"
     : "";
 
   const planetList = tropical.planets
