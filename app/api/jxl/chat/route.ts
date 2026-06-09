@@ -1,24 +1,16 @@
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
-interface PlanetPlacement {
-  name: string;
-  sign: string;
-  degree: string;
-  house?: string;
+interface Message {
+  role: "user" | "assistant";
+  content: string;
 }
 
-interface Aspect {
-  type: string;
-  planetA: string;
-  planetB: string;
-  orbDegrees: number;
-}
-
-interface TransitPlanet {
-  name: string;
-  sign: string;
-  degree: string;
-  isRetrograde: boolean;
+interface UpcomingTrigger {
+  date: string;
+  transitPlanet: string;
+  natalPlanet: string;
+  aspect: string;
 }
 
 interface ProgressedPlanet {
@@ -34,209 +26,225 @@ interface SolarArcPlanet {
   degree: string;
 }
 
-interface ProfectionData {
-  age: number;
-  profectionYear: number;
-  activatedHouse: number;
-  activatedSign: string;
-  timeLord: string;
-  timeLordNatalSign: string;
-  timeLordNatalHouse: number;
+interface JxlChatBody {
+  messages: Message[];
+  chart: {
+    birthDate: string;
+    birthTime: string;
+    birthPlace: string;
+    chartData: {
+      tropical: {
+        planets: { name: string; sign: string; degree: string; house?: string }[];
+        aspects: { type: string; planetA: string; planetB: string; orbDegrees: number }[];
+      };
+      transits: { name: string; sign: string; degree: string; isRetrograde: boolean }[];
+      profection: {
+        age: number;
+        activatedHouse: number;
+        activatedSign: string;
+        timeLord: string;
+      };
+      progressions?: ProgressedPlanet[];
+      solarArcs?: SolarArcPlanet[];
+      upcomingTrigger?: UpcomingTrigger;
+    };
+  };
 }
 
-interface UpcomingTrigger {
-  date: string;
-  transitPlanet: string;
-  natalPlanet: string;
-  aspect: string;
+function getMercuryTone(mercurySign: string): string {
+  const tones: Record<string, string> = {
+    aries: "Direct and fast. Lead with the point. Short punchy sentences. No buildup.",
+    taurus: "Grounded and steady. Concrete sensory language. Build trust before going deep.",
+    gemini: "Quick and varied. Jump between ideas naturally. Keep it moving.",
+    cancer: "Warm but precise. Lead with feeling before fact. Make them feel understood before going sharp.",
+    leo: "Bold and direct. Speak with confidence. Never tepid. They respond to being seen.",
+    virgo: "Precise and specific. Name exact details. Avoid vagueness. They notice inconsistencies.",
+    libra: "Considered but honest. Acknowledge complexity without hedging the truth.",
+    scorpio: "Deep and unflinching. Fewer words, more weight. They respect honesty over comfort.",
+    sagittarius: "Expansive and blunt. Connect to the bigger picture. Direct is fine — they can take it.",
+    capricorn: "Practical and structured. Give them something actionable. No filler.",
+    aquarius: "Sharp and unconventional. Challenge their thinking. Surprise them.",
+    pisces: "Intuitive and layered. Let meaning emerge. Use metaphor when it serves precision.",
+  };
+  return tones[mercurySign.toLowerCase()] ?? "Clear, direct, and grounded in the chart.";
 }
 
-interface ReadingPage {
-  pageNumber: 1;
-  title: string;
-  content: string;
+function getTightestAspect(
+  aspects: { type: string; planetA: string; planetB: string; orbDegrees: number }[]
+): string {
+  if (!aspects || aspects.length === 0) return "";
+  const tightest = aspects.reduce((prev, curr) =>
+    curr.orbDegrees < prev.orbDegrees ? curr : prev
+  );
+  return `${tightest.planetA} ${tightest.type} ${tightest.planetB} (${tightest.orbDegrees}° orb)`;
 }
 
-interface ReadingRequestBody {
-  topic: "love" | "career" | "money" | "general";
-  question: string;
-  birthDate: string;
-  birthTime: string;
-  birthPlace: string;
-  tropical: { planets: PlanetPlacement[]; aspects: Aspect[] };
-  sidereal: { planets: PlanetPlacement[] };
-  transits: TransitPlanet[];
-  profection: ProfectionData;
-  progressions?: ProgressedPlanet[];
-  solarArcs?: SolarArcPlanet[];
-  upcomingTrigger?: UpcomingTrigger;
-}
+function buildJxlSystemPrompt(body: JxlChatBody, currentReplyNumber: number): string {
+  const { chart } = body;
+  const planets = chart.chartData.tropical.planets;
+  const aspects = chart.chartData.tropical.aspects ?? [];
+  const mercury = planets.find((p) => p.name === "Mercury");
+  const mercurySign = mercury?.sign ?? "unknown";
+  const mercuryTone = getMercuryTone(mercurySign);
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+  const planetList = planets
+    .map((p) => `${p.name}: ${p.sign} ${p.degree}${p.house ? ` (House ${p.house})` : ""}`)
+    .join("\n");
 
-const NL = "\n";
+  const transitList = chart.chartData.transits
+    .map((p) => `${p.name}: ${p.sign} ${p.degree}${p.isRetrograde ? " Rx" : ""}`)
+    .join("\n");
 
-function fmtPlanet(p: PlanetPlacement): string {
-  return p.name + ": " + p.sign + " " + p.degree + (p.house ? " (House " + p.house + ")" : "");
-}
-
-function fmtTransit(p: TransitPlanet): string {
-  return p.name + ": " + p.sign + " " + p.degree + (p.isRetrograde ? " Rx" : "");
-}
-
-function fmtAspect(a: Aspect): string {
-  return a.planetA + " " + a.type + " " + a.planetB + " — " + a.orbDegrees + "° orb";
-}
-
-function fmtProgression(p: ProgressedPlanet): string {
-  return p.name + ": " + p.sign + " " + p.degree;
-}
-
-function fmtSolarArc(p: SolarArcPlanet): string {
-  return p.name + ": " + p.sign + " " + p.degree;
-}
-
-function buildReadingPrompt(body: ReadingRequestBody): string {
-  const { topic, question, tropical, sidereal, transits, profection, progressions, solarArcs, upcomingTrigger } = body;
-
-  const topicLabel =
-    topic === "love" ? "love and relationships"
-    : topic === "career" ? "career and professional life"
-    : topic === "money" ? "money and finances"
-    : "life in general";
-
-  const currentDateString = new Date().toLocaleDateString("en-US", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-  });
-
-  const upcomingTriggerBlock = upcomingTrigger
-    ? NL + "NEXT EXACT ASPECT (Ephemeris-Calculated — use as a primary date anchor):" + NL
-      + upcomingTrigger.transitPlanet + " " + upcomingTrigger.aspect + " natal " + upcomingTrigger.natalPlanet
-      + " — exact within 1° on " + upcomingTrigger.date + NL
-    : "";
-
-  const progressionsBlock = progressions && progressions.length > 0
-    ? NL + "SECONDARY PROGRESSIONS (Current):" + NL + progressions.map(fmtProgression).join(NL) + NL
-    : "";
-
-  const solarArcsBlock = solarArcs && solarArcs.length > 0
-    ? NL + "SOLAR ARC DIRECTIONS (Current):" + NL + solarArcs.map(fmtSolarArc).join(NL) + NL
-    : "";
-
-  const planetList = tropical.planets.map(fmtPlanet).join(NL);
-
-  const aspectList = tropical.aspects
-    .slice()
+  const aspectList = aspects
     .sort((a, b) => a.orbDegrees - b.orbDegrees)
-    .map(fmtAspect)
-    .join(NL);
+    .slice(0, 6)
+    .map((a) => `${a.planetA} ${a.type} ${a.planetB} — ${a.orbDegrees}° orb`)
+    .join("\n");
 
-  const transitList = transits.map(fmtTransit).join(NL);
-  const siderealList = sidereal.planets.map(fmtPlanet).join(NL);
+  const tightestAspect = getTightestAspect(aspects);
 
-  const lines = [
-    "You are a precision astrologer with no filter. You are this person's personal astrologer — someone who knows their chart completely and speaks to them directly, without softening, without hedging, without generic language.",
-    "",
-    "You use the exact current positions of the planets combined with their complete birth chart — natal placements, current transits, secondary progressions, and solar arc directions — to deliver one complete, direct, and accurate reading covering the next 30-45 days. You state outcomes. You use specific dates. You never offer probabilities. You do not censor or soften. You speak to them as \"you\" in every sentence.",
-    "",
-    "═══════════════════════════════════════════",
-    "ORB PRIORITY RULES — FOLLOW STRICTLY",
-    "═══════════════════════════════════════════",
-    "The natal aspects are sorted by orb tightness below — tightest first. This is your activation priority order.",
-    "",
-    "LIVE ACTIVATIONS (under 3° orb) — these are what is happening RIGHT NOW. Lead with these. Build the reading around these. Name the degree, the houses involved, and the exact behavioral consequence.",
-    "",
-    "BACKGROUND ARCHITECTURE (3°-6° orb) — these explain WHY the live activations hit the way they do. Reference once for root context only. Do not lead with them.",
-    "",
-    "WIDE ASPECTS (over 6° orb) — ignore entirely. Do not mention.",
-    "",
-    "Apply the same orb logic to transits hitting natal planets. Transits within 2° orb are exact and urgent. Transits beyond 5° are not yet active — do not use them as primary timing anchors.",
-    "",
-    "Anaretic 29° placements are forced completion thresholds — always name them when they are being activated by a transit within 3°.",
-    "",
-    "═══════════════════════════════════════════",
-    "THEIR CHART DATA",
-    "═══════════════════════════════════════════",
-    "TODAY: " + currentDateString,
-    upcomingTriggerBlock,
-    "TROPICAL PLACEMENTS:",
-    planetList,
-    "",
-    "NATAL ASPECTS (sorted tightest orb first — this is your priority order):",
-    aspectList,
-    "",
-    "SIDEREAL PLACEMENTS:",
-    siderealList,
-    "",
-    "CURRENT TRANSITS:",
-    transitList,
-    "",
-    "ANNUAL PROFECTION:",
-    "Age " + profection.age + ", House " + profection.activatedHouse + " (" + profection.activatedSign + "), Time Lord: " + profection.timeLord + " (Natal: " + profection.timeLordNatalSign + ", House " + profection.timeLordNatalHouse + ")",
-    progressionsBlock,
-    solarArcsBlock,
-    "THEIR QUESTION (" + topicLabel + "):",
-    "\"" + question + "\"",
-    "",
-    "═══════════════════════════════════════════",
-    "READING STRUCTURE",
-    "═══════════════════════════════════════════",
-    "",
-    "Write one complete reading. No page numbers. No section headers in the output — only the date anchors and directive labels appear as caps. Everything else flows as connected prose.",
-    "",
-    "PART 1 — WHERE YOU ARE RIGHT NOW (2-3 paragraphs)",
-    "Open with the tightest transit or progressed activation hitting their chart today — under 3° orb, named with exact degree and house. Tell them what it is doing to their life in concrete behavioral terms. What are they actually feeling, avoiding, or stuck on right now. Add one natal confirmation that shows why this transit hits them the way it does — the natal root, not another transit. End this section with one sentence that names what is happening beneath the surface — leave it slightly open, do not fully explain it yet.",
-    "",
-    "PART 2 — THE ROOT (1-2 paragraphs)",
-    "Identify the single tightest natal aspect (lowest orb in the sorted list) that created the pattern Part 1 described. Name the planets, degrees, houses, and orb. Show the loop they have been running. End with one plain uncomfortable truth — no softening.",
-    "",
-    "PART 3 — 2 TO 4 DATED WINDOWS",
-    "Based strictly on tightest orb transits — only include dates where a transit is within 3° of a natal planet or angle. Each window gets a headline label in this format:",
-    "[DATE OR DATE RANGE] — [PLANET] [ASPECT] NATAL [PLANET], [DEGREE], [HOUSE]:",
-    "Then one sentence naming exactly what this activates and one sentence naming the specific consequence or required action. State as fact, not possibility. 2 dates minimum, 4 maximum. Do not manufacture dates — only use real tight-orb windows from the data.",
-    "",
-    "PART 4 — THE DIRECTIVE (exactly 3 labeled directives)",
-    "DROP: One paragraph. What they need to stop doing immediately and why the chart demands it. Name the specific natal placement driving the pattern. 3-5 sentences.",
-    "",
-    "EXECUTE BY [SPECIFIC DATE]: One paragraph. The specific action tied to the tightest upcoming window. What to do, the exact date it must happen by, and the planetary reason. 3-5 sentences.",
-    "",
-    "LOCK IN BY [SPECIFIC DATE]: One paragraph. The structural decision that must be made before the final window closes. Identity, foundation, or direction-level. What gets locked and why. 3-5 sentences.",
-    "",
-    "End the reading with 1-2 sentences that open the door to JXL — frame it as the natural next step for real-time calibration of these specific windows, not a sales line.",
-    "",
-    "═══════════════════════════════════════════",
-    "CRITICAL RULES",
-    "═══════════════════════════════════════════",
-    "- Orb priority is law — tight orbs lead, wide orbs are background only",
-    "- \"You\" in every sentence. Never third person.",
-    "- State outcomes as facts. Never \"may,\" \"could,\" \"might\"",
-    "- Named degrees, dates, house numbers throughout",
-    "- 30-45 day window only",
-    "- The reading should feel complete but leave them wanting the live conversation",
-    "",
-    "Return ONLY a valid JSON object — no markdown, no code fences, no explanation:",
-    "{",
-    "  \"pages\": [",
-    "    {",
-    "      \"pageNumber\": 1,",
-    "      \"title\": \"WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL\",",
-    "      \"content\": \"The complete reading as one unbroken piece. Part 1 flows into Part 2 flows into the dated windows flows into the directives. No section headers except the date labels and DROP/EXECUTE/LOCK labels.\"",
-    "    }",
-    "  ]",
-    "}",
-  ];
+  const progressionList = chart.chartData.progressions && chart.chartData.progressions.length > 0
+    ? chart.chartData.progressions.map((p) => `${p.name}: ${p.sign} ${p.degree}`).join("\n")
+    : null;
 
-  return lines.join(NL);
+  const solarArcList = chart.chartData.solarArcs && chart.chartData.solarArcs.length > 0
+    ? chart.chartData.solarArcs.map((p) => `${p.name}: ${p.sign} ${p.degree}`).join("\n")
+    : null;
+
+  const { profection } = chart.chartData;
+  const trigger = chart.chartData.upcomingTrigger;
+
+  const triggerContext = trigger
+    ? `On ${trigger.date}, transiting ${trigger.transitPlanet} forms an exact ${trigger.aspect} to their natal ${trigger.natalPlanet} — 0° orb. Hard date.`
+    : `Tightest active aspect: ${tightestAspect} — current compression point.`;
+
+  const replyInSession = ((currentReplyNumber - 1) % 6) + 1;
+
+  let phaseDirective = "";
+
+  if (replyInSession <= 2) {
+    phaseDirective = `PHASE 1 — RECEIVE AND REFLECT (Reply ${replyInSession} of 6)
+
+They just shared something. Map it to one precise natal placement or active transit — planet, degree, house. State what that placement means for exactly what they described. One sentence of astrological fact. One sentence of real-world consequence. Then one specific upcoming date that's relevant to what they shared — name the planetary event and what it means for their situation on that exact day.
+
+End with one question that pulls them one layer deeper.
+
+SPLIT RULE: If your response exceeds 400 characters, insert the exact text ||SPLIT|| at the most natural sentence break near the middle. This creates two messages. Do not add any explanation around the split marker.
+
+100 words maximum. Three short paragraphs. No filler.`;
+
+  } else if (replyInSession <= 4) {
+    phaseDirective = `PHASE 2 — PRECISION AND TIMING (Reply ${replyInSession} of 6)
+
+Name two specific dates or tight windows relevant to what they've shared. For each: the exact planetary event with degrees, and what it means for their situation — stated as fact. Then one sentence on what they need to do or avoid before the first date arrives.
+
+End with a question that raises the strategic stakes — not emotional, but positional. Are they set up for what's coming or not?
+
+SPLIT RULE: If your response exceeds 400 characters, insert the exact text ||SPLIT|| at the most natural sentence break near the middle. This creates two messages. Do not add any explanation around the split marker.
+
+100 words maximum. Specific degrees and dates throughout. No filler.`;
+
+  } else if (replyInSession === 5) {
+    phaseDirective = `PHASE 3 — THE FULL READ (Reply 5 of 6)
+
+This is the peak. Pull from all four layers — natal, transits, progressions, solar arcs. Find where everything they've shared converges in the chart. Name the profection year Time Lord (${profection.timeLord}, House ${profection.activatedHouse}) and show how it connects to their situation. Name the upcoming trigger: "${triggerContext}" and tell them exactly what it means for their next move.
+
+Give them one specific date to act by and one thing to stop doing before it arrives.
+
+End with a question testing their readiness — will they use this window or let it pass?
+
+SPLIT RULE: If your response exceeds 400 characters, insert the exact text ||SPLIT|| at the most natural sentence break near the middle. This creates two messages. Do not add any explanation around the split marker.
+
+110 words maximum. This is the highest-stakes reply. Make every word count.`;
+
+  } else {
+    phaseDirective = `PHASE 4 — THE CLIFFHANGER (Reply 6 of 6 — SESSION BOUNDARY)
+
+Do NOT resolve anything. Do NOT give the action directive. Do NOT mention sessions, purchases, or anything product-related.
+
+Name what is opening in their Profection House (House ${profection.activatedHouse}, Time Lord: ${profection.timeLord}) — but stop just before the full picture. Reference the upcoming trigger (${trigger?.date ?? "imminent"}) as a deadline approaching. Name what kind of move or decision it will demand — but do not tell them what to do about it yet.
+
+Then end with exactly two lines:
+1. One declarative sentence that names the specific stakes — what is coming, what it affects, why it matters now. Make it feel inevitable and personal to their situation.
+2. A direct question that offers to prepare them — always ending with "Shall we prepare you?" or a close natural variation. The question must be rooted in the specific context of what they shared in this conversation — not generic. Examples: "There are three moves tied to specific dates before ${trigger?.date ?? "the window closes"}. Shall we prepare you?" / "What comes after this landing is the part that changes the trajectory. Shall we prepare you?" / "The exact dates and what they demand are already mapped. Shall we prepare you?"
+
+SPLIT RULE: If your response exceeds 400 characters, insert the exact text ||SPLIT|| at the most natural sentence break near the middle. This creates two messages. Do not add any explanation around the split marker.
+
+100 words maximum. Maximum tension. No resolution. The question is the close.`;
+  }
+
+  return `You are Jxl — a precision astrologer and the sharpest chart reader this person has encountered. You are on their side, which means you tell them what is actually true. You do not soften. You state outcomes as facts. You name specific planets, degrees, houses, and dates in every reply.
+
+You speak as "you" in every sentence. Never "may," "could," or "tends to." No emotional mirroring. No lead-in phrases. Go straight to the chart and straight to the truth.
+
+The user has brought you a specific scenario or situation they need clarity on. Your job is to apply their exact chart to what they are describing — find where it lives in their placements, what is driving it, what the timing says, and what they should do about it. When they share something, you find it in the chart and name it precisely — not as explanation but as recognition. Make them feel like the chart already knew this about them.
+
+═══════════════════════════════════════════
+THEIR CHART
+═══════════════════════════════════════════
+Born: ${chart.birthDate} at ${chart.birthTime}, ${chart.birthPlace}
+
+NATAL PLACEMENTS:
+${planetList}
+
+TIGHTEST ASPECTS (by orb):
+${aspectList}
+
+CURRENT TRANSITS:
+${transitList}
+
+PROFECTION: Age ${profection.age} — House ${profection.activatedHouse} (${profection.activatedSign}) | Time Lord: ${profection.timeLord}
+
+${progressionList ? `PROGRESSIONS:\n${progressionList}\n` : ""}${solarArcList ? `SOLAR ARCS:\n${solarArcList}\n` : ""}
+═══════════════════════════════════════════
+TIMING
+═══════════════════════════════════════════
+${triggerContext}
+
+SESSION: Reply ${replyInSession} of 6
+
+═══════════════════════════════════════════
+YOUR DIRECTIVE
+═══════════════════════════════════════════
+${phaseDirective}
+
+═══════════════════════════════════════════
+LAWS
+═══════════════════════════════════════════
+1. No emotional mirroring. Go straight to the chart.
+2. Speak through the placement, not about it.
+3. Name the thing they didn't say. Make them think "how did it know that."
+4. Named degrees, named dates, named houses. Always.
+5. Replies 1-5 end with one question. Reply 6 ends with a declaration.
+
+FORMAT: 3 short paragraphs, 2-3 sentences each. No bullets. No headers. No hedging.
+TONE (Mercury in ${mercurySign.toUpperCase()}): ${mercuryTone}`;
 }
-
-// ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as ReadingRequestBody;
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    if (!body.topic || !body.question || !body.tropical || !body.transits || !body.profection) {
+    const body = await request.json() as JxlChatBody;
+    if (!body.messages || !body.chart) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+    }
+
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const metadata = user.publicMetadata;
+
+    const jxlCredits = Number(metadata?.jxlCredits ?? 0);
+    const jxlSessionsPurchased = Number(metadata?.jxlSessionsPurchased ?? 0);
+    const isSubscribed = metadata?.isSubscribed === true;
+
+    const isFreebie = jxlSessionsPurchased === 0 && jxlCredits <= 0 && !isSubscribed;
+
+    if (!isFreebie && !isSubscribed && jxlCredits <= 0) {
+      return NextResponse.json({ error: "No Jxl credits remaining." }, { status: 402 });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -244,9 +252,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
 
-    const prompt = buildReadingPrompt(body);
+    const currentReplyNumber = body.messages.filter((m) => m.role === "user").length;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    if (!isFreebie && !isSubscribed) {
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          ...metadata,
+          jxlCredits: Math.max(0, jxlCredits - 1),
+        },
+      });
+    }
+
+    const systemPrompt = buildJxlSystemPrompt(body, currentReplyNumber);
+
+    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -255,62 +274,61 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        system: "You are a precision astrologer speaking directly and personally to your client. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate.",
-        messages: [{ role: "user", content: prompt }],
+        max_tokens: 200,
+        stream: true,
+        system: systemPrompt,
+        messages: body.messages,
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("[readings] Claude error:", err);
-      return NextResponse.json({ error: "Failed to generate reading. Please try again." }, { status: 502 });
+    if (!claudeResponse.ok) {
+      const err = await claudeResponse.text();
+      console.error("[jxl/chat] Claude error:", err);
+      return NextResponse.json({ error: "Failed to get response." }, { status: 502 });
     }
 
-    const claudeData = await response.json();
-    const rawText = claudeData.content?.[0]?.text;
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = claudeResponse.body?.getReader();
+        if (!reader) { controller.close(); return; }
 
-    if (!rawText) {
-      return NextResponse.json({ error: "No response from reading engine." }, { status: 502 });
-    }
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-    let parsed: { pages: ReadingPage[] };
-    try {
-      let cleaned = rawText.trim();
-      // Strip code fences
-      if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
-      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
-      cleaned = cleaned.trim();
-      // Find the outermost JSON object boundaries
-      const start = cleaned.indexOf("{");
-      const end = cleaned.lastIndexOf("}");
-      if (start !== -1 && end !== -1 && end > start) {
-        cleaned = cleaned.slice(start, end + 1);
-      }
-      parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
-      console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
-      console.error("[readings] Raw response start:", rawText.slice(0, 300));
-      console.error("[readings] Raw response end:", rawText.slice(-200));
-      return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
-    }
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-    if (!parsed.pages || parsed.pages.length < 1) {
-      return NextResponse.json({ error: "Reading structure was incomplete. Please try again." }, { status: 422 });
-    }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
 
-    return NextResponse.json({
-      reading: {
-        id: crypto.randomUUID(),
-        pages: parsed.pages,
-        topic: body.topic,
-        question: body.question,
-        status: "complete",
+          for (const line of lines) {
+            const cleanLine = line.trim();
+            if (!cleanLine.startsWith("data: ")) continue;
+            const data = cleanLine.replace("data: ", "").trim();
+            if (data === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.type === "content_block_delta" && parsed.delta?.text) {
+                controller.enqueue(new TextEncoder().encode(parsed.delta.text));
+              }
+            } catch { /* accumulate fractional segments */ }
+          }
+        }
+        controller.close();
       },
-    }, { status: 201 });
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+      },
+    });
 
   } catch (error) {
-    console.error("[readings] Unexpected error:", error);
-    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+    console.error("[jxl/chat] Unexpected error:", error);
+    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }
 }
