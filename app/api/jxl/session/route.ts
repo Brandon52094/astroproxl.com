@@ -10,7 +10,6 @@ import {
   getNextJxlTier,
 } from "@/lib/jxlConfig";
 
-// ── GET /api/jxl/session ──────────────────────────────────────────────────────
 export async function GET() {
   try {
     const { userId } = await auth();
@@ -30,8 +29,9 @@ export async function GET() {
     const jxlFreeUsedAt = metadata?.jxlFreeUsedAt
       ? new Date(metadata.jxlFreeUsedAt as string)
       : null;
-    const paywallsCompleted = Number(metadata?.paywallsCompleted ?? 0);
+    const readingsCompleted = Number(metadata?.readingsCompleted ?? 0);
     const isSubscribed = metadata?.isSubscribed === true;
+    const jxlUnlimited = metadata?.jxlUnlimited === true; // set by subscription webhook
 
     // ── Cycle cooldown check ──────────────────────────────────────────────────
     let onCycleCooldown = false;
@@ -43,12 +43,13 @@ export async function GET() {
       cycleResetsAt = expiresAt.toISOString();
 
       // Auto-reset if cooldown has naturally expired
+      // Use undefined not null — Clerk rejects null in publicMetadata
       if (!onCycleCooldown) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...metadata,
             jxlSessionsPurchased: 0,
-            jxlCycleStartedAt: null,
+            jxlCycleStartedAt: undefined,
             jxlCredits: 0,
           },
         });
@@ -61,7 +62,6 @@ export async function GET() {
       ? Date.now() - jxlFreeUsedAt.getTime() > JXL_FREEBIE_COOLDOWN_MS
       : true;
 
-    // If cycle reset but freebie hasn't reset yet — skip freebie, go to Session 1
     const canUseFreebie = freebieExpired && !onCycleCooldown;
     const freebieResetsAt = jxlFreeUsedAt && !freebieExpired
       ? new Date(jxlFreeUsedAt.getTime() + JXL_FREEBIE_COOLDOWN_MS).toISOString()
@@ -74,29 +74,29 @@ export async function GET() {
     // ── Caring message ────────────────────────────────────────────────────────
     const showCaringMessage =
       !isSubscribed &&
+      !jxlUnlimited &&
       jxlSessionsPurchased >= JXL_MAX_SESSIONS_PER_CYCLE &&
       onCycleCooldown;
 
     // ── Unlock state ──────────────────────────────────────────────────────────
-    const isUnlocked = isSubscribed || paywallsCompleted >= 1;
-
-    // ── Subscriber overflow — can buy from Session 1 ladder ──────────────────
-    const subscriberCanBuyMore = isSubscribed && jxlCredits <= 0;
+    // JXL unlocks after first reading completion (readingsCompleted >= 1)
+    const isUnlocked = isSubscribed || jxlUnlimited || readingsCompleted >= 1;
 
     return NextResponse.json({
       isUnlocked,
       jxlCredits,
+      jxlUnlimited,           // subscribers have unlimited JXL
       jxlSessionsPurchased,
       canUseFreebie,
       freebieResetsAt,
       freebieReplies: JXL_FREEBIE_REPLIES,
-      onCycleCooldown: isSubscribed ? false : onCycleCooldown,
-      cycleResetsAt: isSubscribed ? null : cycleResetsAt,
+      onCycleCooldown: (isSubscribed || jxlUnlimited) ? false : onCycleCooldown,
+      cycleResetsAt: (isSubscribed || jxlUnlimited) ? null : cycleResetsAt,
       nextTier,
       nextPack,
-      showCaringMessage: isSubscribed ? false : showCaringMessage,
+      showCaringMessage: (isSubscribed || jxlUnlimited) ? false : showCaringMessage,
       caringMessage: showCaringMessage ? JXL_CARING_MESSAGE : null,
-      subscriberCanBuyMore,
+      subscriberCanBuyMore: false, // subscribers have unlimited — no top-up needed in JXL
       isSubscribed,
       maxSessionsPerCycle: JXL_MAX_SESSIONS_PER_CYCLE,
     });

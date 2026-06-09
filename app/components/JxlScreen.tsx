@@ -124,7 +124,7 @@ export default function JxlScreen() {
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isLoading || !chart || !session) return;
 
-    if (!isFreebie && creditsRemaining <= 0) {
+    if (!isFreebie && !session.isSubscribed && creditsRemaining <= 0) {
       setShowPaywall(true);
       return;
     }
@@ -191,6 +191,7 @@ export default function JxlScreen() {
       if (updated && updated.jxlCredits <= 0 && !updated.isSubscribed && !updated.canUseFreebie) {
         setTimeout(() => setShowPaywall(true), 800);
       }
+      // Never show paywall for subscribers
 
       if (updated?.showCaringMessage) {
         setTimeout(() => setShowPaywall(true), 800);
@@ -276,9 +277,11 @@ export default function JxlScreen() {
               </button>
             )}
             <div className="flex h-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] px-3 text-[11px] font-medium text-slate-400">
-              {isFreebie
-                ? `${Math.max(0, (session?.freebieReplies ?? 6) - userRepliesCount)} free`
-                : `${creditsRemaining} left`}
+              {session?.isSubscribed
+                ? "Unlimited"
+                : isFreebie
+                  ? `${Math.max(0, (session?.freebieReplies ?? 6) - userRepliesCount)} free`
+                  : `${creditsRemaining} left`}
             </div>
           </div>
         </header>
@@ -298,10 +301,10 @@ export default function JxlScreen() {
                 <Sparkles className="h-6 w-6 text-amber-300" />
               </div>
               <h2 className="mb-2 text-[18px] font-semibold text-white">
-                What's going on?
+                Tell me about a specific scenario you need clarity on.
               </h2>
               <p className="max-w-[28ch] text-[13px] leading-5 text-slate-400">
-                Tell Jxl what's happening in your life right now. No categories, no prompts — just what's on your mind.
+                The more information you share, the more precise the read.
               </p>
               {isFreebie && (
                 <span className="mt-4 rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1 text-[11px] text-amber-300/80">
@@ -404,10 +407,10 @@ export default function JxlScreen() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-[13px] font-semibold text-slate-950">
-                              {session.nextPack.name}
+                              Continue
                             </p>
                             <p className="text-[11px] text-slate-800">
-                              {session.nextPack.tagline}
+                              {session.nextPack.replies} replies · nothing resets
                             </p>
                           </div>
                           <span className="text-[16px] font-bold text-slate-950">
@@ -419,7 +422,7 @@ export default function JxlScreen() {
                     <div className="mt-3 space-y-2">
                       {["session_1", "session_2", "session_3", "session_4", "session_5"].map((tier, i) => {
                         const prices = ["$4.99", "$8.99", "$12.99", "$16.99", "$19.99"];
-                        const names = ["Session 1", "Session 2", "Session 3", "Session 4", "Session 5"];
+                        const labels = ["1 Session", "2 Sessions", "3 Sessions", "4 Sessions", "5 Sessions"];
                         const isNext = tier === session.nextPack?.tier;
                         if (isNext) return null;
                         return (
@@ -431,7 +434,7 @@ export default function JxlScreen() {
                             className="w-full rounded-[16px] border border-white/10 bg-white/[0.03] px-4 py-2.5 text-left transition hover:border-amber-300/20 disabled:opacity-40"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-[12px] text-slate-400">{names[i]}</span>
+                              <span className="text-[12px] text-slate-400">{labels[i]}</span>
                               <span className="text-[12px] font-semibold text-slate-300">{prices[i]}</span>
                             </div>
                           </button>
