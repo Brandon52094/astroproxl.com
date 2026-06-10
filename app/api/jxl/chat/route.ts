@@ -66,7 +66,7 @@ const SISTER_SIGNS: Record<string, string> = {
 // the sister sign is the polarity they're unconsciously seeking.
 function getMoonSisterTone(moonSign: string): string {
   const sisterSign = SISTER_SIGNS[moonSign.toLowerCase()] ?? moonSign.toLowerCase();
-  
+
   const tones: Record<string, { rhythm: string; trigger: string; forbidden: string }> = {
     aries: {
       rhythm: "Direct, rapid, and combative. Lead with the core conclusion. Short, heavy, declarative sentences.",
@@ -133,7 +133,7 @@ function getMoonSisterTone(moonSign: string): string {
   const profile = tones[sisterSign];
   if (!profile) return "Clear, direct, surgical, and entirely grounded in the mechanical facts of the chart.";
 
-  return `DELIVERY RHYTHM: ${profile.rhythm}\nPSYCHOLOGICAL TRIGGER: ${profile.trigger}\nFORBIDDEN: ${profile.forbidden}`;
+  return "DELIVERY RHYTHM: " + profile.rhythm + "\nPSYCHOLOGICAL TRIGGER: " + profile.trigger + "\nFORBIDDEN: " + profile.forbidden;
 }
 
 function getTightestAspect(
@@ -367,10 +367,17 @@ export async function POST(request: NextRequest) {
     const jxlCredits = Number(metadata?.jxlCredits ?? 0);
     const jxlSessionsPurchased = Number(metadata?.jxlSessionsPurchased ?? 0);
     const isSubscribed = metadata?.isSubscribed === true;
+    const jxlUnlimited = metadata?.jxlUnlimited === true;
+    const jxlFreeUsedAt = metadata?.jxlFreeUsedAt as string | undefined;
 
-    const isFreebie = jxlSessionsPurchased === 0 && jxlCredits <= 0 && !isSubscribed;
+    // Freebie is only available if:
+    // - No sessions purchased
+    // - No credits (they haven't paid)
+    // - Not subscribed
+    // - jxlFreeUsedAt is NOT set (haven't used freebie before)
+    const isFreebie = jxlSessionsPurchased === 0 && jxlCredits <= 0 && !isSubscribed && !jxlUnlimited && !jxlFreeUsedAt;
 
-    if (!isFreebie && !isSubscribed && jxlCredits <= 0) {
+    if (!isFreebie && !isSubscribed && !jxlUnlimited && jxlCredits <= 0) {
       return NextResponse.json({ error: "No Jxl credits remaining." }, { status: 402 });
     }
 
@@ -381,11 +388,21 @@ export async function POST(request: NextRequest) {
 
     const currentReplyNumber = body.messages.filter((m) => m.role === "user").length;
 
-    if (!isFreebie && !isSubscribed) {
+    if (!isFreebie && !isSubscribed && !jxlUnlimited) {
       await client.users.updateUserMetadata(userId, {
         publicMetadata: {
           ...metadata,
           jxlCredits: Math.max(0, jxlCredits - 1),
+        },
+      });
+    }
+
+    // Mark freebie as used on reply 6 so it cannot retrigger
+    if (isFreebie && currentReplyNumber >= 6 && !jxlFreeUsedAt) {
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          ...metadata,
+          jxlFreeUsedAt: new Date().toISOString(),
         },
       });
     }
