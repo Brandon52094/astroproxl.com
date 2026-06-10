@@ -88,16 +88,26 @@ function ResultsPageInner() {
 
   // Runs exactly once on mount
   useEffect(() => {
+    const returningFromDownload = consumeDownloadReturnFlag();
+    const returningFromPayment = consumePaymentReturnFlag();
+
     const stored = loadReading();
-    if (!stored) { router.push("/reading/intake"); return; }
-    setReading(stored);
+
+    // If returning from download payment and reading is gone,
+    // keep the page alive so polling can update the download button
+    if (!stored && !returningFromDownload) {
+      router.push("/reading/intake");
+      return;
+    }
+
+    if (stored) {
+      setReading(stored);
+    }
     setLoaded(true);
 
-    const returningFromPayment = consumePaymentReturnFlag();
     if (returningFromPayment) {
       setUnlockedByPayment(true);
     }
-    const returningFromDownload = consumeDownloadReturnFlag();
     if (returningFromDownload) {
       setDownloadPaymentReturn(true);
     }
@@ -269,7 +279,7 @@ function ResultsPageInner() {
   // Payment is gated at intake — results page always shows the full reading
   const showPaywall = false;
 
-  if (!loaded || !reading) {
+  if (!loaded) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#050816]">
         <div className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
