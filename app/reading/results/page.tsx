@@ -244,6 +244,7 @@ function ResultsPageInner() {
               Direct Future Predictions
             </p>
             <p className="mt-1 text-xs text-slate-400">Your Reading</p>
+            <p className="mt-0.5 text-xs font-medium text-amber-300/80">Download your reading below</p>
           </div>
           <div className="w-11" />
         </header>
