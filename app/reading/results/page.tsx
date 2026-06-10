@@ -89,13 +89,31 @@ function ResultsPageInner() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchCredits(); }, [fetchCredits]);
-  useEffect(() => { 
-    if (unlockedByPayment) {
-      // Poll twice — once immediately, once after 2s to catch webhook delay
-      fetchCredits();
-      setTimeout(() => fetchCredits(), 2000);
-    }
-  }, [unlockedByPayment, fetchCredits]);
+  useEffect(() => {
+    if (!unlockedByPayment) return;
+
+    // Poll until downloadUnlocked is true — webhook may take a few seconds
+    let attempts = 0;
+    const maxAttempts = 8;
+
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/user/credits");
+        const data: Credits = await response.json();
+        setCredits(data);
+        const paywallsCompleted = data.paywallsCompleted ?? 0;
+        if (!data.isSubscribed) setPaywallConfig(getPaywallConfig(paywallsCompleted));
+
+        // Keep polling until download is unlocked or max attempts reached
+        attempts++;
+        if (!data.downloadUnlocked && !data.isSubscribed && attempts < maxAttempts) {
+          setTimeout(poll, 1500);
+        }
+      } catch { /* silent */ }
+    };
+
+    poll();
+  }, [unlockedByPayment]);
 
   const handleCheckout = async (mode: "one_time" | "subscription") => {
     if (!paywallConfig) return;
