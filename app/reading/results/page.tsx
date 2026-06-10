@@ -287,8 +287,8 @@ function ResultsPageInner() {
     );
   }
 
-  const page = reading.pages[0];
-  const page4 = reading.pages[0]; // for paywall teaser
+  const page = reading?.pages[0];
+  const page4 = reading?.pages[0]; // for paywall teaser
 
   return (
     <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
