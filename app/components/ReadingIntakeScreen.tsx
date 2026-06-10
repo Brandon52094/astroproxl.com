@@ -246,12 +246,28 @@ export default function ReadingIntakeScreen() {
         timeframeValue: "next-45-days",
       });
 
+      // Gate at intake — check credits before generating
       if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
-        await fetch("/api/user/credits", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pageNumber: 1 }),
-        });
+        const creditsRes = await fetch("/api/user/credits");
+        const creditsData = await creditsRes.json();
+        if (Number(creditsData.credits ?? 0) <= 0) {
+          const paywallsCompleted = Number(creditsData.paywallsCompleted ?? 0);
+          const paywallIndex = Math.min(paywallsCompleted + 1, 4);
+          const checkoutRes = await fetch("/api/stripe/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              returnUrl: window.location.origin + "/reading/preparing",
+              mode: "one_time",
+              paywallIndex,
+            }),
+          });
+          const checkoutData = await checkoutRes.json();
+          if (checkoutData.url) {
+            window.location.href = checkoutData.url;
+            return;
+          }
+        }
       }
 
       router.push("/reading/preparing");
