@@ -77,6 +77,7 @@ export async function GET() {
     }
 
     const canUnlockPage4 = isSubscribed || credits > 0;
+    const downloadUnlocked = metadata?.downloadUnlocked === true;
 
     return NextResponse.json({
       credits,
@@ -89,6 +90,7 @@ export async function GET() {
       onCooldown: isSubscribed ? false : onCooldown,
       cooldownExpiresAt,
       canBypass: isSubscribed ? false : canBypass,
+      downloadUnlocked,
     });
   } catch (error) {
     console.error("[credits GET] Error:", error);
