@@ -11,6 +11,7 @@ import type { StoredReading } from "@/lib/chartStore";
 import type { PaywallConfig } from "@/lib/paywallConfig";
 
 const PAYMENT_FLAG_KEY = "dfp_payment_return";
+const DOWNLOAD_FLAG_KEY = "dfp_download_return";
 
 function setPaymentReturnFlag() {
   if (typeof window === "undefined") return;
@@ -21,6 +22,18 @@ function consumePaymentReturnFlag(): boolean {
   if (typeof window === "undefined") return false;
   const exists = localStorage.getItem(PAYMENT_FLAG_KEY) === "1";
   localStorage.removeItem(PAYMENT_FLAG_KEY);
+  return exists;
+}
+
+function setDownloadReturnFlag() {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(DOWNLOAD_FLAG_KEY, "1");
+}
+
+function consumeDownloadReturnFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  const exists = localStorage.getItem(DOWNLOAD_FLAG_KEY) === "1";
+  localStorage.removeItem(DOWNLOAD_FLAG_KEY);
   return exists;
 }
 
@@ -48,6 +61,7 @@ function ResultsPageInner() {
   const readingCompleteRecorded = useRef(false); // useRef so guard is synchronous
   const [isFinishing, setIsFinishing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadPaymentReturn, setDownloadPaymentReturn] = useState(false);
 
   const intake = loadIntake();
 
@@ -83,6 +97,10 @@ function ResultsPageInner() {
     if (returningFromPayment) {
       setUnlockedByPayment(true);
     }
+    const returningFromDownload = consumeDownloadReturnFlag();
+    if (returningFromDownload) {
+      setDownloadPaymentReturn(true);
+    }
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/results");
     }
@@ -91,10 +109,16 @@ function ResultsPageInner() {
   useEffect(() => { fetchCredits(); }, [fetchCredits]);
   useEffect(() => {
     if (!unlockedByPayment) return;
+    fetchCredits();
+    setTimeout(() => fetchCredits(), 2000);
+  }, [unlockedByPayment, fetchCredits]);
 
-    // Poll until downloadUnlocked is true — webhook may take a few seconds
+  // Dedicated polling for download payment return — polls until downloadUnlocked is true
+  useEffect(() => {
+    if (!downloadPaymentReturn) return;
+
     let attempts = 0;
-    const maxAttempts = 8;
+    const maxAttempts = 10;
 
     const poll = async () => {
       try {
@@ -103,8 +127,6 @@ function ResultsPageInner() {
         setCredits(data);
         const paywallsCompleted = data.paywallsCompleted ?? 0;
         if (!data.isSubscribed) setPaywallConfig(getPaywallConfig(paywallsCompleted));
-
-        // Keep polling until download is unlocked or max attempts reached
         attempts++;
         if (!data.downloadUnlocked && !data.isSubscribed && attempts < maxAttempts) {
           setTimeout(poll, 1500);
@@ -113,7 +135,7 @@ function ResultsPageInner() {
     };
 
     poll();
-  }, [unlockedByPayment]);
+  }, [downloadPaymentReturn]);
 
   const handleCheckout = async (mode: "one_time" | "subscription") => {
     if (!paywallConfig) return;
@@ -138,7 +160,7 @@ function ResultsPageInner() {
 
     // Subscribers get downloads free — everyone else pays $1
     if (!downloadUnlocked && !isSubscribed) {
-      setPaymentReturnFlag();
+      setDownloadReturnFlag();
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
