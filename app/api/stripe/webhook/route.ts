@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
       | "bypass"
       | "jxl"
       | "subscriber_topup"
+      | "reading_download"
       | undefined;
 
     if (!userId || !mode) {
