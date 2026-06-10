@@ -32,33 +32,49 @@ type ResolvedPlace = {
 function normalizeBirthDate(raw: string): string {
   const s = raw.trim();
 
-  // Already MM/DD/YYYY
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) return s;
+  // Strip all separators to get pure digits
+  const digits = s.replace(/[-\/\.]/g, "");
 
-  // YYYY-MM-DD or YYYYMMDD
-  const isoMatch = s.match(/^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})$/);
-  if (isoMatch) {
-    return `${isoMatch[2]}/${isoMatch[3]}/${isoMatch[1]}`;
-  }
-
-  // MM-DD-YYYY
-  const mdyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (mdyDash) {
-    return `${mdyDash[1]}/${mdyDash[2]}/${mdyDash[3]}`;
-  }
-
-  // DD/MM/YYYY (European) — only if day > 12 makes it unambiguous
-  const dmyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dmyMatch) {
-    const d = parseInt(dmyMatch[1]);
-    const m = parseInt(dmyMatch[2]);
-    if (d > 12 && m <= 12) {
-      return `${dmyMatch[2]}/${dmyMatch[1]}/${dmyMatch[3]}`;
+  // 8 digits — could be YYYYMMDD or MMDDYYYY
+  if (/^\d{8}$/.test(digits)) {
+    const firstFour = parseInt(digits.slice(0, 4));
+    // If first 4 digits look like a year (1900-2099), treat as YYYYMMDD
+    if (firstFour >= 1900 && firstFour <= 2099) {
+      const yyyy = digits.slice(0, 4);
+      const mm = digits.slice(4, 6);
+      const dd = digits.slice(6, 8);
+      return mm + "/" + dd + "/" + yyyy;
     }
-    return s; // ambiguous — return as-is
+    // Otherwise treat as MMDDYYYY
+    const mm = digits.slice(0, 2);
+    const dd = digits.slice(2, 4);
+    const yyyy = digits.slice(4, 8);
+    return mm + "/" + dd + "/" + yyyy;
   }
 
-  return s;
+  // Already has separators — parse intelligently
+  // MM/DD/YYYY or MM-DD-YYYY or MM.DD.YYYY
+  const mdyMatch = s.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/);
+  if (mdyMatch) {
+    return mdyMatch[1].padStart(2, "0") + "/" + mdyMatch[2].padStart(2, "0") + "/" + mdyMatch[3];
+  }
+
+  // YYYY-MM-DD or YYYY/MM/DD
+  const isoMatch = s.match(/^(\d{4})[-\/\.](\d{2})[-\/\.](\d{2})$/);
+  if (isoMatch) {
+    return isoMatch[2] + "/" + isoMatch[3] + "/" + isoMatch[1];
+  }
+
+  // 6 digits — MMDDYY
+  if (/^\d{6}$/.test(digits)) {
+    const mm = digits.slice(0, 2);
+    const dd = digits.slice(2, 4);
+    const yy = digits.slice(4, 6);
+    const yyyy = parseInt(yy) > 30 ? "19" + yy : "20" + yy;
+    return mm + "/" + dd + "/" + yyyy;
+  }
+
+  return s; // return as-is if unrecognized
 }
 
 function Section({
