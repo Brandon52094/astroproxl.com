@@ -88,8 +88,11 @@ function ResultsPageInner() {
 
   // Runs exactly once on mount
   useEffect(() => {
-    const returningFromDownload = consumeDownloadReturnFlag();
-    const returningFromPayment = consumePaymentReturnFlag();
+    // Use URL params directly — more reliable than localStorage on iOS Safari
+    const paymentMode = searchParams.get("mode");
+    const paymentStatus = searchParams.get("payment");
+    const returningFromDownload = paymentMode === "reading_download" && paymentStatus === "success";
+    const returningFromPayment = consumePaymentReturnFlag() || (paymentStatus === "success" && paymentMode !== "reading_download");
 
     const stored = loadReading();
 
@@ -111,7 +114,7 @@ function ResultsPageInner() {
     if (returningFromDownload) {
       setDownloadPaymentReturn(true);
     }
-    if (searchParams.get("payment")) {
+    if (paymentStatus) {
       window.history.replaceState({}, "", "/reading/results");
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
