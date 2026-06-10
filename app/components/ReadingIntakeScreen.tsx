@@ -324,7 +324,7 @@ export default function ReadingIntakeScreen() {
       Outer shell: h-screen overflow-y-auto — scrolls within the locked viewport.
       The fixed footer CTA stays anchored to the bottom of the screen as before.
     */
-    <div className="h-screen overflow-y-auto bg-[#050816] text-slate-100">
+    <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
       <style jsx>{`
         @keyframes jxlAmberPulse {
           0%, 100% {
@@ -749,7 +749,7 @@ export default function ReadingIntakeScreen() {
                 className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
               >
                 <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
-                <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL No Cool Down</span>
+                <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
               </button>
             )}
           </div>
