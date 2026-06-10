@@ -86,14 +86,16 @@ function ResultsPageInner() {
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/results");
     }
-    // If returning from download payment, re-fetch credits so downloadUnlocked is fresh
-    if (searchParams.get("mode") === "reading_download") {
-      setTimeout(() => fetchCredits(), 1500);
-    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchCredits(); }, [fetchCredits]);
-  useEffect(() => { if (unlockedByPayment) fetchCredits(); }, [unlockedByPayment, fetchCredits]);
+  useEffect(() => { 
+    if (unlockedByPayment) {
+      // Poll twice — once immediately, once after 2s to catch webhook delay
+      fetchCredits();
+      setTimeout(() => fetchCredits(), 2000);
+    }
+  }, [unlockedByPayment, fetchCredits]);
 
   const handleCheckout = async (mode: "one_time" | "subscription") => {
     if (!paywallConfig) return;
