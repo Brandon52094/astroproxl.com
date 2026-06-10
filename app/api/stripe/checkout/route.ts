@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { returnUrl, mode, paywallIndex, jxlTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "bypass" | "jxl" | "subscriber_topup";
+      mode: "one_time" | "subscription" | "bypass" | "jxl" | "subscriber_topup" | "reading_download";
       paywallIndex?: number;
       jxlTier?: string;
     };
@@ -77,6 +77,32 @@ export async function POST(request: NextRequest) {
           pack: SUBSCRIBER_TOPUP.pack,
         },
         success_url: `${returnUrl}?payment=success&mode=subscriber_topup`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Reading download — $1.00 ──────────────────────────────────────────────
+    if (mode === "reading_download") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Download Your Reading",
+              description: "Save your full reading as a PDF",
+            },
+            unit_amount: 100,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "reading_download",
+        },
+        success_url: `${returnUrl}?payment=success&mode=reading_download`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });

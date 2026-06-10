@@ -213,6 +213,22 @@ export default function JxlScreen() {
   const handleCheckout = async (tier: string) => {
     setCheckoutLoading(true);
     try {
+      // Subscription option routes to subscription checkout
+      if (tier === "subscription") {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            returnUrl: `${window.location.origin}/jxl`,
+            mode: "subscription",
+            paywallIndex: 1,
+          }),
+        });
+        const data = await res.json();
+        if (data.url) window.location.href = data.url;
+        return;
+      }
+      // JXL session purchase
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -397,50 +413,37 @@ export default function JxlScreen() {
                         ? "You've felt what Jxl can do. The conversation picks up exactly where it left off."
                         : "The next session continues from here — nothing resets."}
                     </p>
-                    {session.nextPack && (
-                      <button
-                        type="button"
-                        onClick={() => handleCheckout(session.nextPack!.tier)}
-                        disabled={checkoutLoading}
-                        className="w-full rounded-[18px] bg-amber-300 px-5 py-3 text-left transition hover:bg-amber-200 disabled:opacity-60"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-[13px] font-semibold text-slate-950">
-                              Continue
-                            </p>
-                            <p className="text-[11px] text-slate-800">
-                              {session.nextPack.replies} replies · nothing resets
-                            </p>
-                          </div>
-                          <span className="text-[16px] font-bold text-slate-950">
-                            {session.nextPack.displayPrice}
-                          </span>
+                    {/* Single session option */}
+                    <button
+                      type="button"
+                      onClick={() => handleCheckout("session_1")}
+                      disabled={checkoutLoading}
+                      className="w-full rounded-[18px] bg-amber-300 px-5 py-3 text-left transition hover:bg-amber-200 disabled:opacity-60"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[13px] font-semibold text-slate-950">Continue</p>
+                          <p className="text-[11px] text-slate-800">6 replies · nothing resets</p>
                         </div>
-                      </button>
-                    )}
-                    <div className="mt-3 space-y-2">
-                      {["session_1", "session_2", "session_3", "session_4", "session_5"].map((tier, i) => {
-                        const prices = ["$4.99", "$8.99", "$12.99", "$16.99", "$19.99"];
-                        const labels = ["1 Session", "2 Sessions", "3 Sessions", "4 Sessions", "5 Sessions"];
-                        const isNext = tier === session.nextPack?.tier;
-                        if (isNext) return null;
-                        return (
-                          <button
-                            key={tier}
-                            type="button"
-                            onClick={() => handleCheckout(tier)}
-                            disabled={checkoutLoading}
-                            className="w-full rounded-[16px] border border-white/10 bg-white/[0.03] px-4 py-2.5 text-left transition hover:border-amber-300/20 disabled:opacity-40"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-[12px] text-slate-400">{labels[i]}</span>
-                              <span className="text-[12px] font-semibold text-slate-300">{prices[i]}</span>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                        <span className="text-[16px] font-bold text-slate-950">$4.99</span>
+                      </div>
+                    </button>
+
+                    {/* Subscription option */}
+                    <button
+                      type="button"
+                      onClick={() => handleCheckout("subscription")}
+                      disabled={checkoutLoading}
+                      className="w-full rounded-[16px] border border-amber-300/30 bg-amber-400/[0.06] px-5 py-3 text-left transition hover:border-amber-300/50 disabled:opacity-40"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[13px] font-semibold text-amber-200">AstroXL — $20/mo</p>
+                          <p className="text-[11px] text-slate-400">Unlimited JXL + 8 readings · no cooldowns</p>
+                        </div>
+                        <span className="text-[12px] font-semibold text-amber-300">Best value</span>
+                      </div>
+                    </button>
                   </>
                 )}
               </motion.div>

@@ -141,6 +141,17 @@ export async function POST(request: NextRequest) {
 
         console.log(`[webhook] bypass — full cycle reset for ${userId}.`);
 
+      // ── Reading download — $1.00 ───────────────────────────────────────────
+      } else if (mode === "reading_download") {
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            downloadUnlocked: true,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+        console.log(`[webhook] reading_download — unlocked for ${userId}.`);
+
       // ── JXL session purchase ────────────────────────────────────────────────
       } else if (mode === "jxl") {
         const jxlTier = session.metadata?.jxlTier ?? "";
@@ -168,7 +179,21 @@ export async function POST(request: NextRequest) {
       }
 
     } catch (err) {
-      console.error("[webhook] Failed to update user metadata:", err);
+      // Clerk update failed AFTER Stripe charged the card.
+      // Log everything needed to manually recover — userId, mode, amount, session ID.
+      console.error("[webhook] CRITICAL — Stripe charged but Clerk update failed.", {
+        userId,
+        mode,
+        sessionId: session.id,
+        amount: session.amount_total,
+        paywallIndex: session.metadata?.paywallIndex ?? null,
+        jxlTier: session.metadata?.jxlTier ?? null,
+        tier: session.metadata?.tier ?? null,
+        error: String(err),
+        timestamp: new Date().toISOString(),
+      });
+      // Return 500 so Stripe retries the webhook up to 3 times over 24 hours.
+      // If all retries fail, the log above has everything needed to fix manually.
       return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
     }
   }
@@ -196,7 +221,12 @@ export async function POST(request: NextRequest) {
 
         console.log(`[webhook] subscription cancelled for ${userId}`);
       } catch (err) {
-        console.error("[webhook] Failed to update cancelled subscription:", err);
+        console.error("[webhook] CRITICAL — Failed to update cancelled subscription.", {
+          userId,
+          subscriptionId: subscription.id,
+          error: String(err),
+          timestamp: new Date().toISOString(),
+        });
         return NextResponse.json({ error: "Failed to update subscription" }, { status: 500 });
       }
     }
