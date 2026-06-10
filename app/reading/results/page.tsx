@@ -86,6 +86,10 @@ function ResultsPageInner() {
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/results");
     }
+    // If returning from download payment, re-fetch credits so downloadUnlocked is fresh
+    if (searchParams.get("mode") === "reading_download") {
+      setTimeout(() => fetchCredits(), 1500);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchCredits(); }, [fetchCredits]);
@@ -314,11 +318,15 @@ function ResultsPageInner() {
                 type="button"
                 onClick={handleDownload}
                 disabled={isDownloading}
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white disabled:opacity-60"
+                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition disabled:opacity-60 ${
+                  credits?.downloadUnlocked || credits?.isSubscribed
+                    ? "border-amber-300/50 bg-amber-400/10 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.25)] hover:bg-amber-400/20"
+                    : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-teal-300/30 hover:text-white"
+                }`}
                 title={credits?.downloadUnlocked || credits?.isSubscribed ? "Download PDF" : "Download PDF — $1.00"}
               >
                 {isDownloading
-                  ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-teal-300 border-t-transparent" />
+                  ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-transparent" />
                   : <Download className="h-4 w-4" />}
               </button>
               <button
