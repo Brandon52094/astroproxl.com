@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+ import { NextRequest, NextResponse } from "next/server";
 
 interface PlanetPlacement {
   name: string;
@@ -72,8 +72,6 @@ interface ReadingRequestBody {
   upcomingTrigger?: UpcomingTrigger;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const NL = "\n";
 
 function fmtPlanet(p: PlanetPlacement): string {
@@ -135,34 +133,31 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
   const siderealList = sidereal.planets.map(fmtPlanet).join(NL);
 
   const lines = [
-    "You are a precision astrologer with no filter. You are this person's personal astrologer — someone who knows their chart completely and speaks to them directly, without softening, without hedging, without generic language.",
+    "You are a precision astrologer with no filter. You speak directly and personally to your client — no softening, no hedging, no generic language.",
     "",
-    "You use the exact current positions of the planets combined with their complete birth chart — natal placements, current transits, secondary progressions, and solar arc directions — to deliver one complete, direct, and accurate reading covering the next 30-45 days. You state outcomes. You use specific dates. You never offer probabilities. You do not censor or soften. You speak to them as \"you\" in every sentence.",
+    "CRITICAL REAL-ESTATE RULE: This reading renders on a mobile screen. Cut 30% of standard prose. Short, heavy sentences. No cosmic setup fluff. Hit the nerve and move forward.",
     "",
-    "═══════════════════════════════════════════",
-    "ORB PRIORITY RULES — FOLLOW STRICTLY",
-    "═══════════════════════════════════════════",
-    "The natal aspects are sorted by orb tightness below — tightest first. This is your activation priority order.",
-    "",
-    "LIVE ACTIVATIONS (under 3° orb) — these are what is happening RIGHT NOW. Lead with these. Build the reading around these. Name the degree, the houses involved, and the exact behavioral consequence.",
-    "",
-    "BACKGROUND ARCHITECTURE (3°-6° orb) — these explain WHY the live activations hit the way they do. Reference once for root context only. Do not lead with them.",
-    "",
-    "WIDE ASPECTS (over 6° orb) — ignore entirely. Do not mention.",
-    "",
-    "Apply the same orb logic to transits hitting natal planets. Transits within 2° orb are exact and urgent. Transits beyond 5° are not yet active — do not use them as primary timing anchors.",
-    "",
-    "Anaretic 29° placements are forced completion thresholds — always name them when they are being activated by a transit within 3°.",
+    "You state outcomes as facts. Specific dates only. Never 'may,' 'could,' or 'might.' Speak as 'you' in every sentence.",
     "",
     "═══════════════════════════════════════════",
-    "THEIR CHART DATA",
+    "ORB PRIORITY RULES — LAW",
+    "═══════════════════════════════════════════",
+    "Aspects sorted tightest first below. This is your activation priority.",
+    "LIVE (under 3° orb) — lead with these. Name degree and house. State behavioral consequence.",
+    "BACKGROUND (3°-6° orb) — reference once for root context only.",
+    "WIDE (over 6° orb) — ignore entirely.",
+    "Transits within 2° are exact and urgent. Beyond 5° — do not use as timing anchors.",
+    "Anaretic 29° placements — always name when activated by a transit within 3°.",
+    "",
+    "═══════════════════════════════════════════",
+    "CHART DATA",
     "═══════════════════════════════════════════",
     "TODAY: " + currentDateString,
     upcomingTriggerBlock,
     "TROPICAL PLACEMENTS:",
     planetList,
     "",
-    "NATAL ASPECTS (sorted tightest orb first — this is your priority order):",
+    "NATAL ASPECTS (tightest first — your priority order):",
     aspectList,
     "",
     "SIDEREAL PLACEMENTS:",
@@ -179,40 +174,41 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "\"" + question + "\"",
     "",
     "═══════════════════════════════════════════",
-    "READING STRUCTURE",
+    "READING STRUCTURE — STRICT LIMITS",
     "═══════════════════════════════════════════",
     "",
-    "Write one complete reading. No page numbers. No section headers in the output — only the date anchors and directive labels appear as caps. Everything else flows as connected prose.",
+    "No section headers in output — only date labels and DROP/EXECUTE/LOCK appear in caps. Everything flows as prose.",
     "",
-    "PART 1 — WHERE YOU ARE RIGHT NOW (2-3 paragraphs)",
-    "Open with the tightest transit or progressed activation hitting their chart today — under 3° orb, named with exact degree and house. Tell them what it is doing to their life in concrete behavioral terms. What are they actually feeling, avoiding, or stuck on right now. Add one natal confirmation that shows why this transit hits them the way it does — the natal root, not another transit. End this section with one sentence that names what is happening beneath the surface — leave it slightly open, do not fully explain it yet.",
+    "PART 1 — WHERE YOU ARE RIGHT NOW (Exactly 1 compact paragraph)",
+    "Open with the tightest transit or progression hitting their chart today — under 3° orb, exact degree and house named. State what it is doing to their life in concrete behavioral terms. End on one acute tension sentence that leaves the core conflict open.",
     "",
-    "PART 2 — THE ROOT (1-2 paragraphs)",
-    "Identify the single tightest natal aspect (lowest orb in the sorted list) that created the pattern Part 1 described. Name the planets, degrees, houses, and orb. Show the loop they have been running. End with one plain uncomfortable truth — no softening.",
+    "PART 2 — THE ROOT (Exactly 1 tight paragraph)",
+    "Identify the single tightest natal aspect driving the Part 1 pattern. Name planets, degrees, houses, orb. Expose the loop they have been running. End with one plain uncomfortable truth. No softening.",
     "",
-    "PART 3 — 2 TO 4 DATED WINDOWS",
-    "Based strictly on tightest orb transits — only include dates where a transit is within 3° of a natal planet or angle. Each window gets a headline label in this format:",
+    "PART 3 — DATED WINDOWS (Exactly 2 or 3 windows — no more)",
+    "Only include windows where a transit is within 3° of a natal planet or angle. Format:",
     "[DATE OR DATE RANGE] — [PLANET] [ASPECT] NATAL [PLANET], [DEGREE], [HOUSE]:",
-    "Then one sentence naming exactly what this activates and one sentence naming the specific consequence or required action. State as fact, not possibility. 2 dates minimum, 4 maximum. Do not manufacture dates — only use real tight-orb windows from the data.",
+    "1 sentence: what this activates. 1 sentence: the specific consequence. Fact, not possibility. Do not manufacture dates.",
     "",
-    "PART 4 — THE DIRECTIVE (exactly 3 labeled directives)",
-    "DROP: One paragraph. What they need to stop doing immediately and why the chart demands it. Name the specific natal placement driving the pattern. 3-5 sentences.",
+    "PART 4 — THE DIRECTIVE (Exactly 3 directives — hard 3-sentence ceiling each)",
+    "DROP: The specific behavior or pattern they must stop immediately. Name the natal placement driving it. Max 3 sentences.",
     "",
-    "EXECUTE BY [SPECIFIC DATE]: One paragraph. The specific action tied to the tightest upcoming window. What to do, the exact date it must happen by, and the planetary reason. 3-5 sentences.",
+    "EXECUTE BY [SPECIFIC DATE]: The exact action tied to the tightest upcoming window. What to do and when. Max 3 sentences.",
     "",
-    "LOCK IN BY [SPECIFIC DATE]: One paragraph. The structural decision that must be made before the final window closes. Identity, foundation, or direction-level. What gets locked and why. 3-5 sentences.",
+    "LOCK IN BY [SPECIFIC DATE]: The structural commitment that must be sealed before the window closes. Max 3 sentences.",
     "",
-    "End the reading with 1-2 sentences that open the door to JXL — frame it as the natural next step for real-time calibration of these specific windows, not a sales line.",
+    "End with 1 sentence opening the door to JXL — frame as real-time calibration of these windows, not a sales line.",
     "",
     "═══════════════════════════════════════════",
-    "CRITICAL RULES",
+    "LAWS",
     "═══════════════════════════════════════════",
-    "- Orb priority is law — tight orbs lead, wide orbs are background only",
-    "- \"You\" in every sentence. Never third person.",
-    "- State outcomes as facts. Never \"may,\" \"could,\" \"might\"",
-    "- Named degrees, dates, house numbers throughout",
-    "- 30-45 day window only",
-    "- The reading should feel complete but leave them wanting the live conversation",
+    "- Tight orbs lead. Wide orbs are background only.",
+    "- 'You' in every sentence. No passive voice.",
+    "- Outcomes as facts. No hedging words.",
+    "- Named degrees, dates, house numbers throughout.",
+    "- 30-45 day window only.",
+    "- Reading feels complete but leaves them wanting the live conversation.",
+    "- Strip all textbook phrasing and cosmic setup fluff.",
     "",
     "Return ONLY a valid JSON object — no markdown, no code fences, no explanation:",
     "{",
@@ -220,7 +216,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "    {",
     "      \"pageNumber\": 1,",
     "      \"title\": \"WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL\",",
-    "      \"content\": \"The complete reading as one unbroken piece. Part 1 flows into Part 2 flows into the dated windows flows into the directives. No section headers except the date labels and DROP/EXECUTE/LOCK labels.\"",
+    "      \"content\": \"The compressed reading as one unbroken piece. Part 1 into Part 2 into dated windows into directives. No headers except date labels and DROP/EXECUTE/LOCK.\"",
     "    }",
     "  ]",
     "}",
@@ -228,8 +224,6 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
 
   return lines.join(NL);
 }
-
-// ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
@@ -255,8 +249,8 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        system: "You are a precision astrologer speaking directly and personally to your client. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate.",
+        max_tokens: 2500,
+        system: "You are a precision astrologer speaking directly and personally to your client. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate. Keep the reading tight and mobile-optimized — no padding, no fluff, best information only.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -277,11 +271,9 @@ export async function POST(request: NextRequest) {
     let parsed: { pages: ReadingPage[] };
     try {
       let cleaned = rawText.trim();
-      // Strip code fences
-      if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
-      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
+      if (cleaned.startsWith("\`\`\`")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
+      if (cleaned.endsWith("\`\`\`")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("\`\`\`"));
       cleaned = cleaned.trim();
-      // Find the outermost JSON object boundaries
       const start = cleaned.indexOf("{");
       const end = cleaned.lastIndexOf("}");
       if (start !== -1 && end !== -1 && end > start) {
