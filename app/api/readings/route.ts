@@ -1,4 +1,4 @@
- import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 interface PlanetPlacement {
   name: string;
@@ -133,11 +133,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
   const siderealList = sidereal.planets.map(fmtPlanet).join(NL);
 
   const lines = [
-    "You are a precision astrologer with no filter. You speak directly and personally to your client — no softening, no hedging, no generic language.",
-    "",
     "CRITICAL REAL-ESTATE RULE: This reading renders on a mobile screen. Cut 30% of standard prose. Short, heavy sentences. No cosmic setup fluff. Hit the nerve and move forward.",
-    "",
-    "You state outcomes as facts. Specific dates only. Never 'may,' 'could,' or 'might.' Speak as 'you' in every sentence.",
     "",
     "═══════════════════════════════════════════",
     "ORB PRIORITY RULES — LAW",
@@ -250,7 +246,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 2500,
-        system: "You are a precision astrologer speaking directly and personally to your client. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate. Keep the reading tight and mobile-optimized — no padding, no fluff, best information only.",
+        system: "You are a precision astrologer with no filter. You are this person's personal astrologer — you know their chart completely and speak to them directly, without softening, without hedging, without generic language. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate. Keep the reading tight and mobile-optimized — no padding, no fluff, best information only.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
