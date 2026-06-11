@@ -264,8 +264,8 @@ export default function JxlScreen() {
       The messages area scrolls internally via flex-1 overflow-y-auto.
       The header and input bar are fixed within this container, not the window.
     */
-    <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
-      <div className="flex h-full w-full max-w-[430px] flex-col">
+    <div className="fixed inset-0 flex justify-center bg-[#050816] overflow-hidden">
+      <div className="flex w-full max-w-[430px] flex-col" style={{ height: "100dvh" }}>
 
         {/* Header — stuck to top of phone frame */}
         <header className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-white/10 bg-[#050816]/90 backdrop-blur-xl z-10">
@@ -305,7 +305,8 @@ export default function JxlScreen() {
         {/* Messages — scrollable area between header and input */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-4 py-6 space-y-4"
+          className="flex-1 overflow-y-auto overscroll-none px-4 py-6 space-y-4"
+          style={{ WebkitOverflowScrolling: "touch" }}
         >
           {messages.length === 0 && !showPaywall && (
             <motion.div
@@ -456,7 +457,7 @@ export default function JxlScreen() {
 
         {/* Input bar — stuck to bottom of phone frame, not the window */}
         {!showPaywall && !session?.onCycleCooldown && (
-          <div className="shrink-0 border-t border-white/10 bg-[#050816]/90 px-4 py-3 backdrop-blur-xl">
+          <div className="shrink-0 border-t border-white/10 bg-[#050816]/90 px-4 py-3 backdrop-blur-xl" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
             <div className="flex items-end gap-3">
               <textarea
                 ref={inputRef}
