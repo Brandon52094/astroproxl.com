@@ -40,6 +40,16 @@ interface JxlSession {
 
 const STORAGE_KEY = "jxl_conversation";
 
+function renderMessage(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "soon";
@@ -351,7 +361,7 @@ export default function JxlScreen() {
                       : "bg-white/[0.05] border border-white/10 text-slate-200 rounded-bl-[6px]"
                   )}
                 >
-                  {msg.content}
+                  {msg.isStreaming ? msg.content : renderMessage(msg.content)}
                   {msg.isStreaming && (
                     <span className="ml-1 inline-block h-3 w-1 animate-pulse bg-amber-300 rounded-full" />
                   )}
