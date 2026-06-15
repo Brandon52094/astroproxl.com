@@ -399,7 +399,7 @@ export default function ReadingIntakeScreen() {
         }
       `}</style>
 
-      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-66 pt-4">
+      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-8 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -751,48 +751,46 @@ export default function ReadingIntakeScreen() {
             )}
           </motion.div>
 
-        </motion.div>
-      </div>
+          {/* Inline CTA — below JXL */}
+          <div className="mt-6 border-t border-white/[0.08] pt-4 space-y-2 pb-10">
+            {submitError && (
+              <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
+            )}
+            {!userStatus?.isSubscribed && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await fetch("/api/stripe/checkout", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      returnUrl: `${window.location.origin}/reading/intake`,
+                      mode: "subscription",
+                      paywallIndex: 1,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.url) window.location.href = data.url;
+                }}
+                className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
+              >
+                <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
+                <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
+              </button>
+            )}
+            {!onCooldown && (
+              <Button
+                type="button"
+                onClick={handleStartReading}
+                disabled={!canSubmit || isCreatingReading}
+                className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              >
+                {buttonCopy}
+              </Button>
+            )
+          </div>
 
-      {/* Footer CTA — fixed */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
-        <div className="mx-auto w-full max-w-[430px] space-y-2">
-          {submitError && (
-            <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
-          )}
-          {!onCooldown && (
-            <Button
-              type="button"
-              onClick={handleStartReading}
-              disabled={!canSubmit || isCreatingReading}
-              className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-            >
-              {buttonCopy}
-            </Button>
-          )}
-          {!userStatus?.isSubscribed && (
-            <button
-              type="button"
-              onClick={async () => {
-                const res = await fetch("/api/stripe/checkout", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    returnUrl: `${window.location.origin}/reading/intake`,
-                    mode: "subscription",
-                    paywallIndex: 1,
-                  }),
-                });
-                const data = await res.json();
-                if (data.url) window.location.href = data.url;
-              }}
-              className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
-            >
-              <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
-              <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
-            </button>
-          )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
