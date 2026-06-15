@@ -34,21 +34,7 @@ export async function GET() {
     let cooldownExpiresAt: string | null = null;
     let canBypass = false;
 
-    // Cooldown is only active when cooldownStartedAt is set AND readingsCompleted >= 4
-    // If cooldownStartedAt exists but readingsCompleted < 4, it's a stale/broken state
-    // — clear it so the user can access their free reading
-    if (cooldownStartedAt && readingsCompleted < 4) {
-      // Stale cooldown — clear it
-      await client.users.updateUserMetadata(userId, {
-        publicMetadata: {
-          ...metadata,
-          cooldownStartedAt: undefined,
-          readingsCompleted: 0,
-          paywallsCompleted: 0,
-          credits: 0,
-        },
-      });
-    } else if (cooldownStartedAt && readingsCompleted >= 4) {
+    if (cooldownStartedAt) {
       const expiresAt = new Date(cooldownStartedAt.getTime() + COOLDOWN_MS);
       onCooldown = Date.now() < expiresAt.getTime();
       cooldownExpiresAt = expiresAt.toISOString();
@@ -60,7 +46,6 @@ export async function GET() {
 
       // Auto-reset if cooldown has naturally expired.
       // Resets the full cycle including firstReadingUsed so the free reading refreshes.
-      // Use undefined instead of null — Clerk rejects null values in publicMetadata.
       if (!onCooldown) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
