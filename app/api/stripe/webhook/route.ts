@@ -125,25 +125,38 @@ export async function POST(request: NextRequest) {
       // $6 to skip 2-week cooldown and start fresh cycle immediately
       // Use undefined not null — Clerk rejects null in publicMetadata
       } else if (mode === "bypass") {
-        // Build clean metadata without cooldown fields
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { cooldownStartedAt, jxlCycleStartedAt, ...metaWithoutCooldown } = meta as Record<string, unknown>;
-
-        await client.users.updateUserMetadata(userId, {
+        // Clerk merges metadata — to truly remove cooldownStartedAt we must
+        // use updateUser (replaces publicMetadata entirely) instead of updateUserMetadata
+        await client.users.updateUser(userId, {
           publicMetadata: {
-            ...metaWithoutCooldown,
-            readingsCompleted: 0,
-            paywallsCompleted: 0,
+            lat: meta.lat,
+            lng: meta.lng,
+            timezone: meta.timezone,
+            birthDate: meta.birthDate,
+            birthTime: meta.birthTime,
+            birthPlace: meta.birthPlace,
+            chartSavedAt: meta.chartSavedAt,
+            chartCompleted: meta.chartCompleted,
+            downloadUnlocked: meta.downloadUnlocked ?? false,
+            jxlFreeUsedAt: meta.jxlFreeUsedAt,
+            isSubscribed: meta.isSubscribed ?? false,
+            jxlUnlimited: meta.jxlUnlimited ?? false,
+            subscriptionId: meta.subscriptionId,
+            subscriptionTier: meta.subscriptionTier,
+            // Reset all cycle fields
             credits: 0,
             firstReadingUsed: false,
+            readingsCompleted: 0,
+            paywallsCompleted: 0,
             jxlCredits: 0,
             jxlSessionsPurchased: 0,
             bypassUsedAt: new Date().toISOString(),
             lastPurchaseAt: new Date().toISOString(),
+            // cooldownStartedAt intentionally omitted — this is the fix
           },
         });
 
-        console.log(`[webhook] bypass — full cycle reset for ${userId}. cooldownStartedAt removed.`);
+        console.log(`[webhook] bypass — full cycle reset for ${userId}. cooldownStartedAt removed via updateUser.`);
 
       // ── Reading download — $1.00 ───────────────────────────────────────────
       } else if (mode === "reading_download") {
