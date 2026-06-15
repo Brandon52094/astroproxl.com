@@ -402,7 +402,7 @@ export default function ReadingIntakeScreen() {
         />
       </div>
 
-      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-66 pt-4">
+      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-32 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
