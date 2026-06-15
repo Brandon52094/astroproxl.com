@@ -204,7 +204,7 @@ export default function ReadingIntakeScreen() {
     // Show price on button if this reading requires payment
     if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
       const prices = ["$2.99", "$3.99", "$4.99", "$4.99"];
-      const idx = Math.min((userStatus.readingsCompleted ?? 0), 3);
+      const idx = Math.min((userStatus.paywallsCompleted ?? 0), 3);
       return `${selectedAreaConfig.cta} — ${prices[idx]}`;
     }
     return selectedAreaConfig.cta;
