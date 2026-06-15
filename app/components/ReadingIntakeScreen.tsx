@@ -393,11 +393,11 @@ export default function ReadingIntakeScreen() {
         <div className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.06] blur-3xl" />
         {/* Subtle starfield grain */}
         <div
-          className="absolute inset-0 opacity-[0.045] mix-blend-screen"
+          className="absolute inset-0 opacity-[0.022] mix-blend-screen"
           style={{
             backgroundImage:
               "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.6px, transparent 0.8px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.6) 0.6px, transparent 0.8px), radial-gradient(circle at 40% 70%, rgba(255,255,255,0.4) 0.6px, transparent 0.8px)",
-            backgroundSize: "180px 180px, 220px 220px, 260px 260px",
+            backgroundSize: "220px 220px, 260px 260px, 320px 320px",
           }}
         />
       </div>
@@ -601,7 +601,6 @@ export default function ReadingIntakeScreen() {
                       type="button"
                       whileTap={{ scale: 0.985 }}
                       animate={{
-                        scale: isSelected ? 1.01 : 1,
                         y: isSelected ? -2 : 0,
                       }}
                       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
@@ -612,8 +611,8 @@ export default function ReadingIntakeScreen() {
                       className={cn(
                         "relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left transition-all duration-300",
                         "bg-white/[0.04] backdrop-blur-md",
-                        // Top highlight line on every card
-                        "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/12 before:to-transparent",
+                        !isSelected &&
+                          "before:content-[''] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/12 before:to-transparent",
                         isSelected
                           ? "border-teal-300/60 bg-[linear-gradient(180deg,rgba(45,212,191,0.10),rgba(45,212,191,0.04))] shadow-[0_0_0_1px_rgba(94,234,212,0.10),0_8px_24px_rgba(0,0,0,0.28)]"
                           : "border-white/10 hover:border-white/15 hover:bg-white/[0.05]"
@@ -770,7 +769,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       {/* Footer CTA — elevated glass panel */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.96))] px-4 pb-5 pt-3 backdrop-blur-2xl">
+      <div className="fixed inset-x-0 bottom-0 z-20 relative border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.96))] px-4 pb-5 pt-3 backdrop-blur-2xl">
         {/* Top glow line */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
         <div className="mx-auto w-full max-w-[430px] space-y-2">
