@@ -43,7 +43,6 @@ export async function GET() {
         publicMetadata: {
           ...metadata,
           cooldownStartedAt: undefined,
-          firstReadingUsed: false,
           readingsCompleted: 0,
           paywallsCompleted: 0,
           credits: 0,
