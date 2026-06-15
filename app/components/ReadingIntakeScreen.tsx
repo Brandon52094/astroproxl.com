@@ -313,7 +313,7 @@ export default function ReadingIntakeScreen() {
 
   return (
     <div
-      className="relative h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
+      className="relative min-h-screen overflow-x-hidden bg-[#050816] text-slate-100"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       <style jsx>{`
@@ -413,7 +413,7 @@ export default function ReadingIntakeScreen() {
         />
       </div>
 
-      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-32 pt-4">
+      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-32 pt-0">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -421,7 +421,7 @@ export default function ReadingIntakeScreen() {
           className="flex flex-col"
         >
           {/* Header */}
-          <header className="mb-6 flex items-center justify-between py-2">
+          <header className="mb-6 flex items-center justify-between px-0 pt-12 pb-2">
             <button
               type="button"
               onClick={() => router.back()}
