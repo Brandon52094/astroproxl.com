@@ -841,10 +841,10 @@ export default function ReadingIntakeScreen() {
       </div>
 
       {/* Footer CTA — elevated glass panel */}
-      <div className="fixed inset-x-0 bottom-0 z-20 relative border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.96))] px-4 pb-5 pt-3 backdrop-blur-2xl">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.96))] px-4 pb-5 pt-3 backdrop-blur-2xl">
         {/* Top glow line */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-        <div className="mx-auto w-full max-w-[430px] space-y-2">
+        <div className="relative mx-auto w-full max-w-[430px] space-y-2">
           {submitError && (
             <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
           )}
