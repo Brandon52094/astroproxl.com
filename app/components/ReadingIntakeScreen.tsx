@@ -386,17 +386,28 @@ export default function ReadingIntakeScreen() {
         }
       `}</style>
 
-      {/* ── Page background aura ─────────────────────────────────────────── */}
+      {/* ── Mobile-first ambient background ─────────────────────────── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.08] blur-3xl" />
-        <div className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.06] blur-3xl" />
-        <div className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.06] blur-3xl" />
-        {/* Subtle starfield grain */}
+        <motion.div
+          animate={{ x: [0, 10, 0], y: [0, 14, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.10] blur-3xl"
+        />
+        <motion.div
+          animate={{ x: [0, -12, 0], y: [0, 10, 0] }}
+          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.08] blur-3xl"
+        />
+        <motion.div
+          animate={{ x: [0, 8, 0], y: [0, -12, 0] }}
+          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.08] blur-3xl"
+        />
         <div
-          className="absolute inset-0 opacity-[0.022] mix-blend-screen"
+          className="absolute inset-0 opacity-[0.025] mix-blend-screen"
           style={{
             backgroundImage:
-              "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.6px, transparent 0.8px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.6) 0.6px, transparent 0.8px), radial-gradient(circle at 40% 70%, rgba(255,255,255,0.4) 0.6px, transparent 0.8px)",
+              "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.6px, transparent 0.8px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.55) 0.6px, transparent 0.8px), radial-gradient(circle at 40% 70%, rgba(255,255,255,0.4) 0.6px, transparent 0.8px)",
             backgroundSize: "220px 220px, 260px 260px, 320px 320px",
           }}
         />
@@ -453,7 +464,7 @@ export default function ReadingIntakeScreen() {
                 What do you want insight on?
               </h1>
               <p className="max-w-[34ch] text-[14px] leading-6 text-slate-400">
-                Select Which Area You'd Like A Reading On, Then Ask Your Question 
+                Choose the area you want clarity on, then ask your question in a direct way.
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
@@ -592,61 +603,122 @@ export default function ReadingIntakeScreen() {
             <>
               {/* Main reading categories */}
               <section className="space-y-3">
-                {AREAS.map((area) => {
+                {AREAS.map((area, index) => {
                   const Icon = area.icon;
                   const isSelected = selectedArea === area.id;
+
                   return (
                     <motion.button
                       key={area.id}
                       type="button"
-                      whileTap={{ scale: 0.985 }}
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{
-                        y: isSelected ? -2 : 0,
+                        opacity: 1,
+                        y: isSelected ? -3 : 0,
+                        borderColor: isSelected
+                          ? "rgba(94,234,212,0.62)"
+                          : "rgba(255,255,255,0.10)",
+                        backgroundColor: isSelected
+                          ? "rgba(45,212,191,0.10)"
+                          : "rgba(255,255,255,0.04)",
+                        boxShadow: isSelected
+                          ? "0 0 0 1px rgba(94,234,212,0.10), 0 14px 30px rgba(20,184,166,0.14)"
+                          : "0 0 0 1px rgba(255,255,255,0.00), 0 0 0 rgba(0,0,0,0)",
                       }}
-                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                      whileTap={{
+                        scale: 0.972,
+                        y: 2,
+                      }}
+                      transition={{
+                        opacity: { duration: 0.25, delay: index * 0.04 },
+                        y: { type: "spring", stiffness: 320, damping: 24 },
+                        borderColor: { duration: 0.22 },
+                        backgroundColor: { duration: 0.22 },
+                        boxShadow: { duration: 0.25 },
+                      }}
                       onClick={() => {
                         setSelectedArea(area.id);
                         setQuestion("");
                       }}
                       className={cn(
-                        "relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left transition-all duration-300",
-                        "bg-white/[0.04] backdrop-blur-md",
-                        !isSelected &&
-                          "before:content-[''] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/12 before:to-transparent",
-                        isSelected
-                          ? "border-teal-300/60 bg-[linear-gradient(180deg,rgba(45,212,191,0.10),rgba(45,212,191,0.04))] shadow-[0_0_0_1px_rgba(94,234,212,0.10),0_8px_24px_rgba(0,0,0,0.28)]"
-                          : "border-white/10 hover:border-white/15 hover:bg-white/[0.05]"
+                        "relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left backdrop-blur-md"
                       )}
                     >
-                      {/* Inner glow highlight on selected */}
-                      {isSelected && (
-                        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-200/60 to-transparent" />
-                      )}
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-all duration-300",
-                            isSelected
-                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.15)]"
-                              : "border-white/10 bg-black/20 text-slate-300"
-                          )}
+                      {/* top sheen */}
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent" />
+
+                      {/* selected glow wash */}
+                      <AnimatePresence>
+                        {isSelected && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.22 }}
+                            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(94,234,212,0.14),transparent_58%)]"
+                          />
+                        )}
+                      </AnimatePresence>
+
+                      <div className="relative flex items-start gap-3">
+                        <motion.div
+                          animate={{
+                            scale: isSelected ? 1.08 : 1,
+                            rotate: isSelected ? -3 : 0,
+                            boxShadow: isSelected
+                              ? "0 0 18px rgba(94,234,212,0.22)"
+                              : "0 0 0 rgba(0,0,0,0)",
+                            borderColor: isSelected
+                              ? "rgba(94,234,212,0.40)"
+                              : "rgba(255,255,255,0.10)",
+                            backgroundColor: isSelected
+                              ? "rgba(94,234,212,0.10)"
+                              : "rgba(0,0,0,0.20)",
+                          }}
+                          transition={{ type: "spring", stiffness: 280, damping: 18 }}
+                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-slate-300"
+                          style={{
+                            color: isSelected ? "rgb(153 246 228)" : "rgb(203 213 225)",
+                          }}
                         >
                           <Icon className="h-4 w-4" />
-                        </div>
+                        </motion.div>
+
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-[15px] font-semibold text-white">
+                            <motion.h2
+                              animate={{
+                                color: isSelected ? "#ffffff" : "#ffffff",
+                              }}
+                              className="text-[15px] font-semibold"
+                            >
                               {area.title}
-                            </h2>
-                            {isSelected && (
-                              <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200">
-                                Selected
-                              </span>
-                            )}
+                            </motion.h2>
+
+                            <AnimatePresence>
+                              {isSelected && (
+                                <motion.span
+                                  initial={{ opacity: 0, scale: 0.9, y: 4 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.95, y: 2 }}
+                                  transition={{ duration: 0.18 }}
+                                  className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
+                                >
+                                  Selected
+                                </motion.span>
+                              )}
+                            </AnimatePresence>
                           </div>
-                          <p className="mt-1 text-sm leading-5 text-slate-400">
+
+                          <motion.p
+                            animate={{
+                              color: isSelected ? "rgba(226,232,240,0.88)" : "rgba(148,163,184,1)",
+                            }}
+                            transition={{ duration: 0.22 }}
+                            className="mt-1 text-sm leading-5"
+                          >
                             {area.description}
-                          </p>
+                          </motion.p>
                         </div>
                       </div>
                     </motion.button>
@@ -658,10 +730,10 @@ export default function ReadingIntakeScreen() {
               <AnimatePresence>
                 {selectedArea && selectedArea !== "other" && (
                   <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    initial={{ opacity: 0, y: 16, scale: 0.985 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.985 }}
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                     className="mt-6 space-y-2"
                   >
                     <Textarea
@@ -769,10 +841,10 @@ export default function ReadingIntakeScreen() {
       </div>
 
       {/* Footer CTA — elevated glass panel */}
-      <div className="fixed inset-x-0 bottom-0 z-20 relative border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.96))] px-4 pb-5 pt-3 backdrop-blur-2xl">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.96))] px-4 pb-5 pt-3 backdrop-blur-2xl">
         {/* Top glow line */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-        <div className="mx-auto w-full max-w-[430px] space-y-2">
+        <div className="relative mx-auto w-full max-w-[430px] space-y-2">
           {submitError && (
             <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
           )}
@@ -781,7 +853,7 @@ export default function ReadingIntakeScreen() {
               type="button"
               onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
-              className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
             >
               {buttonCopy}
             </Button>
