@@ -604,7 +604,7 @@ export default function ReadingIntakeScreen() {
                         "w-full rounded-[24px] border px-4 py-4 text-left transition-all duration-200",
                         "bg-white/[0.03] backdrop-blur-sm",
                         isSelected
-                          ? "border-teal-300/70 bg-teal-400/[0.08] shadow-[0_0_0_1px_rgba(94,234,212,0.16)]"
+                          ? "border-teal-300/70 bg-teal-400/[0.08] shadow-[0_0_0_1px_rgba(94,234,212,0.16),0_8px_24px_rgba(20,184,166,0.18)] -translate-y-0.5"
                           : "border-white/10 hover:border-white/20 hover:bg-white/[0.045]"
                       )}
                     >
@@ -613,7 +613,7 @@ export default function ReadingIntakeScreen() {
                           className={cn(
                             "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
                             isSelected
-                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200"
+                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]"
                               : "border-white/10 bg-black/20 text-slate-300"
                           )}
                         >
