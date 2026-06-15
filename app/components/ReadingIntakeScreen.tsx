@@ -320,10 +320,6 @@ export default function ReadingIntakeScreen() {
   }, [userStatus, onCooldown]);
 
   return (
-    /*
-      Outer shell: h-screen overflow-y-auto — scrolls within the locked viewport.
-      The fixed footer CTA stays anchored to the bottom of the screen as before.
-    */
     <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
       <style jsx>{`
         @keyframes jxlAmberPulse {
@@ -340,6 +336,7 @@ export default function ReadingIntakeScreen() {
               0 0 56px rgba(251, 191, 36, 0.08);
           }
         }
+
         @keyframes cooldownPulse {
           0%, 100% {
             box-shadow:
@@ -352,11 +349,53 @@ export default function ReadingIntakeScreen() {
               0 0 28px rgba(99, 102, 241, 0.16);
           }
         }
+
         .jxl-teaser {
           animation: jxlAmberPulse 2.8s ease-in-out infinite;
+          position: relative;
+          overflow: hidden;
         }
+
+        /* Shimmer overlay that moves a soft yellow streak across the card */
+        .jxl-teaser::before {
+          content: "";
+          position: absolute;
+          inset: -40%;
+          background-image: linear-gradient(
+            120deg,
+            rgba(253, 230, 138, 0) 0%,
+            rgba(253, 230, 138, 0.12) 40%,
+            rgba(250, 204, 21, 0.3) 50%,
+            rgba(253, 230, 138, 0.12) 60%,
+            rgba(253, 230, 138, 0) 100%
+          );
+          mix-blend-mode: screen;
+          pointer-events: none;
+          opacity: 0.85;
+          transform: translateX(-60%);
+          animation: jxlShimmer 3.5s linear infinite;
+        }
+
+        @keyframes jxlShimmer {
+          0% {
+            transform: translateX(-60%);
+          }
+          50% {
+            transform: translateX(40%);
+          }
+          100% {
+            transform: translateX(120%);
+          }
+        }
+
         .cooldown-glow {
           animation: cooldownPulse 3s ease-in-out infinite;
+        }
+
+        /* Locked version: subtler shimmer */
+        .jxl-teaser--subtle::before {
+          opacity: 0.55;
+          animation-duration: 5s;
         }
       `}</style>
 
@@ -680,7 +719,7 @@ export default function ReadingIntakeScreen() {
                   </span>
                 </div>
                 <div
-                  className="jxl-teaser relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-black/30 pointer-events-none select-none"
+                  className="jxl-teaser jxl-teaser--subtle relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-black/30 pointer-events-none select-none"
                   aria-hidden="true"
                 >
                   <div className="blur-[6px] px-5 py-5 opacity-60">
