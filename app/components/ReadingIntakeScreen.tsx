@@ -289,6 +289,9 @@ export default function ReadingIntakeScreen() {
   const handleBypass = async () => {
     setIsBypassLoading(true);
     try {
+      // Reset cooldown in Clerk immediately — don't wait for webhook
+      await fetch("/api/user/bypass-reset", { method: "POST" });
+
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -405,7 +408,7 @@ export default function ReadingIntakeScreen() {
         }
       `}</style>
 
-      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-10 pt-4">
+      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-32 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
