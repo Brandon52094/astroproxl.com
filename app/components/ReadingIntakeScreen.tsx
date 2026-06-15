@@ -137,7 +137,6 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
-  // ── Single shared fetchStatus — debounced to prevent Clerk rate limiting ─────
   const fetchInFlight = useRef(false);
 
   const fetchStatus = useCallback(async (): Promise<number> => {
@@ -161,12 +160,10 @@ export default function ReadingIntakeScreen() {
     } catch {
       return 0;
     } finally {
-      // Allow next fetch after 2 seconds minimum gap
       setTimeout(() => { fetchInFlight.current = false; }, 2000);
     }
   }, []);
 
-  // ── Mount effect: fetch once + light poll if paywalls still 0 ─────────────
   useEffect(() => {
     (async () => {
       const initialPaywalls = await fetchStatus();
@@ -176,7 +173,7 @@ export default function ReadingIntakeScreen() {
           const paywalls = await fetchStatus();
           attempts++;
           if (paywalls === 0 && attempts < 4) {
-            setTimeout(poll, 3000); // 3s between polls to avoid rate limiting
+            setTimeout(poll, 3000);
           }
         };
         setTimeout(poll, 3000);
@@ -184,7 +181,6 @@ export default function ReadingIntakeScreen() {
     })();
   }, [fetchStatus]);
 
-  // ── Visibility effect: re-fetch when returning from Stripe ─────────────────
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") fetchStatus();
@@ -201,7 +197,6 @@ export default function ReadingIntakeScreen() {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
     if (!selectedAreaConfig) return "Choose a reading type";
-    // Show price on button if this reading requires payment
     if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
       const prices = ["$2.99", "$3.99", "$4.99", "$4.99"];
       const idx = Math.min((userStatus.paywallsCompleted ?? 0), 3);
@@ -246,7 +241,6 @@ export default function ReadingIntakeScreen() {
         timeframeValue: "next-45-days",
       });
 
-      // Gate at intake — check credits before generating
       if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
         const creditsRes = await fetch("/api/user/credits");
         const creditsData = await creditsRes.json();
@@ -305,11 +299,9 @@ export default function ReadingIntakeScreen() {
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
-  // Free reading cooldown timer — shown when user has used their free reading
-  // but the 2-week reset hasn't fired yet (readingsCompleted < 4, firstReadingUsed true)
   const freeReadingCooldownLine = useMemo(() => {
     if (!userStatus?.firstReadingUsed) return null;
-    if (onCooldown) return null; // full cooldown shown separately
+    if (onCooldown) return null;
     if (!userStatus?.cooldownExpiresAt) return null;
     const ms = new Date(userStatus.cooldownExpiresAt).getTime() - Date.now();
     if (ms <= 0) return null;
@@ -320,7 +312,10 @@ export default function ReadingIntakeScreen() {
   }, [userStatus, onCooldown]);
 
   return (
-    <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
+    <div
+      className="relative h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
       <style jsx>{`
         @keyframes jxlAmberPulse {
           0%, 100% {
@@ -356,7 +351,6 @@ export default function ReadingIntakeScreen() {
           overflow: hidden;
         }
 
-        /* Shimmer overlay that moves a soft yellow streak across the card */
         .jxl-teaser::before {
           content: "";
           position: absolute;
@@ -377,29 +371,38 @@ export default function ReadingIntakeScreen() {
         }
 
         @keyframes jxlShimmer {
-          0% {
-            transform: translateX(-60%);
-          }
-          50% {
-            transform: translateX(40%);
-          }
-          100% {
-            transform: translateX(120%);
-          }
+          0%   { transform: translateX(-60%); }
+          50%  { transform: translateX(40%); }
+          100% { transform: translateX(120%); }
         }
 
         .cooldown-glow {
           animation: cooldownPulse 3s ease-in-out infinite;
         }
 
-        /* Locked version: subtler shimmer */
         .jxl-teaser--subtle::before {
           opacity: 0.55;
           animation-duration: 5s;
         }
       `}</style>
 
-      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-66 pt-4">
+      {/* ── Page background aura ─────────────────────────────────────────── */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.08] blur-3xl" />
+        <div className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.06] blur-3xl" />
+        <div className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.06] blur-3xl" />
+        {/* Subtle starfield grain */}
+        <div
+          className="absolute inset-0 opacity-[0.045] mix-blend-screen"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.6px, transparent 0.8px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.6) 0.6px, transparent 0.8px), radial-gradient(circle at 40% 70%, rgba(255,255,255,0.4) 0.6px, transparent 0.8px)",
+            backgroundSize: "180px 180px, 220px 220px, 260px 260px",
+          }}
+        />
+      </div>
+
+      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-66 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -444,12 +447,13 @@ export default function ReadingIntakeScreen() {
               Reading Setup
             </div>
 
-            <div className="space-y-2">
-              <h1 className="text-[30px] font-semibold leading-[1.05] tracking-tight text-white">
+            {/* Upgraded title block */}
+            <div className="space-y-2 pt-1">
+              <h1 className="text-[32px] font-semibold leading-[1.02] tracking-[-0.03em] text-white">
                 What do you want insight on?
               </h1>
-              <p className="max-w-[32ch] text-sm leading-6 text-slate-300">
-                Choose an area and ask your question.
+              <p className="max-w-[34ch] text-[14px] leading-6 text-slate-400">
+                Choose the area you want clarity on, then ask your question in a direct way.
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
@@ -470,14 +474,14 @@ export default function ReadingIntakeScreen() {
             </div>
           </section>
 
-          {/* ── Free reading cooldown one-liner ───────────────────────────── */}
+          {/* Free reading cooldown one-liner */}
           {freeReadingCooldownLine && (
             <div className="mb-3 text-[11px] text-slate-500">
               {freeReadingCooldownLine}
             </div>
           )}
 
-          {/* ── Reading cycle progress bar ─────────────────────────────────── */}
+          {/* Reading cycle progress bar */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0) && (
             <div className="mb-6 space-y-2">
               <div className="flex items-center justify-between">
@@ -516,7 +520,7 @@ export default function ReadingIntakeScreen() {
             </div>
           )}
 
-          {/* ── Cooldown state ─────────────────────────────────────────────── */}
+          {/* Cooldown state */}
           {onCooldown ? (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -586,7 +590,7 @@ export default function ReadingIntakeScreen() {
             </motion.div>
           ) : (
             <>
-              {/* ── Main reading categories ──────────────────────────────── */}
+              {/* Main reading categories */}
               <section className="space-y-3">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
@@ -594,26 +598,37 @@ export default function ReadingIntakeScreen() {
                   return (
                     <motion.button
                       key={area.id}
-                      whileTap={{ scale: 0.985 }}
                       type="button"
+                      whileTap={{ scale: 0.985 }}
+                      animate={{
+                        scale: isSelected ? 1.01 : 1,
+                        y: isSelected ? -2 : 0,
+                      }}
+                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                       onClick={() => {
                         setSelectedArea(area.id);
                         setQuestion("");
                       }}
                       className={cn(
-                        "w-full rounded-[24px] border px-4 py-4 text-left transition-all duration-200",
-                        "bg-white/[0.03] backdrop-blur-sm",
+                        "relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left transition-all duration-300",
+                        "bg-white/[0.04] backdrop-blur-md",
+                        // Top highlight line on every card
+                        "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/12 before:to-transparent",
                         isSelected
-                          ? "border-teal-300/70 bg-teal-400/[0.08] shadow-[0_0_0_1px_rgba(94,234,212,0.16)]"
-                          : "border-white/10 hover:border-white/20 hover:bg-white/[0.045]"
+                          ? "border-teal-300/60 bg-[linear-gradient(180deg,rgba(45,212,191,0.10),rgba(45,212,191,0.04))] shadow-[0_0_0_1px_rgba(94,234,212,0.10),0_8px_24px_rgba(0,0,0,0.28)]"
+                          : "border-white/10 hover:border-white/15 hover:bg-white/[0.05]"
                       )}
                     >
+                      {/* Inner glow highlight on selected */}
+                      {isSelected && (
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-200/60 to-transparent" />
+                      )}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-all duration-300",
                             isSelected
-                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200"
+                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.15)]"
                               : "border-white/10 bg-black/20 text-slate-300"
                           )}
                         >
@@ -754,8 +769,10 @@ export default function ReadingIntakeScreen() {
         </motion.div>
       </div>
 
-      {/* Footer CTA */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
+      {/* Footer CTA — elevated glass panel */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.96))] px-4 pb-5 pt-3 backdrop-blur-2xl">
+        {/* Top glow line */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
         <div className="mx-auto w-full max-w-[430px] space-y-2">
           {submitError && (
             <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
@@ -786,8 +803,10 @@ export default function ReadingIntakeScreen() {
                 const data = await res.json();
                 if (data.url) window.location.href = data.url;
               }}
-              className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
+              className="relative h-12 w-full overflow-hidden rounded-2xl border border-amber-300/25 bg-[linear-gradient(180deg,rgba(251,191,36,0.10),rgba(251,191,36,0.04))] px-5 text-left transition hover:border-amber-300/45 flex items-center justify-between"
             >
+              {/* Subscription row top highlight */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/40 to-transparent" />
               <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
               <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
             </button>
