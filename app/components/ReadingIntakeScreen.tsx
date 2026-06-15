@@ -380,40 +380,15 @@ export default function ReadingIntakeScreen() {
         }
       `}</style>
 
-      {/* ── Ambient background aura ──────────────────────────────────────── */}
+      {/* ── Static ambient background ────────────────────────────────── */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <motion.div
-          animate={{ x: [0, 10, 0], y: [0, 14, 0] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.09] blur-3xl"
-        />
-        <motion.div
-          animate={{ x: [0, -12, 0], y: [0, 10, 0] }}
-          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.07] blur-3xl"
-        />
-        <motion.div
-          animate={{ x: [0, 8, 0], y: [0, -12, 0] }}
-          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.07] blur-3xl"
-        />
-        <div
-          className="absolute inset-0 opacity-[0.022] mix-blend-screen"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.6px, transparent 0.8px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.55) 0.6px, transparent 0.8px), radial-gradient(circle at 40% 70%, rgba(255,255,255,0.4) 0.6px, transparent 0.8px)",
-            backgroundSize: "220px 220px, 260px 260px, 320px 320px",
-          }}
-        />
+        <div className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.09] blur-3xl" />
+        <div className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.07] blur-3xl" />
+        <div className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.07] blur-3xl" />
       </div>
 
       <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col"
-        >
+        <div className="flex flex-col">
           {/* Header */}
           <header className="mb-6 flex items-center justify-between py-2">
             <button
@@ -596,7 +571,7 @@ export default function ReadingIntakeScreen() {
             <>
               {/* Main reading categories */}
               <section className="space-y-3">
-                {AREAS.map((area, index) => {
+                {AREAS.map((area) => {
                   const Icon = area.icon;
                   const isSelected = selectedArea === area.id;
 
@@ -604,102 +579,50 @@ export default function ReadingIntakeScreen() {
                     <motion.button
                       key={area.id}
                       type="button"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{
-                        opacity: 1,
-                        y: isSelected ? -3 : 0,
-                        borderColor: isSelected
-                          ? "rgba(94,234,212,0.62)"
-                          : "rgba(255,255,255,0.10)",
-                        backgroundColor: isSelected
-                          ? "rgba(45,212,191,0.10)"
-                          : "rgba(255,255,255,0.04)",
-                        boxShadow: isSelected
-                          ? "0 0 0 1px rgba(94,234,212,0.10), 0 14px 30px rgba(20,184,166,0.14)"
-                          : "0 0 0 1px rgba(255,255,255,0.00), 0 0 0 rgba(0,0,0,0)",
-                      }}
-                      whileTap={{ scale: 0.972, y: 2 }}
-                      transition={{
-                        opacity: { duration: 0.25, delay: index * 0.04 },
-                        y: { type: "spring", stiffness: 320, damping: 24 },
-                        borderColor: { duration: 0.22 },
-                        backgroundColor: { duration: 0.22 },
-                        boxShadow: { duration: 0.25 },
-                      }}
+                      whileTap={{ scale: 0.985 }}
                       onClick={() => {
                         setSelectedArea(area.id);
                         setQuestion("");
                       }}
-                      className="relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left backdrop-blur-md"
+                      className={cn(
+                        "relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left transition-all duration-200 backdrop-blur-sm",
+                        "before:content-[''] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/12 before:to-transparent",
+                        isSelected
+                          ? "border-teal-300/60 bg-teal-400/[0.08] shadow-[0_0_0_1px_rgba(94,234,212,0.10),0_8px_24px_rgba(0,0,0,0.28)]"
+                          : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
+                      )}
                     >
-                      {/* Top sheen line */}
-                      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent" />
-
-                      {/* Selected radial glow wash */}
-                      <AnimatePresence>
-                        {isSelected && (
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.22 }}
-                            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(94,234,212,0.14),transparent_58%)]"
-                          />
-                        )}
-                      </AnimatePresence>
-
-                      <div className="relative flex items-start gap-3">
-                        <motion.div
-                          animate={{
-                            scale: isSelected ? 1.08 : 1,
-                            rotate: isSelected ? -3 : 0,
-                            boxShadow: isSelected
-                              ? "0 0 18px rgba(94,234,212,0.22)"
-                              : "0 0 0 rgba(0,0,0,0)",
-                            borderColor: isSelected
-                              ? "rgba(94,234,212,0.40)"
-                              : "rgba(255,255,255,0.10)",
-                            backgroundColor: isSelected
-                              ? "rgba(94,234,212,0.10)"
-                              : "rgba(0,0,0,0.20)",
-                          }}
-                          transition={{ type: "spring", stiffness: 280, damping: 18 }}
-                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
-                          style={{
-                            color: isSelected ? "rgb(153 246 228)" : "rgb(203 213 225)",
-                          }}
+                      {isSelected && (
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-200/60 to-transparent" />
+                      )}
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-all duration-200",
+                            isSelected
+                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200"
+                              : "border-white/10 bg-black/20 text-slate-300"
+                          )}
                         >
                           <Icon className="h-4 w-4" />
-                        </motion.div>
-
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
                             <h2 className="text-[15px] font-semibold text-white">
                               {area.title}
                             </h2>
-                            <AnimatePresence>
-                              {isSelected && (
-                                <motion.span
-                                  initial={{ opacity: 0, scale: 0.9, y: 4 }}
-                                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                                  exit={{ opacity: 0, scale: 0.95, y: 2 }}
-                                  transition={{ duration: 0.18 }}
-                                  className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
-                                >
-                                  Selected
-                                </motion.span>
-                              )}
-                            </AnimatePresence>
+                            {isSelected && (
+                              <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200">
+                                Selected
+                              </span>
+                            )}
                           </div>
-                          <motion.p
-                            animate={{
-                              color: isSelected ? "rgba(226,232,240,0.88)" : "rgba(148,163,184,1)",
-                            }}
-                            transition={{ duration: 0.22 }}
-                            className="mt-1 text-sm leading-5"
-                          >
+                          <p className={cn(
+                            "mt-1 text-sm leading-5 transition-colors duration-200",
+                            isSelected ? "text-slate-200" : "text-slate-400"
+                          )}>
                             {area.description}
-                          </motion.p>
+                          </p>
                         </div>
                       </div>
                     </motion.button>
@@ -711,10 +634,10 @@ export default function ReadingIntakeScreen() {
               <AnimatePresence>
                 {selectedArea && selectedArea !== "other" && (
                   <motion.section
-                    initial={{ opacity: 0, y: 16, scale: 0.985 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.985 }}
-                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.2 }}
                     className="mt-6 space-y-2"
                   >
                     <Textarea
@@ -745,12 +668,7 @@ export default function ReadingIntakeScreen() {
               </div>
 
               {/* Ask Jxl */}
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-                className="mt-4"
-              >
+              <div className="mt-4">
                 {(userStatus?.readingsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
                   <button
                     type="button"
@@ -814,7 +732,7 @@ export default function ReadingIntakeScreen() {
                     </div>
                   </>
                 )}
-              </motion.div>
+              </div>
             </>
           )}
 
@@ -859,7 +777,7 @@ export default function ReadingIntakeScreen() {
             )}
           </div>
 
-        </motion.div>
+        </div>
       </div>
     </div>
   );
