@@ -314,7 +314,7 @@ export default function ReadingIntakeScreen() {
   return (
     <div
       className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
-      style={{ WebkitOverflowScrolling: "touch" }}
+      style={{ WebkitOverflowScrolling: "touch", paddingTop: "env(safe-area-inset-top, 48px)" }}
     >
       <style jsx>{`
         @keyframes jxlAmberPulse {
@@ -407,7 +407,7 @@ export default function ReadingIntakeScreen() {
         />
       </div>
 
-      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-28 pt-4">
+      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -818,50 +818,48 @@ export default function ReadingIntakeScreen() {
             </>
           )}
 
-        </motion.div>
-      </div>
+          {/* ── Inline CTA — sits directly below JXL ──────────────────── */}
+          <div className="mt-6 border-t border-white/[0.08]" />
+          <div className="mt-4 space-y-2 pb-8">
+            {submitError && (
+              <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
+            )}
+            {!userStatus?.isSubscribed && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await fetch("/api/stripe/checkout", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      returnUrl: `${window.location.origin}/reading/intake`,
+                      mode: "subscription",
+                      paywallIndex: 1,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.url) window.location.href = data.url;
+                }}
+                className="relative h-12 w-full overflow-hidden rounded-2xl border border-amber-300/25 bg-[linear-gradient(180deg,rgba(251,191,36,0.10),rgba(251,191,36,0.04))] px-5 text-left transition hover:border-amber-300/45 flex items-center justify-between"
+              >
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/40 to-transparent" />
+                <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
+                <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
+              </button>
+            )}
+            {!onCooldown && (
+              <Button
+                type="button"
+                onClick={handleStartReading}
+                disabled={!canSubmit || isCreatingReading}
+                className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              >
+                {buttonCopy}
+              </Button>
+            )}
+          </div>
 
-      {/* Footer CTA */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.75),rgba(5,8,22,0.97))] px-4 pb-5 pt-3 backdrop-blur-2xl">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-        <div className="relative mx-auto w-full max-w-[430px] space-y-2">
-          {submitError && (
-            <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
-          )}
-          {!onCooldown && (
-            <Button
-              type="button"
-              onClick={handleStartReading}
-              disabled={!canSubmit || isCreatingReading}
-              className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-            >
-              {buttonCopy}
-            </Button>
-          )}
-          {!userStatus?.isSubscribed && (
-            <button
-              type="button"
-              onClick={async () => {
-                const res = await fetch("/api/stripe/checkout", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    returnUrl: `${window.location.origin}/reading/intake`,
-                    mode: "subscription",
-                    paywallIndex: 1,
-                  }),
-                });
-                const data = await res.json();
-                if (data.url) window.location.href = data.url;
-              }}
-              className="relative h-12 w-full overflow-hidden rounded-2xl border border-amber-300/25 bg-[linear-gradient(180deg,rgba(251,191,36,0.10),rgba(251,191,36,0.04))] px-5 text-left transition hover:border-amber-300/45 flex items-center justify-between"
-            >
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/40 to-transparent" />
-              <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
-              <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
-            </button>
-          )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
