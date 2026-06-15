@@ -453,7 +453,7 @@ export default function ReadingIntakeScreen() {
                 What do you want insight on?
               </h1>
               <p className="max-w-[34ch] text-[14px] leading-6 text-slate-400">
-                Choose the area you want clarity on, then ask your question in a direct way.
+                Select Which Area You'd Like A Reading On, Then Ask Your Question 
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
