@@ -478,14 +478,14 @@ export default function ReadingIntakeScreen() {
           )}
 
           {/* ── Reading cycle progress bar ─────────────────────────────────── */}
-          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0) && (
+          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
             <div className="mb-6 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
                   Reading cycle
                 </span>
                 <span className="text-[10px] text-slate-600">
-                  {readingsCompleted} / 4
+                  {onCooldown ? 4 : readingsCompleted} / 4
                 </span>
               </div>
               <div className="flex gap-1.5">
@@ -494,7 +494,7 @@ export default function ReadingIntakeScreen() {
                     key={i}
                     className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]"
                   >
-                    {i < readingsCompleted && (
+                    {(onCooldown || i < readingsCompleted) && (
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: "100%" }}
@@ -566,21 +566,19 @@ export default function ReadingIntakeScreen() {
                       Resets in {formatTimeRemaining(userStatus.cooldownExpiresAt)}
                     </p>
                   )}
-                  {userStatus?.canBypass && (
-                    <div className="mt-5 border-t border-white/10 pt-5">
-                      <p className="mb-3 text-[12px] leading-5 text-slate-400">
-                        You may pay to bypass this cooldown — once per cycle.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleBypass}
-                        disabled={isBypassLoading}
-                        className="rounded-2xl bg-indigo-400 px-6 py-2.5 text-[13px] font-semibold text-slate-950 transition hover:bg-indigo-300 disabled:opacity-60"
-                      >
-                        {isBypassLoading ? "Loading…" : "Skip cooldown — $6.00"}
-                      </button>
-                    </div>
-                  )}
+                  <div className="mt-5 border-t border-white/10 pt-5">
+                    <p className="mb-3 text-[12px] leading-5 text-slate-400">
+                      You may pay to bypass this cooldown — once per cycle.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleBypass}
+                      disabled={isBypassLoading}
+                      className="rounded-2xl bg-indigo-400 px-6 py-2.5 text-[13px] font-semibold text-slate-950 transition hover:bg-indigo-300 disabled:opacity-60"
+                    >
+                      {isBypassLoading ? "Loading…" : "Skip cooldown — $6.00"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
