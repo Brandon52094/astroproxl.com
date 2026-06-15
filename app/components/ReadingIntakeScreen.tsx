@@ -754,13 +754,13 @@ export default function ReadingIntakeScreen() {
         </motion.div>
       </div>
 
-      {/* Footer CTA — hidden during cooldown */}
-      {!onCooldown && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-[430px] space-y-2">
-            {submitError && (
-              <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
-            )}
+      {/* Footer CTA */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
+        <div className="mx-auto w-full max-w-[430px] space-y-2">
+          {submitError && (
+            <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
+          )}
+          {!onCooldown && (
             <Button
               type="button"
               onClick={handleStartReading}
@@ -769,31 +769,31 @@ export default function ReadingIntakeScreen() {
             >
               {buttonCopy}
             </Button>
-            {!userStatus?.isSubscribed && (
-              <button
-                type="button"
-                onClick={async () => {
-                  const res = await fetch("/api/stripe/checkout", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      returnUrl: `${window.location.origin}/reading/intake`,
-                      mode: "subscription",
-                      paywallIndex: 1,
-                    }),
-                  });
-                  const data = await res.json();
-                  if (data.url) window.location.href = data.url;
-                }}
-                className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
-              >
-                <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
-                <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
-              </button>
-            )}
-          </div>
+          )}
+          {!userStatus?.isSubscribed && (
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await fetch("/api/stripe/checkout", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    returnUrl: `${window.location.origin}/reading/intake`,
+                    mode: "subscription",
+                    paywallIndex: 1,
+                  }),
+                });
+                const data = await res.json();
+                if (data.url) window.location.href = data.url;
+              }}
+              className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
+            >
+              <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
+              <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
