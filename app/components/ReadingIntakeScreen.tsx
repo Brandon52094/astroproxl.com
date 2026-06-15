@@ -187,7 +187,13 @@ export default function ReadingIntakeScreen() {
   // ── Visibility effect: re-fetch when returning from Stripe ─────────────────
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") fetchStatus();
+      if (document.visibilityState === "visible") {
+        // Poll a few times to catch webhook delay
+        fetchStatus();
+        setTimeout(() => fetchStatus(), 2000);
+        setTimeout(() => fetchStatus(), 5000);
+        setTimeout(() => fetchStatus(), 10000);
+      }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
@@ -684,7 +690,7 @@ export default function ReadingIntakeScreen() {
             transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
             className="mt-4"
           >
-            {(userStatus?.readingsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
+            {userStatus?.firstReadingUsed || userStatus?.isSubscribed ? (
               <button
                 type="button"
                 onClick={() => router.push("/jxl")}

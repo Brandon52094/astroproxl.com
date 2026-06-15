@@ -2,7 +2,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 const JXL_FIRST_READING_CREDITS = 6;
-const CREDITS_PER_READING = 12; // cost of one reading
+const CREDITS_PER_READING = 12;
 
 export async function POST() {
   try {
@@ -22,10 +22,9 @@ export async function POST() {
     const isSubscribed = metadata?.isSubscribed === true;
 
     const currentJxlCredits = Number(metadata?.jxlCredits ?? 0);
+    // Grant JXL credits on first reading completion
     const jxlCreditsToGrant = isFirstReading ? JXL_FIRST_READING_CREDITS : 0;
 
-    // Deduct reading credits after completion — except for free first reading
-    // and subscribers (unlimited readings)
     const currentCredits = Number(metadata?.credits ?? 0);
     const newCredits = (!isFirstReading && !isSubscribed)
       ? Math.max(0, currentCredits - CREDITS_PER_READING)
@@ -37,7 +36,10 @@ export async function POST() {
         readingsCompleted: next,
         firstReadingUsed: true,
         credits: newCredits,
-        ...(isFirstReading ? { jxlCredits: currentJxlCredits + jxlCreditsToGrant } : {}),
+        // Always update jxlCredits on first reading so JXL unlocks immediately
+        jxlCredits: isFirstReading
+          ? currentJxlCredits + jxlCreditsToGrant
+          : currentJxlCredits,
         ...(hitCooldown && !metadata?.cooldownStartedAt
           ? { cooldownStartedAt: new Date().toISOString() }
           : {}),
