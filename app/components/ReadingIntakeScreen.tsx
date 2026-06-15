@@ -399,7 +399,7 @@ export default function ReadingIntakeScreen() {
         }
       `}</style>
 
-      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-8 pt-4">
+      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-10 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -751,8 +751,9 @@ export default function ReadingIntakeScreen() {
             )}
           </motion.div>
 
-          {/* Inline CTA — below JXL */}
-          <div className="mt-6 border-t border-white/[0.08] pt-4 space-y-2 pb-10">
+          {/* Inline CTA section */}
+          <div className="mt-6 border-t border-white/[0.08]" />
+          <div className="mt-4 space-y-2 pb-8">
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}
@@ -772,7 +773,7 @@ export default function ReadingIntakeScreen() {
                   const data = await res.json();
                   if (data.url) window.location.href = data.url;
                 }}
-                className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
+                className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] px-5 text-left transition hover:border-amber-300/50 flex items-center justify-between"
               >
                 <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
                 <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
@@ -787,7 +788,7 @@ export default function ReadingIntakeScreen() {
               >
                 {buttonCopy}
               </Button>
-            )
+            )}
           </div>
 
         </motion.div>
