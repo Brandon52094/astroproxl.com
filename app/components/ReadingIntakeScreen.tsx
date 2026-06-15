@@ -199,7 +199,7 @@ export default function ReadingIntakeScreen() {
     if (!selectedAreaConfig) return "Choose a reading type";
     if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
       const prices = ["$2.99", "$3.99", "$4.99", "$4.99"];
-      const idx = Math.min((userStatus.paywallsCompleted ?? 0), 3);
+      const idx = Math.min((userStatus.readingsCompleted ?? 0), 3);
       return `${selectedAreaConfig.cta} — ${prices[idx]}`;
     }
     return selectedAreaConfig.cta;
@@ -313,7 +313,7 @@ export default function ReadingIntakeScreen() {
 
   return (
     <div
-      className="relative h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
+      className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       <style jsx>{`
@@ -331,7 +331,6 @@ export default function ReadingIntakeScreen() {
               0 0 56px rgba(251, 191, 36, 0.08);
           }
         }
-
         @keyframes cooldownPulse {
           0%, 100% {
             box-shadow:
@@ -344,13 +343,11 @@ export default function ReadingIntakeScreen() {
               0 0 28px rgba(99, 102, 241, 0.16);
           }
         }
-
         .jxl-teaser {
           animation: jxlAmberPulse 2.8s ease-in-out infinite;
           position: relative;
           overflow: hidden;
         }
-
         .jxl-teaser::before {
           content: "";
           position: absolute;
@@ -369,42 +366,39 @@ export default function ReadingIntakeScreen() {
           transform: translateX(-60%);
           animation: jxlShimmer 3.5s linear infinite;
         }
-
         @keyframes jxlShimmer {
           0%   { transform: translateX(-60%); }
           50%  { transform: translateX(40%); }
           100% { transform: translateX(120%); }
         }
-
-        .cooldown-glow {
-          animation: cooldownPulse 3s ease-in-out infinite;
-        }
-
         .jxl-teaser--subtle::before {
           opacity: 0.55;
           animation-duration: 5s;
         }
+        .cooldown-glow {
+          animation: cooldownPulse 3s ease-in-out infinite;
+        }
       `}</style>
 
-      {/* ── Mobile-first ambient background ─────────────────────────── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {/* ── Ambient background aura ──────────────────────────────────────── */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <motion.div
           animate={{ x: [0, 10, 0], y: [0, 14, 0] }}
           transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.10] blur-3xl"
+          className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.09] blur-3xl"
         />
         <motion.div
           animate={{ x: [0, -12, 0], y: [0, 10, 0] }}
           transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.08] blur-3xl"
+          className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.07] blur-3xl"
         />
         <motion.div
           animate={{ x: [0, 8, 0], y: [0, -12, 0] }}
           transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.08] blur-3xl"
+          className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.07] blur-3xl"
         />
         <div
-          className="absolute inset-0 opacity-[0.025] mix-blend-screen"
+          className="absolute inset-0 opacity-[0.022] mix-blend-screen"
           style={{
             backgroundImage:
               "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.6px, transparent 0.8px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.55) 0.6px, transparent 0.8px), radial-gradient(circle at 40% 70%, rgba(255,255,255,0.4) 0.6px, transparent 0.8px)",
@@ -413,7 +407,7 @@ export default function ReadingIntakeScreen() {
         />
       </div>
 
-      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-44 pt-4">
+      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pb-28 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -458,7 +452,6 @@ export default function ReadingIntakeScreen() {
               Reading Setup
             </div>
 
-            {/* Upgraded title block */}
             <div className="space-y-2 pt-1">
               <h1 className="text-[32px] font-semibold leading-[1.02] tracking-[-0.03em] text-white">
                 What do you want insight on?
@@ -625,10 +618,7 @@ export default function ReadingIntakeScreen() {
                           ? "0 0 0 1px rgba(94,234,212,0.10), 0 14px 30px rgba(20,184,166,0.14)"
                           : "0 0 0 1px rgba(255,255,255,0.00), 0 0 0 rgba(0,0,0,0)",
                       }}
-                      whileTap={{
-                        scale: 0.972,
-                        y: 2,
-                      }}
+                      whileTap={{ scale: 0.972, y: 2 }}
                       transition={{
                         opacity: { duration: 0.25, delay: index * 0.04 },
                         y: { type: "spring", stiffness: 320, damping: 24 },
@@ -640,14 +630,12 @@ export default function ReadingIntakeScreen() {
                         setSelectedArea(area.id);
                         setQuestion("");
                       }}
-                      className={cn(
-                        "relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left backdrop-blur-md"
-                      )}
+                      className="relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left backdrop-blur-md"
                     >
-                      {/* top sheen */}
+                      {/* Top sheen line */}
                       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent" />
 
-                      {/* selected glow wash */}
+                      {/* Selected radial glow wash */}
                       <AnimatePresence>
                         {isSelected && (
                           <motion.div
@@ -676,7 +664,7 @@ export default function ReadingIntakeScreen() {
                               : "rgba(0,0,0,0.20)",
                           }}
                           transition={{ type: "spring", stiffness: 280, damping: 18 }}
-                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-slate-300"
+                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
                           style={{
                             color: isSelected ? "rgb(153 246 228)" : "rgb(203 213 225)",
                           }}
@@ -686,15 +674,9 @@ export default function ReadingIntakeScreen() {
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
-                            <motion.h2
-                              animate={{
-                                color: isSelected ? "#ffffff" : "#ffffff",
-                              }}
-                              className="text-[15px] font-semibold"
-                            >
+                            <h2 className="text-[15px] font-semibold text-white">
                               {area.title}
-                            </motion.h2>
-
+                            </h2>
                             <AnimatePresence>
                               {isSelected && (
                                 <motion.span
@@ -709,7 +691,6 @@ export default function ReadingIntakeScreen() {
                               )}
                             </AnimatePresence>
                           </div>
-
                           <motion.p
                             animate={{
                               color: isSelected ? "rgba(226,232,240,0.88)" : "rgba(148,163,184,1)",
@@ -753,96 +734,95 @@ export default function ReadingIntakeScreen() {
                   </motion.section>
                 )}
               </AnimatePresence>
+
+              {/* Divider */}
+              <div className="mt-8 flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/[0.06]" />
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
+                  Premium
+                </span>
+                <div className="h-px flex-1 bg-white/[0.06]" />
+              </div>
+
+              {/* Ask Jxl */}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
+                className="mt-4"
+              >
+                {(userStatus?.readingsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/jxl")}
+                    className="jxl-teaser w-full rounded-[28px] border border-amber-400/30 bg-black/30 px-5 py-5 text-left transition hover:border-amber-300/50 hover:bg-amber-400/[0.06]"
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-amber-300" />
+                        <span className="text-[14px] font-semibold text-amber-200">
+                          Ask Jxl
+                        </span>
+                      </div>
+                      <span className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300">
+                        Unlocked
+                      </span>
+                    </div>
+                    <p className="text-[12px] leading-5 text-slate-400">
+                      A personal conversation with your chart. No categories — just tell Jxl what's going on.
+                    </p>
+                    <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-300/70">
+                      <span>Start a session →</span>
+                    </div>
+                  </button>
+                ) : (
+                  <>
+                    <div className="mb-2 flex items-center justify-center">
+                      <span className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-400/80">
+                        <Lock className="h-2.5 w-2.5" />
+                        Unlocks after your first reading
+                      </span>
+                    </div>
+                    <div
+                      className="jxl-teaser jxl-teaser--subtle relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-black/30 pointer-events-none select-none"
+                      aria-hidden="true"
+                    >
+                      <div className="blur-[6px] px-5 py-5 opacity-60">
+                        <div className="mb-3 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-amber-300" />
+                          <span className="text-[14px] font-semibold text-amber-200">
+                            Ask Jxl
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="h-3 w-3/4 rounded-full bg-slate-400/30" />
+                          <div className="h-3 w-1/2 rounded-full bg-slate-400/20" />
+                          <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
+                        </div>
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-b from-amber-950/10 via-transparent to-amber-950/20 rounded-[28px]" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/10">
+                            <Lock className="h-4 w-4 text-amber-300/70" />
+                          </div>
+                          <span className="text-[11px] text-amber-400/60 tracking-wide">
+                            Complete one reading to unlock
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </motion.div>
             </>
           )}
-
-          {/* Divider */}
-          <div className="mt-8 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
-              Premium
-            </span>
-            <div className="h-px flex-1 bg-white/[0.06]" />
-          </div>
-
-          {/* Ask Jxl */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-            className="mt-4"
-          >
-            {(userStatus?.readingsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
-              <button
-                type="button"
-                onClick={() => router.push("/jxl")}
-                className="jxl-teaser w-full rounded-[28px] border border-amber-400/30 bg-black/30 px-5 py-5 text-left transition hover:border-amber-300/50 hover:bg-amber-400/[0.06]"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-300" />
-                    <span className="text-[14px] font-semibold text-amber-200">
-                      Ask Jxl
-                    </span>
-                  </div>
-                  <span className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300">
-                    Unlocked
-                  </span>
-                </div>
-                <p className="text-[12px] leading-5 text-slate-400">
-                  A personal conversation with your chart. No categories — just tell Jxl what's going on.
-                </p>
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-300/70">
-                  <span>Start a session →</span>
-                </div>
-              </button>
-            ) : (
-              <>
-                <div className="mb-2 flex items-center justify-center">
-                  <span className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-400/80">
-                    <Lock className="h-2.5 w-2.5" />
-                    Unlocks after your first reading
-                  </span>
-                </div>
-                <div
-                  className="jxl-teaser jxl-teaser--subtle relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-black/30 pointer-events-none select-none"
-                  aria-hidden="true"
-                >
-                  <div className="blur-[6px] px-5 py-5 opacity-60">
-                    <div className="mb-3 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-amber-300" />
-                      <span className="text-[14px] font-semibold text-amber-200">
-                        Ask Jxl
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 w-3/4 rounded-full bg-slate-400/30" />
-                      <div className="h-3 w-1/2 rounded-full bg-slate-400/20" />
-                      <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
-                    </div>
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-b from-amber-950/10 via-transparent to-amber-950/20 rounded-[28px]" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/10">
-                        <Lock className="h-4 w-4 text-amber-300/70" />
-                      </div>
-                      <span className="text-[11px] text-amber-400/60 tracking-wide">
-                        Complete one reading to unlock
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </motion.div>
 
         </motion.div>
       </div>
 
-      {/* Footer CTA — elevated glass panel */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.72),rgba(5,8,22,0.98))] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-2xl">
-        {/* Top glow line */}
+      {/* Footer CTA */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[linear-gradient(180deg,rgba(5,8,22,0.75),rgba(5,8,22,0.97))] px-4 pb-5 pt-3 backdrop-blur-2xl">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
         <div className="relative mx-auto w-full max-w-[430px] space-y-2">
           {submitError && (
@@ -876,7 +856,6 @@ export default function ReadingIntakeScreen() {
               }}
               className="relative h-12 w-full overflow-hidden rounded-2xl border border-amber-300/25 bg-[linear-gradient(180deg,rgba(251,191,36,0.10),rgba(251,191,36,0.04))] px-5 text-left transition hover:border-amber-300/45 flex items-center justify-between"
             >
-              {/* Subscription row top highlight */}
               <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/40 to-transparent" />
               <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
               <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
