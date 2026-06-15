@@ -125,22 +125,25 @@ export async function POST(request: NextRequest) {
       // $6 to skip 2-week cooldown and start fresh cycle immediately
       // Use undefined not null — Clerk rejects null in publicMetadata
       } else if (mode === "bypass") {
+        // Build clean metadata without cooldown fields
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { cooldownStartedAt, jxlCycleStartedAt, ...metaWithoutCooldown } = meta as Record<string, unknown>;
+
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
-            ...meta,
+            ...metaWithoutCooldown,
             readingsCompleted: 0,
             paywallsCompleted: 0,
-            cooldownStartedAt: undefined,
             credits: 0,
+            firstReadingUsed: false,
             jxlCredits: 0,
             jxlSessionsPurchased: 0,
-            jxlCycleStartedAt: undefined,
             bypassUsedAt: new Date().toISOString(),
             lastPurchaseAt: new Date().toISOString(),
           },
         });
 
-        console.log(`[webhook] bypass — full cycle reset for ${userId}.`);
+        console.log(`[webhook] bypass — full cycle reset for ${userId}. cooldownStartedAt removed.`);
 
       // ── Reading download — $1.00 ───────────────────────────────────────────
       } else if (mode === "reading_download") {
