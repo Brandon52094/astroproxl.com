@@ -137,7 +137,6 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
-  // ── Single shared fetchStatus — debounced to prevent Clerk rate limiting ─────
   const fetchInFlight = useRef(false);
 
   const fetchStatus = useCallback(async (): Promise<number> => {
@@ -161,12 +160,10 @@ export default function ReadingIntakeScreen() {
     } catch {
       return 0;
     } finally {
-      // Allow next fetch after 2 seconds minimum gap
       setTimeout(() => { fetchInFlight.current = false; }, 2000);
     }
   }, []);
 
-  // ── Mount effect: fetch once + light poll if paywalls still 0 ─────────────
   useEffect(() => {
     (async () => {
       const initialPaywalls = await fetchStatus();
@@ -176,7 +173,7 @@ export default function ReadingIntakeScreen() {
           const paywalls = await fetchStatus();
           attempts++;
           if (paywalls === 0 && attempts < 4) {
-            setTimeout(poll, 3000); // 3s between polls to avoid rate limiting
+            setTimeout(poll, 3000);
           }
         };
         setTimeout(poll, 3000);
@@ -184,7 +181,6 @@ export default function ReadingIntakeScreen() {
     })();
   }, [fetchStatus]);
 
-  // ── Visibility effect: re-fetch when returning from Stripe ─────────────────
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") fetchStatus();
@@ -201,7 +197,6 @@ export default function ReadingIntakeScreen() {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
     if (!selectedAreaConfig) return "Choose a reading type";
-    // Show price on button if this reading requires payment
     if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
       const prices = ["$2.99", "$3.99", "$4.99", "$4.99"];
       const idx = Math.min((userStatus.readingsCompleted ?? 0), 3);
@@ -246,7 +241,6 @@ export default function ReadingIntakeScreen() {
         timeframeValue: "next-45-days",
       });
 
-      // Gate at intake — check credits before generating
       if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
         const creditsRes = await fetch("/api/user/credits");
         const creditsData = await creditsRes.json();
@@ -305,11 +299,9 @@ export default function ReadingIntakeScreen() {
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
-  // Free reading cooldown timer — shown when user has used their free reading
-  // but the 2-week reset hasn't fired yet (readingsCompleted < 4, firstReadingUsed true)
   const freeReadingCooldownLine = useMemo(() => {
     if (!userStatus?.firstReadingUsed) return null;
-    if (onCooldown) return null; // full cooldown shown separately
+    if (onCooldown) return null;
     if (!userStatus?.cooldownExpiresAt) return null;
     const ms = new Date(userStatus.cooldownExpiresAt).getTime() - Date.now();
     if (ms <= 0) return null;
@@ -320,11 +312,10 @@ export default function ReadingIntakeScreen() {
   }, [userStatus, onCooldown]);
 
   return (
-    /*
-      Outer shell: h-screen overflow-y-auto — scrolls within the locked viewport.
-      The fixed footer CTA stays anchored to the bottom of the screen as before.
-    */
-    <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
+    <div
+      className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
+      style={{ WebkitOverflowScrolling: "touch", paddingTop: "env(safe-area-inset-top, 48px)" }}
+    >
       <style jsx>{`
         @keyframes jxlAmberPulse {
           0%, 100% {
@@ -354,13 +345,69 @@ export default function ReadingIntakeScreen() {
         }
         .jxl-teaser {
           animation: jxlAmberPulse 2.8s ease-in-out infinite;
+          position: relative;
+          overflow: hidden;
+        }
+        .jxl-teaser::before {
+          content: "";
+          position: absolute;
+          inset: -40%;
+          background-image: linear-gradient(
+            120deg,
+            rgba(253, 230, 138, 0) 0%,
+            rgba(253, 230, 138, 0.12) 40%,
+            rgba(250, 204, 21, 0.3) 50%,
+            rgba(253, 230, 138, 0.12) 60%,
+            rgba(253, 230, 138, 0) 100%
+          );
+          mix-blend-mode: screen;
+          pointer-events: none;
+          opacity: 0.85;
+          transform: translateX(-60%);
+          animation: jxlShimmer 3.5s linear infinite;
+        }
+        @keyframes jxlShimmer {
+          0%   { transform: translateX(-60%); }
+          50%  { transform: translateX(40%); }
+          100% { transform: translateX(120%); }
+        }
+        .jxl-teaser--subtle::before {
+          opacity: 0.55;
+          animation-duration: 5s;
         }
         .cooldown-glow {
           animation: cooldownPulse 3s ease-in-out infinite;
         }
       `}</style>
 
-      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-28 pt-4">
+      {/* ── Ambient background aura ──────────────────────────────────────── */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <motion.div
+          animate={{ x: [0, 10, 0], y: [0, 14, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-1/2 top-[-120px] h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-teal-300/[0.09] blur-3xl"
+        />
+        <motion.div
+          animate={{ x: [0, -12, 0], y: [0, 10, 0] }}
+          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute right-[-60px] top-[30%] h-[220px] w-[220px] rounded-full bg-amber-300/[0.07] blur-3xl"
+        />
+        <motion.div
+          animate={{ x: [0, 8, 0], y: [0, -12, 0] }}
+          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute left-[-80px] bottom-[18%] h-[200px] w-[200px] rounded-full bg-indigo-400/[0.07] blur-3xl"
+        />
+        <div
+          className="absolute inset-0 opacity-[0.022] mix-blend-screen"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.6px, transparent 0.8px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.55) 0.6px, transparent 0.8px), radial-gradient(circle at 40% 70%, rgba(255,255,255,0.4) 0.6px, transparent 0.8px)",
+            backgroundSize: "220px 220px, 260px 260px, 320px 320px",
+          }}
+        />
+      </div>
+
+      <div className="relative mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -405,12 +452,12 @@ export default function ReadingIntakeScreen() {
               Reading Setup
             </div>
 
-            <div className="space-y-2">
-              <h1 className="text-[30px] font-semibold leading-[1.05] tracking-tight text-white">
+            <div className="space-y-2 pt-1">
+              <h1 className="text-[32px] font-semibold leading-[1.02] tracking-[-0.03em] text-white">
                 What do you want insight on?
               </h1>
-              <p className="max-w-[32ch] text-sm leading-6 text-slate-300">
-                Choose an area and ask your question.
+              <p className="max-w-[34ch] text-[14px] leading-6 text-slate-400">
+                Choose the area you want clarity on, then ask your question in a direct way.
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
@@ -431,14 +478,14 @@ export default function ReadingIntakeScreen() {
             </div>
           </section>
 
-          {/* ── Free reading cooldown one-liner ───────────────────────────── */}
+          {/* Free reading cooldown one-liner */}
           {freeReadingCooldownLine && (
             <div className="mb-3 text-[11px] text-slate-500">
               {freeReadingCooldownLine}
             </div>
           )}
 
-          {/* ── Reading cycle progress bar ─────────────────────────────────── */}
+          {/* Reading cycle progress bar */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0) && (
             <div className="mb-6 space-y-2">
               <div className="flex items-center justify-between">
@@ -477,7 +524,7 @@ export default function ReadingIntakeScreen() {
             </div>
           )}
 
-          {/* ── Cooldown state ─────────────────────────────────────────────── */}
+          {/* Cooldown state */}
           {onCooldown ? (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -547,53 +594,112 @@ export default function ReadingIntakeScreen() {
             </motion.div>
           ) : (
             <>
-              {/* ── Main reading categories ──────────────────────────────── */}
+              {/* Main reading categories */}
               <section className="space-y-3">
-                {AREAS.map((area) => {
+                {AREAS.map((area, index) => {
                   const Icon = area.icon;
                   const isSelected = selectedArea === area.id;
+
                   return (
                     <motion.button
                       key={area.id}
-                      whileTap={{ scale: 0.985 }}
                       type="button"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{
+                        opacity: 1,
+                        y: isSelected ? -3 : 0,
+                        borderColor: isSelected
+                          ? "rgba(94,234,212,0.62)"
+                          : "rgba(255,255,255,0.10)",
+                        backgroundColor: isSelected
+                          ? "rgba(45,212,191,0.10)"
+                          : "rgba(255,255,255,0.04)",
+                        boxShadow: isSelected
+                          ? "0 0 0 1px rgba(94,234,212,0.10), 0 14px 30px rgba(20,184,166,0.14)"
+                          : "0 0 0 1px rgba(255,255,255,0.00), 0 0 0 rgba(0,0,0,0)",
+                      }}
+                      whileTap={{ scale: 0.972, y: 2 }}
+                      transition={{
+                        opacity: { duration: 0.25, delay: index * 0.04 },
+                        y: { type: "spring", stiffness: 320, damping: 24 },
+                        borderColor: { duration: 0.22 },
+                        backgroundColor: { duration: 0.22 },
+                        boxShadow: { duration: 0.25 },
+                      }}
                       onClick={() => {
                         setSelectedArea(area.id);
                         setQuestion("");
                       }}
-                      className={cn(
-                        "w-full rounded-[24px] border px-4 py-4 text-left transition-all duration-200",
-                        "bg-white/[0.03] backdrop-blur-sm",
-                        isSelected
-                          ? "border-teal-300/70 bg-teal-400/[0.08] shadow-[0_0_0_1px_rgba(94,234,212,0.16)]"
-                          : "border-white/10 hover:border-white/20 hover:bg-white/[0.045]"
-                      )}
+                      className="relative w-full overflow-hidden rounded-[24px] border px-4 py-4 text-left backdrop-blur-md"
                     >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
-                            isSelected
-                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200"
-                              : "border-white/10 bg-black/20 text-slate-300"
-                          )}
+                      {/* Top sheen line */}
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent" />
+
+                      {/* Selected radial glow wash */}
+                      <AnimatePresence>
+                        {isSelected && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.22 }}
+                            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(94,234,212,0.14),transparent_58%)]"
+                          />
+                        )}
+                      </AnimatePresence>
+
+                      <div className="relative flex items-start gap-3">
+                        <motion.div
+                          animate={{
+                            scale: isSelected ? 1.08 : 1,
+                            rotate: isSelected ? -3 : 0,
+                            boxShadow: isSelected
+                              ? "0 0 18px rgba(94,234,212,0.22)"
+                              : "0 0 0 rgba(0,0,0,0)",
+                            borderColor: isSelected
+                              ? "rgba(94,234,212,0.40)"
+                              : "rgba(255,255,255,0.10)",
+                            backgroundColor: isSelected
+                              ? "rgba(94,234,212,0.10)"
+                              : "rgba(0,0,0,0.20)",
+                          }}
+                          transition={{ type: "spring", stiffness: 280, damping: 18 }}
+                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border"
+                          style={{
+                            color: isSelected ? "rgb(153 246 228)" : "rgb(203 213 225)",
+                          }}
                         >
                           <Icon className="h-4 w-4" />
-                        </div>
+                        </motion.div>
+
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
                             <h2 className="text-[15px] font-semibold text-white">
                               {area.title}
                             </h2>
-                            {isSelected && (
-                              <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200">
-                                Selected
-                              </span>
-                            )}
+                            <AnimatePresence>
+                              {isSelected && (
+                                <motion.span
+                                  initial={{ opacity: 0, scale: 0.9, y: 4 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.95, y: 2 }}
+                                  transition={{ duration: 0.18 }}
+                                  className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
+                                >
+                                  Selected
+                                </motion.span>
+                              )}
+                            </AnimatePresence>
                           </div>
-                          <p className="mt-1 text-sm leading-5 text-slate-400">
+                          <motion.p
+                            animate={{
+                              color: isSelected ? "rgba(226,232,240,0.88)" : "rgba(148,163,184,1)",
+                            }}
+                            transition={{ duration: 0.22 }}
+                            className="mt-1 text-sm leading-5"
+                          >
                             {area.description}
-                          </p>
+                          </motion.p>
                         </div>
                       </div>
                     </motion.button>
@@ -605,10 +711,10 @@ export default function ReadingIntakeScreen() {
               <AnimatePresence>
                 {selectedArea && selectedArea !== "other" && (
                   <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    initial={{ opacity: 0, y: 16, scale: 0.985 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.985 }}
+                    transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
                     className="mt-6 space-y-2"
                   >
                     <Textarea
@@ -628,29 +734,96 @@ export default function ReadingIntakeScreen() {
                   </motion.section>
                 )}
               </AnimatePresence>
+
+              {/* Divider */}
+              <div className="mt-8 flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/[0.06]" />
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
+                  Premium
+                </span>
+                <div className="h-px flex-1 bg-white/[0.06]" />
+              </div>
+
+              {/* Ask Jxl */}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
+                className="mt-4"
+              >
+                {(userStatus?.readingsCompleted ?? 0) >= 1 || userStatus?.isSubscribed ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/jxl")}
+                    className="jxl-teaser w-full rounded-[28px] border border-amber-400/30 bg-black/30 px-5 py-5 text-left transition hover:border-amber-300/50 hover:bg-amber-400/[0.06]"
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-amber-300" />
+                        <span className="text-[14px] font-semibold text-amber-200">
+                          Ask Jxl
+                        </span>
+                      </div>
+                      <span className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300">
+                        Unlocked
+                      </span>
+                    </div>
+                    <p className="text-[12px] leading-5 text-slate-400">
+                      A personal conversation with your chart. No categories — just tell Jxl what's going on.
+                    </p>
+                    <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-300/70">
+                      <span>Start a session →</span>
+                    </div>
+                  </button>
+                ) : (
+                  <>
+                    <div className="mb-2 flex items-center justify-center">
+                      <span className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-400/80">
+                        <Lock className="h-2.5 w-2.5" />
+                        Unlocks after your first reading
+                      </span>
+                    </div>
+                    <div
+                      className="jxl-teaser jxl-teaser--subtle relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-black/30 pointer-events-none select-none"
+                      aria-hidden="true"
+                    >
+                      <div className="blur-[6px] px-5 py-5 opacity-60">
+                        <div className="mb-3 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-amber-300" />
+                          <span className="text-[14px] font-semibold text-amber-200">
+                            Ask Jxl
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="h-3 w-3/4 rounded-full bg-slate-400/30" />
+                          <div className="h-3 w-1/2 rounded-full bg-slate-400/20" />
+                          <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
+                        </div>
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-b from-amber-950/10 via-transparent to-amber-950/20 rounded-[28px]" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/10">
+                            <Lock className="h-4 w-4 text-amber-300/70" />
+                          </div>
+                          <span className="text-[11px] text-amber-400/60 tracking-wide">
+                            Complete one reading to unlock
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </motion.div>
             </>
           )}
 
-
-
-        </motion.div>
-      </div>
-
-      {/* Footer CTA — hidden during cooldown */}
-      {!onCooldown && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-[430px] space-y-2">
+          {/* ── Inline CTA — sits directly below JXL ──────────────────── */}
+          <div className="mt-6 border-t border-white/[0.08]" />
+          <div className="mt-4 space-y-2 pb-8">
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}
-            <Button
-              type="button"
-              onClick={handleStartReading}
-              disabled={!canSubmit || isCreatingReading}
-              className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-            >
-              {buttonCopy}
-            </Button>
             {!userStatus?.isSubscribed && (
               <button
                 type="button"
@@ -667,15 +840,27 @@ export default function ReadingIntakeScreen() {
                   const data = await res.json();
                   if (data.url) window.location.href = data.url;
                 }}
-                className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] text-left px-5 transition hover:border-amber-300/50 flex items-center justify-between"
+                className="relative h-12 w-full overflow-hidden rounded-2xl border border-amber-300/25 bg-[linear-gradient(180deg,rgba(251,191,36,0.10),rgba(251,191,36,0.04))] px-5 text-left transition hover:border-amber-300/45 flex items-center justify-between"
               >
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/40 to-transparent" />
                 <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
                 <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
               </button>
             )}
+            {!onCooldown && (
+              <Button
+                type="button"
+                onClick={handleStartReading}
+                disabled={!canSubmit || isCreatingReading}
+                className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              >
+                {buttonCopy}
+              </Button>
+            )}
           </div>
-        </div>
-      )}
+
+        </motion.div>
+      </div>
     </div>
   );
 }
