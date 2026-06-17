@@ -484,9 +484,9 @@ export default function ReadingIntakeScreen() {
 
           {/* ── Free reading weekly reset countdown ───────────────────── */}
           {freeReadingCooldownLine && (
-            <div className="mb-4 flex items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/[0.06] px-3 py-1.5 w-fit">
-              <div className="h-1.5 w-1.5 rounded-full bg-teal-300/60" />
-              <span className="text-[11px] text-teal-300/70">{freeReadingCooldownLine}</span>
+            <div className="mb-3 flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
+              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
           )}
 
