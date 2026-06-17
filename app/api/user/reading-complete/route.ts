@@ -22,7 +22,6 @@ export async function POST() {
     const isSubscribed = metadata?.isSubscribed === true;
 
     const currentJxlCredits = Number(metadata?.jxlCredits ?? 0);
-    // Grant JXL credits on first reading completion
     const jxlCreditsToGrant = isFirstReading ? JXL_FIRST_READING_CREDITS : 0;
 
     const currentCredits = Number(metadata?.credits ?? 0);
@@ -36,10 +35,11 @@ export async function POST() {
         readingsCompleted: next,
         firstReadingUsed: true,
         credits: newCredits,
-        // Always update jxlCredits on first reading so JXL unlocks immediately
         jxlCredits: isFirstReading
           ? currentJxlCredits + jxlCreditsToGrant
           : currentJxlCredits,
+        // Stamp when the free reading was used so we can reset it weekly
+        ...(isFirstReading ? { freeReadingUsedAt: new Date().toISOString() } : {}),
         ...(hitCooldown && !metadata?.cooldownStartedAt
           ? { cooldownStartedAt: new Date().toISOString() }
           : {}),
@@ -48,7 +48,7 @@ export async function POST() {
 
     console.log(
       `[reading-complete] ${userId} — readingsCompleted: ${current} → ${next}` +
-      (isFirstReading ? ` — granted ${jxlCreditsToGrant} JXL credits (first reading)` : "") +
+      (isFirstReading ? ` — granted ${jxlCreditsToGrant} JXL credits + stamped freeReadingUsedAt` : "") +
       (!isFirstReading && !isSubscribed ? ` — deducted ${CREDITS_PER_READING} credits (${currentCredits} → ${newCredits})` : "") +
       (hitCooldown ? " — cooldown started" : "")
     );

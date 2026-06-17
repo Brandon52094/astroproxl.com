@@ -66,6 +66,8 @@ interface UserStatus {
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
+  freeReadingResetAt: string | null;
+  freeReadingAvailable: boolean;
 }
 
 function formatTimeRemaining(expiresAt: string): string {
@@ -156,6 +158,8 @@ export default function ReadingIntakeScreen() {
         onCooldown: data.onCooldown === true,
         cooldownExpiresAt: data.cooldownExpiresAt ?? null,
         canBypass: data.canBypass === true,
+        freeReadingResetAt: data.freeReadingResetAt ?? null,
+        freeReadingAvailable: data.freeReadingAvailable === true,
       });
       return activePaywallIndex;
     } catch {
@@ -314,13 +318,12 @@ export default function ReadingIntakeScreen() {
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
-  // Free reading cooldown timer — shown when user has used their free reading
-  // but the 2-week reset hasn't fired yet (readingsCompleted < 4, firstReadingUsed true)
+  // Weekly free reading reset countdown
   const freeReadingCooldownLine = useMemo(() => {
-    if (!userStatus?.firstReadingUsed) return null;
-    if (onCooldown) return null; // full cooldown shown separately
-    if (!userStatus?.cooldownExpiresAt) return null;
-    const ms = new Date(userStatus.cooldownExpiresAt).getTime() - Date.now();
+    if (!userStatus?.freeReadingResetAt) return null;
+    if (onCooldown) return null;
+    if (userStatus?.isSubscribed) return null;
+    const ms = new Date(userStatus.freeReadingResetAt).getTime() - Date.now();
     if (ms <= 0) return null;
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
     const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -479,10 +482,11 @@ export default function ReadingIntakeScreen() {
             </div>
           </section>
 
-          {/* ── Free reading cooldown one-liner ───────────────────────────── */}
+          {/* ── Free reading weekly reset countdown ───────────────────── */}
           {freeReadingCooldownLine && (
-            <div className="mb-3 text-[11px] text-slate-500">
-              {freeReadingCooldownLine}
+            <div className="mb-4 flex items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/[0.06] px-3 py-1.5 w-fit">
+              <div className="h-1.5 w-1.5 rounded-full bg-teal-300/60" />
+              <span className="text-[11px] text-teal-300/70">{freeReadingCooldownLine}</span>
             </div>
           )}
 
