@@ -332,7 +332,7 @@ export default function ReadingIntakeScreen() {
   }, [userStatus, onCooldown]);
 
   return (
-    <div className="h-screen overflow-y-auto overscroll-none bg-transparent text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
+    <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
       <style jsx>{`
         @keyframes jxlAmberPulse {
           0%, 100% {
@@ -461,7 +461,7 @@ export default function ReadingIntakeScreen() {
                 What do you want insight on?
               </h1>
               <p className="max-w-[32ch] text-sm leading-6 text-slate-300">
-                Choose A Reading and Ask Anything.
+                Choose an area and ask your question.
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
@@ -715,7 +715,7 @@ export default function ReadingIntakeScreen() {
                   </span>
                 </div>
                 <p className="text-[12px] leading-5 text-slate-400">
-                  Ask Anything. Something Specific and Detailed. No limits -- Get direct insights.
+                  A personal conversation with your chart. No categories — just tell Jxl what's going on.
                 </p>
                 <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-300/70">
                   <span>Start a session →</span>
