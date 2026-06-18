@@ -2,17 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { clerkClient } from "@clerk/nextjs/server";
 
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
 
+
   if (!signature) {
     return NextResponse.json({ error: "No signature" }, { status: 400 });
   }
 
+
   let event: Stripe.Event;
+
 
   try {
     event = stripe.webhooks.constructEvent(
@@ -25,7 +30,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+
   console.log("[webhook] event type:", event.type, "metadata:", JSON.stringify((event.data.object as any).metadata));
+
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
@@ -37,27 +44,33 @@ export async function POST(request: NextRequest) {
       | "jxl"
       | "subscriber_topup"
       | "reading_download"
+      | "followup"
       | undefined;
+
 
     if (!userId || !mode) {
       console.error("[webhook] Missing userId or mode in metadata");
       return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
     }
 
+
     try {
       const client = await clerkClient();
       const user = await client.users.getUser(userId);
       const meta = user.publicMetadata;
+
 
       const currentCredits = Number(meta?.credits ?? 0);
       const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
       const currentJxlSessionsPurchased = Number(meta?.jxlSessionsPurchased ?? 0);
       const paywallIndex = Number(session.metadata?.paywallIndex ?? 0);
 
+
       // ── One-time reading purchase ───────────────────────────────────────────
       if (mode === "one_time") {
         const credits = Number(session.metadata?.credits ?? 0);
         const jxlCredits = Number(session.metadata?.jxlCredits ?? 0);
+
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
@@ -70,11 +83,13 @@ export async function POST(request: NextRequest) {
           },
         });
 
+
         console.log(
           `[webhook] one_time — granted ${credits} reading credits` +
           (jxlCredits > 0 ? ` + ${jxlCredits} Jxl credits` : "") +
           ` to ${userId}. Paywall ${paywallIndex} complete.`
         );
+
 
       // ── Subscription ────────────────────────────────────────────────────────
       // $20/mo — 8 readings (96 credits) + unlimited JXL
@@ -83,6 +98,7 @@ export async function POST(request: NextRequest) {
         const stripeSubscriptionId = session.subscription as string;
         const tier = session.metadata?.tier ?? "sub_base";
         const SUBSCRIPTION_READING_CREDITS = 96; // 8 readings × 12 credits
+
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
@@ -99,15 +115,18 @@ export async function POST(request: NextRequest) {
           },
         });
 
+
         console.log(
           `[webhook] subscription — activated ${tier} for ${userId}. ` +
           `Granted ${SUBSCRIPTION_READING_CREDITS} reading credits + unlimited JXL.`
         );
 
+
       // ── Subscriber top-up ───────────────────────────────────────────────────
       // Subscriber ran out of 8 monthly readings — $4 for 4 more
       } else if (mode === "subscriber_topup") {
         const TOPUP_CREDITS = 48; // 4 readings × 12 credits
+
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
@@ -117,9 +136,11 @@ export async function POST(request: NextRequest) {
           },
         });
 
+
         console.log(
           `[webhook] subscriber_topup — granted ${TOPUP_CREDITS} reading credits to ${userId}.`
         );
+
 
       // ── Cooldown bypass ─────────────────────────────────────────────────────
       // $6 to skip 2-week cooldown and start fresh cycle immediately
@@ -156,7 +177,9 @@ export async function POST(request: NextRequest) {
           },
         });
 
+
         console.log(`[webhook] bypass — full cycle reset for ${userId}. cooldownStartedAt removed via updateUser.`);
+
 
       // ── Reading download — $1.00 ───────────────────────────────────────────
       } else if (mode === "reading_download") {
@@ -169,6 +192,7 @@ export async function POST(request: NextRequest) {
         });
         console.log(`[webhook] reading_download — unlocked for ${userId}.`);
 
+
       // ── JXL session purchase ────────────────────────────────────────────────
       } else if (mode === "jxl") {
         const jxlTier = session.metadata?.jxlTier ?? "";
@@ -177,6 +201,7 @@ export async function POST(request: NextRequest) {
         const cycleStartedAt = isFirstSession
           ? new Date().toISOString()
           : (meta?.jxlCycleStartedAt as string ?? new Date().toISOString());
+
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
@@ -188,12 +213,19 @@ export async function POST(request: NextRequest) {
           },
         });
 
+
         console.log(
           `[webhook] jxl — granted ${jxlReplies} replies (${jxlTier}) to ${userId}. ` +
           `Sessions this cycle: ${currentJxlSessionsPurchased + 1}. ` +
           `Total credits: ${currentJxlCredits + jxlReplies}`
         );
+
+
+      } else if (mode === "followup") {
+        // No Clerk update needed — just log it
+        console.log(`[webhook] followup — $2 charged to ${userId}.`);
       }
+
 
     } catch (err) {
       // Clerk update failed AFTER Stripe charged the card.
@@ -215,15 +247,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+
   // ── Subscription cancelled ──────────────────────────────────────────────────
   if (event.type === "customer.subscription.deleted") {
     const subscription = event.data.object as Stripe.Subscription;
     const userId = subscription.metadata?.userId;
 
+
     if (userId) {
       try {
         const client = await clerkClient();
         const user = await client.users.getUser(userId);
+
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
@@ -235,6 +270,7 @@ export async function POST(request: NextRequest) {
             subscriptionCancelledAt: new Date().toISOString(),
           },
         });
+
 
         console.log(`[webhook] subscription cancelled for ${userId}`);
       } catch (err) {
@@ -248,6 +284,7 @@ export async function POST(request: NextRequest) {
       }
     }
   }
+
 
   return NextResponse.json({ received: true });
 }

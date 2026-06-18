@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { returnUrl, mode, paywallIndex, jxlTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "bypass" | "jxl" | "subscriber_topup" | "reading_download";
+      mode: "one_time" | "subscription" | "bypass" | "jxl" | "subscriber_topup" | "reading_download" | "followup";
       paywallIndex?: number;
       jxlTier?: string;
     };
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Subscriber top-up — $4.00 (4 more readings for active subscribers) ───
+    // ── Subscriber top-up — $4.00 ─────────────────────────────────────────────
     if (mode === "subscriber_topup") {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -98,11 +98,31 @@ export async function POST(request: NextRequest) {
           },
           quantity: 1,
         }],
-        metadata: {
-          userId,
-          mode: "reading_download",
-        },
+        metadata: { userId, mode: "reading_download" },
         success_url: `${returnUrl}?payment=success&mode=reading_download`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Follow-up question — $2.00 ────────────────────────────────────────────
+    if (mode === "followup") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Ask a Follow-Up",
+              description: "Get a deeper answer on your reading",
+            },
+            unit_amount: 200,
+          },
+          quantity: 1,
+        }],
+        metadata: { userId, mode: "followup" },
+        success_url: `${returnUrl}?payment=success&mode=followup`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });
@@ -113,7 +133,6 @@ export async function POST(request: NextRequest) {
       if (!jxlTier || !isValidJxlTier(jxlTier)) {
         return NextResponse.json({ error: "Invalid jxlTier" }, { status: 400 });
       }
-
       const pack = JXL_PACKS[jxlTier as JxlTier];
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -121,20 +140,12 @@ export async function POST(request: NextRequest) {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: {
-              name: "Jxl — " + pack.name,
-              description: pack.tagline,
-            },
+            product_data: { name: "Jxl — " + pack.name, description: pack.tagline },
             unit_amount: pack.price,
           },
           quantity: 1,
         }],
-        metadata: {
-          userId,
-          mode: "jxl",
-          jxlTier,
-          jxlReplies: pack.replies,
-        },
+        metadata: { userId, mode: "jxl", jxlTier, jxlReplies: pack.replies },
         success_url: `${returnUrl}?payment=success&mode=jxl&tier=${jxlTier}`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
@@ -161,10 +172,7 @@ export async function POST(request: NextRequest) {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: {
-              name: pack.name,
-              description: pack.description,
-            },
+            product_data: { name: pack.name, description: pack.description },
             unit_amount: pack.price,
           },
           quantity: 1,
@@ -183,30 +191,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Subscription — $20/mo, single tier ───────────────────────────────────
-    // All paywalls show the same subscription. paywallIndex is passed for
-    // context only — the tier is always SUBSCRIPTION_TIER.
+    // ── Subscription — $20/mo ─────────────────────────────────────────────────
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "subscription",
       line_items: [{
         price_data: {
           currency: "usd",
-          product_data: {
-            name: SUBSCRIPTION_TIER.name,
-            description: SUBSCRIPTION_TIER.tagline,
-          },
+          product_data: { name: SUBSCRIPTION_TIER.name, description: SUBSCRIPTION_TIER.tagline },
           unit_amount: SUBSCRIPTION_TIER.price,
           recurring: { interval: "month" },
         },
         quantity: 1,
       }],
-      metadata: {
-        userId,
-        tier: SUBSCRIPTION_TIER.tier,
-        paywallIndex: index,
-        mode: "subscription",
-      },
+      metadata: { userId, tier: SUBSCRIPTION_TIER.tier, paywallIndex: index, mode: "subscription" },
       success_url: `${returnUrl}?payment=success&mode=subscription&paywall=${index}`,
       cancel_url: `${returnUrl}?payment=cancelled`,
     });
