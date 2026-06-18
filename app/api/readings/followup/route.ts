@@ -22,6 +22,7 @@ interface FollowupRequestBody {
   topic: string;
   tropical: { planets: PlanetPlacement[] };
   profection: ProfectionData;
+  conversationHistory?: string; // previous Q&A pairs
 }
 
 export async function POST(request: NextRequest) {
@@ -46,8 +47,12 @@ export async function POST(request: NextRequest) {
       .map(p => `${p.name}: ${p.sign} ${p.degree}${p.house ? ` (House ${p.house})` : ""}`)
       .join("\n");
 
+    const conversationBlock = body.conversationHistory
+      ? `\nPREVIOUS CONVERSATION:\n${body.conversationHistory}\n`
+      : "";
+
     const prompt = [
-      "CRITICAL: Mobile screen. Short, heavy sentences. No fluff. Go deeper — do not repeat the original reading.",
+      "CRITICAL: Mobile screen. Short, heavy sentences. No fluff. Go deeper — do not repeat anything already said.",
       "",
       "═══════════════════════════════════════════",
       "CONTEXT",
@@ -60,20 +65,20 @@ export async function POST(request: NextRequest) {
       "",
       "ORIGINAL READING:",
       body.originalReading,
-      "",
-      "THEIR FOLLOW-UP QUESTION:",
+      conversationBlock,
+      "THEIR LATEST QUESTION:",
       `"${body.question}"`,
       "",
       "═══════════════════════════════════════════",
       "RESPONSE RULES",
       "═══════════════════════════════════════════",
-      "- Answer ONLY what they asked. Stay on that thread.",
-      "- Build directly on the original reading — reference specific placements named in it.",
+      "- Answer ONLY what they just asked. Stay on that thread.",
+      "- Build on the original reading AND the conversation so far — never repeat what was already said.",
       "- Go deeper on the specific planet, house, or timing they're asking about.",
       "- 'You' in every sentence. No passive voice. No hedging.",
       "- Outcomes as facts. Named degrees and house numbers.",
       "- 3-5 compact paragraphs maximum. No headers.",
-      "- End with one sentence that either closes the loop or points to what they should watch next.",
+      "- End with one sentence that either closes the loop or opens the next natural question.",
       "",
       "Return ONLY a valid JSON object:",
       '{ "title": "A sharp 4-6 word title specific to their question", "content": "The deeper response as flowing prose." }',

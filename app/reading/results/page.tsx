@@ -32,13 +32,6 @@ function setDownloadReturnFlag() {
   localStorage.setItem(DOWNLOAD_FLAG_KEY, "1");
 }
 
-function consumeDownloadReturnFlag(): boolean {
-  if (typeof window === "undefined") return false;
-  const exists = localStorage.getItem(DOWNLOAD_FLAG_KEY) === "1";
-  localStorage.removeItem(DOWNLOAD_FLAG_KEY);
-  return exists;
-}
-
 function setFollowupReturnFlag(question: string) {
   if (typeof window === "undefined") return;
   localStorage.setItem(FOLLOWUP_FLAG_KEY, "1");
@@ -66,7 +59,8 @@ interface Credits {
   downloadUnlocked?: boolean;
 }
 
-interface FollowupResponse {
+interface FollowupEntry {
+  question: string;
   title: string;
   content: string;
 }
@@ -85,12 +79,12 @@ function ResultsPageInner() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadPaymentReturn, setDownloadPaymentReturn] = useState(false);
 
-  // ── Follow-up state ────────────────────────────────────────────────────────
+  // ── Follow-up conversation state ───────────────────────────────────────────
   const [followupQuestion, setFollowupQuestion] = useState("");
-  const [followupResponse, setFollowupResponse] = useState<FollowupResponse | null>(null);
+  const [followupThread, setFollowupThread] = useState<FollowupEntry[]>([]);
   const [isGeneratingFollowup, setIsGeneratingFollowup] = useState(false);
   const [followupError, setFollowupError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const intake = loadIntake();
 
@@ -115,13 +109,19 @@ function ResultsPageInner() {
     } catch { /* silent */ }
   }, [fetchCredits]);
 
-  const generateFollowup = useCallback(async (question: string) => {
+  // Build conversation context from the full thread so each reply builds on previous
+  const generateFollowup = useCallback(async (question: string, existingThread: FollowupEntry[]) => {
     const storedReading = loadReading();
     const chart = loadChart();
     if (!storedReading || !chart) return;
 
     setIsGeneratingFollowup(true);
     setFollowupError(null);
+
+    // Build the conversation history to pass to the API
+    const conversationHistory = existingThread.map(entry =>
+      `Q: ${entry.question}\nA: ${entry.content}`
+    ).join("\n\n");
 
     try {
       const response = await fetch("/api/readings/followup", {
@@ -134,12 +134,22 @@ function ResultsPageInner() {
           topic: storedReading.topic,
           tropical: chart.chartData.tropical,
           profection: chart.chartData.profection,
+          conversationHistory: conversationHistory || undefined,
         }),
       });
 
       const data = await response.json();
       if (!response.ok || !data.content) throw new Error(data.error ?? "Failed to generate response.");
-      setFollowupResponse({ title: data.title, content: data.content });
+
+      setFollowupThread(prev => [...prev, {
+        question,
+        title: data.title,
+        content: data.content,
+      }]);
+      setFollowupQuestion("");
+
+      // Scroll to bottom after new reply
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (err) {
       setFollowupError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
@@ -155,7 +165,6 @@ function ResultsPageInner() {
     const returningFromPayment = consumePaymentReturnFlag() || (paymentStatus === "success" && paymentMode !== "reading_download" && paymentMode !== "followup");
     const { isReturn: returningFromFollowup, question: savedQuestion } = consumeFollowupReturnFlag();
 
-    // Clear stale followup flags if user cancelled
     if (returningFromCancelledFollowup) {
       localStorage.removeItem("dfp_followup_return");
       localStorage.removeItem("dfp_followup_question");
@@ -163,7 +172,6 @@ function ResultsPageInner() {
 
     const stored = loadReading();
 
-    // Don't redirect if returning from cancelled followup — reading is still valid
     if (!stored && !returningFromDownload && !returningFromCancelledFollowup) {
       router.push("/reading/intake");
       return;
@@ -175,10 +183,9 @@ function ResultsPageInner() {
     if (returningFromPayment) setUnlockedByPayment(true);
     if (returningFromDownload) setDownloadPaymentReturn(true);
 
-    // Auto-generate followup after returning from payment
     if (returningFromFollowup && savedQuestion && stored) {
       setFollowupQuestion(savedQuestion);
-      generateFollowup(savedQuestion);
+      generateFollowup(savedQuestion, []);
     }
 
     if (paymentStatus) window.history.replaceState({}, "", "/reading/results");
@@ -217,13 +224,12 @@ function ResultsPageInner() {
 
     const isSubscribed = credits?.isSubscribed ?? false;
 
-    // Subscribers get follow-ups free
     if (isSubscribed) {
-      generateFollowup(question);
+      generateFollowup(question, followupThread);
       return;
     }
 
-    // Everyone else pays $2 — save question, redirect to Stripe
+    // Save question and current thread index, redirect to Stripe
     setFollowupReturnFlag(question);
     const response = await fetch("/api/stripe/checkout", {
       method: "POST",
@@ -357,6 +363,9 @@ function ResultsPageInner() {
 
   const isSubscribed = credits?.isSubscribed ?? false;
   const showPaywall = false;
+  const hasThread = followupThread.length > 0;
+  const sendButtonLabel = isSubscribed ? "Send" : "Send — $2.00";
+  const downloadGlowing = !!(credits?.downloadUnlocked || credits?.isSubscribed);
 
   if (!loaded) {
     return (
@@ -369,12 +378,28 @@ function ResultsPageInner() {
   const page = reading?.pages[0];
   const page4 = reading?.pages[0];
 
-  const sendButtonLabel = isSubscribed
-    ? "Send"
-    : `Send — $2.00`;
-
   return (
     <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
+      <style jsx>{`
+        @keyframes downloadPulse {
+          0%, 100% {
+            box-shadow:
+              0 0 0 1px rgba(251, 191, 36, 0.3),
+              0 0 12px rgba(251, 191, 36, 0.15),
+              0 0 24px rgba(251, 191, 36, 0.06);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(251, 191, 36, 0.6),
+              0 0 20px rgba(251, 191, 36, 0.35),
+              0 0 40px rgba(251, 191, 36, 0.15);
+          }
+        }
+        .download-pulse {
+          animation: downloadPulse 2.5s ease-in-out infinite;
+        }
+      `}</style>
+
       <div
         id="results-scroll"
         className="flex w-full max-w-[430px] flex-col overflow-y-auto px-4 pb-52 pt-4"
@@ -446,40 +471,11 @@ function ResultsPageInner() {
                 </div>
               )}
 
-              {/* ── Follow-up section ────────────────────────────────────── */}
-              {!followupResponse && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.3 }}
-                  className="mt-6"
-                >
-                  <div className="mb-3 flex items-center gap-2">
-                    <div className="h-px flex-1 bg-white/[0.06]" />
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask more</span>
-                    <div className="h-px flex-1 bg-white/[0.06]" />
-                  </div>
-                  <p className="mb-3 text-[12px] text-slate-500">
-                    Want to go deeper on something in this reading?
-                  </p>
-                  <textarea
-                    ref={textareaRef}
-                    value={followupQuestion}
-                    onChange={(e) => setFollowupQuestion(e.target.value)}
-                    placeholder="Ask about a specific part of your reading…"
-                    rows={3}
-                    className="w-full resize-none rounded-[20px] border border-white/10 bg-black/20 px-4 py-3 text-[14px] leading-6 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-300"
-                  />
-                  {followupError && (
-                    <p className="mt-2 text-[12px] text-rose-300">{followupError}</p>
-                  )}
-                </motion.div>
-              )}
-
-              {/* Follow-up response */}
+              {/* ── Follow-up conversation thread ────────────────────────── */}
               <AnimatePresence>
-                {followupResponse && (
+                {followupThread.map((entry, index) => (
                   <motion.div
+                    key={index}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
@@ -487,19 +483,59 @@ function ResultsPageInner() {
                   >
                     <div className="mb-3 flex items-center gap-2">
                       <div className="h-px flex-1 bg-white/[0.06]" />
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Going deeper</span>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
+                        {index === 0 ? "Going deeper" : `Follow-up ${index + 1}`}
+                      </span>
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
-                    <div className="mb-2 text-[11px] text-slate-500 italic">"{followupQuestion}"</div>
-                    <h2 className="mb-3 text-lg font-semibold text-white">{followupResponse.title}</h2>
+                    <div className="mb-2 text-[11px] text-slate-500 italic">"{entry.question}"</div>
+                    <h2 className="mb-3 text-lg font-semibold text-white">{entry.title}</h2>
                     <div className="rounded-[24px] border border-teal-300/20 bg-teal-400/[0.04] p-5">
                       <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
-                        {followupResponse.content}
+                        {entry.content}
                       </p>
                     </div>
                   </motion.div>
-                )}
+                ))}
               </AnimatePresence>
+
+              {/* ── Ask another question ─────────────────────────────────── */}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: hasThread ? 0 : 0.3 }}
+                className="mt-6"
+              >
+                {!hasThread && (
+                  <>
+                    <div className="mb-3 flex items-center gap-2">
+                      <div className="h-px flex-1 bg-white/[0.06]" />
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask more</span>
+                      <div className="h-px flex-1 bg-white/[0.06]" />
+                    </div>
+                    <p className="mb-3 text-[12px] text-slate-500">
+                      Want to go deeper on something in this reading?
+                    </p>
+                  </>
+                )}
+                {hasThread && (
+                  <p className="mb-3 text-[12px] text-slate-500">
+                    Keep going — ask another question.
+                  </p>
+                )}
+                <textarea
+                  value={followupQuestion}
+                  onChange={(e) => setFollowupQuestion(e.target.value)}
+                  placeholder={hasThread ? "Ask another question…" : "Ask about a specific part of your reading…"}
+                  rows={3}
+                  className="w-full resize-none rounded-[20px] border border-white/10 bg-black/20 px-4 py-3 text-[14px] leading-6 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                />
+                {followupError && (
+                  <p className="mt-2 text-[12px] text-rose-300">{followupError}</p>
+                )}
+              </motion.div>
+
+              <div ref={bottomRef} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -509,9 +545,9 @@ function ResultsPageInner() {
         <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
           <div className="w-full max-w-[430px] space-y-2">
 
-            {/* Follow-up send button — shows when question typed and no response yet */}
+            {/* Send button — shows when question typed */}
             <AnimatePresence>
-              {followupQuestion.trim() && !followupResponse && (
+              {followupQuestion.trim() && (
                 <motion.button
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -537,16 +573,16 @@ function ResultsPageInner() {
             </AnimatePresence>
 
             <div className="flex gap-3">
+              {/* Download button — pulses amber to draw attention */}
               <button
                 type="button"
                 onClick={handleDownload}
                 disabled={isDownloading}
-                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition disabled:opacity-60 ${
-                  credits?.downloadUnlocked || credits?.isSubscribed
-                    ? "border-amber-300/50 bg-amber-400/10 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.25)] hover:bg-amber-400/20"
-                    : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-teal-300/30 hover:text-white"
-                }`}
-                title={credits?.downloadUnlocked || credits?.isSubscribed ? "Download PDF" : "Download PDF — $1.00"}
+                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition disabled:opacity-60
+                  border-amber-300/50 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20
+                  ${!isDownloading ? "download-pulse" : ""}
+                `}
+                title={downloadGlowing ? "Download PDF" : "Download PDF — $1.00"}
               >
                 {isDownloading
                   ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-transparent" />
