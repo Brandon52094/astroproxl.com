@@ -40,7 +40,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="h-full overflow-hidden bg-[transparent] text-foreground">
+      <body className="h-full overflow-hidden bg-[#050816] text-foreground">
         <ClerkProvider>
           <main className="h-full">
             {children}
