@@ -28,53 +28,25 @@ type ResolvedPlace = {
   timezone: string;
 };
 
-// ─── Normalize any date format to MM/DD/YYYY ──────────────────────────────────
 function normalizeBirthDate(raw: string): string {
   const s = raw.trim();
-
-  // Strip all separators to get pure digits
   const digits = s.replace(/[-\/\.]/g, "");
-
-  // 8 digits — could be YYYYMMDD or MMDDYYYY
   if (/^\d{8}$/.test(digits)) {
     const firstFour = parseInt(digits.slice(0, 4));
-    // If first 4 digits look like a year (1900-2099), treat as YYYYMMDD
     if (firstFour >= 1900 && firstFour <= 2099) {
-      const yyyy = digits.slice(0, 4);
-      const mm = digits.slice(4, 6);
-      const dd = digits.slice(6, 8);
-      return mm + "/" + dd + "/" + yyyy;
+      return digits.slice(4, 6) + "/" + digits.slice(6, 8) + "/" + digits.slice(0, 4);
     }
-    // Otherwise treat as MMDDYYYY
-    const mm = digits.slice(0, 2);
-    const dd = digits.slice(2, 4);
-    const yyyy = digits.slice(4, 8);
-    return mm + "/" + dd + "/" + yyyy;
+    return digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4, 8);
   }
-
-  // Already has separators — parse intelligently
-  // MM/DD/YYYY or MM-DD-YYYY or MM.DD.YYYY
   const mdyMatch = s.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/);
-  if (mdyMatch) {
-    return mdyMatch[1].padStart(2, "0") + "/" + mdyMatch[2].padStart(2, "0") + "/" + mdyMatch[3];
-  }
-
-  // YYYY-MM-DD or YYYY/MM/DD
+  if (mdyMatch) return mdyMatch[1].padStart(2, "0") + "/" + mdyMatch[2].padStart(2, "0") + "/" + mdyMatch[3];
   const isoMatch = s.match(/^(\d{4})[-\/\.](\d{2})[-\/\.](\d{2})$/);
-  if (isoMatch) {
-    return isoMatch[2] + "/" + isoMatch[3] + "/" + isoMatch[1];
-  }
-
-  // 6 digits — MMDDYY
+  if (isoMatch) return isoMatch[2] + "/" + isoMatch[3] + "/" + isoMatch[1];
   if (/^\d{6}$/.test(digits)) {
-    const mm = digits.slice(0, 2);
-    const dd = digits.slice(2, 4);
     const yy = digits.slice(4, 6);
-    const yyyy = parseInt(yy) > 30 ? "19" + yy : "20" + yy;
-    return mm + "/" + dd + "/" + yyyy;
+    return digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + (parseInt(yy) > 30 ? "19" + yy : "20" + yy);
   }
-
-  return s; // return as-is if unrecognized
+  return s;
 }
 
 function Section({
@@ -139,6 +111,12 @@ export default function ChartDataScreen() {
   const [resolvedPlace, setResolvedPlace] = useState<ResolvedPlace | null>(null);
   const [geocodeLoading, setGeocodeLoading] = useState(false);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
+
+  // ── Current location for Solar Return ─────────────────────────────────────
+  const [currentPlace, setCurrentPlace] = useState("");
+  const [resolvedCurrentPlace, setResolvedCurrentPlace] = useState<ResolvedPlace | null>(null);
+  const [currentGeocodeLoading, setCurrentGeocodeLoading] = useState(false);
+
   const [chartData, setChartData] = useState<ChartCalculateResponse | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState<string | null>(null);
@@ -152,6 +130,10 @@ export default function ChartDataScreen() {
       setBirthTime(saved.birthTime);
       setBirthPlace(saved.birthPlace);
       setResolvedPlace({ label: saved.birthPlace, lat: saved.lat, lon: saved.lng, timezone: saved.timezone });
+      if (saved.currentPlace) setCurrentPlace(saved.currentPlace);
+      if (saved.currentLat && saved.currentLng) {
+        setResolvedCurrentPlace({ label: saved.currentPlace ?? "", lat: saved.currentLat, lon: saved.currentLng, timezone: "" });
+      }
       setChartData(saved.chartData);
     }
   }, []);
@@ -184,13 +166,35 @@ export default function ChartDataScreen() {
     }
   }, []);
 
+  // Silently geocode current location — no error shown, just best effort
+  const geocodeCurrentPlace = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) { setResolvedCurrentPlace(null); return; }
+    setCurrentGeocodeLoading(true);
+    try {
+      const response = await fetch("/api/places/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: trimmed }),
+      });
+      const data = await response.json();
+      if (response.ok && data?.place) {
+        setResolvedCurrentPlace({ label: data.place.label, lat: data.place.lat, lon: data.place.lon, timezone: data.place.timezone ?? "UTC" });
+        setCurrentPlace(data.place.label);
+      }
+    } catch {
+      // silent — current location is optional
+    } finally {
+      setCurrentGeocodeLoading(false);
+    }
+  }, []);
+
   const handleCalculateChart = useCallback(async () => {
     if (!birthDate.trim() || !birthTime.trim() || !resolvedPlace) return;
     setCalculating(true);
     setCalcError(null);
     setChartData(null);
 
-    // Normalize date format before sending
     const normalizedDate = normalizeBirthDate(birthDate.trim());
 
     try {
@@ -204,12 +208,17 @@ export default function ChartDataScreen() {
           lat: resolvedPlace.lat,
           lng: resolvedPlace.lon,
           timezone: resolvedPlace.timezone,
+          // Pass current location for Solar Return if available
+          ...(resolvedCurrentPlace ? {
+            currentLat: resolvedCurrentPlace.lat,
+            currentLng: resolvedCurrentPlace.lon,
+          } : {}),
         }),
       });
       const data: ChartCalculateResponse = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error ?? "Chart calculation failed.");
       setChartData(data);
-      setBirthDate(normalizedDate); // update display to normalized format
+      setBirthDate(normalizedDate);
 
       saveChart({
         birthDate: normalizedDate,
@@ -218,6 +227,12 @@ export default function ChartDataScreen() {
         lat: resolvedPlace.lat,
         lng: resolvedPlace.lon,
         timezone: resolvedPlace.timezone,
+        // Store current location alongside birth location
+        ...(resolvedCurrentPlace ? {
+          currentLat: resolvedCurrentPlace.lat,
+          currentLng: resolvedCurrentPlace.lon,
+          currentPlace: resolvedCurrentPlace.label,
+        } : {}),
         chartData: data,
       });
 
@@ -240,7 +255,7 @@ export default function ChartDataScreen() {
     } finally {
       setCalculating(false);
     }
-  }, [birthDate, birthTime, resolvedPlace]);
+  }, [birthDate, birthTime, resolvedPlace, resolvedCurrentPlace]);
 
   const birthMissing = useMemo(() => [birthDate, birthTime, birthPlace].filter((v) => !v.trim()).length, [birthDate, birthTime, birthPlace]);
   const birthComplete = birthMissing === 0 && !!resolvedPlace;
@@ -271,11 +286,12 @@ export default function ChartDataScreen() {
       { label: "Birth Date", value: birthDate.trim() || "—" },
       { label: "Birth Time", value: birthTime.trim() || "—" },
       { label: "Birth Place", value: resolvedPlace?.label || birthPlace.trim() || "—" },
+      { label: "Current Location", value: resolvedCurrentPlace?.label || "—" },
       { label: "Sun", value: sun ? `${sun.sign} ${sun.degree}` : "—" },
       { label: "Moon", value: moon ? `${moon.sign} ${moon.degree}` : "—" },
       { label: "Rising", value: asc ? `${asc.sign} ${asc.degree}` : "—" },
     ];
-  }, [birthDate, birthTime, birthPlace, resolvedPlace, tropicalPlanets]);
+  }, [birthDate, birthTime, birthPlace, resolvedPlace, resolvedCurrentPlace, tropicalPlanets]);
 
   const handleContinue = useCallback(() => {
     setSubmitError(null);
@@ -283,7 +299,6 @@ export default function ChartDataScreen() {
   }, [router]);
 
   return (
-    // iOS-safe scroll container — no rubber-band snap
     <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
       style={{ WebkitOverflowScrolling: "touch" }}>
       <div className="mx-auto w-full max-w-md px-4 pb-32 pt-4">
@@ -353,6 +368,33 @@ export default function ChartDataScreen() {
                   )}
                 </div>
 
+                {/* ── Current Location — optional, for Solar Return ──────── */}
+                <div className="space-y-2">
+                  <Label htmlFor="current-place" className="text-sm font-medium text-slate-200">
+                    Current Location <span className="text-slate-500 font-normal">(optional)</span>
+                  </Label>
+                  <p className="text-[11px] text-slate-500">Used to cast your Solar Return chart for where you are now — gives a more accurate rising sign for this year.</p>
+                  <div className="relative">
+                    <Input id="current-place" type="text" autoComplete="off"
+                      value={currentPlace}
+                      onChange={(e) => { setCurrentPlace(e.target.value ?? ""); setResolvedCurrentPlace(null); }}
+                      onBlur={() => geocodeCurrentPlace(currentPlace)}
+                      placeholder="City, state, country"
+                      className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-teal-300" />
+                    {currentGeocodeLoading && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                        <span className="h-3 w-3 animate-pulse rounded-full bg-teal-300 block" />
+                      </div>
+                    )}
+                  </div>
+                  {resolvedCurrentPlace && (
+                    <div className="flex items-center gap-2 text-[11px] text-teal-200">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span>Verified: {resolvedCurrentPlace.label}</span>
+                    </div>
+                  )}
+                </div>
+
                 <Button type="button" onClick={handleCalculateChart} disabled={!canCalculate}
                   className={cn(
                     "h-12 w-full rounded-2xl font-medium transition",
@@ -398,6 +440,9 @@ export default function ChartDataScreen() {
                         <p className="mt-1 text-xs leading-5 text-teal-100/70">
                           Age {chartData.profection.age} · {chartData.profection.activatedSign} activated ·{" "}
                           <span className="text-teal-200 font-medium">{chartData.profection.timeLord}</span> is your Time Lord
+                          {chartData.solarReturn && (
+                            <span className="text-teal-100/50"> · SR {chartData.solarReturn.ascendant.sign} rising</span>
+                          )}
                         </p>
                       </div>
                     </div>
