@@ -4,8 +4,8 @@ import type { NormalizedChart } from "@/lib/schema/charts";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ChartCalculateRequest {
-  birthDate: string;   // YYYY-MM-DD
-  birthTime: string;   // HH:MM (24h)
+  birthDate: string;
+  birthTime: string;
   birthPlace: string;
   lat: number;
   lng: number;
@@ -49,6 +49,18 @@ export interface UpcomingTriggerData {
   aspect: string;
 }
 
+// ── NEW: Planetary Station data ───────────────────────────────────────────────
+export interface PlanetaryStationData {
+  planet: string;
+  stationDate: string;          // e.g. "June 29"
+  stationType: "retrograde" | "direct";
+  sign: string;
+  degree: string;
+  natalPlanetHit: string | null; // natal planet within 3° orb, if any
+  orbDegrees: number | null;
+  natalHouse: number | null;
+}
+
 export interface ChartCalculateResponse {
   success: boolean;
   tropical: NormalizedChart;
@@ -58,6 +70,7 @@ export interface ChartCalculateResponse {
   progressions: ProgressedPlanet[];
   solarArcs: SolarArcPlanet[];
   upcomingTrigger?: UpcomingTriggerData;
+  planetaryStations: PlanetaryStationData[]; // NEW
   error?: string;
 }
 
@@ -251,10 +264,6 @@ function calculateProfection(
   return { age, profectionYear, activatedHouse, activatedSign, timeLord, timeLordNatalSign: timeLordNatal?.sign ?? "", timeLordNatalHouse: timeLordNatal?.house ?? 0 };
 }
 
-// ─── Secondary Progressions ───────────────────────────────────────────────────
-// Uses the "day-for-a-year" method: 1 day after birth = 1 year of life.
-// JD for progressions = JD birth + age in years (approximated as days).
-
 function calculateProgressions(
   jdBirth: number, birthDate: string, lat: number, lng: number
 ): ProgressedPlanet[] {
@@ -262,19 +271,12 @@ function calculateProgressions(
   const now = new Date();
   let age = now.getFullYear() - birthYear;
   if (now.getMonth() + 1 < birthMonth || (now.getMonth() + 1 === birthMonth && now.getDate() < birthDay)) age--;
-
-  // Fractional age: adds days elapsed since last birthday for sub-year precision
   const lastBirthday = new Date(now.getFullYear() - (now < new Date(now.getFullYear(), birthMonth - 1, birthDay) ? 0 : 0), birthMonth - 1, birthDay);
   const daysSinceLastBirthday = Math.floor((now.getTime() - lastBirthday.getTime()) / 86400000);
   const fractionalAge = age + daysSinceLastBirthday / 365.25;
-
-  // Progressed JD = birth JD + age in days (1 day per year)
   const jdProgressed = jdBirth + fractionalAge;
-
   const raw = calculatePlanets(jdProgressed, lat, lng, "W");
-
   const PLANET_NAMES = ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","North Node"];
-
   return raw.planets
     .filter(p => PLANET_NAMES.includes(p.name))
     .map(({ name, longitude, isRetrograde }) => {
@@ -283,42 +285,27 @@ function calculateProgressions(
     });
 }
 
-// ─── Solar Arc Directions ─────────────────────────────────────────────────────
-// Solar arc = distance the progressed Sun has traveled from natal Sun position.
-// Every natal planet is advanced by this same arc.
-
 function calculateSolarArcs(
   jdBirth: number, birthDate: string, lat: number, lng: number
 ): SolarArcPlanet[] {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
   const [birthYear, birthMonth, birthDay] = birthDate.split("-").map(Number);
   const now = new Date();
   let age = now.getFullYear() - birthYear;
   if (now.getMonth() + 1 < birthMonth || (now.getMonth() + 1 === birthMonth && now.getDate() < birthDay)) age--;
-
   const lastBirthday = new Date(now.getFullYear(), birthMonth - 1, birthDay);
   const daysSinceLastBirthday = Math.floor((now.getTime() - lastBirthday.getTime()) / 86400000);
   const fractionalAge = age + daysSinceLastBirthday / 365.25;
   const jdProgressed = jdBirth + fractionalAge;
-
-  // Get natal Sun longitude
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const swisseph = require("swisseph");
   const natalSunResult = swisseph.swe_calc_ut(jdBirth, swisseph.SE_SUN, 4);
   const natalSunLongitude = natalSunResult.longitude;
-
-  // Get progressed Sun longitude
   const progressedSunResult = swisseph.swe_calc_ut(jdProgressed, swisseph.SE_SUN, 4);
   const progressedSunLongitude = progressedSunResult.longitude;
-
-  // Solar arc = angular distance traveled by the Sun
   let solarArc = progressedSunLongitude - natalSunLongitude;
   if (solarArc < 0) solarArc += 360;
-
-  // Get all natal planet longitudes and advance each by solar arc
   const natalRaw = calculatePlanets(jdBirth, lat, lng, "W");
-
   const PLANET_NAMES = ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","North Node"];
-
   const solarArcPlanets: SolarArcPlanet[] = natalRaw.planets
     .filter(p => PLANET_NAMES.includes(p.name))
     .map(({ name, longitude }) => {
@@ -326,19 +313,12 @@ function calculateSolarArcs(
       const { sign, degree } = longitudeToSignDegree(directedLongitude);
       return { name: `SA ${name}`, sign, degree };
     });
-
-  // Also direct the Ascendant and MC
   const directedAsc = (natalRaw.ascLongitude + solarArc) % 360;
   const directedMC  = (natalRaw.mcLongitude  + solarArc) % 360;
-  const ascDeg = longitudeToSignDegree(directedAsc);
-  const mcDeg  = longitudeToSignDegree(directedMC);
-  solarArcPlanets.push({ name: "SA Ascendant", sign: ascDeg.sign, degree: ascDeg.degree });
-  solarArcPlanets.push({ name: "SA Midheaven", sign: mcDeg.sign,  degree: mcDeg.degree });
-
+  solarArcPlanets.push({ name: "SA Ascendant", ...longitudeToSignDegree(directedAsc) });
+  solarArcPlanets.push({ name: "SA Midheaven", ...longitudeToSignDegree(directedMC) });
   return solarArcPlanets;
 }
-
-// ─── Upcoming Trigger Sweep ───────────────────────────────────────────────────
 
 function calculateUpcomingTrigger(
   natalRaw: ReturnType<typeof calculatePlanets>, lat: number, lng: number
@@ -380,6 +360,94 @@ function calculateUpcomingTrigger(
     }
   }
   return undefined;
+}
+
+// ── NEW: Planetary Stations ───────────────────────────────────────────────────
+// Sweeps the next 60 days for planets that station (speed crosses zero).
+// Only outer planets + Mercury/Venus are worth checking — Moon moves too fast.
+// Flags any station within 3° orb of a natal planet or angle.
+
+function calculatePlanetaryStations(
+  natalRaw: ReturnType<typeof calculatePlanets>,
+  lat: number,
+  lng: number
+): PlanetaryStationData[] {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  const STATION_PLANETS = [
+    { id: swisseph.SE_MERCURY, name: "Mercury" },
+    { id: swisseph.SE_VENUS,   name: "Venus" },
+    { id: swisseph.SE_MARS,    name: "Mars" },
+    { id: swisseph.SE_JUPITER, name: "Jupiter" },
+    { id: swisseph.SE_SATURN,  name: "Saturn" },
+    { id: swisseph.SE_URANUS,  name: "Uranus" },
+    { id: swisseph.SE_NEPTUNE, name: "Neptune" },
+    { id: swisseph.SE_PLUTO,   name: "Pluto" },
+  ];
+
+  // Build natal targets — planets + angles
+  const natalTargets = [
+    ...natalRaw.planets.map(p => ({ name: p.name, longitude: p.longitude, house: getWholeSignHouse(p.longitude, natalRaw.ascLongitude) })),
+    { name: "Ascendant", longitude: natalRaw.ascLongitude, house: 1 },
+    { name: "Midheaven", longitude: natalRaw.mcLongitude, house: 10 },
+  ];
+
+  const today = new Date();
+  const stations: PlanetaryStationData[] = [];
+
+  for (const planet of STATION_PLANETS) {
+    let prevSpeed: number | null = null;
+
+    for (let dayOffset = 0; dayOffset <= 60; dayOffset++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(today.getDate() + dayOffset);
+      const checkDateStr = checkDate.toISOString().slice(0, 10);
+      const jd = toJulianDay(checkDateStr, "12:00", 0);
+
+      const result = swisseph.swe_calc_ut(jd, planet.id, 4);
+      const speed = result.longitudeSpeed;
+      const longitude = result.longitude;
+
+      // Station detected: speed crossed zero between yesterday and today
+      if (prevSpeed !== null && ((prevSpeed > 0 && speed <= 0) || (prevSpeed < 0 && speed >= 0))) {
+        const stationType: "retrograde" | "direct" = speed <= 0 ? "retrograde" : "direct";
+        const { sign, degree } = longitudeToSignDegree(longitude);
+
+        // Check if within 3° of any natal planet or angle
+        let natalPlanetHit: string | null = null;
+        let orbDegrees: number | null = null;
+        let natalHouse: number | null = null;
+
+        for (const target of natalTargets) {
+          let diff = Math.abs(longitude - target.longitude);
+          if (diff > 180) diff = 360 - diff;
+          if (diff <= 3.0) {
+            if (orbDegrees === null || diff < orbDegrees) {
+              natalPlanetHit = target.name;
+              orbDegrees = Math.round(diff * 10) / 10;
+              natalHouse = target.house;
+            }
+          }
+        }
+
+        stations.push({
+          planet: planet.name,
+          stationDate: checkDate.toLocaleDateString("en-US", { month: "long", day: "numeric" }),
+          stationType,
+          sign,
+          degree,
+          natalPlanetHit,
+          orbDegrees,
+          natalHouse,
+        });
+      }
+
+      prevSpeed = speed;
+    }
+  }
+
+  return stations;
 }
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
@@ -431,7 +499,7 @@ export async function POST(req: NextRequest) {
     });
     const profection = calculateProfection(birthDate, ascSign, natalPlanetsForProfection);
 
-    // Secondary progressions (day-for-a-year)
+    // Secondary progressions
     const progressions = calculateProgressions(jdBirth, birthDate, lat, lng);
 
     // Solar arc directions
@@ -445,6 +513,14 @@ export async function POST(req: NextRequest) {
       console.warn("[chart-calculate] Upcoming trigger sweep failed:", e);
     }
 
+    // Planetary stations — NEW
+    let planetaryStations: PlanetaryStationData[] = [];
+    try {
+      planetaryStations = calculatePlanetaryStations(tropicalRaw, lat, lng);
+    } catch (e) {
+      console.warn("[chart-calculate] Planetary stations sweep failed:", e);
+    }
+
     const response: ChartCalculateResponse = {
       success: true,
       tropical: tropicalChart,
@@ -454,6 +530,7 @@ export async function POST(req: NextRequest) {
       progressions,
       solarArcs,
       upcomingTrigger,
+      planetaryStations,
     };
 
     return NextResponse.json(response, { status: 200 });
