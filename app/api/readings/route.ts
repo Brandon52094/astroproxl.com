@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
+
 interface PlanetPlacement {
   name: string;
   sign: string;
   degree: string;
   house?: string;
 }
+
 
 interface Aspect {
   type: string;
@@ -14,12 +16,14 @@ interface Aspect {
   orbDegrees: number;
 }
 
+
 interface TransitPlanet {
   name: string;
   sign: string;
   degree: string;
   isRetrograde: boolean;
 }
+
 
 interface ProgressedPlanet {
   name: string;
@@ -28,11 +32,13 @@ interface ProgressedPlanet {
   isRetrograde: boolean;
 }
 
+
 interface SolarArcPlanet {
   name: string;
   sign: string;
   degree: string;
 }
+
 
 interface ProfectionData {
   age: number;
@@ -44,6 +50,7 @@ interface ProfectionData {
   timeLordNatalHouse: number;
 }
 
+
 interface UpcomingTrigger {
   date: string;
   transitPlanet: string;
@@ -51,11 +58,25 @@ interface UpcomingTrigger {
   aspect: string;
 }
 
+
+interface PlanetaryStationData {
+  planet: string;
+  stationType: string;
+  stationDate: string;
+  degree: string;
+  sign: string;
+  natalPlanetHit?: string;
+  natalHouse?: number;
+  orbDegrees: number;
+}
+
+
 interface ReadingPage {
   pageNumber: 1;
   title: string;
   content: string;
 }
+
 
 interface ReadingRequestBody {
   topic: "love" | "career" | "money" | "general";
@@ -70,32 +91,41 @@ interface ReadingRequestBody {
   progressions?: ProgressedPlanet[];
   solarArcs?: SolarArcPlanet[];
   upcomingTrigger?: UpcomingTrigger;
+  planetaryStations?: PlanetaryStationData[];
 }
 
+
 const NL = "\n";
+
 
 function fmtPlanet(p: PlanetPlacement): string {
   return p.name + ": " + p.sign + " " + p.degree + (p.house ? " (House " + p.house + ")" : "");
 }
 
+
 function fmtTransit(p: TransitPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree + (p.isRetrograde ? " Rx" : "");
 }
+
 
 function fmtAspect(a: Aspect): string {
   return a.planetA + " " + a.type + " " + a.planetB + " — " + a.orbDegrees + "° orb";
 }
 
+
 function fmtProgression(p: ProgressedPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree;
 }
+
 
 function fmtSolarArc(p: SolarArcPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree;
 }
 
+
 function buildReadingPrompt(body: ReadingRequestBody): string {
-  const { topic, question, tropical, sidereal, transits, profection, progressions, solarArcs, upcomingTrigger } = body;
+  const { topic, question, tropical, sidereal, transits, profection, progressions, solarArcs, upcomingTrigger, planetaryStations } = body;
+
 
   const topicLabel =
     topic === "love" ? "love and relationships"
@@ -103,9 +133,11 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     : topic === "money" ? "money and finances"
     : "life in general";
 
+
   const currentDateString = new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
+
 
   const upcomingTriggerBlock = upcomingTrigger
     ? NL + "NEXT EXACT ASPECT (Ephemeris-Calculated — use as a primary date anchor):" + NL
@@ -113,15 +145,34 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
       + " — exact within 1° on " + upcomingTrigger.date + NL
     : "";
 
+
   const progressionsBlock = progressions && progressions.length > 0
     ? NL + "SECONDARY PROGRESSIONS (Current):" + NL + progressions.map(fmtProgression).join(NL) + NL
     : "";
+
 
   const solarArcsBlock = solarArcs && solarArcs.length > 0
     ? NL + "SOLAR ARC DIRECTIONS (Current):" + NL + solarArcs.map(fmtSolarArc).join(NL) + NL
     : "";
 
+
+  const stationsBlock = planetaryStations && planetaryStations.length > 0
+    ? NL + [
+      "PLANETARY STATIONS (next 60 days — crystallization points):",
+      "Stations with natal hits are PRIMARY date anchors. A planet stationing on a natal point forces an unavoidable crystallization of that house theme.",
+      ...planetaryStations.map(s => {
+        const hit = s.natalPlanetHit
+          ? ` — stations within ${s.orbDegrees}° of natal ${s.natalPlanetHit} (House ${s.natalHouse})`
+          : " — no exact natal hit within 3°";
+        return `${s.planet} stations ${s.stationType.toUpperCase()} on ${s.stationDate} at ${s.degree} ${s.sign}${hit}`;
+      }),
+      ""
+    ].join(NL)
+    : "";
+
+
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
+
 
   const aspectList = tropical.aspects
     .slice()
@@ -129,8 +180,10 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     .map(fmtAspect)
     .join(NL);
 
+
   const transitList = transits.map(fmtTransit).join(NL);
   const siderealList = sidereal.planets.map(fmtPlanet).join(NL);
+
 
   const lines = [
     "CRITICAL REAL-ESTATE RULE: This reading renders on a mobile screen. Cut 30% of standard prose. Short, heavy sentences. No cosmic setup fluff. Hit the nerve and move forward.",
@@ -150,6 +203,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "═══════════════════════════════════════════",
     "TODAY: " + currentDateString,
     upcomingTriggerBlock,
+    stationsBlock,
     "TROPICAL PLACEMENTS:",
     planetList,
     "",
@@ -218,23 +272,29 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "}",
   ];
 
+
   return lines.join(NL);
 }
+
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as ReadingRequestBody;
 
+
     if (!body.topic || !body.question || !body.tropical || !body.transits || !body.profection) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
+
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
 
+
     const prompt = buildReadingPrompt(body);
+
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -251,18 +311,22 @@ export async function POST(request: NextRequest) {
       }),
     });
 
+
     if (!response.ok) {
       const err = await response.text();
       console.error("[readings] Claude error:", err);
       return NextResponse.json({ error: "Failed to generate reading. Please try again." }, { status: 502 });
     }
 
+
     const claudeData = await response.json();
     const rawText = claudeData.content?.[0]?.text;
+
 
     if (!rawText) {
       return NextResponse.json({ error: "No response from reading engine." }, { status: 502 });
     }
+
 
     let parsed: { pages: ReadingPage[] };
     try {
@@ -283,9 +347,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
     }
 
+
     if (!parsed.pages || parsed.pages.length < 1) {
       return NextResponse.json({ error: "Reading structure was incomplete. Please try again." }, { status: 422 });
     }
+
 
     return NextResponse.json({
       reading: {
@@ -296,6 +362,7 @@ export async function POST(request: NextRequest) {
         status: "complete",
       },
     }, { status: 201 });
+
 
   } catch (error) {
     console.error("[readings] Unexpected error:", error);
