@@ -1,12 +1,10 @@
 "use client";
 
-
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartStore";
 import type { ReadingPage } from "@/lib/chartStore";
-
 
 const LOADING_MESSAGES = [
   "Reading your natal placements…",
@@ -16,9 +14,9 @@ const LOADING_MESSAGES = [
   "Tracing the activated house themes…",
   "Cross-referencing tropical and sidereal layers…",
   "Synthesizing progressions and solar arcs…",
+  "Scanning for planetary station points…",
   "Finalizing your reading…",
 ];
-
 
 function PreparingPageInner() {
   const router = useRouter();
@@ -27,14 +25,20 @@ function PreparingPageInner() {
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
 
-
-  // Clean up ?payment=success param if returning from Stripe
   useEffect(() => {
+    // Fix 1 — if user cancelled Stripe, send them back to intake immediately
+    // This closes the bypass where they could exit Stripe and get a free reading
+    const paymentStatus = searchParams.get("payment");
+    if (paymentStatus === "cancelled") {
+      router.replace("/reading/intake");
+      return;
+    }
+
+    // Clean up any other payment params from the URL
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/preparing");
     }
-  }, [searchParams]);
-
+  }, [searchParams, router]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -45,29 +49,29 @@ function PreparingPageInner() {
     return () => clearInterval(interval);
   }, []);
 
-
   useEffect(() => {
     if (hasStarted.current) return;
-    hasStarted.current = true;
 
+    // Don't start generating if payment was cancelled
+    const paymentStatus = searchParams.get("payment");
+    if (paymentStatus === "cancelled") return;
+
+    hasStarted.current = true;
 
     async function generateReading() {
       try {
         const chart = loadChart();
         const intake = loadIntake();
 
-
         if (!chart || !isChartFresh()) {
           router.push("/chart-data");
           return;
         }
 
-
         if (!intake) {
           router.push("/reading/intake");
           return;
         }
-
 
         const response = await fetch("/api/readings", {
           method: "POST",
@@ -84,22 +88,19 @@ function PreparingPageInner() {
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
             profection: chart.chartData.profection,
-            // New timing layers — passed through if available
             progressions: chart.chartData.progressions,
             solarArcs: chart.chartData.solarArcs,
             upcomingTrigger: chart.chartData.upcomingTrigger,
             planetaryStations: chart.chartData.planetaryStations,
+            solarReturn: chart.chartData.solarReturn,
           }),
         });
 
-
         const data = await response.json();
-
 
         if (!response.ok || !data.reading) {
           throw new Error(data.error ?? "Failed to generate reading.");
         }
-
 
         saveReading({
           id: data.reading.id,
@@ -109,8 +110,9 @@ function PreparingPageInner() {
           generatedAt: new Date().toISOString(),
         });
 
-
-        router.push("/reading/results");
+        // Fix 2 — replace instead of push so preparing never appears in history
+        // This prevents the back button on results from re-triggering the AI
+        router.replace("/reading/results");
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Something went wrong. Please try again."
@@ -118,10 +120,8 @@ function PreparingPageInner() {
       }
     }
 
-
     generateReading();
-  }, [router]);
-
+  }, [router, searchParams]);
 
   return (
     <div className="h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden">
@@ -177,7 +177,6 @@ function PreparingPageInner() {
                 </div>
               </div>
 
-
               <div className="space-y-3">
                 <h1 className="text-2xl font-semibold tracking-tight text-white">
                   Preparing your reading
@@ -187,7 +186,6 @@ function PreparingPageInner() {
                   secondary progressions, and solar arc directions.
                 </p>
               </div>
-
 
               <div className="h-6">
                 <AnimatePresence mode="wait">
@@ -204,7 +202,6 @@ function PreparingPageInner() {
                 </AnimatePresence>
               </div>
 
-
               <div className="flex items-center justify-center gap-2">
                 {LOADING_MESSAGES.map((_, i) => (
                   <motion.div
@@ -215,7 +212,6 @@ function PreparingPageInner() {
                   />
                 ))}
               </div>
-
 
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
                 <p className="text-xs leading-6 text-slate-400">
@@ -234,7 +230,6 @@ function PreparingPageInner() {
     </div>
   );
 }
-
 
 export default function PreparingPage() {
   return (

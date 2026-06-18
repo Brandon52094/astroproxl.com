@@ -383,7 +383,7 @@ function ResultsPageInner() {
         <header className="mb-6 flex items-center justify-between py-2">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={() => router.push("/reading/intake")}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
