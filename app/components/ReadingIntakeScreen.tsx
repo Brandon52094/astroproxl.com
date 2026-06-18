@@ -332,7 +332,7 @@ export default function ReadingIntakeScreen() {
   }, [userStatus, onCooldown]);
 
   return (
-    <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
+    <div className="h-screen overflow-y-auto overscroll-none bg-transparent text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
       <style jsx>{`
         @keyframes jxlAmberPulse {
           0%, 100% {
