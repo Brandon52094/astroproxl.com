@@ -461,7 +461,7 @@ export default function ReadingIntakeScreen() {
                 What do you want insight on?
               </h1>
               <p className="max-w-[32ch] text-sm leading-6 text-slate-300">
-                Choose an area and ask your question.
+                Choose A Reading and Ask Anything.
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
@@ -715,7 +715,7 @@ export default function ReadingIntakeScreen() {
                   </span>
                 </div>
                 <p className="text-[12px] leading-5 text-slate-400">
-                  A personal conversation with your chart. No categories — just tell Jxl what's going on.
+                  Ask Anything. Something Specific and Detailed. No limits -- Get direct insights.
                 </p>
                 <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-300/70">
                   <span>Start a session →</span>
