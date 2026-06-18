@@ -151,12 +151,20 @@ function ResultsPageInner() {
     const paymentMode = searchParams.get("mode");
     const paymentStatus = searchParams.get("payment");
     const returningFromDownload = paymentMode === "reading_download" && paymentStatus === "success";
+    const returningFromCancelledFollowup = paymentMode === "followup" && paymentStatus === "cancelled";
     const returningFromPayment = consumePaymentReturnFlag() || (paymentStatus === "success" && paymentMode !== "reading_download" && paymentMode !== "followup");
     const { isReturn: returningFromFollowup, question: savedQuestion } = consumeFollowupReturnFlag();
 
+    // Clear stale followup flags if user cancelled
+    if (returningFromCancelledFollowup) {
+      localStorage.removeItem("dfp_followup_return");
+      localStorage.removeItem("dfp_followup_question");
+    }
+
     const stored = loadReading();
 
-    if (!stored && !returningFromDownload) {
+    // Don't redirect if returning from cancelled followup — reading is still valid
+    if (!stored && !returningFromDownload && !returningFromCancelledFollowup) {
       router.push("/reading/intake");
       return;
     }

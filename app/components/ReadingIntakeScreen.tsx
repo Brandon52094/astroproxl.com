@@ -235,6 +235,9 @@ export default function ReadingIntakeScreen() {
     try {
       clearIntake();
       clearReading();
+      // Clear any stale followup state from a previous reading
+      localStorage.removeItem("dfp_followup_return");
+      localStorage.removeItem("dfp_followup_question");
 
       const topic =
         selectedArea === "love"
