@@ -181,6 +181,20 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
 
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
 
+  const sun = tropical.planets.find(p => p.name === "Sun");
+  const moon = tropical.planets.find(p => p.name === "Moon");
+  const rising = tropical.planets.find(p => p.name === "Ascendant");
+  const mercury = tropical.planets.find(p => p.name === "Mercury");
+  const venus = tropical.planets.find(p => p.name === "Venus");
+  const big3Block = (sun || moon || rising || mercury || venus)
+    ? NL + "TONE CALIBRATION PLACEMENTS (use to shape voice only — never name these as the reason for your tone):" + NL
+      + (sun ? `Sun: ${sun.sign} — core identity, baseline confidence and ego expression` + NL : "")
+      + (moon ? `Moon: ${moon.sign} — emotional register, how they process and feel things internally` + NL : "")
+      + (rising ? `Rising: ${rising.sign} — how they come across, first-impression energy` + NL : "")
+      + (mercury ? `Mercury: ${mercury.sign} — how they think and want to be communicated with (direct vs winding, fast vs deliberate, blunt vs gentle)` + NL : "")
+      + (venus ? `Venus: ${venus.sign} — what feels good or comforting to them, their relationship to pleasure and ease` + NL : "")
+    : "";
+
   const aspectList = tropical.aspects
     .slice()
     .sort((a, b) => a.orbDegrees - b.orbDegrees)
@@ -207,6 +221,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "CHART DATA",
     "═══════════════════════════════════════════",
     "TODAY: " + currentDateString,
+    big3Block,
     upcomingTriggerBlock,
     stationsBlock,
     solarReturnBlock,
@@ -256,6 +271,22 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "End with 1 sentence opening the door to JXL — frame as real-time calibration of these windows, not a sales line.",
     "",
     "═══════════════════════════════════════════",
+    "PART 5 — THE ACTUAL ANSWER (Exactly 1-2 warm sentences, after Part 4, before the JXL line)",
+    "═══════════════════════════════════════════",
+    "Everything above is diagnosis. This part is different: directly answer the literal question they asked, in plain human language, like a person who heard them — not a structural readout. Drop the clinical tone here. No new placements, no new degrees. Just land on their actual question with warmth and a real answer, even if the question was casual or funny. This is the moment the reading stops being a report and starts being a person talking to them.",
+    "",
+    "═══════════════════════════════════════════",
+    "TONE — INFORMED BY SUN, MOON, RISING, MERCURY, VENUS",
+    "═══════════════════════════════════════════",
+    "These placements should flavor HOW you talk to them, not just what you predict:",
+    "- Sun shapes baseline confidence in how directives are delivered.",
+    "- Moon shapes emotional texture — how much feeling-language versus blunt fact lands right for them.",
+    "- Rising shapes the opening energy — how the reading should 'walk in the room.'",
+    "- Mercury shapes sentence rhythm and directness — a quick-mutable Mercury (Gemini/Sagittarius/Virgo-adjacent speed) wants short punchy sentences; a fixed or water Mercury (Taurus/Scorpio/Cancer-adjacent) can hold slightly longer, more weighted sentences.",
+    "- Venus shapes what softness or ease should sound like in the warm closing answer (Part 5) specifically — what comfort sounds like to THIS person.",
+    "This is a subtle coloring of voice throughout the whole reading, not a personality test callout — never name any placement as an explanation of tone (never say 'because you're a Pisces Moon' or similar). Just let it shape how you write, especially in Part 5.",
+    "",
+    "═══════════════════════════════════════════",
     "LAWS",
     "═══════════════════════════════════════════",
     "- Tight orbs lead. Wide orbs are background only.",
@@ -281,7 +312,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "    {",
     "      \"pageNumber\": 1,",
     "      \"title\": \"WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL\",",
-    "      \"content\": \"The compressed reading as one unbroken piece. Part 1 into Part 2 into dated windows into directives. No headers except date labels and DROP/EXECUTE/LOCK. Dates wrapped in [[DATE: ...]] format.\",",
+    "      \"content\": \"The compressed reading as one unbroken piece. Part 1 into Part 2 into dated windows into directives into the warm direct answer to their actual question. No headers except date labels and DROP/EXECUTE/LOCK. Dates wrapped in [[DATE: ...]] format.\",",
     "      \"sources\": [",
     "        { \"section\": \"Part 1\", \"placements\": \"Mercury 23°34' Cancer conjunct natal Neptune 23°11' Capricorn, House 11, 1° orb\" }",
     "      ]",

@@ -47,17 +47,14 @@ function consumeFollowupReturnFlag(): { isReturn: boolean; question: string } {
   return { isReturn, question };
 }
 
-// ── Parse content and pull out [[DATE: ...]] markers into highlighted badges ──
+// ── Parse content and pull out [[DATE: ...]] markers into simple yellow text ──
 function renderContentWithDateBadges(content: string): React.ReactNode[] {
   const parts = content.split(/(\[\[DATE:[^\]]+\]\])/g);
   return parts.map((part, i) => {
     const match = part.match(/^\[\[DATE:\s*(.+?)\]\]$/);
     if (match) {
       return (
-        <span
-          key={i}
-          className="date-badge mx-0.5 inline-flex items-center rounded-full border border-amber-300/50 bg-amber-400/15 px-2.5 py-0.5 text-[0.92em] font-semibold text-amber-200"
-        >
+        <span key={i} className="font-semibold text-amber-300">
           {match[1]}
         </span>
       );
@@ -193,7 +190,12 @@ function ResultsPageInner() {
       return;
     }
 
-    if (stored) setReading(stored);
+    if (stored) {
+      setReading(stored);
+      // Record completion the moment the reading loads — counts even if
+      // the user backs out without tapping Done
+      recordReadingComplete();
+    }
     setLoaded(true);
 
     if (returningFromPayment) setUnlockedByPayment(true);
@@ -205,7 +207,7 @@ function ResultsPageInner() {
     }
 
     if (paymentStatus) window.history.replaceState({}, "", "/reading/results");
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recordReadingComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchCredits(); }, [fetchCredits]);
 
