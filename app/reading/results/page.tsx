@@ -414,9 +414,9 @@ function ResultsPageInner() {
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="text-center">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Direct Future Predictions</p>
-            <p className="mt-1 text-xs text-slate-400">Your Reading</p>
-            <p className="mt-0.5 text-xs font-medium text-amber-300/80">Download your reading below</p>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Your Direct Insights</p>
+            <p className="mt-1 text-xs text-slate-400">What We've Gathed</p>
+            <p className="mt-0.5 text-xs font-medium text-amber-300/80"> You can download the synopsis</p>
           </div>
           <div className="w-11" />
         </header>
@@ -427,7 +427,7 @@ function ResultsPageInner() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-4 rounded-[18px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-[12px] text-emerald-200"
           >
-            ✓ Payment successful — your reading is unlocked
+            ✓ Thanks for your support! — Lets get you your reading
           </motion.div>
         )}
 
@@ -514,13 +514,13 @@ function ResultsPageInner() {
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
                     <p className="mb-3 text-[12px] text-slate-500">
-                      Want to go deeper on something in this reading?
+                      Would you like more clarity?
                     </p>
                   </>
                 )}
                 {hasThread && (
                   <p className="mb-3 text-[12px] text-slate-500">
-                    Keep going — ask another question.
+                    You can ask more.
                   </p>
                 )}
                 <textarea
