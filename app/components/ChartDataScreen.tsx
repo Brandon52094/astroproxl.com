@@ -265,12 +265,15 @@ export default function ChartDataScreen() {
   const canCalculate = birthComplete && agreedToTerms && !calculating;
 
   useEffect(() => {
-    const completion = { birth: birthComplete, chart: chartComplete };
-    const justCompleted = (Object.keys(completion) as SectionId[]).filter(
-      (key) => completion[key] && !previousCompletionRef.current[key]
-    );
-    if (justCompleted.length > 0) setOpenSections((prev) => prev.filter((s) => !justCompleted.includes(s)));
-    previousCompletionRef.current = completion;
+    // Only auto-collapse the birth section once the CHART is complete —
+    // not just when birth fields are filled. The Calculate button and
+    // terms checkbox live inside the birth section, so collapsing it
+    // as soon as birth fields fill in hides them before the user can tap.
+    const justCompletedChart = chartComplete && !previousCompletionRef.current.chart;
+    if (justCompletedChart) {
+      setOpenSections((prev) => prev.filter((s) => s !== "birth"));
+    }
+    previousCompletionRef.current = { birth: birthComplete, chart: chartComplete };
   }, [birthComplete, chartComplete]);
 
   const tropicalPlanets = useMemo(() => {
