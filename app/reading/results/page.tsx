@@ -434,6 +434,19 @@ function ResultsPageInner() {
         .ask-more-glow {
           animation: askMoreGlow 3.2s ease-in-out infinite;
         }
+        @keyframes followupLabelGlow {
+          0%, 100% {
+            text-shadow: 0 0 6px rgba(94, 234, 212, 0.3);
+            opacity: 0.85;
+          }
+          50% {
+            text-shadow: 0 0 14px rgba(94, 234, 212, 0.7), 0 0 24px rgba(94, 234, 212, 0.35);
+            opacity: 1;
+          }
+        }
+        .ask-followup-label {
+          animation: followupLabelGlow 2.8s ease-in-out infinite;
+        }
       `}</style>
 
       <div
@@ -503,39 +516,6 @@ function ResultsPageInner() {
                 </p>
               </div>
 
-              {/* ── Astrological sources — collapsed by default ──────────── */}
-              {hasSources && (
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowSources((s) => !s)}
-                    className="text-[11px] text-slate-500 underline transition hover:text-slate-400"
-                  >
-                    {showSources ? "Hide astrological sources" : "Show astrological sources"}
-                  </button>
-                  <AnimatePresence>
-                    {showSources && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-3 space-y-2.5 rounded-[18px] border border-white/[0.06] bg-black/20 p-4">
-                          {page!.sources!.map((src, i) => (
-                            <div key={i} className="text-[11px] leading-5">
-                              <span className="font-medium text-slate-500">{src.section}:</span>{" "}
-                              <span className="text-slate-600">{src.placements}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
-
               {credits && credits.firstReadingUsed && credits.credits > 0 && (
                 <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
                   <span>{credits.credits} credits remaining</span>
@@ -581,12 +561,11 @@ function ResultsPageInner() {
                   <>
                     <div className="mb-3 flex items-center gap-2">
                       <div className="h-px flex-1 bg-white/[0.06]" />
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask a Follow Up</span>
+                      <span className="ask-followup-label text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300">
+                        Ask a Follow Up
+                      </span>
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
-                    <p className="mb-1.5 text-[13px] font-medium text-teal-200/90">
-                      Ask a Follow Up for More Insights.
-                    </p>
                     <p className="mb-3 text-[11px] text-slate-500">
                       Don't over think this. Just say what's on your mind.
                     </p>
@@ -608,6 +587,39 @@ function ResultsPageInner() {
                 />
                 {followupError && (
                   <p className="mt-2 text-[12px] text-rose-300">{followupError}</p>
+                )}
+
+                {/* ── Astrological sources — centered below the follow-up box ── */}
+                {hasSources && (
+                  <div className="mt-4 flex flex-col items-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowSources((s) => !s)}
+                      className="text-[11px] text-slate-500 underline transition hover:text-slate-400"
+                    >
+                      {showSources ? "Hide astrological sources" : "Show astrological sources"}
+                    </button>
+                    <AnimatePresence>
+                      {showSources && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.25 }}
+                          className="w-full overflow-hidden"
+                        >
+                          <div className="mt-3 space-y-2.5 rounded-[18px] border border-white/[0.06] bg-black/20 p-4">
+                            {page!.sources!.map((src, i) => (
+                              <div key={i} className="text-[11px] leading-5">
+                                <span className="font-medium text-slate-500">{src.section}:</span>{" "}
+                                <span className="text-slate-600">{src.placements}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 )}
               </motion.div>
 
