@@ -62,7 +62,6 @@ interface PlanetaryStationData {
   orbDegrees: number;
 }
 
-// ── NEW: Solar Return ─────────────────────────────────────────────────────────
 interface SolarReturnData {
   sunReturnDate: string;
   location: string;
@@ -73,10 +72,17 @@ interface SolarReturnData {
   timeLordSRHouse: number | null;
 }
 
+// ── NEW: Source citation for a section of the reading ─────────────────────────
+interface ReadingSource {
+  section: string; // e.g. "Part 1", "Part 2", "June 28 window", "DROP"
+  placements: string; // e.g. "Mercury 23°34' Cancer conjunct natal Neptune 23°11' Capricorn, House 11, 1° orb"
+}
+
 interface ReadingPage {
   pageNumber: 1;
   title: string;
   content: string;
+  sources?: ReadingSource[]; // NEW
 }
 
 interface ReadingRequestBody {
@@ -93,7 +99,7 @@ interface ReadingRequestBody {
   solarArcs?: SolarArcPlanet[];
   upcomingTrigger?: UpcomingTrigger;
   planetaryStations?: PlanetaryStationData[];
-  solarReturn?: SolarReturnData; // NEW
+  solarReturn?: SolarReturnData;
 }
 
 const NL = "\n";
@@ -159,7 +165,6 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     ].join(NL)
     : "";
 
-  // ── NEW: Solar Return block ────────────────────────────────────────────────
   const solarReturnBlock = solarReturn
     ? NL + [
       `SOLAR RETURN (${solarReturn.sunReturnDate} — cast for ${solarReturn.location}):`,
@@ -260,6 +265,15 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "- 30-45 day window only.",
     "- Reading feels complete but leaves them wanting the live conversation.",
     "- Strip all textbook phrasing and cosmic setup fluff.",
+    "- DATES in the main content must appear in this exact bracket format so the UI can highlight them: [[DATE: June 28]] or [[DATE: June 28-July 3]]. Wrap every specific date or date range you mention in the prose this way.",
+    "",
+    "═══════════════════════════════════════════",
+    "SOURCES — SEPARATE FROM THE READING",
+    "═══════════════════════════════════════════",
+    "After writing the content, build a 'sources' array. One entry per distinct claim/section of the reading (Part 1, Part 2, each dated window, DROP, EXECUTE, LOCK IN). For each entry:",
+    "- 'section': a short label identifying which part of the reading this supports (e.g. 'Part 1', 'Part 2', 'June 28-July 3 window', 'DROP', 'EXECUTE', 'LOCK IN')",
+    "- 'placements': the exact astrological data that justified that section — list every planet, sign, degree, house, and orb you used for that specific claim, comma separated. Use as many or as few as were actually used — don't pad it, don't omit any that were used.",
+    "This is the technical proof behind each part of the reading, written precisely and tersely, no prose.",
     "",
     "Return ONLY a valid JSON object — no markdown, no code fences, no explanation:",
     "{",
@@ -267,7 +281,10 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "    {",
     "      \"pageNumber\": 1,",
     "      \"title\": \"WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL\",",
-    "      \"content\": \"The compressed reading as one unbroken piece. Part 1 into Part 2 into dated windows into directives. No headers except date labels and DROP/EXECUTE/LOCK.\"",
+    "      \"content\": \"The compressed reading as one unbroken piece. Part 1 into Part 2 into dated windows into directives. No headers except date labels and DROP/EXECUTE/LOCK. Dates wrapped in [[DATE: ...]] format.\",",
+    "      \"sources\": [",
+    "        { \"section\": \"Part 1\", \"placements\": \"Mercury 23°34' Cancer conjunct natal Neptune 23°11' Capricorn, House 11, 1° orb\" }",
+    "      ]",
     "    }",
     "  ]",
     "}",
@@ -300,8 +317,8 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2500,
-        system: "You are a precision astrologer with no filter. You are this person's personal astrologer — you know their chart completely and speak to them directly, without softening, without hedging, without generic language. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate. Keep the reading tight and mobile-optimized — no padding, no fluff, best information only.",
+        max_tokens: 3000,
+        system: "You are a precision astrologer with no filter. You are this person's personal astrologer — you know their chart completely and speak to them directly, without softening, without hedging, without generic language. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page with a content field and a sources field. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate. Keep the reading tight and mobile-optimized — no padding, no fluff, best information only. Every specific date in the content must be wrapped in [[DATE: ...]] brackets.",
         messages: [{ role: "user", content: prompt }],
       }),
     });

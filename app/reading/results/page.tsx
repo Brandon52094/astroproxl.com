@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import React, { useEffect, useState, useCallback, useRef, Suspense, Fragment } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Download, Send } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -47,6 +47,25 @@ function consumeFollowupReturnFlag(): { isReturn: boolean; question: string } {
   return { isReturn, question };
 }
 
+// ── Parse content and pull out [[DATE: ...]] markers into highlighted badges ──
+function renderContentWithDateBadges(content: string): React.ReactNode[] {
+  const parts = content.split(/(\[\[DATE:[^\]]+\]\])/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^\[\[DATE:\s*(.+?)\]\]$/);
+    if (match) {
+      return (
+        <span
+          key={i}
+          className="date-badge mx-0.5 inline-flex items-center rounded-full border border-amber-300/50 bg-amber-400/15 px-2.5 py-0.5 text-[0.92em] font-semibold text-amber-200"
+        >
+          {match[1]}
+        </span>
+      );
+    }
+    return <Fragment key={i}>{part}</Fragment>;
+  });
+}
+
 interface Credits {
   credits: number;
   firstReadingUsed: boolean;
@@ -78,8 +97,8 @@ function ResultsPageInner() {
   const [isFinishing, setIsFinishing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadPaymentReturn, setDownloadPaymentReturn] = useState(false);
+  const [showSources, setShowSources] = useState(false);
 
-  // ── Follow-up conversation state ───────────────────────────────────────────
   const [followupQuestion, setFollowupQuestion] = useState("");
   const [followupThread, setFollowupThread] = useState<FollowupEntry[]>([]);
   const [isGeneratingFollowup, setIsGeneratingFollowup] = useState(false);
@@ -109,7 +128,6 @@ function ResultsPageInner() {
     } catch { /* silent */ }
   }, [fetchCredits]);
 
-  // Build conversation context from the full thread so each reply builds on previous
   const generateFollowup = useCallback(async (question: string, existingThread: FollowupEntry[]) => {
     const storedReading = loadReading();
     const chart = loadChart();
@@ -118,7 +136,6 @@ function ResultsPageInner() {
     setIsGeneratingFollowup(true);
     setFollowupError(null);
 
-    // Build the conversation history to pass to the API
     const conversationHistory = existingThread.map(entry =>
       `Q: ${entry.question}\nA: ${entry.content}`
     ).join("\n\n");
@@ -148,7 +165,6 @@ function ResultsPageInner() {
       }]);
       setFollowupQuestion("");
 
-      // Scroll to bottom after new reply
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (err) {
       setFollowupError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -229,7 +245,6 @@ function ResultsPageInner() {
       return;
     }
 
-    // Save question and current thread index, redirect to Stripe
     setFollowupReturnFlag(question);
     const response = await fetch("/api/stripe/checkout", {
       method: "POST",
@@ -314,7 +329,9 @@ function ResultsPageInner() {
       doc.setTextColor(200, 200, 215);
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      const contentLines = doc.splitTextToSize(page?.content ?? "", maxWidth);
+      // Strip date markup tags before generating the PDF
+      const cleanContent = (page?.content ?? "").replace(/\[\[DATE:\s*(.+?)\]\]/g, "$1");
+      const contentLines = doc.splitTextToSize(cleanContent, maxWidth);
       let y = 60;
       for (const line of contentLines) {
         if (y > 275) {
@@ -377,26 +394,32 @@ function ResultsPageInner() {
 
   const page = reading?.pages[0];
   const page4 = reading?.pages[0];
+  const hasSources = page?.sources && page.sources.length > 0;
 
   return (
     <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
       <style jsx>{`
         @keyframes downloadPulse {
           0%, 100% {
+            transform: scale(1);
             box-shadow:
-              0 0 0 1px rgba(251, 191, 36, 0.3),
-              0 0 12px rgba(251, 191, 36, 0.15),
-              0 0 24px rgba(251, 191, 36, 0.06);
+              0 0 0 1px rgba(251, 191, 36, 0.4),
+              0 0 16px rgba(251, 191, 36, 0.25),
+              0 0 32px rgba(251, 191, 36, 0.12);
           }
           50% {
+            transform: scale(1.06);
             box-shadow:
-              0 0 0 1px rgba(251, 191, 36, 0.6),
-              0 0 20px rgba(251, 191, 36, 0.35),
-              0 0 40px rgba(251, 191, 36, 0.15);
+              0 0 0 2px rgba(251, 191, 36, 0.85),
+              0 0 30px rgba(251, 191, 36, 0.6),
+              0 0 60px rgba(251, 191, 36, 0.3);
           }
         }
         .download-pulse {
-          animation: downloadPulse 2.5s ease-in-out infinite;
+          animation: downloadPulse 1.6s ease-in-out infinite;
+        }
+        .date-badge {
+          box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), 0 0 4px rgba(251, 191, 36, 0.5);
         }
       `}</style>
 
@@ -415,7 +438,7 @@ function ResultsPageInner() {
           </button>
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Your Direct Insights</p>
-            <p className="mt-1 text-xs text-slate-400">What We've Gathed</p>
+            <p className="mt-1 text-xs text-slate-400">What We've Gathered</p>
             <p className="mt-0.5 text-xs font-medium text-amber-300/80"> You can download the synopsis</p>
           </div>
           <div className="w-11" />
@@ -462,8 +485,43 @@ function ResultsPageInner() {
               </div>
 
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">{page?.content}</p>
+                <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
+                  {page?.content ? renderContentWithDateBadges(page.content) : null}
+                </p>
               </div>
+
+              {/* ── Astrological sources — collapsed by default ──────────── */}
+              {hasSources && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowSources((s) => !s)}
+                    className="text-[11px] text-slate-500 underline transition hover:text-slate-400"
+                  >
+                    {showSources ? "Hide astrological sources" : "Show astrological sources"}
+                  </button>
+                  <AnimatePresence>
+                    {showSources && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-3 space-y-2.5 rounded-[18px] border border-white/[0.06] bg-black/20 p-4">
+                          {page!.sources!.map((src, i) => (
+                            <div key={i} className="text-[11px] leading-5">
+                              <span className="font-medium text-slate-500">{src.section}:</span>{" "}
+                              <span className="text-slate-600">{src.placements}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
 
               {credits && credits.firstReadingUsed && credits.credits > 0 && (
                 <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
@@ -492,7 +550,7 @@ function ResultsPageInner() {
                     <h2 className="mb-3 text-lg font-semibold text-white">{entry.title}</h2>
                     <div className="rounded-[24px] border border-teal-300/20 bg-teal-400/[0.04] p-5">
                       <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
-                        {entry.content}
+                        {renderContentWithDateBadges(entry.content)}
                       </p>
                     </div>
                   </motion.div>
@@ -545,7 +603,6 @@ function ResultsPageInner() {
         <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
           <div className="w-full max-w-[430px] space-y-2">
 
-            {/* Send button — shows when question typed */}
             <AnimatePresence>
               {followupQuestion.trim() && (
                 <motion.button
@@ -573,7 +630,6 @@ function ResultsPageInner() {
             </AnimatePresence>
 
             <div className="flex gap-3">
-              {/* Download button — pulses amber to draw attention */}
               <button
                 type="button"
                 onClick={handleDownload}

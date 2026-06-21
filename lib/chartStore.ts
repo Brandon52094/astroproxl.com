@@ -28,10 +28,16 @@ export interface StoredIntake {
   savedAt: string;
 }
 
+export interface ReadingSource {
+  section: string;
+  placements: string;
+}
+
 export interface ReadingPage {
   pageNumber: 1 | 2 | 3 | 4;
   title: string;
   content: string;
+  sources?: ReadingSource[];
 }
 
 export interface StoredReading {
