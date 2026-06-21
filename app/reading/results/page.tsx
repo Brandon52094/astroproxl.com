@@ -581,14 +581,14 @@ function ResultsPageInner() {
                   <>
                     <div className="mb-3 flex items-center gap-2">
                       <div className="h-px flex-1 bg-white/[0.06]" />
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Go deeper</span>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask a Follow Up</span>
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
                     <p className="mb-1.5 text-[13px] font-medium text-teal-200/90">
-                      Something didn't land? Ask it directly.
+                      Ask a Follow Up for More Insights.
                     </p>
                     <p className="mb-3 text-[11px] text-slate-500">
-                      Most people ask about the dated windows above, or what to actually say.
+                      Don't over think this. Just say what's on your mind.
                     </p>
                   </>
                 )}
