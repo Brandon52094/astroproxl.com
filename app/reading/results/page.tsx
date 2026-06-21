@@ -567,7 +567,7 @@ function ResultsPageInner() {
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
                     <p className="mb-3 text-[11px] text-slate-500">
-                      Don't over think this. Just say what's on your mind.
+                                       Don't over think this. Just say what's on your mind.
                     </p>
                   </>
                 )}
