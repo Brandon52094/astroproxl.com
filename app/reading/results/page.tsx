@@ -423,6 +423,17 @@ function ResultsPageInner() {
         .date-badge {
           box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), 0 0 4px rgba(251, 191, 36, 0.5);
         }
+        @keyframes askMoreGlow {
+          0%, 100% {
+            box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.12), 0 0 10px rgba(94, 234, 212, 0.06);
+          }
+          50% {
+            box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.3), 0 0 18px rgba(94, 234, 212, 0.14);
+          }
+        }
+        .ask-more-glow {
+          animation: askMoreGlow 3.2s ease-in-out infinite;
+        }
       `}</style>
 
       <div
@@ -570,25 +581,30 @@ function ResultsPageInner() {
                   <>
                     <div className="mb-3 flex items-center gap-2">
                       <div className="h-px flex-1 bg-white/[0.06]" />
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask more</span>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Go deeper</span>
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
-                    <p className="mb-3 text-[12px] text-slate-500">
-                      Would you like more clarity?
+                    <p className="mb-1.5 text-[13px] font-medium text-teal-200/90">
+                      Something didn't land? Ask it directly.
+                    </p>
+                    <p className="mb-3 text-[11px] text-slate-500">
+                      Most people ask about the dated windows above, or what to actually say.
                     </p>
                   </>
                 )}
                 {hasThread && (
                   <p className="mb-3 text-[12px] text-slate-500">
-                    You can ask more.
+                    Still got more? Keep going.
                   </p>
                 )}
                 <textarea
                   value={followupQuestion}
                   onChange={(e) => setFollowupQuestion(e.target.value)}
-                  placeholder={hasThread ? "Ask another question…" : "Ask about a specific part of your reading…"}
+                  placeholder={hasThread ? "Ask another question…" : "What do you want to understand better?"}
                   rows={3}
-                  className="w-full resize-none rounded-[20px] border border-white/10 bg-black/20 px-4 py-3 text-[14px] leading-6 text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-300"
+                  className={`w-full resize-none rounded-[20px] border bg-black/20 px-4 py-3 text-[14px] leading-6 text-white placeholder:text-slate-500 transition focus:outline-none focus:ring-1 focus:ring-teal-300 ${
+                    followupQuestion.trim() ? "border-teal-300/40" : "border-white/10 ask-more-glow"
+                  }`}
                 />
                 {followupError && (
                   <p className="mt-2 text-[12px] text-rose-300">{followupError}</p>
