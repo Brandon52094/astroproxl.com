@@ -138,14 +138,14 @@ function PreparingPageInner() {
                 <span className="text-2xl">✕</span>
               </div>
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold text-white">Something went wrong</h1>
+                <h1 className="text-xl font-semibold text-white">yikesg</h1>
                 <p className="text-sm leading-6 text-slate-400">{error}</p>
               </div>
               <button
                 onClick={() => router.push("/reading/intake")}
                 className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
               >
-                Try Again
+                Tap again
               </button>
             </motion.div>
           ) : (
@@ -179,11 +179,11 @@ function PreparingPageInner() {
 
               <div className="space-y-3">
                 <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Preparing your reading
+                  Preparing .....
                 </h1>
                 <p className="text-sm leading-6 text-slate-400">
-                  Your chart is being analyzed using natal placements, current transits,
-                  secondary progressions, and solar arc directions.
+                  Your chart is being analyzed in mulitple ways. Only you can see this information. 
+                  Readings are not saved..
                 </p>
               </div>
 
@@ -215,12 +215,12 @@ function PreparingPageInner() {
 
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
                 <p className="text-xs leading-6 text-slate-400">
-                  Your reading synthesizes{" "}
-                  <span className="text-slate-200">tropical psychology</span>,{" "}
-                  <span className="text-slate-200">sidereal timing</span>,{" "}
-                  <span className="text-slate-200">secondary progressions</span>, and{" "}
-                  <span className="text-slate-200">solar arc directions</span>{" "}
-                  — four layers most apps never touch.
+                  A lot is being caculated{" "}
+                  <span className="text-slate-200">but while I have you,</span>,{" "}
+                  <span className="text-slate-200"> this all makes me wonder </span>,{" "}
+                  <span className="text-slate-200"> is the plan set into stone? </span>, or {" "}
+                  <span className="text-slate-200"></span>{" "}
+                  — or...I guess, nevermind.
                 </p>
               </div>
             </motion.div>
