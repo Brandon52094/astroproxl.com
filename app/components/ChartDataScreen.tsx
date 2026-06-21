@@ -121,6 +121,7 @@ export default function ChartDataScreen() {
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const previousCompletionRef = useRef({ birth: false, chart: false });
 
   useEffect(() => {
@@ -261,7 +262,7 @@ export default function ChartDataScreen() {
   const birthComplete = birthMissing === 0 && !!resolvedPlace;
   const chartComplete = !!chartData;
   const canContinue = birthComplete && chartComplete;
-  const canCalculate = birthComplete && !calculating;
+  const canCalculate = birthComplete && agreedToTerms && !calculating;
 
   useEffect(() => {
     const completion = { birth: birthComplete, chart: chartComplete };
@@ -373,7 +374,6 @@ export default function ChartDataScreen() {
                   <Label htmlFor="current-place" className="text-sm font-medium text-slate-200">
                     Current Location <span className="text-slate-500 font-normal">(optional)</span>
                   </Label>
-                  <p className="text-sm font-medium text-teal-100">{chartData.profection.profectionYear}th House Profection Year</p>
                   <p className="text-[11px] text-slate-500">Used to cast your Solar Return chart for where you are now — gives a more accurate rising sign for this year.</p>
                   <div className="relative">
                     <Input id="current-place" type="text" autoComplete="off"
@@ -391,10 +391,34 @@ export default function ChartDataScreen() {
                   {resolvedCurrentPlace && (
                     <div className="flex items-center gap-2 text-[11px] text-teal-200">
                       <MapPin className="h-3 w-3 shrink-0" />
-                      <span> You're Verified: {resolvedCurrentPlace.label}</span>
+                      <span>Verified: {resolvedCurrentPlace.label}</span>
                     </div>
                   )}
                 </div>
+
+                {/* ── Terms & Conditions agreement ─────────────────────── */}
+                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-black/40 accent-teal-300"
+                  />
+                  <span className="text-[12px] leading-5 text-slate-400">
+                    I agree to the{" "}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        window.open("/terms", "_blank");
+                      }}
+                      className="text-teal-300 underline transition hover:text-teal-200"
+                    >
+                      Terms & Conditions
+                    </button>{" "}
+                    and understand this reading is for entertainment purposes.
+                  </span>
+                </label>
 
                 <Button type="button" onClick={handleCalculateChart} disabled={!canCalculate}
                   className={cn(
@@ -412,7 +436,7 @@ export default function ChartDataScreen() {
                 {calculating && (
                   <div className="flex items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
-                    Calculating it all. Please review or edit…
+                    Calculating your tropical and sidereal charts…
                   </div>
                 )}
 
@@ -437,7 +461,7 @@ export default function ChartDataScreen() {
                         <Sparkles className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-teal-100">{chartData.profection.profectionYear}House Profection Year</p>
+                        <p className="text-sm font-medium text-teal-100">{chartData.profection.profectionYear}th House Profection Year</p>
                         <p className="mt-1 text-xs leading-5 text-teal-100/70">
                           Age {chartData.profection.age} · {chartData.profection.activatedSign} activated ·{" "}
                           <span className="text-teal-200 font-medium">{chartData.profection.timeLord}</span> is your Time Lord
@@ -475,7 +499,7 @@ export default function ChartDataScreen() {
                 </div>
               ) : (
                 <div className="py-6 text-center text-sm text-slate-500">
-                  I'll need your birth details, then tap Calculate Chart. You may have to repoen to be sure.
+                  Fill in your birth details and tap Calculate Chart to see your placements.
                 </div>
               )}
             </Section>
@@ -485,9 +509,9 @@ export default function ChartDataScreen() {
             <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
               <div className="mb-3 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-teal-200" />
-                <h3 className="text-sm font-semibold text-white">Are Your Details Corrct?</h3>
+                <h3 className="text-sm font-semibold text-white">Confirm your main chart details</h3>
               </div>
-              <p className="mb-4 text-xs leading-5 text-slate-400"> Review to be sure... you can edit later on.</p>
+              <p className="mb-4 text-xs leading-5 text-slate-400">Review your core details before continuing to the reading.</p>
               <div className="grid gap-2">
                 {confirmationItems.map((item) => (
                   <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3">
