@@ -90,6 +90,8 @@ export default function ReadingIntakeScreen() {
   >("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
+  const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
+  const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
   useEffect(() => {
     async function ensureChart() {
@@ -737,32 +739,12 @@ export default function ReadingIntakeScreen() {
 
           {/* Inline CTA section */}
           <div className="mt-6 border-t border-white/[0.08]" />
-          <div className="mt-4 space-y-2 pb-8">
+          <div className="mt-4 space-y-3 pb-8">
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}
-            {!userStatus?.isSubscribed && (
-              <button
-                type="button"
-                onClick={async () => {
-                  const res = await fetch("/api/stripe/checkout", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      returnUrl: `${window.location.origin}/reading/intake`,
-                      mode: "subscription",
-                      paywallIndex: 1,
-                    }),
-                  });
-                  const data = await res.json();
-                  if (data.url) window.location.href = data.url;
-                }}
-                className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] px-5 text-left transition hover:border-amber-300/50 flex items-center justify-between"
-              >
-                <span className="text-[13px] font-semibold text-amber-200">AstroXL Unlimited</span>
-                <span className="text-[12px] text-slate-400">$20/mo · 8 readings, no cooldowns</span>
-              </button>
-            )}
+
+            {/* Primary action — Begin My Reading, always first */}
             {!onCooldown && (
               <Button
                 type="button"
@@ -772,6 +754,98 @@ export default function ReadingIntakeScreen() {
               >
                 {buttonCopy}
               </Button>
+            )}
+
+            {/* Subscribe — secondary, expandable */}
+            {!userStatus?.isSubscribed && (
+              <div className="rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSubscriptionDetails((s) => !s)}
+                  className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-amber-400/[0.04]"
+                >
+                  <span className="text-[13px] font-semibold text-amber-200">Subscribe</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[12px] text-slate-400">$12.99/mo</span>
+                    <motion.span
+                      animate={{ rotate: showSubscriptionDetails ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-amber-300/70"
+                    >
+                      ▾
+                    </motion.span>
+                  </span>
+                </button>
+
+                <AnimatePresence>
+                  {showSubscriptionDetails && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border-t border-amber-300/15 px-5 py-4 space-y-4">
+                        <div>
+                          <h3 className="text-[15px] font-semibold leading-snug text-white">
+                            Never wait. Never guess. Never pay per question.
+                          </h3>
+                          <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
+                            Your chart, on demand — a fresh reading almost every 4 days, real answers when something's actually bothering you, and nothing ever locked behind a timer.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          {[
+                            "8 full readings every month",
+                            "2 free follow-ups on every reading",
+                            "Never wait out a cooldown",
+                            "Downloads always included",
+                          ].map((perk) => (
+                            <div key={perk} className="flex items-center gap-2.5">
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
+                                ✓
+                              </span>
+                              <span className="text-[12px] text-slate-300">{perk}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <p className="text-[11px] text-amber-300/60">
+                          Less than the price of 3 readings — unlimited access for a month.
+                        </p>
+
+                        <button
+                          type="button"
+                          disabled={isSubscribeLoading}
+                          onClick={async () => {
+                            setIsSubscribeLoading(true);
+                            try {
+                              const res = await fetch("/api/stripe/checkout", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  returnUrl: `${window.location.origin}/reading/intake`,
+                                  mode: "subscription",
+                                  paywallIndex: 1,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.url) window.location.href = data.url;
+                            } finally {
+                              setIsSubscribeLoading(false);
+                            }
+                          }}
+                          className="h-11 w-full rounded-xl bg-amber-300 text-[13px] font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
+                        >
+                          {isSubscribeLoading ? "Loading…" : "Subscribe — $12.99/mo"}
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </div>
 
