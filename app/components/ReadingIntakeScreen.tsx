@@ -458,16 +458,32 @@ export default function ReadingIntakeScreen() {
           inset: -1px;
           border-radius: 24px;
           background:
-            radial-gradient(circle at 20% 20%, rgba(94, 234, 212, 0.16), transparent 42%),
-            radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.10), transparent 46%),
-            linear-gradient(180deg, rgba(45, 212, 191, 0.10), rgba(20, 184, 166, 0.04));
+            radial-gradient(circle at 20% 20%, rgba(94, 234, 212, 0.14), transparent 42%),
+            radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%),
+            linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03));
           opacity: 0;
           z-index: 0;
           pointer-events: none;
           transition: opacity 260ms ease;
         }
 
-        .selected-card-shell[data-selected="true"]::before {
+        .selected-card-shell::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: 24px;
+          opacity: 0;
+          z-index: 0;
+          pointer-events: none;
+          box-shadow:
+            0 0 0 1px rgba(94, 234, 212, 0.14),
+            0 10px 30px rgba(20, 184, 166, 0.14),
+            0 0 24px rgba(94, 234, 212, 0.08);
+          transition: opacity 260ms ease;
+        }
+
+        .selected-card-shell[data-selected="true"]::before,
+        .selected-card-shell[data-selected="true"]::after {
           opacity: 1;
         }
       `}</style>
@@ -697,10 +713,7 @@ export default function ReadingIntakeScreen() {
                             }
                       }
                       data-selected={isSelected ? "true" : "false"}
-                      className={cn(
-                        "selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm",
-                        isSelected && "shadow-[0_0_0_1px_rgba(94,234,212,0.12)]"
-                      )}
+                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm"
                       style={{ willChange: "transform, opacity" }}
                     >
                       {isSelected && !shouldReduceMotion && (
@@ -709,10 +722,10 @@ export default function ReadingIntakeScreen() {
                           className="pointer-events-none absolute inset-0 rounded-[24px]"
                           style={{
                             background:
-                              "radial-gradient(circle at 50% 50%, rgba(45,212,191,0.18), rgba(45,212,191,0.06) 42%, transparent 72%)",
+                              "radial-gradient(circle at 50% 50%, rgba(45,212,191,0.14), rgba(45,212,191,0.04) 42%, transparent 72%)",
                             zIndex: 0,
                           }}
-                          animate={{ opacity: [0.45, 0.75, 0.45], scale: [1, 1.015, 1] }}
+                          animate={{ opacity: [0.42, 0.68, 0.42] }}
                           transition={{
                             duration: 3.4,
                             repeat: Infinity,
@@ -747,9 +760,26 @@ export default function ReadingIntakeScreen() {
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.92, y: 4 }}
                                   transition={{ duration: 0.18, ease: "easeOut" }}
-                                  className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
+                                  className="relative overflow-hidden rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
                                 >
-                                  Selected
+                                  {!shouldReduceMotion && (
+                                    <motion.span
+                                      aria-hidden="true"
+                                      className="pointer-events-none absolute inset-0"
+                                      style={{
+                                        background:
+                                          "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.18) 50%, transparent 65%, transparent 100%)",
+                                      }}
+                                      initial={{ x: "-140%" }}
+                                      animate={{ x: ["-140%", "140%"] }}
+                                      transition={{
+                                        duration: 1.1,
+                                        ease: "easeOut",
+                                        delay: 0.2,
+                                      }}
+                                    />
+                                  )}
+                                  <span className="relative z-[1]">Selected</span>
                                 </motion.span>
                               )}
                             </AnimatePresence>
