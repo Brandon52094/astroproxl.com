@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Lock, Sparkles, Check, Star } from "lucide-react";
+import { Lock, Check, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PaywallConfig } from "@/lib/paywallConfig";
 
@@ -23,7 +23,6 @@ export default function PaywallScreen({
 }: PaywallScreenProps) {
   const [selected, setSelected] = useState<"one_time" | "subscription">("one_time");
   const [loading, setLoading] = useState(false);
-
   const { oneTime, subscription, isJourneyComplete, paywallIndex } = config;
 
   const handleContinue = async () => {
@@ -86,18 +85,15 @@ export default function PaywallScreen({
             <Check className="h-3.5 w-3.5 text-teal-300 shrink-0" />
             DROP / EXECUTE / LOCK directives — what to do now
           </li>
-          {isJourneyComplete && (
-            <li className="flex items-center gap-2 text-[13px] text-amber-300/80">
-              <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              Includes 1 JXL session — live chart conversation
-            </li>
-          )}
+          <li className="flex items-center gap-2 text-[13px] text-slate-300">
+            <Check className="h-3.5 w-3.5 text-teal-300 shrink-0" />
+            2 free follow-up questions on this reading
+          </li>
         </ul>
       </div>
 
       {/* Option selector */}
       <div className="mb-4 space-y-3">
-
         {/* One-time option */}
         <button
           type="button"
@@ -152,7 +148,6 @@ export default function PaywallScreen({
               </span>
             </div>
           )}
-
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2">
               <span
@@ -169,15 +164,15 @@ export default function PaywallScreen({
                 <ul className="space-y-1 pt-1">
                   <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
                     <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                    Unlimited readings — no paywalls
+                    8 readings/month — no per-reading paywalls
                   </li>
                   <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
                     <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                    JXL sessions included every month
+                    2 free follow-ups per reading
                   </li>
                   <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
                     <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                    No cooldown periods
+                    No cooldown periods, downloads included
                   </li>
                 </ul>
               </div>
