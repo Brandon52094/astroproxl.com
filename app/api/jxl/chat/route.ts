@@ -304,7 +304,10 @@ export async function POST(request: NextRequest) {
     }
 
     const client = await clerkClient();
-    const user = await client.users.getUser(userId);
+if (!userId) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
     const jxlCredits = Number(metadata?.jxlCredits ?? 0);
