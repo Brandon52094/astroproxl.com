@@ -81,9 +81,7 @@ function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "soon";
   const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  const hours = Math.floor(
-    (ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-  );
+  const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   if (days > 0) return `${days}d ${hours}h`;
   return `${hours}h`;
 }
@@ -102,20 +100,27 @@ export default function ReadingIntakeScreen() {
   const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
-  // Respect OS-level reduced-motion preference for looping icon animations
   const shouldReduceMotion = useReducedMotion();
 
-  const getIconPulseAnimation = (isSelected = false) =>
-    shouldReduceMotion
-      ? {}
-      : {
-          scale: isSelected ? [1, 1.08, 1] : [1, 1.04, 1],
-          transition: {
-            duration: isSelected ? 2.8 : 3.6,
-            repeat: Infinity,
-            ease: "easeInOut" as const,
-          },
-        };
+  const getIconPulseAnimation = (isSelected = false) => {
+    if (shouldReduceMotion) return {};
+
+    if (!isSelected) {
+      return {
+        scale: 1,
+        transition: { duration: 0.2 },
+      };
+    }
+
+    return {
+      scale: [1, 1.08, 1],
+      transition: {
+        duration: 2.8,
+        repeat: Infinity,
+        ease: "easeInOut" as const,
+      },
+    };
+  };
 
   useEffect(() => {
     async function ensureChart() {
@@ -165,7 +170,6 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
-  // ── Single shared fetchStatus — debounced to prevent Clerk rate limiting ─────
   const fetchInFlight = useRef(false);
 
   const fetchStatus = useCallback(async (): Promise<number> => {
@@ -191,14 +195,12 @@ export default function ReadingIntakeScreen() {
     } catch {
       return 0;
     } finally {
-      // Allow next fetch after 2 seconds minimum gap
       setTimeout(() => {
         fetchInFlight.current = false;
       }, 2000);
     }
   }, []);
 
-  // ── Mount effect: fetch once + light poll if paywalls still 0 ─────────────
   useEffect(() => {
     (async () => {
       const initialPaywalls = await fetchStatus();
@@ -208,7 +210,7 @@ export default function ReadingIntakeScreen() {
           const paywalls = await fetchStatus();
           attempts++;
           if (paywalls === 0 && attempts < 4) {
-            setTimeout(poll, 3000); // 3s between polls to avoid rate limiting
+            setTimeout(poll, 3000);
           }
         };
         setTimeout(poll, 3000);
@@ -216,11 +218,9 @@ export default function ReadingIntakeScreen() {
     })();
   }, [fetchStatus]);
 
-  // ── Visibility effect: re-fetch when returning from Stripe ─────────────────
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        // Poll a few times to catch webhook delay
         fetchStatus();
         setTimeout(() => fetchStatus(), 2000);
         setTimeout(() => fetchStatus(), 5000);
@@ -228,8 +228,7 @@ export default function ReadingIntakeScreen() {
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [fetchStatus]);
 
   const selectedAreaConfig = useMemo(() => {
@@ -240,7 +239,6 @@ export default function ReadingIntakeScreen() {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
     if (!selectedAreaConfig) return "Choose a reading type";
-    // Flat $4 for every reading after the free one
     if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
       return `${selectedAreaConfig.cta} — $4.00`;
     }
@@ -262,7 +260,6 @@ export default function ReadingIntakeScreen() {
     try {
       clearIntake();
       clearReading();
-      // Clear any stale followup state from a previous reading
       localStorage.removeItem("dfp_followup_return");
       localStorage.removeItem("dfp_followup_question");
 
@@ -270,10 +267,10 @@ export default function ReadingIntakeScreen() {
         selectedArea === "love"
           ? "love"
           : selectedArea === "career"
-          ? "career"
-          : selectedArea === "money"
-          ? "money"
-          : "general";
+            ? "career"
+            : selectedArea === "money"
+              ? "money"
+              : "general";
 
       saveIntake({
         topic: topic as "love" | "career" | "money" | "general",
@@ -286,7 +283,6 @@ export default function ReadingIntakeScreen() {
         timeframeValue: "next-45-days",
       });
 
-      // Gate at intake — check credits before generating
       if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
         const creditsRes = await fetch("/api/user/credits");
         const creditsData = await creditsRes.json();
@@ -323,7 +319,6 @@ export default function ReadingIntakeScreen() {
   const handleBypass = async () => {
     setIsBypassLoading(true);
     try {
-      // Reset cooldown in Clerk immediately — don't wait for webhook
       await fetch("/api/user/bypass-reset", { method: "POST" });
 
       const response = await fetch("/api/stripe/checkout", {
@@ -339,7 +334,6 @@ export default function ReadingIntakeScreen() {
         window.location.href = data.url;
       }
     } catch {
-      // silent
     } finally {
       setIsBypassLoading(false);
     }
@@ -348,31 +342,37 @@ export default function ReadingIntakeScreen() {
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
-  // Weekly free reading reset countdown
   const freeReadingCooldownLine = useMemo(() => {
     if (!userStatus?.freeReadingResetAt) return null;
     if (onCooldown) return null;
     if (userStatus?.isSubscribed) return null;
-    const ms =
-      new Date(userStatus.freeReadingResetAt).getTime() - Date.now();
+    const ms = new Date(userStatus.freeReadingResetAt).getTime() - Date.now();
     if (ms <= 0) return null;
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(
-      (ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-    );
+    const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     if (days > 0) return `Free reading resets in ${days}d ${hours}h`;
     return `Free reading resets in ${hours}h`;
   }, [userStatus, onCooldown]);
 
   return (
     <div
-      className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
+      className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       <style jsx>{`
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+
         @keyframes jxlAmberPulse {
-          0%,
-          100% {
+          0%, 100% {
             box-shadow:
               0 0 0 1px rgba(245, 158, 11, 0.18),
               0 0 20px rgba(245, 158, 11, 0.08),
@@ -387,8 +387,7 @@ export default function ReadingIntakeScreen() {
         }
 
         @keyframes cooldownPulse {
-          0%,
-          100% {
+          0%, 100% {
             box-shadow:
               0 0 0 1px rgba(99, 102, 241, 0.2),
               0 0 20px rgba(99, 102, 241, 0.08);
@@ -406,7 +405,6 @@ export default function ReadingIntakeScreen() {
           overflow: hidden;
         }
 
-        /* Shimmer overlay that moves a soft yellow streak across the card */
         .jxl-teaser::before {
           content: "";
           position: absolute;
@@ -442,41 +440,71 @@ export default function ReadingIntakeScreen() {
           animation: cooldownPulse 3s ease-in-out infinite;
         }
 
-        /* Locked version: subtler shimmer */
         .jxl-teaser--subtle::before {
           opacity: 0.55;
           animation-duration: 5s;
         }
+
+        .selected-card-shell {
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+          will-change: transform, opacity;
+        }
+
+        .selected-card-shell::before {
+          content: "";
+          position: absolute;
+          inset: -1px;
+          border-radius: 24px;
+          background:
+            radial-gradient(circle at 20% 20%, rgba(94, 234, 212, 0.16), transparent 42%),
+            radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.10), transparent 46%),
+            linear-gradient(180deg, rgba(45, 212, 191, 0.10), rgba(20, 184, 166, 0.04));
+          opacity: 0;
+          z-index: 0;
+          pointer-events: none;
+          transition: opacity 260ms ease;
+        }
+
+        .selected-card-shell[data-selected="true"]::before {
+          opacity: 1;
+        }
       `}</style>
 
-      <div className="mx-auto w-full max-w-[430px] flex flex-col px-4 pb-32 pt-4">
+      <div
+        className="mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
+        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          {/* Header */}
           <header className="mb-6 flex items-center justify-between py-2">
-            <button
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              transition={{ duration: 0.12 }}
               type="button"
               onClick={() => router.back()}
               className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />
-            </button>
+            </motion.button>
+
             <div className="text-center">
               <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
                 Direct Future Predictions
               </p>
               <p className="mt-1 text-xs text-slate-400">Reading Setup</p>
             </div>
+
             <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[11px] font-medium text-slate-400">
               3/4
             </div>
           </header>
 
-          {/* Status banners */}
           <section className="mb-6 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
@@ -501,40 +529,33 @@ export default function ReadingIntakeScreen() {
               <p className="max-w-[32ch] text-sm leading-6 text-slate-300">
                 Choose an area and ask your question.
               </p>
-              {chartStatus === "ready" &&
-                (() => {
-                  const chart = loadChart();
-                  return chart ? (
-                    <div className="pt-1 text-xs text-slate-500">
-                      <span>Chart for {chart.birthPlace}</span>
-                      <span className="mx-1.5">·</span>
-                      <button
-                        type="button"
-                        onClick={() => router.push("/chart-data")}
-                        className="text-slate-400 transition hover:text-teal-300"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  ) : null;
-                })()}
+              {chartStatus === "ready" && (() => {
+                const chart = loadChart();
+                return chart ? (
+                  <div className="pt-1 text-xs text-slate-500">
+                    <span>Chart for {chart.birthPlace}</span>
+                    <span className="mx-1.5">·</span>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/chart-data")}
+                      className="text-slate-400 transition hover:text-teal-300"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </section>
 
-          {/* ── Free reading weekly reset countdown ───────────────────── */}
           {freeReadingCooldownLine && (
             <div className="mb-3 flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
-              <span className="text-[11px] text-indigo-300/70">
-                {freeReadingCooldownLine}
-              </span>
+              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
           )}
 
-          {/* ── Reading cycle progress bar ─────────────────────────────────── */}
-          {(userStatus?.firstReadingUsed ||
-            (userStatus?.readingsCompleted ?? 0) > 0 ||
-            onCooldown) && (
+          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
             <div className="mb-6 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
@@ -554,11 +575,7 @@ export default function ReadingIntakeScreen() {
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: "100%" }}
-                        transition={{
-                          duration: 0.6,
-                          delay: i * 0.1,
-                          ease: "easeOut",
-                        }}
+                        transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
                         className={cn(
                           "absolute inset-y-0 left-0 rounded-full",
                           onCooldown ? "bg-indigo-400" : "bg-teal-300"
@@ -576,7 +593,6 @@ export default function ReadingIntakeScreen() {
             </div>
           )}
 
-          {/* ── Cooldown state ─────────────────────────────────────────────── */}
           {onCooldown ? (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -600,12 +616,8 @@ export default function ReadingIntakeScreen() {
                           <Icon className="h-4 w-4" />
                         </motion.div>
                         <div>
-                          <h2 className="text-[15px] font-semibold text-white">
-                            {area.title}
-                          </h2>
-                          <p className="mt-1 text-sm text-slate-400">
-                            {area.description}
-                          </p>
+                          <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
+                          <p className="mt-1 text-sm text-slate-400">{area.description}</p>
                         </div>
                       </div>
                     </div>
@@ -614,11 +626,7 @@ export default function ReadingIntakeScreen() {
               </div>
 
               <div className="absolute inset-0 flex items-center justify-center px-2">
-                <div
-                  className={cn(
-                    "cooldown-glow w-full rounded-[28px] border border-indigo-400/20 bg-[#050816]/95 px-6 py-6 text-center backdrop-blur-sm"
-                  )}
-                >
+                <div className="cooldown-glow w-full rounded-[28px] border border-indigo-400/20 bg-[#050816]/95 px-6 py-6 text-center backdrop-blur-sm">
                   <div className="mb-3 flex justify-center">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
                       <Timer className="h-5 w-5 text-indigo-300" />
@@ -628,60 +636,96 @@ export default function ReadingIntakeScreen() {
                     Cooldown period active
                   </h2>
                   <p className="mb-1 text-[13px] leading-5 text-slate-400">
-                    Due to safety concerns and us caring about your wellbeing,
-                    we've implemented a cooldown period between reading cycles.
+                    Due to safety concerns and us caring about your wellbeing, we've implemented a cooldown period between reading cycles.
                   </p>
                   {userStatus?.cooldownExpiresAt && (
                     <p className="mt-2 text-[12px] text-indigo-300/80">
-                      Resets in{" "}
-                      {formatTimeRemaining(userStatus.cooldownExpiresAt)}
+                      Resets in {formatTimeRemaining(userStatus.cooldownExpiresAt)}
                     </p>
                   )}
                   <div className="mt-5 border-t border-white/10 pt-5">
                     <p className="mb-3 text-[12px] leading-5 text-slate-400">
                       You may pay to bypass this cooldown — once per cycle.
                     </p>
-                    <button
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.12 }}
                       type="button"
                       onClick={handleBypass}
                       disabled={isBypassLoading}
                       className="rounded-2xl bg-indigo-400 px-6 py-2.5 text-[13px] font-semibold text-slate-950 transition hover:bg-indigo-300 disabled:opacity-60"
                     >
                       {isBypassLoading ? "Loading…" : "Skip cooldown — $6.00"}
-                    </button>
+                    </motion.button>
                   </div>
                 </div>
               </div>
             </motion.div>
           ) : (
             <>
-              {/* ── Main reading categories ──────────────────────────────── */}
               <section className="space-y-3">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
                   const isSelected = selectedArea === area.id;
+
                   return (
                     <motion.button
                       key={area.id}
                       whileTap={{ scale: 0.985 }}
+                      transition={{ duration: 0.12 }}
                       type="button"
                       onClick={() => {
                         setSelectedArea(area.id);
                         setQuestion("");
                       }}
-                      className={cn(
-                        "w-full rounded-[24px] border px-4 py-4 text-left transition-all duration-200",
-                        "bg-white/[0.03] backdrop-blur-sm",
+                      animate={
                         isSelected
-                          ? "border-teal-300/70 bg-teal-400/[0.08] shadow-[0_0_0_1px_rgba(94,234,212,0.16),0_8px_24px_rgba(20,184,166,0.18)] -translate-y-0.5"
-                          : "border-white/10 hover:border-white/20 hover:bg-white/[0.045]"
+                          ? shouldReduceMotion
+                            ? {
+                                backgroundColor: "rgba(45, 212, 191, 0.08)",
+                                borderColor: "rgba(94, 234, 212, 0.45)",
+                              }
+                            : {
+                                backgroundColor: "rgba(45, 212, 191, 0.10)",
+                                borderColor: "rgba(94, 234, 212, 0.55)",
+                                y: -2,
+                              }
+                          : {
+                              backgroundColor: "rgba(255, 255, 255, 0.03)",
+                              borderColor: "rgba(255, 255, 255, 0.10)",
+                              y: 0,
+                            }
+                      }
+                      data-selected={isSelected ? "true" : "false"}
+                      className={cn(
+                        "selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm",
+                        isSelected && "shadow-[0_0_0_1px_rgba(94,234,212,0.12)]"
                       )}
+                      style={{ willChange: "transform, opacity" }}
                     >
-                      <div className="flex items-start gap-3">
+                      {isSelected && !shouldReduceMotion && (
+                        <motion.div
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 rounded-[24px]"
+                          style={{
+                            background:
+                              "radial-gradient(circle at 50% 50%, rgba(45,212,191,0.18), rgba(45,212,191,0.06) 42%, transparent 72%)",
+                            zIndex: 0,
+                          }}
+                          animate={{ opacity: [0.45, 0.75, 0.45], scale: [1, 1.015, 1] }}
+                          transition={{
+                            duration: 3.4,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                          }}
+                        />
+                      )}
+
+                      <div className="relative z-[1] flex items-start gap-3">
                         <motion.div
                           animate={getIconPulseAnimation(isSelected)}
                           className={cn(
-                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
                             isSelected
                               ? "border-teal-300/40 bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]"
                               : "border-white/10 bg-black/20 text-slate-300"
@@ -689,20 +733,39 @@ export default function ReadingIntakeScreen() {
                         >
                           <Icon className="h-4 w-4" />
                         </motion.div>
+
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
                             <h2 className="text-[15px] font-semibold text-white">
                               {area.title}
                             </h2>
-                            {isSelected && (
-                              <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200">
-                                Selected
-                              </span>
-                            )}
+
+                            <AnimatePresence>
+                              {isSelected && (
+                                <motion.span
+                                  initial={{ opacity: 0, scale: 0.92, y: 4 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.92, y: 4 }}
+                                  transition={{ duration: 0.18, ease: "easeOut" }}
+                                  className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
+                                >
+                                  Selected
+                                </motion.span>
+                              )}
+                            </AnimatePresence>
                           </div>
-                          <p className="mt-1 text-sm leading-5 text-slate-400">
+
+                          <motion.p
+                            className="mt-1 text-sm leading-5"
+                            animate={{
+                              color: isSelected
+                                ? "rgba(226, 232, 240, 0.92)"
+                                : "rgba(148, 163, 184, 1)",
+                            }}
+                            transition={{ duration: 0.24, ease: "easeOut" }}
+                          >
                             {area.description}
-                          </p>
+                          </motion.p>
                         </div>
                       </div>
                     </motion.button>
@@ -710,14 +773,13 @@ export default function ReadingIntakeScreen() {
                 })}
               </section>
 
-              {/* Question box */}
               <AnimatePresence>
                 {selectedArea && selectedArea !== "other" && (
                   <motion.section
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                     className="mt-6 space-y-2"
                   >
                     <Textarea
@@ -726,15 +788,13 @@ export default function ReadingIntakeScreen() {
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       placeholder={
-                        AREAS.find((a) => a.id === selectedArea)
-                          ?.placeholder ??
+                        AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
                       className="min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[15px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300"
                     />
                     <p className="text-xs leading-5 text-slate-400">
-                      Be specific. The clearer your question, the sharper the
-                      reading.
+                      Be specific. The clearer your question, the sharper the reading.
                     </p>
                   </motion.section>
                 )}
@@ -742,7 +802,6 @@ export default function ReadingIntakeScreen() {
             </>
           )}
 
-          {/* Divider */}
           <div className="mt-8 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
@@ -751,7 +810,6 @@ export default function ReadingIntakeScreen() {
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* Ask Jxl — Coming Soon */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -795,44 +853,37 @@ export default function ReadingIntakeScreen() {
             </div>
           </motion.div>
 
-          {/* Inline CTA section */}
           <div className="mt-6 border-t border-white/[0.08]" />
-          <div className="mt-4 space-y-3 pb-8">
+          <div className="mt-4 space-y-3 pb-2">
             {submitError && (
-              <p className="mb-2 text-center text-xs text-red-300">
-                {submitError}
-              </p>
+              <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}
 
-            {/* Primary action — Begin My Reading, always first */}
             {!onCooldown && (
-              <Button
-                type="button"
-                onClick={handleStartReading}
-                disabled={!canSubmit || isCreatingReading}
-                className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-              >
-                {buttonCopy}
-              </Button>
+              <motion.div whileTap={{ scale: 0.985 }} transition={{ duration: 0.12 }}>
+                <Button
+                  type="button"
+                  onClick={handleStartReading}
+                  disabled={!canSubmit || isCreatingReading}
+                  className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                >
+                  {buttonCopy}
+                </Button>
+              </motion.div>
             )}
 
-            {/* Subscribe — secondary, expandable */}
             {!userStatus?.isSubscribed && (
               <div className="rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] overflow-hidden">
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.995 }}
+                  transition={{ duration: 0.12 }}
                   type="button"
-                  onClick={() =>
-                    setShowSubscriptionDetails((s) => !s)
-                  }
+                  onClick={() => setShowSubscriptionDetails((s) => !s)}
                   className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-amber-400/[0.04]"
                 >
-                  <span className="text-[13px] font-semibold text-amber-200">
-                    Subscribe
-                  </span>
+                  <span className="text-[13px] font-semibold text-amber-200">Subscribe</span>
                   <span className="flex items-center gap-2">
-                    <span className="text-[12px] text-slate-400">
-                      $12.99/mo
-                    </span>
+                    <span className="text-[12px] text-slate-400">$12.99/mo</span>
                     <motion.span
                       animate={{ rotate: showSubscriptionDetails ? 180 : 0 }}
                       transition={{ duration: 0.2 }}
@@ -841,7 +892,7 @@ export default function ReadingIntakeScreen() {
                       ▾
                     </motion.span>
                   </span>
-                </button>
+                </motion.button>
 
                 <AnimatePresence>
                   {showSubscriptionDetails && (
@@ -855,14 +906,10 @@ export default function ReadingIntakeScreen() {
                       <div className="border-t border-amber-300/15 px-5 py-4 space-y-4">
                         <div>
                           <h3 className="text-[15px] font-semibold leading-snug text-white">
-                            Never wait. Never guess. Never pay per
-                            question.
+                            Never wait. Never guess. Never pay per question.
                           </h3>
                           <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-                            Your chart, on demand — a fresh reading almost
-                            every 4 days, real answers when something's
-                            actually bothering you, and nothing ever locked
-                            behind a timer.
+                            Your chart, on demand — a fresh reading almost every 4 days, real answers when something's actually bothering you, and nothing ever locked behind a timer.
                           </p>
                         </div>
 
@@ -873,59 +920,46 @@ export default function ReadingIntakeScreen() {
                             "Never wait out a cooldown",
                             "Downloads always included",
                           ].map((perk) => (
-                            <div
-                              key={perk}
-                              className="flex items-center gap-2.5"
-                            >
+                            <div key={perk} className="flex items-center gap-2.5">
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
                                 ✓
                               </span>
-                              <span className="text-[12px] text-slate-300">
-                                {perk}
-                              </span>
+                              <span className="text-[12px] text-slate-300">{perk}</span>
                             </div>
                           ))}
                         </div>
 
                         <p className="text-[11px] text-amber-300/60">
-                          Less than the price of 3 readings — unlimited
-                          access for a month.
+                          Less than the price of 3 readings — unlimited access for a month.
                         </p>
 
-                        <button
+                        <motion.button
+                          whileTap={{ scale: 0.985 }}
+                          transition={{ duration: 0.12 }}
                           type="button"
                           disabled={isSubscribeLoading}
                           onClick={async () => {
                             setIsSubscribeLoading(true);
                             try {
-                              const res = await fetch(
-                                "/api/stripe/checkout",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type":
-                                      "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    returnUrl: `${window.location.origin}/reading/intake`,
-                                    mode: "subscription",
-                                    paywallIndex: 1,
-                                  }),
-                                }
-                              );
+                              const res = await fetch("/api/stripe/checkout", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  returnUrl: `${window.location.origin}/reading/intake`,
+                                  mode: "subscription",
+                                  paywallIndex: 1,
+                                }),
+                              });
                               const data = await res.json();
-                              if (data.url)
-                                window.location.href = data.url;
+                              if (data.url) window.location.href = data.url;
                             } finally {
                               setIsSubscribeLoading(false);
                             }
                           }}
                           className="h-11 w-full rounded-xl bg-amber-300 text-[13px] font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
                         >
-                          {isSubscribeLoading
-                            ? "Loading…"
-                            : "Subscribe — $12.99/mo"}
-                        </button>
+                          {isSubscribeLoading ? "Loading…" : "Subscribe — $12.99/mo"}
+                        </motion.button>
                       </div>
                     </motion.div>
                   )}
