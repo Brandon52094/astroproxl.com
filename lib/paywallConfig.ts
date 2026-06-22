@@ -22,6 +22,7 @@ export interface SubscriptionTier {
   isBestOffer: boolean;
   readingsPerMonth: number;
   jxlSessionsPerMonth: number; // -1 = unlimited
+  freeRepliesPerReading: number; // NEW — subscriber perk
 }
 
 export interface PaywallConfig {
@@ -32,14 +33,13 @@ export interface PaywallConfig {
 }
 
 // ── One-time reading packs ────────────────────────────────────────────────────
-// Reading 1 is free. Paywalls trigger on readings 2, 3, 4.
-// Crescendo: $2.99 → $3.99 → $4.99
+// Reading 1 is free. Flat $4.00 for every reading after — no more escalation.
 export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
   1: {
     name: "Unlock Your Reading",
     description: "Full 30-45 day reading with specific dates and directives",
-    price: 299,
-    displayPrice: "$2.99",
+    price: 400,
+    displayPrice: "$4.00",
     credits: 12,
     jxlCredits: 0,
     creditsLabel: "Unlocks your next reading",
@@ -48,8 +48,8 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
   2: {
     name: "Unlock Your Reading",
     description: "Full 30-45 day reading with specific dates and directives",
-    price: 399,
-    displayPrice: "$3.99",
+    price: 400,
+    displayPrice: "$4.00",
     credits: 12,
     jxlCredits: 0,
     creditsLabel: "Unlocks your next reading",
@@ -58,37 +58,37 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
   3: {
     name: "Unlock Your Reading",
     description: "Full 30-45 day reading with specific dates and directives",
-    price: 499,
-    displayPrice: "$4.99",
+    price: 400,
+    displayPrice: "$4.00",
     credits: 12,
-    jxlCredits: 6,
-    creditsLabel: "Unlocks your reading + 1 JXL session",
+    jxlCredits: 0,
+    creditsLabel: "Unlocks your next reading",
     pack: "paywall_3",
   },
   4: {
     name: "Complete Your Cycle",
-    description: "Full 30-45 day reading + 1 JXL session",
-    price: 499,
-    displayPrice: "$4.99",
+    description: "Full 30-45 day reading",
+    price: 400,
+    displayPrice: "$4.00",
     credits: 12,
-    jxlCredits: 6,
-    creditsLabel: "Unlocks your reading + 1 JXL session",
+    jxlCredits: 0,
+    creditsLabel: "Unlocks your next reading",
     pack: "paywall_4",
   },
 };
 
 // ── Single subscription tier ──────────────────────────────────────────────────
-// One plan shown at every paywall. Clean, no choice paralysis.
-// $20/mo — 8 readings + unlimited JXL + no cooldowns
+// $20/mo — 8 readings + 2 free follow-up replies per reading + free downloads + no cooldowns
 export const SUBSCRIPTION_TIER: SubscriptionTier = {
   name: "AstroXL",
-  tagline: "8 readings + unlimited JXL — no cooldowns, no paywalls",
+  tagline: "8 readings/mo + 2 free replies per reading + free downloads — no cooldowns",
   price: 2000,
   displayPrice: "$20/mo",
   tier: "sub_base",
   isBestOffer: true,
   readingsPerMonth: 8,
-  jxlSessionsPerMonth: -1, // unlimited
+  jxlSessionsPerMonth: 0, // JXL paused — re-enable later
+  freeRepliesPerReading: 2,
 };
 
 // All paywalls show the same subscription tier
@@ -100,21 +100,26 @@ export const SUBSCRIPTION_TIERS: Record<PaywallIndex, SubscriptionTier> = {
 };
 
 // ── Subscriber top-up pack ────────────────────────────────────────────────────
-// When a subscriber runs out of their 8 monthly readings,
-// they can unlock 4 more for $4 instead of waiting for renewal.
 export const SUBSCRIBER_TOPUP = {
   name: "Reading Top-Up",
   description: "4 more readings added to your subscription this month",
   price: 400,
   displayPrice: "$4.00",
-  credits: 48, // 4 readings × 12 credits
+  credits: 48,
   pack: "subscriber_topup",
 };
 
 // ── Cooldown bypass ───────────────────────────────────────────────────────────
-// $6.00 to skip the 2-week cooldown and start a fresh cycle immediately
-export const COOLDOWN_BYPASS_PRICE = 600; // cents
+export const COOLDOWN_BYPASS_PRICE = 600;
 export const COOLDOWN_BYPASS_DISPLAY = "$6.00";
+
+// ── Follow-up reply price ─────────────────────────────────────────────────────
+export const FOLLOWUP_PRICE = 200; // $2.00
+export const FOLLOWUP_DISPLAY = "$2.00";
+
+// ── Download price ────────────────────────────────────────────────────────────
+export const DOWNLOAD_PRICE = 100; // $1.00
+export const DOWNLOAD_DISPLAY = "$1.00";
 
 export function getPaywallConfig(paywallsCompleted: number): PaywallConfig | null {
   const next = (paywallsCompleted + 1) as PaywallIndex;

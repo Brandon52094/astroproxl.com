@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { ONE_TIME_PACKS, SUBSCRIPTION_TIER, SUBSCRIBER_TOPUP } from "@/lib/paywallConfig";
+import { ONE_TIME_PACKS, SUBSCRIPTION_TIER, SUBSCRIBER_TOPUP, DOWNLOAD_PRICE, FOLLOWUP_PRICE, COOLDOWN_BYPASS_PRICE } from "@/lib/paywallConfig";
 import { JXL_PACKS, isValidJxlTier, JxlTier } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
               name: "Cooldown Bypass",
               description: "Skip your cooldown period and start a fresh cycle immediately",
             },
-            unit_amount: 600,
+            unit_amount: COOLDOWN_BYPASS_PRICE,
           },
           quantity: 1,
         }],
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
               name: "Download Your Reading",
               description: "Save your full reading as a PDF",
             },
-            unit_amount: 100,
+            unit_amount: DOWNLOAD_PRICE,
           },
           quantity: 1,
         }],
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
               name: "Ask a Follow-Up",
               description: "Get a deeper answer on your reading",
             },
-            unit_amount: 200,
+            unit_amount: FOLLOWUP_PRICE,
           },
           quantity: 1,
         }],
@@ -128,28 +128,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── JXL session purchase ──────────────────────────────────────────────────
+    // ── JXL session purchase — PAUSED ─────────────────────────────────────────
     if (mode === "jxl") {
-      if (!jxlTier || !isValidJxlTier(jxlTier)) {
-        return NextResponse.json({ error: "Invalid jxlTier" }, { status: 400 });
-      }
-      const pack = JXL_PACKS[jxlTier as JxlTier];
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: { name: "Jxl — " + pack.name, description: pack.tagline },
-            unit_amount: pack.price,
-          },
-          quantity: 1,
-        }],
-        metadata: { userId, mode: "jxl", jxlTier, jxlReplies: pack.replies },
-        success_url: `${returnUrl}?payment=success&mode=jxl&tier=${jxlTier}`,
-        cancel_url: `${returnUrl}?payment=cancelled`,
-      });
-      return NextResponse.json({ url: session.url });
+      return NextResponse.json({ error: "JXL is currently unavailable." }, { status: 503 });
     }
 
     // ── Validate paywall index ────────────────────────────────────────────────
@@ -163,7 +144,7 @@ export async function POST(request: NextRequest) {
 
     const index = paywallIndex as PaywallIndex;
 
-    // ── One-time reading purchase ─────────────────────────────────────────────
+    // ── One-time reading purchase — flat $4.00 ────────────────────────────────
     if (mode === "one_time") {
       const pack = ONE_TIME_PACKS[index];
       const session = await stripe.checkout.sessions.create({

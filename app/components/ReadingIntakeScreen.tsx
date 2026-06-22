@@ -211,11 +211,9 @@ export default function ReadingIntakeScreen() {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
     if (!selectedAreaConfig) return "Choose a reading type";
-    // Show price on button if this reading requires payment
+    // Flat $4 for every reading after the free one
     if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
-      const prices = ["$2.99", "$3.99", "$4.99", "$4.99"];
-      const idx = Math.min((userStatus.paywallsCompleted ?? 0), 3);
-      return `${selectedAreaConfig.cta} — ${prices[idx]}`;
+      return `${selectedAreaConfig.cta} — $4.00`;
     }
     return selectedAreaConfig.cta;
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
@@ -693,76 +691,48 @@ export default function ReadingIntakeScreen() {
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* Ask Jxl */}
+          {/* Ask Jxl — Coming Soon */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
             className="mt-4"
           >
-            {userStatus?.firstReadingUsed || userStatus?.isSubscribed ? (
-              <button
-                type="button"
-                onClick={() => router.push("/jxl")}
-                className="jxl-teaser w-full rounded-[28px] border border-amber-400/30 bg-black/30 px-5 py-5 text-left transition hover:border-amber-300/50 hover:bg-amber-400/[0.06]"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-300" />
-                    <span className="text-[14px] font-semibold text-amber-200">
-                      Ask Jxl
-                    </span>
-                  </div>
-                  <span className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300">
-                    Unlocked
+            <div className="mb-2 flex items-center justify-center">
+              <span className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-400/80">
+                <Lock className="h-2.5 w-2.5" />
+                Coming Soon
+              </span>
+            </div>
+            <div
+              className="jxl-teaser jxl-teaser--subtle relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-black/30 pointer-events-none select-none"
+              aria-hidden="true"
+            >
+              <div className="blur-[6px] px-5 py-5 opacity-60">
+                <div className="mb-3 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-300" />
+                  <span className="text-[14px] font-semibold text-amber-200">
+                    Ask Jxl
                   </span>
                 </div>
-                <p className="text-[12px] leading-5 text-slate-400">
-                  A personal conversation with your chart. No categories — just tell Jxl what's going on.
-                </p>
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-300/70">
-                  <span>Start a session →</span>
+                <div className="space-y-2">
+                  <div className="h-3 w-3/4 rounded-full bg-slate-400/30" />
+                  <div className="h-3 w-1/2 rounded-full bg-slate-400/20" />
+                  <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
                 </div>
-              </button>
-            ) : (
-              <>
-                <div className="mb-2 flex items-center justify-center">
-                  <span className="flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-400/80">
-                    <Lock className="h-2.5 w-2.5" />
-                    Unlocks after your first reading
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-b from-amber-950/10 via-transparent to-amber-950/20 rounded-[28px]" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/10">
+                    <Lock className="h-4 w-4 text-amber-300/70" />
+                  </div>
+                  <span className="text-[11px] text-amber-400/60 tracking-wide">
+                    A deeper conversation with your chart — coming soon
                   </span>
                 </div>
-                <div
-                  className="jxl-teaser jxl-teaser--subtle relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-black/30 pointer-events-none select-none"
-                  aria-hidden="true"
-                >
-                  <div className="blur-[6px] px-5 py-5 opacity-60">
-                    <div className="mb-3 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-amber-300" />
-                      <span className="text-[14px] font-semibold text-amber-200">
-                        Ask Jxl
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 w-3/4 rounded-full bg-slate-400/30" />
-                      <div className="h-3 w-1/2 rounded-full bg-slate-400/20" />
-                      <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
-                    </div>
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-b from-amber-950/10 via-transparent to-amber-950/20 rounded-[28px]" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/10">
-                        <Lock className="h-4 w-4 text-amber-300/70" />
-                      </div>
-                      <span className="text-[11px] text-amber-400/60 tracking-wide">
-                        Complete one reading to unlock
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+              </div>
+            </div>
           </motion.div>
 
           {/* Inline CTA section */}
@@ -789,8 +759,8 @@ export default function ReadingIntakeScreen() {
                 }}
                 className="h-12 w-full rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] px-5 text-left transition hover:border-amber-300/50 flex items-center justify-between"
               >
-                <span className="text-[13px] font-semibold text-amber-200">JXL Unlimited</span>
-                <span className="text-[12px] text-slate-400">$20/mo · 8 readings + unlimited JXL</span>
+                <span className="text-[13px] font-semibold text-amber-200">AstroXL Unlimited</span>
+                <span className="text-[12px] text-slate-400">$20/mo · 8 readings, no cooldowns</span>
               </button>
             )}
             {!onCooldown && (
