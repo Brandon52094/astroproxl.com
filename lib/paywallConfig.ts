@@ -78,12 +78,12 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
 };
 
 // ── Single subscription tier ──────────────────────────────────────────────────
-// $20/mo — 8 readings + 2 free follow-up replies per reading + free downloads + no cooldowns
+// $12.99/mo — 8 readings + 2 free follow-up replies per reading + free downloads + no cooldowns
 export const SUBSCRIPTION_TIER: SubscriptionTier = {
   name: "AstroXL",
   tagline: "8 readings/mo + 2 free replies per reading + free downloads — no cooldowns",
-  price: 2000,
-  displayPrice: "$20/mo",
+  price: 1299,
+  displayPrice: "$12.99/mo",
   tier: "sub_base",
   isBestOffer: true,
   readingsPerMonth: 8,

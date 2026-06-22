@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Subscription — $20/mo ─────────────────────────────────────────────────
+    // ── Subscription — $12.99/mo ──────────────────────────────────────────────
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "subscription",
