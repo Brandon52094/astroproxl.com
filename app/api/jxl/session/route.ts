@@ -11,6 +11,10 @@ import {
 } from "@/lib/jxlConfig";
 
 export async function GET() {
+  // JXL is paused — remove this early return to re-enable.
+  return NextResponse.json({ isUnlocked: false }, { status: 200 });
+
+  /* eslint-disable no-unreachable */
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -31,9 +35,8 @@ export async function GET() {
       : null;
     const readingsCompleted = Number(metadata?.readingsCompleted ?? 0);
     const isSubscribed = metadata?.isSubscribed === true;
-    const jxlUnlimited = metadata?.jxlUnlimited === true; // set by subscription webhook
+    const jxlUnlimited = metadata?.jxlUnlimited === true;
 
-    // ── Cycle cooldown check ──────────────────────────────────────────────────
     let onCycleCooldown = false;
     let cycleResetsAt: string | null = null;
 
@@ -42,8 +45,6 @@ export async function GET() {
       onCycleCooldown = Date.now() < expiresAt.getTime();
       cycleResetsAt = expiresAt.toISOString();
 
-      // Auto-reset if cooldown has naturally expired
-      // Use undefined not null — Clerk rejects null in publicMetadata
       if (!onCycleCooldown) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
@@ -56,8 +57,6 @@ export async function GET() {
       }
     }
 
-    // ── Freebie eligibility ───────────────────────────────────────────────────
-    // Freebie resets every 4 weeks — independent of 2-week cycle reset
     const freebieExpired = jxlFreeUsedAt
       ? Date.now() - jxlFreeUsedAt.getTime() > JXL_FREEBIE_COOLDOWN_MS
       : true;
@@ -67,25 +66,21 @@ export async function GET() {
       ? new Date(jxlFreeUsedAt.getTime() + JXL_FREEBIE_COOLDOWN_MS).toISOString()
       : null;
 
-    // ── Next purchasable session ──────────────────────────────────────────────
     const nextTier = getNextJxlTier(jxlSessionsPurchased);
     const nextPack = nextTier ? JXL_PACKS[nextTier] : null;
 
-    // ── Caring message ────────────────────────────────────────────────────────
     const showCaringMessage =
       !isSubscribed &&
       !jxlUnlimited &&
       jxlSessionsPurchased >= JXL_MAX_SESSIONS_PER_CYCLE &&
       onCycleCooldown;
 
-    // ── Unlock state ──────────────────────────────────────────────────────────
-    // JXL unlocks after first reading completion (readingsCompleted >= 1)
     const isUnlocked = isSubscribed || jxlUnlimited || readingsCompleted >= 1;
 
     return NextResponse.json({
       isUnlocked,
       jxlCredits,
-      jxlUnlimited,           // subscribers have unlimited JXL
+      jxlUnlimited,
       jxlSessionsPurchased,
       canUseFreebie,
       freebieResetsAt,
@@ -96,7 +91,7 @@ export async function GET() {
       nextPack,
       showCaringMessage: (isSubscribed || jxlUnlimited) ? false : showCaringMessage,
       caringMessage: showCaringMessage ? JXL_CARING_MESSAGE : null,
-      subscriberCanBuyMore: false, // subscribers have unlimited — no top-up needed in JXL
+      subscriberCanBuyMore: false,
       isSubscribed,
       maxSessionsPerCycle: JXL_MAX_SESSIONS_PER_CYCLE,
     });

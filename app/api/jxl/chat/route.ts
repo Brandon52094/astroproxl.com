@@ -1,4 +1,3 @@
-
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -62,9 +61,6 @@ const SISTER_SIGNS: Record<string, string> = {
   virgo: "pisces", pisces: "virgo",
 };
 
-// Tone is derived from the sister sign of the Moon —
-// the Moon reveals how they receive emotional information;
-// the sister sign is the polarity they're unconsciously seeking.
 function getMoonSisterTone(moonSign: string): string {
   const sisterSign = SISTER_SIGNS[moonSign.toLowerCase()] ?? moonSign.toLowerCase();
 
@@ -150,7 +146,6 @@ function getTightestAspect(
 function buildJxlSystemPrompt(body: JxlChatBody, currentReplyNumber: number): string {
   const { chart } = body;
 
-  // Declare todayString FIRST — used in phase directive template literals below
   const todayString = new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
@@ -293,6 +288,10 @@ TONE (Moon in ${moonSign.toUpperCase()} — sister sign ${(SISTER_SIGNS[moonSign
 }
 
 export async function POST(request: NextRequest) {
+  // JXL is paused — remove this early return to re-enable.
+  return NextResponse.json({ error: "JXL is currently unavailable." }, { status: 503 });
+
+  /* eslint-disable no-unreachable */
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -314,11 +313,6 @@ export async function POST(request: NextRequest) {
     const jxlUnlimited = metadata?.jxlUnlimited === true;
     const jxlFreeUsedAt = metadata?.jxlFreeUsedAt as string | undefined;
 
-    // Freebie is only available if:
-    // - No sessions purchased
-    // - No credits (they haven't paid)
-    // - Not subscribed
-    // - jxlFreeUsedAt is NOT set (haven't used freebie before)
     const isFreebie = jxlSessionsPurchased === 0 && jxlCredits <= 0 && !isSubscribed && !jxlUnlimited && !jxlFreeUsedAt;
 
     if (!isFreebie && !isSubscribed && !jxlUnlimited && jxlCredits <= 0) {
@@ -341,7 +335,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Mark freebie as used on reply 6 so it cannot retrigger
     if (isFreebie && currentReplyNumber >= 6 && !jxlFreeUsedAt) {
       await client.users.updateUserMetadata(userId, {
         publicMetadata: {
