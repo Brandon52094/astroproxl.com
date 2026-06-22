@@ -10,11 +10,14 @@ import {
   getNextJxlTier,
 } from "@/lib/jxlConfig";
 
-export async function GET() {
-  // JXL is paused — remove this early return to re-enable.
-  return NextResponse.json({ isUnlocked: false }, { status: 200 });
+// JXL is paused — flip this to true to re-enable without touching anything else below.
+const JXL_ENABLED = false;
 
-  /* eslint-disable no-unreachable */
+export async function GET() {
+  if (!JXL_ENABLED) {
+    return NextResponse.json({ isUnlocked: false }, { status: 200 });
+  }
+
   try {
     const { userId } = await auth();
     if (!userId) {

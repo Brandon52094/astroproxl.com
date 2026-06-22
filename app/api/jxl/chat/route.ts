@@ -1,6 +1,9 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
+// JXL is paused — flip this to true to re-enable without touching anything else below.
+const JXL_ENABLED = false;
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -288,10 +291,11 @@ TONE (Moon in ${moonSign.toUpperCase()} — sister sign ${(SISTER_SIGNS[moonSign
 }
 
 export async function POST(request: NextRequest) {
-  // JXL is paused — remove this early return to re-enable.
-  return NextResponse.json({ error: "JXL is currently unavailable." }, { status: 503 });
+  // JXL is paused — flip JXL_ENABLED to true at the top of this file to re-enable.
+  if (!JXL_ENABLED) {
+    return NextResponse.json({ error: "JXL is currently unavailable." }, { status: 503 });
+  }
 
-  /* eslint-disable no-unreachable */
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -304,10 +308,7 @@ export async function POST(request: NextRequest) {
     }
 
     const client = await clerkClient();
-if (!userId) {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-const user = await client.users.getUser(userId);
+    const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
     const jxlCredits = Number(metadata?.jxlCredits ?? 0);
