@@ -216,11 +216,11 @@ function PreparingPageInner() {
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
                 <p className="text-xs leading-6 text-slate-400">
                   A lot is being caculated{" "}
-                  <span className="text-slate-200">from every angle possible,</span>,{" "}
+                  <span className="text-slate-200">from every angle possible</span>,{" "}
                   <span className="text-slate-200"> and every way imaginable </span>,{" "}
                   <span className="text-slate-200"> still, your authentic action is needed </span>, or {" "}
                   <span className="text-slate-200"></span>{" "}
-                  — but these readings are accurate so save the dates.
+                  — take note of the dates it gives.
                 </p>
               </div>
             </motion.div>
