@@ -138,7 +138,7 @@ function PreparingPageInner() {
                 <span className="text-2xl">✕</span>
               </div>
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold text-white">yikesg</h1>
+                <h1 className="text-xl font-semibold text-white">yikes</h1>
                 <p className="text-sm leading-6 text-slate-400">{error}</p>
               </div>
               <button
@@ -183,7 +183,7 @@ function PreparingPageInner() {
                 </h1>
                 <p className="text-sm leading-6 text-slate-400">
                   Your chart is being analyzed in mulitple ways. Only you can see this information. 
-                  Readings are not saved..
+                  Tap the Download icon to save your reading
                 </p>
               </div>
 
@@ -216,11 +216,11 @@ function PreparingPageInner() {
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
                 <p className="text-xs leading-6 text-slate-400">
                   A lot is being caculated{" "}
-                  <span className="text-slate-200">but while I have you,</span>,{" "}
-                  <span className="text-slate-200"> this all makes me wonder </span>,{" "}
-                  <span className="text-slate-200"> is the plan set into stone? </span>, or {" "}
+                  <span className="text-slate-200">from every angle possible,</span>,{" "}
+                  <span className="text-slate-200"> and every way imaginable </span>,{" "}
+                  <span className="text-slate-200"> still, your authentic action is needed </span>, or {" "}
                   <span className="text-slate-200"></span>{" "}
-                  — or...I guess, nevermind.
+                  — but these readings are accurate so save the dates.
                 </p>
               </div>
             </motion.div>
