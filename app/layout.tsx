@@ -3,22 +3,18 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
-
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
 export const metadata: Metadata = {
   title: "AstroProXL",
   description: "Direct future predictions from your natal chart",
 };
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -36,12 +32,12 @@ export default function RootLayout({
       */}
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-        <meta name="theme-color" content="#050816" />
+        <meta name="theme-color" content="#040611" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="h-full overflow-hidden bg-[#050816] text-foreground">
+      <body className="h-full overflow-hidden bg-[#040611] text-foreground">
         {/* TikTok Pixel — loads after page becomes interactive, doesn't block render */}
         <Script id="tiktok-pixel" strategy="afterInteractive">
           {`
