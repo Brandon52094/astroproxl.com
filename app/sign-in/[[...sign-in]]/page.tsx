@@ -3,8 +3,23 @@
 import { SignIn } from "@clerk/nextjs";
 import { motion, useReducedMotion } from "framer-motion";
 
-function BirthChartRing({
-  size = 540,
+const zodiacSigns = [
+  "♈︎",
+  "♉︎",
+  "♊︎",
+  "♋︎",
+  "♌︎",
+  "♍︎",
+  "♎︎",
+  "♏︎",
+  "♐︎",
+  "♑︎",
+  "♒︎",
+  "♓︎",
+];
+
+function ZodiacWheel({
+  size = 560,
   opacity = 0.16,
   className = "",
 }: {
@@ -22,53 +37,86 @@ function BirthChartRing({
       }}
     >
       <svg
-        viewBox="0 0 540 540"
+        viewBox="0 0 560 560"
         className="h-full w-full"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <circle cx="270" cy="270" r="220" stroke="rgba(148,163,184,0.12)" strokeWidth="1.2" />
-        <circle cx="270" cy="270" r="185" stroke="rgba(94,234,212,0.15)" strokeWidth="1" />
-        <circle cx="270" cy="270" r="150" stroke="rgba(148,163,184,0.10)" strokeWidth="1" />
-        <circle cx="270" cy="270" r="114" stroke="rgba(251,191,36,0.10)" strokeWidth="1" />
+        <circle cx="280" cy="280" r="228" stroke="rgba(148,163,184,0.11)" strokeWidth="1.2" />
+        <circle cx="280" cy="280" r="192" stroke="rgba(94,234,212,0.14)" strokeWidth="1" />
+        <circle cx="280" cy="280" r="156" stroke="rgba(148,163,184,0.10)" strokeWidth="1" />
+        <circle cx="280" cy="280" r="118" stroke="rgba(94,234,212,0.10)" strokeWidth="1" />
 
         {Array.from({ length: 12 }).map((_, i) => {
-          const angle = (i / 12) * Math.PI * 2;
-          const x1 = 270 + Math.cos(angle) * 114;
-          const y1 = 270 + Math.sin(angle) * 114;
-          const x2 = 270 + Math.cos(angle) * 220;
-          const y2 = 270 + Math.sin(angle) * 220;
+          const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+          const x1 = 280 + Math.cos(angle) * 118;
+          const y1 = 280 + Math.sin(angle) * 118;
+          const x2 = 280 + Math.cos(angle) * 228;
+          const y2 = 280 + Math.sin(angle) * 228;
 
           return (
             <line
-              key={i}
+              key={`line-${i}`}
               x1={x1}
               y1={y1}
               x2={x2}
               y2={y2}
-              stroke="rgba(148,163,184,0.10)"
+              stroke={i % 3 === 0 ? "rgba(94,234,212,0.14)" : "rgba(148,163,184,0.08)"}
               strokeWidth="1"
             />
           );
         })}
 
-        {Array.from({ length: 12 }).map((_, i) => {
+        {zodiacSigns.map((sign, i) => {
           const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-          const x = 270 + Math.cos(angle) * 202;
-          const y = 270 + Math.sin(angle) * 202;
+          const x = 280 + Math.cos(angle) * 208;
+          const y = 280 + Math.sin(angle) * 208;
 
           return (
-            <g key={i} transform={`translate(${x}, ${y})`}>
+            <g key={sign}>
               <circle
-                r="3.2"
-                fill={i % 3 === 0 ? "rgba(94,234,212,0.68)" : "rgba(226,232,240,0.38)"}
+                cx={x}
+                cy={y}
+                r="15"
+                fill={i % 3 === 0 ? "rgba(94,234,212,0.05)" : "rgba(255,255,255,0.025)"}
+                stroke={i % 3 === 0 ? "rgba(94,234,212,0.12)" : "rgba(255,255,255,0.06)"}
               />
+              <text
+                x={x}
+                y={y + 5}
+                textAnchor="middle"
+                fontSize="18"
+                fill={i % 3 === 0 ? "rgba(153,246,228,0.72)" : "rgba(226,232,240,0.5)"}
+                style={{
+                  fontFamily: '"Times New Roman", "Noto Sans Symbols 2", serif',
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {sign}
+              </text>
             </g>
           );
         })}
 
-        <circle cx="270" cy="270" r="10" fill="rgba(94,234,212,0.52)" />
-        <circle cx="270" cy="270" r="24" stroke="rgba(94,234,212,0.12)" strokeWidth="1" />
+        {Array.from({ length: 12 }).map((_, i) => {
+          const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+          const x = 280 + Math.cos(angle) * 174;
+          const y = 280 + Math.sin(angle) * 174;
+
+          return (
+            <circle
+              key={`dot-${i}`}
+              cx={x}
+              cy={y}
+              r={i % 3 === 0 ? 2.4 : 1.6}
+              fill={i % 3 === 0 ? "rgba(94,234,212,0.6)" : "rgba(226,232,240,0.26)"}
+            />
+          );
+        })}
+
+        <circle cx="280" cy="280" r="10" fill="rgba(94,234,212,0.46)" />
+        <circle cx="280" cy="280" r="24" stroke="rgba(94,234,212,0.10)" strokeWidth="1" />
+        <circle cx="280" cy="280" r="42" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
       </svg>
     </div>
   );
@@ -81,7 +129,7 @@ export default function SignInPage() {
     const left = `${((i * 37) % 100)}%`;
     const top = `${((i * 19 + 13) % 100)}%`;
     const size = i % 7 === 0 ? 2 : 1;
-    const opacity = i % 5 === 0 ? 0.72 : 0.34;
+    const opacity = i % 5 === 0 ? 0.7 : 0.3;
     return { left, top, size, opacity, id: i };
   });
 
@@ -92,16 +140,16 @@ export default function SignInPage() {
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(circle at 50% 18%, rgba(94,234,212,0.10), transparent 34%), radial-gradient(circle at 85% 82%, rgba(251,191,36,0.07), transparent 28%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+              "radial-gradient(circle at 50% 18%, rgba(94,234,212,0.10), transparent 34%), radial-gradient(circle at 84% 80%, rgba(251,191,36,0.05), transparent 24%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
           }}
         />
 
         <motion.div
-          className="absolute left-1/2 top-[16%] h-[24rem] w-[24rem] -translate-x-1/2 rounded-full blur-3xl"
+          className="absolute left-1/2 top-[18%] h-[22rem] w-[22rem] -translate-x-1/2 rounded-full blur-3xl"
           animate={
             shouldReduceMotion
               ? undefined
-              : { opacity: [0.14, 0.24, 0.14], scale: [1, 1.05, 1] }
+              : { opacity: [0.12, 0.2, 0.12], scale: [1, 1.04, 1] }
           }
           transition={
             shouldReduceMotion
@@ -109,7 +157,7 @@ export default function SignInPage() {
               : { duration: 8, repeat: Infinity, ease: "easeInOut" }
           }
           style={{
-            background: "radial-gradient(circle, rgba(45,212,191,0.28), transparent 70%)",
+            background: "radial-gradient(circle, rgba(45,212,191,0.26), transparent 70%)",
           }}
         />
 
@@ -149,10 +197,10 @@ export default function SignInPage() {
           transition={
             shouldReduceMotion
               ? undefined
-              : { duration: 90, repeat: Infinity, ease: "linear" }
+              : { duration: 120, repeat: Infinity, ease: "linear" }
           }
         >
-          <BirthChartRing className="blur-[0.2px]" />
+          <ZodiacWheel className="blur-[0.15px]" />
         </motion.div>
       </div>
 
@@ -174,7 +222,7 @@ export default function SignInPage() {
             </p>
 
             <h1 className="text-[2rem] font-semibold leading-[1.02] tracking-tight text-white">
-              Direct Future Predictions
+              Sign In
             </h1>
           </motion.div>
 
@@ -188,13 +236,14 @@ export default function SignInPage() {
               className="absolute inset-0 rounded-[30px]"
               style={{
                 boxShadow:
-                  "0 0 0 1px rgba(148,163,184,0.16), 0 0 34px rgba(45,212,191,0.14), 0 0 90px rgba(45,212,191,0.08)",
+                  "0 0 0 1px rgba(148,163,184,0.15), 0 0 34px rgba(45,212,191,0.12), 0 0 90px rgba(45,212,191,0.07)",
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(94,234,212,0.16) 46%, rgba(94,234,212,0.06) 100%)",
+                  "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(94,234,212,0.14) 46%, rgba(94,234,212,0.05) 100%)",
               }}
             />
 
-            <div className="relative overflow-hidden rounded-[30px] bg-[#07111c]/92 backdrop-blur-2xl">
+            <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-200/30 to-transparent" />
               <SignIn
                 appearance={{
                   variables: {
@@ -202,7 +251,7 @@ export default function SignInPage() {
                     colorBackground: "transparent",
                     colorText: "#f8fafc",
                     colorTextSecondary: "#cbd5e1",
-                    colorInputBackground: "rgba(255,255,255,0.06)",
+                    colorInputBackground: "rgba(255,255,255,0.04)",
                     colorInputText: "#ffffff",
                     colorDanger: "#fb7185",
                     borderRadius: "18px",
@@ -214,30 +263,35 @@ export default function SignInPage() {
                     header: "hidden",
                     headerTitle: "hidden",
                     headerSubtitle: "hidden",
+                    main: "gap-5",
                     socialButtonsBlockButton:
-                      "h-12 rounded-2xl border border-white/10 bg-white/[0.03] text-white shadow-none hover:bg-white/[0.05]",
+                      "h-12 rounded-2xl border border-white/10 bg-white/[0.03] text-white shadow-none transition hover:bg-white/[0.05]",
                     socialButtonsBlockButtonText: "text-sm font-medium text-white",
+                    dividerRow: "px-6",
                     dividerLine: "bg-white/10",
                     dividerText: "text-slate-500 text-[11px] uppercase tracking-[0.18em]",
-                    formFieldLabel: "text-slate-200 text-[13px] font-medium",
+                    formContainer: "px-6 pt-6 pb-2",
+                    formFieldRow: "gap-2",
+                    formFieldLabel: "text-[12px] font-medium text-slate-300",
                     formFieldInput:
-                      "h-14 rounded-[22px] border border-white/10 bg-white text-slate-700 placeholder:text-slate-500 focus:border-teal-300/60 focus:ring-0",
+                      "h-14 rounded-2xl border border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus:border-teal-300/50 focus:ring-1 focus:ring-teal-300/20",
                     formButtonPrimary:
-                      "h-14 rounded-[22px] border-0 bg-teal-300 text-[15px] font-semibold text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] hover:bg-teal-200",
-                    footer: "pb-6 px-6",
-                    footerAction: "pt-2",
+                      "h-14 rounded-2xl border-0 bg-teal-300 text-[15px] font-medium text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] transition hover:bg-teal-200 active:scale-[0.99]",
+                    footer: "px-6 pb-6 pt-3",
+                    footerAction: "pt-1",
                     footerActionText: "text-slate-300",
-                    footerActionLink: "text-teal-300 hover:text-teal-200 font-medium",
+                    footerActionLink: "font-medium text-teal-300 transition hover:text-teal-200",
                     identityPreviewText: "text-slate-200",
                     identityPreviewEditButton: "text-teal-300 hover:text-teal-200",
                     formResendCodeLink: "text-teal-300 hover:text-teal-200",
                     otpCodeFieldInput:
-                      "h-12 w-10 rounded-2xl border border-white/10 bg-white/[0.06] text-white",
+                      "h-12 w-10 rounded-2xl border border-white/10 bg-black/20 text-white",
                     alert:
-                      "rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200",
+                      "rounded-[18px] border border-rose-300/30 bg-rose-500/10 text-rose-100",
                     formFieldWarningText: "text-rose-300",
                     formFieldSuccessText: "text-teal-200",
-                    formContainer: "pt-6 px-6",
+                    formNotice: "text-slate-400",
+                    formNoticeText: "text-slate-400",
                   },
                 }}
               />
