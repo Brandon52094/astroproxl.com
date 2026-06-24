@@ -1,4 +1,4 @@
-5export type GeoapifyFeature = {
+export type GeoapifyFeature = {
   properties?: {
     formatted?: string;
     lat?: number;
