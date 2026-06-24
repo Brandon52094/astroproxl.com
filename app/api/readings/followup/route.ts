@@ -1,6 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 
 interface PlanetPlacement {
   name: string;
@@ -48,8 +47,6 @@ export async function POST(request: NextRequest) {
       .map(p => `${p.name}: ${p.sign} ${p.degree}${p.house ? ` (House ${p.house})` : ""}`)
       .join("\n");
 
-    const voiceBlock = buildVoiceCalibrationBlock(body.tropical.planets);
-
     const conversationBlock = body.conversationHistory
       ? `\nPREVIOUS CONVERSATION:\n${body.conversationHistory}\n`
       : "";
@@ -65,7 +62,7 @@ export async function POST(request: NextRequest) {
       "",
       "NATAL PLACEMENTS:",
       planetList,
-      voiceBlock,
+      "",
       "ORIGINAL READING:",
       body.originalReading,
       conversationBlock,
@@ -82,8 +79,6 @@ export async function POST(request: NextRequest) {
       "- Outcomes as facts. Named degrees and house numbers.",
       "- 3-5 compact paragraphs maximum. No headers.",
       "- End with one sentence that either closes the loop or opens the next natural question.",
-      "- Match the same voice and rhythm the original reading was written in (see VOICE CALIBRATION above) — this is a continuation of one conversation, not a new tone.",
-      "- If voice calibration ever conflicts with the no-fluff, no-hedging rules above, the no-fluff rules win.",
       "",
       "Return ONLY a valid JSON object:",
       '{ "title": "A sharp 4-6 word title specific to their question", "content": "The deeper response as flowing prose." }',
@@ -99,7 +94,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1200,
-        system: "You are a precision astrologer. You just gave this person a reading and they have a follow-up question. You know their chart completely. Speak directly, go deeper, answer exactly what they asked. Match the voice calibration provided in the prompt — this is a continuation of the same conversation, not a new tone. Output ONLY raw valid JSON — no markdown, no code fences.",
+        system: "You are a precision astrologer. You just gave this person a reading and they have a follow-up question. You know their chart completely. Speak directly, go deeper, answer exactly what they asked. Output ONLY raw valid JSON — no markdown, no code fences.",
         messages: [{ role: "user", content: prompt }],
       }),
     });

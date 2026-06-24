@@ -370,8 +370,8 @@ export async function POST(request: NextRequest) {
     let parsed: { pages: ReadingPage[] };
     try {
       let cleaned = rawText.trim();
-      if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
-      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
+      if (cleaned.startsWith("\`\`\`")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
+      if (cleaned.endsWith("\`\`\`")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("\`\`\`"));
       cleaned = cleaned.trim();
       const start = cleaned.indexOf("{");
       const end = cleaned.lastIndexOf("}");
