@@ -174,7 +174,7 @@ export default function SignInPage() {
             </p>
 
             <h1 className="text-[2rem] font-semibold leading-[1.02] tracking-tight text-white">
-              Sign In
+              Direct Future Predictions
             </h1>
           </motion.div>
 
