@@ -150,8 +150,8 @@ export default function SignInPage() {
   });
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#050816] text-white">
-      <div className="pointer-events-none absolute inset-0">
+    <main className="relative min-h-[100dvh] overflow-hidden bg-[#040611] text-white">
+      <div className="pointer-events-none fixed inset-0">
         <div
           className="absolute inset-0"
           style={{
@@ -309,10 +309,29 @@ export default function SignInPage() {
                 opacity: 1 !important;
               }
 
+              @keyframes cooldownPulse {
+                0%,
+                100% {
+                  box-shadow:
+                    0 0 0 1px rgba(99, 102, 241, 0.2),
+                    0 0 20px rgba(99, 102, 241, 0.08);
+                }
+                50% {
+                  box-shadow:
+                    0 0 0 1px rgba(99, 102, 241, 0.4),
+                    0 0 28px rgba(99, 102, 241, 0.16);
+                }
+              }
+
               .cl-box :global(input) {
                 color: #ffffff !important;
                 background-color: rgba(255, 255, 255, 0.04) !important;
-                border-color: rgba(255, 255, 255, 0.12) !important;
+                border: 1px solid rgba(99, 102, 241, 0.2) !important;
+                animation: cooldownPulse 3s ease-in-out infinite;
+              }
+
+              .cl-box :global(input:focus) {
+                border-color: rgba(129, 140, 248, 0.5) !important;
               }
 
               .cl-box :global(input::placeholder) {
@@ -321,8 +340,9 @@ export default function SignInPage() {
 
               .cl-box :global(button[data-localization-key*="formButtonPrimary"]),
               .cl-box :global(.cl-formButtonPrimary) {
-                background-color: #5eead4 !important;
-                color: #022c22 !important;
+                background-color: #818cf8 !important;
+                color: #1e1b4b !important;
+                animation: cooldownPulse 3s ease-in-out infinite;
               }
 
               .cl-box :global(.cl-footer),
@@ -369,9 +389,9 @@ export default function SignInPage() {
                     dividerText: "text-slate-400 text-[11px] uppercase tracking-[0.18em]",
                     formFieldLabel: "!text-slate-300 text-[13px] font-medium",
                     formFieldInput:
-                      "h-14 rounded-[20px] border border-white/10 !bg-white/[0.04] !text-white placeholder:text-slate-400 focus:border-teal-300/50 focus:ring-0",
+                      "h-14 rounded-[20px] border border-indigo-400/20 !bg-white/[0.04] !text-white placeholder:text-slate-400 focus:border-indigo-300/50 focus:ring-0",
                     formButtonPrimary:
-                      "h-14 rounded-[20px] border-0 !bg-teal-300 text-[15px] font-semibold !text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] hover:!bg-teal-200",
+                      "h-14 rounded-[20px] border-0 !bg-indigo-400 text-[15px] font-semibold !text-indigo-950 shadow-[0_10px_30px_rgba(99,102,241,0.22)] hover:!bg-indigo-300",
                     footer: "pb-6 px-6 bg-transparent",
                     footerAction: "pt-2",
                     footerActionText: "!text-slate-400",
