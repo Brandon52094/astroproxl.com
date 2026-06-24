@@ -25,6 +25,25 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 
+// TikTok pixel global
+declare global {
+  interface Window {
+    ttq?: {
+      track: (event: string, params?: Record<string, unknown>) => void;
+    };
+  }
+}
+
+function trackTtq(event: string, params?: Record<string, unknown>) {
+  try {
+    if (typeof window !== "undefined" && window.ttq) {
+      window.ttq.track(event, params);
+    }
+  } catch {
+    // silent — never let pixel tracking break the actual flow
+  }
+}
+
 const AREAS = [
   {
     id: "love",
@@ -257,6 +276,10 @@ export default function ReadingIntakeScreen() {
     if (!canSubmit || !selectedArea) return;
     setIsCreatingReading(true);
     setSubmitError(null);
+
+    // AddToCart — user has committed to this specific reading (area + question)
+    trackTtq("AddToCart", { content_id: selectedArea });
+
     try {
       clearIntake();
       clearReading();
@@ -289,6 +312,10 @@ export default function ReadingIntakeScreen() {
         if (Number(creditsData.credits ?? 0) <= 0) {
           const paywallsCompleted = Number(creditsData.paywallsCompleted ?? 0);
           const paywallIndex = Math.min(paywallsCompleted + 1, 4);
+
+          // InitiateCheckout — about to redirect to Stripe for payment
+          trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.00, currency: "USD" });
+
           const checkoutRes = await fetch("/api/stripe/checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -318,6 +345,7 @@ export default function ReadingIntakeScreen() {
 
   const handleBypass = async () => {
     setIsBypassLoading(true);
+    trackTtq("InitiateCheckout", { content_id: "bypass", value: 6.00, currency: "USD" });
     try {
       await fetch("/api/user/bypass-reset", { method: "POST" });
 
@@ -693,6 +721,7 @@ export default function ReadingIntakeScreen() {
                       onClick={() => {
                         setSelectedArea(area.id);
                         setQuestion("");
+                        trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
                       }}
                       animate={
                         isSelected
@@ -970,6 +999,7 @@ export default function ReadingIntakeScreen() {
                           disabled={isSubscribeLoading}
                           onClick={async () => {
                             setIsSubscribeLoading(true);
+                            trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
                             try {
                               const res = await fetch("/api/stripe/checkout", {
                                 method: "POST",
