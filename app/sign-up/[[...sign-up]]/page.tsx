@@ -156,15 +156,15 @@ export default function SignUpPage() {
   });
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#050816] text-white">
+    <main className="relative min-h-[100dvh] overflow-hidden bg-[#040611] text-white">
       <motion.div
-        className="pointer-events-none absolute inset-0 z-50 bg-black"
+        className="pointer-events-none fixed inset-0 z-50 bg-black"
         initial={{ opacity: 1 }}
         animate={{ opacity: hasMounted ? 0 : 1 }}
         transition={{ duration: shouldReduceMotion ? 0.01 : 0.6, ease: "easeOut" }}
       />
 
-      <div className="pointer-events-none absolute inset-0">
+      <div className="pointer-events-none fixed inset-0">
         <div
           className="absolute inset-0"
           style={{
