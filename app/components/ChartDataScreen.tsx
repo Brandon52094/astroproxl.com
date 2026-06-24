@@ -21,6 +21,15 @@ import { saveChart, loadChart } from "@/lib/chartStore";
 
 type SectionId = "birth" | "chart";
 
+// TikTok pixel global — declared here so TypeScript recognizes window.ttq
+declare global {
+  interface Window {
+    ttq?: {
+      track: (event: string, params?: Record<string, unknown>) => void;
+    };
+  }
+}
+
 type ResolvedPlace = {
   label: string;
   lat: number;
@@ -220,6 +229,18 @@ export default function ChartDataScreen() {
       if (!response.ok || !data.success) throw new Error(data.error ?? "Chart calculation failed.");
       setChartData(data);
       setBirthDate(normalizedDate);
+
+      // Fire TikTok CompleteRegistration once — this is the true "finished
+      // signing up and gave real data" moment, not just account creation.
+      try {
+        const alreadyFired = localStorage.getItem("ttq_registration_fired");
+        if (!alreadyFired && typeof window !== "undefined" && window.ttq) {
+          window.ttq.track("CompleteRegistration");
+          localStorage.setItem("ttq_registration_fired", "1");
+        }
+      } catch {
+        // silent — never let pixel tracking break the actual flow
+      }
 
       saveChart({
         birthDate: normalizedDate,
