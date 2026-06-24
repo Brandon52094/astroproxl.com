@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Next.js standard method for viewport handling
+// Next.js handles viewport settings through this dedicated export
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -42,12 +42,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased bg-[#040611]`}
     >
       <head>
-        {/* Forces the interactive software keyboard to resize layout space rather than push it out of bounds */}
+        {/* interactive-widget is kept here as a raw tag since Next.js viewport object doesn't fully map it natively yet */}
         <meta name="viewport" content="interactive-widget=resizes-content" />
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className="h-full overflow-hidden bg-[#040611] text-foreground">
-        {/* TikTok Pixel */}
+        {/* TikTok Pixel — loads after page becomes interactive, doesn't block render */}
         <Script id="tiktok-pixel" strategy="afterInteractive">
           {`
             !function (w, d, t) {
@@ -60,8 +60,11 @@ export default function RootLayout({
           `}
         </Script>
         <ClerkProvider>
-          {/* bg-background uses the dark variables, p-safe pads the inner page from the battery/home bars */}
-          <main className="h-full w-full bg-background p-safe">
+          {/* Added CSS Safe Area padding utilities to the main wrapper. 
+            This allows your deep dark [#040611] background to fill the whole screen (borders gone), 
+            but keeps the actual layout items perfectly within the safe boundaries.
+          */}
+          <main className="h-full w-full bg-[#040611] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
             {children}
           </main>
         </ClerkProvider>

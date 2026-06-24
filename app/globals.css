@@ -84,8 +84,7 @@
 }
 
 .dark {
-  /* Match layout background */
-  --background: #040611; 
+  --background: #050816;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -135,21 +134,5 @@
   body {
     @apply bg-background text-foreground;
     margin: 0;
-  }
-}
-
-/* Tailwind v4 custom layout utilities for iOS edge-to-edge safe boundaries */
-@layer utilities {
-  .p-safe {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-  }
-  .pt-safe {
-    padding-top: env(safe-area-inset-top);
-  }
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
   }
 }
