@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildPlacementVoiceBlock } from "@/lib/signVoice";
+import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 
 interface PlanetPlacement {
   name: string;
@@ -83,7 +83,7 @@ interface ReadingPage {
   pageNumber: 1;
   title: string;
   content: string;
-  sources?: ReadingSource[]; // NEW
+  sources?: ReadingSource[];
 }
 
 interface ReadingRequestBody {
@@ -125,82 +125,109 @@ function fmtSolarArc(p: SolarArcPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree;
 }
 
-
 function buildReadingPrompt(body: ReadingRequestBody): string {
-  const { topic, question, tropical, sidereal, transits, profection, progressions, solarArcs, upcomingTrigger, planetaryStations, solarReturn } = body;
+  const {
+    topic,
+    question,
+    tropical,
+    sidereal,
+    transits,
+    profection,
+    progressions,
+    solarArcs,
+    upcomingTrigger,
+    planetaryStations,
+    solarReturn,
+  } = body;
 
   const topicLabel =
-    topic === "love" ? "love and relationships"
-    : topic === "career" ? "career and professional life"
-    : topic === "money" ? "money and finances"
-    : "life in general";
+    topic === "love"
+      ? "love and relationships"
+      : topic === "career"
+      ? "career and professional life"
+      : topic === "money"
+      ? "money and finances"
+      : "life in general";
 
   const currentDateString = new Date().toLocaleDateString("en-US", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 
   const upcomingTriggerBlock = upcomingTrigger
-    ? NL + "NEXT EXACT ASPECT (Ephemeris-Calculated — use as a primary date anchor):" + NL
-      + upcomingTrigger.transitPlanet + " " + upcomingTrigger.aspect + " natal " + upcomingTrigger.natalPlanet
-      + " — exact within 1° on " + upcomingTrigger.date + NL
+    ? NL +
+      "NEXT EXACT ASPECT (Ephemeris-Calculated — use as a primary date anchor):" +
+      NL +
+      upcomingTrigger.transitPlanet +
+      " " +
+      upcomingTrigger.aspect +
+      " natal " +
+      upcomingTrigger.natalPlanet +
+      " — exact within 1° on " +
+      upcomingTrigger.date +
+      NL
     : "";
 
-  const progressionsBlock = progressions && progressions.length > 0
-    ? NL + "SECONDARY PROGRESSIONS (Current):" + NL + progressions.map(fmtProgression).join(NL) + NL
-    : "";
+  const progressionsBlock =
+    progressions && progressions.length > 0
+      ? NL +
+        "SECONDARY PROGRESSIONS (Current):" +
+        NL +
+        progressions.map(fmtProgression).join(NL) +
+        NL
+      : "";
 
-  const solarArcsBlock = solarArcs && solarArcs.length > 0
-    ? NL + "SOLAR ARC DIRECTIONS (Current):" + NL + solarArcs.map(fmtSolarArc).join(NL) + NL
-    : "";
+  const solarArcsBlock =
+    solarArcs && solarArcs.length > 0
+      ? NL +
+        "SOLAR ARC DIRECTIONS (Current):" +
+        NL +
+        solarArcs.map(fmtSolarArc).join(NL) +
+        NL
+      : "";
 
-  const stationsBlock = planetaryStations && planetaryStations.length > 0
-    ? NL + [
-      "PLANETARY STATIONS (next 60 days — crystallization points):",
-      "Stations with natal hits are PRIMARY date anchors. A planet stationing on a natal point forces an unavoidable crystallization of that house theme.",
-      ...planetaryStations.map(s => {
-        const hit = s.natalPlanetHit
-          ? ` — stations within ${s.orbDegrees}° of natal ${s.natalPlanetHit} (House ${s.natalHouse})`
-          : " — no exact natal hit within 3°";
-        return `${s.planet} stations ${s.stationType.toUpperCase()} on ${s.stationDate} at ${s.degree} ${s.sign}${hit}`;
-      }),
-      ""
-    ].join(NL)
-    : "";
+  const stationsBlock =
+    planetaryStations && planetaryStations.length > 0
+      ? NL +
+        [
+          "PLANETARY STATIONS (next 60 days — crystallization points):",
+          "Stations with natal hits are PRIMARY date anchors. A planet stationing on a natal point forces an unavoidable crystallization of that house theme.",
+          ...planetaryStations.map((s) => {
+            const hit = s.natalPlanetHit
+              ? ` — stations within ${s.orbDegrees}° of natal ${s.natalPlanetHit} (House ${s.natalHouse})`
+              : " — no exact natal hit within 3°";
+            return `${s.planet} stations ${s.stationType.toUpperCase()} on ${s.stationDate} at ${s.degree} ${s.sign}${hit}`;
+          }),
+          "",
+        ].join(NL)
+      : "";
 
   const solarReturnBlock = solarReturn
-    ? NL + [
-      `SOLAR RETURN (${solarReturn.sunReturnDate} — cast for ${solarReturn.location}):`,
-      `SR Ascendant: ${solarReturn.ascendant.sign} ${solarReturn.ascendant.degree}`,
-      `SR Midheaven: ${solarReturn.midheaven.sign} ${solarReturn.midheaven.degree}`,
-      solarReturn.timeLordInSR
-        ? `Time Lord (${profection.timeLord}) falls in SR ${solarReturn.timeLordInSR} — this is how ${profection.timeLord} will behave this year.`
-        : "",
-      "SR Planets: " + solarReturn.planets.map(p => `${p.name} ${p.sign} H${p.house}`).join(", "),
-      "FILTER RULE: A transit must be reflected in the Solar Return chart themes to trigger a major physical event. Use SR to confirm or downgrade transit predictions.",
-      ""
-    ].filter(Boolean).join(NL)
+    ? NL +
+      [
+        `SOLAR RETURN (${solarReturn.sunReturnDate} — cast for ${solarReturn.location}):`,
+        `SR Ascendant: ${solarReturn.ascendant.sign} ${solarReturn.ascendant.degree}`,
+        `SR Midheaven: ${solarReturn.midheaven.sign} ${solarReturn.midheaven.degree}`,
+        solarReturn.timeLordInSR
+          ? `Time Lord (${profection.timeLord}) falls in SR ${solarReturn.timeLordInSR} — this is how ${profection.timeLord} will behave this year.`
+          : "",
+        "SR Planets: " +
+          solarReturn.planets.map((p) => `${p.name} ${p.sign} H${p.house}`).join(", "),
+        "FILTER RULE: A transit must be reflected in the Solar Return chart themes to trigger a major physical event. Use SR to confirm or downgrade transit predictions.",
+        "",
+      ]
+        .filter(Boolean)
+        .join(NL)
     : "";
 
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
 
-  const sun = tropical.planets.find(p => p.name === "Sun");
-  const moon = tropical.planets.find(p => p.name === "Moon");
-  const rising = tropical.planets.find(p => p.name === "Ascendant");
-  const mercury = tropical.planets.find(p => p.name === "Mercury");
-  const venus = tropical.planets.find(p => p.name === "Venus");
-
-  const voiceBlocks = [
-    buildPlacementVoiceBlock("sun", "Sun", sun?.sign),
-    buildPlacementVoiceBlock("moon", "Moon", moon?.sign),
-    buildPlacementVoiceBlock("rising", "Rising", rising?.sign),
-    buildPlacementVoiceBlock("mercury", "Mercury", mercury?.sign),
-    buildPlacementVoiceBlock("venus", "Venus", venus?.sign),
-  ].filter(Boolean);
-
-  const big3Block = voiceBlocks.length > 0
-    ? NL + "VOICE CALIBRATION — DELIVERY, NOT CONTENT (use to shape rhythm and trigger only — never name a placement as the reason for your tone, never say 'because you're a Pisces Moon' or similar):" + NL
-      + voiceBlocks.join(NL + NL) + NL
-    : "";
+  // Chart-specific blended voice calibration (Sun, Moon, Rising, Mercury, Venus)
+  const voiceCalibrationBlock = buildVoiceCalibrationBlock(
+    tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))
+  );
 
   const aspectList = tropical.aspects
     .slice()
@@ -228,7 +255,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "CHART DATA",
     "═══════════════════════════════════════════",
     "TODAY: " + currentDateString,
-    big3Block,
+    voiceCalibrationBlock,
     upcomingTriggerBlock,
     stationsBlock,
     solarReturnBlock,
@@ -336,7 +363,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as ReadingRequestBody;
+    const body = (await request.json()) as ReadingRequestBody;
 
     if (!body.topic || !body.question || !body.tropical || !body.transits || !body.profection) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
@@ -359,7 +386,8 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 3000,
-        system: "You are a precision astrologer with no filter. You are this person's personal astrologer — you know their chart completely and speak to them directly, without softening, without hedging, without generic language. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page with a content field and a sources field. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate. Keep the reading tight and mobile-optimized — no padding, no fluff, best information only. Every specific date in the content must be wrapped in [[DATE: ...]] brackets.",
+        system:
+          "You are a precision astrologer with no filter. You are this person's personal astrologer — you know their chart completely and speak to them directly, without softening, without hedging, without generic language. You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a single parseable JSON object containing one page with a content field and a sources field. You speak to the person as 'you' in every sentence. You state outcomes as facts. You name specific degrees, dates, and planetary events throughout. Your tone is direct, unfiltered, and unnervingly accurate. Keep the reading tight and mobile-optimized — no padding, no fluff, best information only. Every specific date in the content must be wrapped in [[DATE: ...]] brackets.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -367,14 +395,20 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const err = await response.text();
       console.error("[readings] Claude error:", err);
-      return NextResponse.json({ error: "Failed to generate reading. Please try again." }, { status: 502 });
+      return NextResponse.json(
+        { error: "Failed to generate reading. Please try again." },
+        { status: 502 }
+      );
     }
 
     const claudeData = await response.json();
     const rawText = claudeData.content?.[0]?.text;
 
     if (!rawText) {
-      return NextResponse.json({ error: "No response from reading engine." }, { status: 502 });
+      return NextResponse.json(
+        { error: "No response from reading engine." },
+        { status: 502 }
+      );
     }
 
     let parsed: { pages: ReadingPage[] };
@@ -393,25 +427,36 @@ export async function POST(request: NextRequest) {
       console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
       console.error("[readings] Raw response start:", rawText.slice(0, 300));
       console.error("[readings] Raw response end:", rawText.slice(-200));
-      return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
+      return NextResponse.json(
+        { error: "Failed to parse reading. Please try again." },
+        { status: 422 }
+      );
     }
 
     if (!parsed.pages || parsed.pages.length < 1) {
-      return NextResponse.json({ error: "Reading structure was incomplete. Please try again." }, { status: 422 });
+      return NextResponse.json(
+        { error: "Reading structure was incomplete. Please try again." },
+        { status: 422 }
+      );
     }
 
-    return NextResponse.json({
-      reading: {
-        id: crypto.randomUUID(),
-        pages: parsed.pages,
-        topic: body.topic,
-        question: body.question,
-        status: "complete",
+    return NextResponse.json(
+      {
+        reading: {
+          id: crypto.randomUUID(),
+          pages: parsed.pages,
+          topic: body.topic,
+          question: body.question,
+          status: "complete",
+        },
       },
-    }, { status: 201 });
-
+      { status: 201 }
+    );
   } catch (error) {
     console.error("[readings] Unexpected error:", error);
-    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }
