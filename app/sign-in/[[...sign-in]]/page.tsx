@@ -302,29 +302,54 @@ export default function SignInPage() {
               .sign-in-glow {
                 animation: signInBreathe 3.4s ease-in-out infinite;
               }
-              .cl-footer,
-              .cl-footerAction,
-              .cl-footerActionText,
-              .cl-footer p,
-              .cl-footer a,
-              .cl-footer span {
-                color: rgb(148 163 184) !important;
+
+              .cl-box :global(label),
+              .cl-box :global(.cl-formFieldLabel) {
+                color: #cbd5e1 !important;
+                opacity: 1 !important;
               }
-              .cl-footerActionLink {
-                color: rgb(94 234 212) !important;
+
+              .cl-box :global(input) {
+                color: #ffffff !important;
+                background-color: rgba(255, 255, 255, 0.04) !important;
+                border-color: rgba(255, 255, 255, 0.12) !important;
+              }
+
+              .cl-box :global(input::placeholder) {
+                color: rgba(148, 163, 184, 0.7) !important;
+              }
+
+              .cl-box :global(button[data-localization-key*="formButtonPrimary"]),
+              .cl-box :global(.cl-formButtonPrimary) {
+                background-color: #5eead4 !important;
+                color: #022c22 !important;
+              }
+
+              .cl-box :global(.cl-footer),
+              .cl-box :global(.cl-footer *) {
+                color: #94a3b8 !important;
+                background: transparent !important;
+              }
+
+              .cl-box :global(.cl-footerActionLink) {
+                color: #5eead4 !important;
+              }
+
+              .cl-box :global(.cl-badge) {
+                color: #64748b !important;
               }
             `}</style>
 
             <div className="sign-in-glow absolute inset-0 rounded-[30px]" />
 
-            <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
+            <div className="cl-box relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
               <SignIn
                 appearance={{
                   variables: {
                     colorPrimary: "#5eead4",
                     colorBackground: "transparent",
                     colorText: "#f8fafc",
-                    colorTextSecondary: "#94a3b8",
+                    colorTextSecondary: "#cbd5e1",
                     colorInputBackground: "rgba(255,255,255,0.04)",
                     colorInputText: "#ffffff",
                     colorDanger: "#fb7185",
@@ -342,20 +367,20 @@ export default function SignInPage() {
                     socialButtonsBlockButtonText: "text-sm font-medium text-white",
                     dividerLine: "bg-white/10",
                     dividerText: "text-slate-400 text-[11px] uppercase tracking-[0.18em]",
-                    formFieldLabel: "text-slate-300 text-[13px] font-medium",
+                    formFieldLabel: "!text-slate-300 text-[13px] font-medium",
                     formFieldInput:
-                      "h-14 rounded-[20px] border border-white/10 bg-white/[0.03] text-white placeholder:text-slate-500 focus:border-teal-300/50 focus:bg-teal-300/[0.04] focus:ring-0",
+                      "h-14 rounded-[20px] border border-white/10 !bg-white/[0.04] !text-white placeholder:text-slate-400 focus:border-teal-300/50 focus:ring-0",
                     formButtonPrimary:
-                      "h-14 rounded-[20px] border-0 bg-teal-300 text-[15px] font-semibold text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] hover:bg-teal-200",
+                      "h-14 rounded-[20px] border-0 !bg-teal-300 text-[15px] font-semibold !text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] hover:!bg-teal-200",
                     footer: "pb-6 px-6 bg-transparent",
                     footerAction: "pt-2",
-                    footerActionText: "text-slate-400",
-                    footerActionLink: "text-teal-300 hover:text-teal-200 font-medium",
-                    identityPreviewText: "text-slate-300",
-                    identityPreviewEditButton: "text-teal-300 hover:text-teal-200",
-                    formResendCodeLink: "text-teal-300 hover:text-teal-200",
+                    footerActionText: "!text-slate-400",
+                    footerActionLink: "!text-teal-300 hover:!text-teal-200 font-medium",
+                    identityPreviewText: "!text-slate-300",
+                    identityPreviewEditButton: "!text-teal-300 hover:!text-teal-200",
+                    formResendCodeLink: "!text-teal-300 hover:!text-teal-200",
                     otpCodeFieldInput:
-                      "h-12 w-10 rounded-[16px] border border-white/10 bg-white/[0.04] text-white",
+                      "h-12 w-10 rounded-[16px] border border-white/10 !bg-white/[0.04] !text-white",
                     alert:
                       "rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200",
                     formFieldWarningText: "text-rose-300",
