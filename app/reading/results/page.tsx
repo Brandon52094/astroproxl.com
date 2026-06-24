@@ -22,7 +22,7 @@ function setPaymentReturnFlag() {
 
 function consumePaymentReturnFlag(): boolean {
   if (typeof window === "undefined") return false;
-  const exists = localStorage.getItem(PAYåMENT_FLAG_KEY) === "1";
+  const exists = localStorage.getItem(PAYMENT_FLAG_KEY) === "1";
   localStorage.removeItem(PAYMENT_FLAG_KEY);
   return exists;
 }
@@ -331,7 +331,6 @@ function ResultsPageInner() {
       doc.setTextColor(200, 200, 215);
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      // Strip date markup tags before generating the PDF
       const cleanContent = (page?.content ?? "").replace(/\[\[DATE:\s*(.+?)\]\]/g, "$1");
       const contentLines = doc.splitTextToSize(cleanContent, maxWidth);
       let y = 60;
@@ -567,7 +566,7 @@ function ResultsPageInner() {
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
                     <p className="mb-3 text-[11px] text-slate-500">
-                                       Don't over think this. Just say what's on your mind.
+                      Don't over think this. Just say what's on your mind.
                     </p>
                   </>
                 )}
