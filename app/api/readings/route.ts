@@ -124,6 +124,108 @@ function fmtSolarArc(p: SolarArcPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree;
 }
 
+// ── Sign voice table — rhythm/trigger/forbidden per sign, reused across placements ──
+interface SignVoice {
+  rhythm: string;
+  trigger: string;
+  forbidden: string;
+}
+
+const SIGN_VOICE: Record<string, SignVoice> = {
+  aries: {
+    rhythm: "Direct, rapid, and combative. Lead with the core conclusion. Short, heavy, declarative sentences.",
+    trigger: "Challenge their impulse control. Frame reality as an immediate wall they must either break through or crash into.",
+    forbidden: "Never use tentative build-ups, academic preambles, or soft, comforting validations. Strip all fluff.",
+  },
+  taurus: {
+    rhythm: "Grounded, unhurried, and dense. Use concrete, heavy sensory language and material-world concepts.",
+    trigger: "Target their stubborn resistance to change. Contrast temporary comfort against long-term stagnation.",
+    forbidden: "Never use hyperactive concept-jumping or purely abstract, ungrounded esoteric spiritualizing.",
+  },
+  gemini: {
+    rhythm: "Quick, dualistic, and varied. Shift angles rapidly. Use sharp, intellectual contrasts and dialectical tension.",
+    trigger: "Expose their over-intellectualization loop. Call out how they use analysis to escape taking actual physical action.",
+    forbidden: "Never deliver a singular, heavy, monotonous wall of prose. Keep the rhythm kinetic and multi-faceted.",
+  },
+  cancer: {
+    rhythm: "Precise but intimate. Quiet, heavy authority. Use language that addresses localized roots and protective armor.",
+    trigger: "Pierce the defensive shell directly. Address the hidden emotional weight they are currently hyper-protecting.",
+    forbidden: "Never use cold, purely robotic engineering terminology. The tone must feel like a quiet, inescapable truth.",
+  },
+  leo: {
+    rhythm: "Bold, absolute, and commanding. Speak with unwavering structural authority. Use high-stakes, dramatic framings.",
+    trigger: "Target their core identity and sovereignty. Frame the current bottleneck as a compromise of their actual stature.",
+    forbidden: "Never speak with passive, tepid, or secondary-status language. Do not diminish the scale of the diagnostic.",
+  },
+  virgo: {
+    rhythm: "Surgical, hyper-specific, and analytical. Name exact degrees, houses, and precise behavioral mechanics.",
+    trigger: "Weaponize their obsession with error. Show them the mathematical inevitability of their current self-sabotage loop.",
+    forbidden: "Never use vague generalizations, hand-waving predictions, or unquantifiable mystical metaphors.",
+  },
+  libra: {
+    rhythm: "Measured, objective, and clear. Structural symmetry. Present truths as unyielding geometric balances.",
+    trigger: "Confront their paralyzing hesitation. Strip away their polite justifications and force them to look at the raw discrepancy.",
+    forbidden: "Never pick a side out of bias; state the structural verdict so cleanly that there is no room to negotiate.",
+  },
+  scorpio: {
+    rhythm: "Deep, intense, and heavily compressed. Fewer words, massive psychological weight. Pure unfiltered exposure.",
+    trigger: "Unearth the hidden power dynamic, taboo truth, or survival mechanism they are actively keeping in the dark.",
+    forbidden: "Never use superficial reassurances, generic positive affirmations, or polite, corporate-softened language.",
+  },
+  sagittarius: {
+    rhythm: "Expansive, blunt, and unhedged. Large-scale structural framing. Direct, perspective-shifting delivery.",
+    trigger: "Confront their ideological denial. Call out where they are running from real-world details in search of a broad fantasy.",
+    forbidden: "Never deliver tedious micro-step instructions or defensive, risk-averse, hyper-cautious warnings.",
+  },
+  capricorn: {
+    rhythm: "Practical, cold, and heavily structured. Architectural reality. Focus entirely on material load-bearing capacity.",
+    trigger: "Audit their operational overhead. Expose where they are building on soft ground or tolerating structurally broken dynamics.",
+    forbidden: "Never offer emotional coddling or vague, un-executable spiritual advice. It must be a tactical reality check.",
+  },
+  aquarius: {
+    rhythm: "Sharp, clinical, and completely unconventional. Detached overview. Present facts from a high, objective distance.",
+    trigger: "Deconstruct their rationalizations. Challenge their need to feel detached or different from the actual messy friction.",
+    forbidden: "Never use traditional, copy-paste horoscopic phrases or standard emotional-validation frameworks.",
+  },
+  pisces: {
+    rhythm: "Intuitive, layered, and deep. Use precise structural metaphors that track the underlying porous, dissolving currents.",
+    trigger: "Dissolve their illusions. Force them to confront exactly where they are drifting to avoid a hard reality threshold.",
+    forbidden: "Never use rigid, superficial checklist language that ignores the underlying psychological matrix.",
+  },
+};
+
+const DEFAULT_SIGN_VOICE: SignVoice = {
+  rhythm: "Clear, direct, and entirely grounded in the mechanical facts of the chart.",
+  trigger: "Confront the pattern in the chart data directly, without softening.",
+  forbidden: "Never use vague generalizations or unearned reassurance.",
+};
+
+function getSignVoice(sign: string | undefined): SignVoice {
+  if (!sign) return DEFAULT_SIGN_VOICE;
+  return SIGN_VOICE[sign.toLowerCase()] ?? DEFAULT_SIGN_VOICE;
+}
+
+// What each placement governs — used to frame why its sign-voice applies to that domain
+const PLACEMENT_DOMAIN: Record<string, string> = {
+  sun: "core identity and how directives land with their baseline confidence",
+  moon: "emotional register — how much feeling-language versus blunt fact is true to them",
+  rising: "opening energy — how the reading should walk in the room",
+  mercury: "sentence rhythm and how directly they want to be told things",
+  venus: "what comfort and ease sound like to them, specifically in the warm closing answer",
+};
+
+function buildPlacementVoiceBlock(placementKey: string, label: string, sign: string | undefined): string {
+  if (!sign) return "";
+  const voice = getSignVoice(sign);
+  const domain = PLACEMENT_DOMAIN[placementKey] ?? "general tone";
+  return [
+    `${label} (${sign}) governs ${domain}:`,
+    `  RHYTHM: ${voice.rhythm}`,
+    `  TRIGGER: ${voice.trigger}`,
+    `  FORBIDDEN: ${voice.forbidden}`,
+  ].join(NL);
+}
+
 function buildReadingPrompt(body: ReadingRequestBody): string {
   const { topic, question, tropical, sidereal, transits, profection, progressions, solarArcs, upcomingTrigger, planetaryStations, solarReturn } = body;
 
@@ -186,13 +288,18 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
   const rising = tropical.planets.find(p => p.name === "Ascendant");
   const mercury = tropical.planets.find(p => p.name === "Mercury");
   const venus = tropical.planets.find(p => p.name === "Venus");
-  const big3Block = (sun || moon || rising || mercury || venus)
-    ? NL + "TONE CALIBRATION PLACEMENTS (use to shape voice only — never name these as the reason for your tone):" + NL
-      + (sun ? `Sun: ${sun.sign} — core identity, baseline confidence and ego expression` + NL : "")
-      + (moon ? `Moon: ${moon.sign} — emotional register, how they process and feel things internally` + NL : "")
-      + (rising ? `Rising: ${rising.sign} — how they come across, first-impression energy` + NL : "")
-      + (mercury ? `Mercury: ${mercury.sign} — how they think and want to be communicated with (direct vs winding, fast vs deliberate, blunt vs gentle)` + NL : "")
-      + (venus ? `Venus: ${venus.sign} — what feels good or comforting to them, their relationship to pleasure and ease` + NL : "")
+
+  const voiceBlocks = [
+    buildPlacementVoiceBlock("sun", "Sun", sun?.sign),
+    buildPlacementVoiceBlock("moon", "Moon", moon?.sign),
+    buildPlacementVoiceBlock("rising", "Rising", rising?.sign),
+    buildPlacementVoiceBlock("mercury", "Mercury", mercury?.sign),
+    buildPlacementVoiceBlock("venus", "Venus", venus?.sign),
+  ].filter(Boolean);
+
+  const big3Block = voiceBlocks.length > 0
+    ? NL + "VOICE CALIBRATION — DELIVERY, NOT CONTENT (use to shape rhythm and trigger only — never name a placement as the reason for your tone, never say 'because you're a Pisces Moon' or similar):" + NL
+      + voiceBlocks.join(NL + NL) + NL
     : "";
 
   const aspectList = tropical.aspects
@@ -276,15 +383,18 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "Everything above is diagnosis. This part is different: directly answer the literal question they asked, in plain human language, like a person who heard them — not a structural readout. Drop the clinical tone here. No new placements, no new degrees. Just land on their actual question with warmth and a real answer, even if the question was casual or funny. This is the moment the reading stops being a report and starts being a person talking to them.",
     "",
     "═══════════════════════════════════════════",
-    "TONE — INFORMED BY SUN, MOON, RISING, MERCURY, VENUS",
+    "TONE — VOICE CALIBRATION FROM SUN, MOON, RISING, MERCURY, VENUS",
     "═══════════════════════════════════════════",
-    "These placements should flavor HOW you talk to them, not just what you predict:",
-    "- Sun shapes baseline confidence in how directives are delivered.",
-    "- Moon shapes emotional texture — how much feeling-language versus blunt fact lands right for them.",
-    "- Rising shapes the opening energy — how the reading should 'walk in the room.'",
-    "- Mercury shapes sentence rhythm and directness — a quick-mutable Mercury (Gemini/Sagittarius/Virgo-adjacent speed) wants short punchy sentences; a fixed or water Mercury (Taurus/Scorpio/Cancer-adjacent) can hold slightly longer, more weighted sentences.",
-    "- Venus shapes what softness or ease should sound like in the warm closing answer (Part 5) specifically — what comfort sounds like to THIS person.",
-    "This is a subtle coloring of voice throughout the whole reading, not a personality test callout — never name any placement as an explanation of tone (never say 'because you're a Pisces Moon' or similar). Just let it shape how you write, especially in Part 5.",
+    "Each placement above came with a RHYTHM, a TRIGGER, and a FORBIDDEN list. These govern delivery, not content — the facts, degrees, dates, and directives stay exactly as the chart data dictates. What changes is how it's said:",
+    "- Sun's RHYTHM sets the baseline confidence and cadence of how directives are delivered.",
+    "- Moon's RHYTHM and TRIGGER set the emotional weight — how much the reading leans into feeling versus blunt fact.",
+    "- Rising's RHYTHM sets how the reading opens — its first-impression energy.",
+    "- Mercury's RHYTHM sets sentence length and directness throughout.",
+    "- Venus's TRIGGER and RHYTHM shape what ease sounds like in the warm closing answer (Part 5) specifically.",
+    "Blend these five voices into one coherent delivery — don't treat them as five separate switches that contradict each other. Where they conflict, let Sun and Mercury dominate sentence-level rhythm, let Moon and Venus dominate emotional register, let Rising dominate the opening.",
+    "Respect every FORBIDDEN listed. If a placement's FORBIDDEN list rules something out, it stays ruled out for the entire reading, not just that placement's domain.",
+    "This is a coloring of voice, never a personality-test callout — never name any placement as an explanation of tone (never say 'because you're a Pisces Moon' or similar). The information, structure, and facts in Parts 1-4 do not change. Only the rhythm, trigger framing, and word choice change.",
+    "If anything in this voice calibration ever seems to conflict with the LAWS section below (no fluff, no hedging, facts as facts), the LAWS win. Voice calibration changes the delivery; it never softens the diagnostic.",
     "",
     "═══════════════════════════════════════════",
     "LAWS",
@@ -370,8 +480,8 @@ export async function POST(request: NextRequest) {
     let parsed: { pages: ReadingPage[] };
     try {
       let cleaned = rawText.trim();
-      if (cleaned.startsWith("\`\`\`")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
-      if (cleaned.endsWith("\`\`\`")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("\`\`\`"));
+      if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
+      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
       cleaned = cleaned.trim();
       const start = cleaned.indexOf("{");
       const end = cleaned.lastIndexOf("}");
