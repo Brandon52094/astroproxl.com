@@ -1,10 +1,3 @@
-// Shared voice-calibration table — used by both the main reading endpoint
-// (app/api/readings/route.ts) and the follow-up endpoint (app/api/readings/followup/route.ts)
-// so tone stays consistent across the same conversation.
-//
-// This governs DELIVERY only — rhythm, trigger framing, word choice.
-// It never changes facts, degrees, dates, or directives.
-
 export interface SignVoice {
   rhythm: string;
   trigger: string;
@@ -85,7 +78,6 @@ export function getSignVoice(sign: string | undefined): SignVoice {
   return SIGN_VOICE[sign.toLowerCase()] ?? DEFAULT_SIGN_VOICE;
 }
 
-// What each placement governs — used to frame why its sign-voice applies to that domain
 export const PLACEMENT_DOMAIN: Record<string, string> = {
   sun: "core identity and how directives land with their baseline confidence",
   moon: "emotional register — how much feeling-language versus blunt fact is true to them",
@@ -110,8 +102,6 @@ export function buildPlacementVoiceBlock(
   ].join("\n");
 }
 
-// Extracts Sun/Moon/Rising/Mercury/Venus signs from a tropical planet list
-// and builds the full voice-calibration block in one call.
 export function buildVoiceCalibrationBlock(
   planets: Array<{ name: string; sign: string }>
 ): string {

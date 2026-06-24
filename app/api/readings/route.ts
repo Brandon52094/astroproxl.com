@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildPlacementVoiceBlock } from "@/lib/signVoice";
 
 interface PlanetPlacement {
   name: string;
@@ -125,7 +124,6 @@ function fmtSolarArc(p: SolarArcPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree;
 }
 
-
 function buildReadingPrompt(body: ReadingRequestBody): string {
   const { topic, question, tropical, sidereal, transits, profection, progressions, solarArcs, upcomingTrigger, planetaryStations, solarReturn } = body;
 
@@ -188,18 +186,13 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
   const rising = tropical.planets.find(p => p.name === "Ascendant");
   const mercury = tropical.planets.find(p => p.name === "Mercury");
   const venus = tropical.planets.find(p => p.name === "Venus");
-
-  const voiceBlocks = [
-    buildPlacementVoiceBlock("sun", "Sun", sun?.sign),
-    buildPlacementVoiceBlock("moon", "Moon", moon?.sign),
-    buildPlacementVoiceBlock("rising", "Rising", rising?.sign),
-    buildPlacementVoiceBlock("mercury", "Mercury", mercury?.sign),
-    buildPlacementVoiceBlock("venus", "Venus", venus?.sign),
-  ].filter(Boolean);
-
-  const big3Block = voiceBlocks.length > 0
-    ? NL + "VOICE CALIBRATION — DELIVERY, NOT CONTENT (use to shape rhythm and trigger only — never name a placement as the reason for your tone, never say 'because you're a Pisces Moon' or similar):" + NL
-      + voiceBlocks.join(NL + NL) + NL
+  const big3Block = (sun || moon || rising || mercury || venus)
+    ? NL + "TONE CALIBRATION PLACEMENTS (use to shape voice only — never name these as the reason for your tone):" + NL
+      + (sun ? `Sun: ${sun.sign} — core identity, baseline confidence and ego expression` + NL : "")
+      + (moon ? `Moon: ${moon.sign} — emotional register, how they process and feel things internally` + NL : "")
+      + (rising ? `Rising: ${rising.sign} — how they come across, first-impression energy` + NL : "")
+      + (mercury ? `Mercury: ${mercury.sign} — how they think and want to be communicated with (direct vs winding, fast vs deliberate, blunt vs gentle)` + NL : "")
+      + (venus ? `Venus: ${venus.sign} — what feels good or comforting to them, their relationship to pleasure and ease` + NL : "")
     : "";
 
   const aspectList = tropical.aspects
@@ -283,18 +276,15 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "Everything above is diagnosis. This part is different: directly answer the literal question they asked, in plain human language, like a person who heard them — not a structural readout. Drop the clinical tone here. No new placements, no new degrees. Just land on their actual question with warmth and a real answer, even if the question was casual or funny. This is the moment the reading stops being a report and starts being a person talking to them.",
     "",
     "═══════════════════════════════════════════",
-    "TONE — VOICE CALIBRATION FROM SUN, MOON, RISING, MERCURY, VENUS",
+    "TONE — INFORMED BY SUN, MOON, RISING, MERCURY, VENUS",
     "═══════════════════════════════════════════",
-    "Each placement above came with a RHYTHM, a TRIGGER, and a FORBIDDEN list. These govern delivery, not content — the facts, degrees, dates, and directives stay exactly as the chart data dictates. What changes is how it's said:",
-    "- Sun's RHYTHM sets the baseline confidence and cadence of how directives are delivered.",
-    "- Moon's RHYTHM and TRIGGER set the emotional weight — how much the reading leans into feeling versus blunt fact.",
-    "- Rising's RHYTHM sets how the reading opens — its first-impression energy.",
-    "- Mercury's RHYTHM sets sentence length and directness throughout.",
-    "- Venus's TRIGGER and RHYTHM shape what ease sounds like in the warm closing answer (Part 5) specifically.",
-    "Blend these five voices into one coherent delivery — don't treat them as five separate switches that contradict each other. Where they conflict, let Sun and Mercury dominate sentence-level rhythm, let Moon and Venus dominate emotional register, let Rising dominate the opening.",
-    "Respect every FORBIDDEN listed. If a placement's FORBIDDEN list rules something out, it stays ruled out for the entire reading, not just that placement's domain.",
-    "This is a coloring of voice, never a personality-test callout — never name any placement as an explanation of tone (never say 'because you're a Pisces Moon' or similar). The information, structure, and facts in Parts 1-4 do not change. Only the rhythm, trigger framing, and word choice change.",
-    "If anything in this voice calibration ever seems to conflict with the LAWS section below (no fluff, no hedging, facts as facts), the LAWS win. Voice calibration changes the delivery; it never softens the diagnostic.",
+    "These placements should flavor HOW you talk to them, not just what you predict:",
+    "- Sun shapes baseline confidence in how directives are delivered.",
+    "- Moon shapes emotional texture — how much feeling-language versus blunt fact lands right for them.",
+    "- Rising shapes the opening energy — how the reading should 'walk in the room.'",
+    "- Mercury shapes sentence rhythm and directness — a quick-mutable Mercury (Gemini/Sagittarius/Virgo-adjacent speed) wants short punchy sentences; a fixed or water Mercury (Taurus/Scorpio/Cancer-adjacent) can hold slightly longer, more weighted sentences.",
+    "- Venus shapes what softness or ease should sound like in the warm closing answer (Part 5) specifically — what comfort sounds like to THIS person.",
+    "This is a subtle coloring of voice throughout the whole reading, not a personality test callout — never name any placement as an explanation of tone (never say 'because you're a Pisces Moon' or similar). Just let it shape how you write, especially in Part 5.",
     "",
     "═══════════════════════════════════════════",
     "LAWS",
