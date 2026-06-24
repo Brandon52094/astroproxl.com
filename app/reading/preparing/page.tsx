@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, Suspense } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartStore";
 import type { ReadingPage } from "@/lib/chartStore";
@@ -24,6 +24,20 @@ function PreparingPageInner() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
+  const shouldReduceMotion = useReducedMotion();
+
+  const stars = React.useMemo(
+    () =>
+      Array.from({ length: 28 }).map((_, i) => {
+        const left = `${(i * 37) % 100}%`;
+        const top = `${(i * 19 + 13) % 100}%`;
+        const size = i % 7 === 0 ? 2 : 1;
+        const opacity = i % 5 === 0 ? 0.72 : 0.34;
+        const delay = (i * 0.37) % 4;
+        return { left, top, size, opacity, delay, id: i };
+      }),
+    []
+  );
 
   useEffect(() => {
     // Fix 1 — if user cancelled Stripe, send them back to intake immediately
@@ -124,8 +138,67 @@ function PreparingPageInner() {
   }, [router, searchParams]);
 
   return (
-    <div className="h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden">
-      <div className="mx-auto w-full max-w-md px-6 text-center">
+    <div className="relative h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 18%, rgba(94,234,212,0.10), transparent 34%), radial-gradient(circle at 85% 82%, rgba(251,191,36,0.07), transparent 28%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+          }}
+        />
+
+        <motion.div
+          className="absolute left-1/2 top-[16%] h-[24rem] w-[24rem] -translate-x-1/2 rounded-full blur-3xl"
+          animate={
+            shouldReduceMotion
+              ? undefined
+              : { opacity: [0.14, 0.24, 0.14], scale: [1, 1.05, 1] }
+          }
+          transition={
+            shouldReduceMotion
+              ? undefined
+              : { duration: 8, repeat: Infinity, ease: "easeInOut" }
+          }
+          style={{
+            background: "radial-gradient(circle, rgba(45,212,191,0.28), transparent 70%)",
+          }}
+        />
+
+        {stars.map((star) => (
+          <motion.span
+            key={star.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+            }}
+            animate={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
+                    scale: [1, 1.6, 1],
+                  }
+            }
+            transition={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    duration: 2.6 + (star.id % 5) * 0.6,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: star.delay,
+                  }
+            }
+          />
+        ))}
+      </div>
+
+      <div className="relative z-10 mx-auto w-full max-w-md px-6 text-center">
         <AnimatePresence mode="wait">
           {error ? (
             <motion.div
@@ -179,11 +252,11 @@ function PreparingPageInner() {
 
               <div className="space-y-3">
                 <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Preparing .....
+                  Reading the sky
                 </h1>
                 <p className="text-sm leading-6 text-slate-400">
-                  Your chart is being analyzed in mulitple ways. Only you can see this information. 
-                  Tap the Download icon to save your reading
+                  Your chart is being traced from multiple angles. Only you can see this reading —
+                  tap the download icon to keep it.
                 </p>
               </div>
 
@@ -215,11 +288,11 @@ function PreparingPageInner() {
 
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
                 <p className="text-xs leading-6 text-slate-400">
-                  A lot is being caculated{" "}
-                  <span className="text-slate-200">from every angle possible</span>,{" "}
-                  <span className="text-slate-200"> and every way imaginable </span>,{" "}
-                  <span className="text-slate-200"> still, your authentic action is needed </span>, or {" "}
-                  <span className="text-slate-200"></span>{" "}
+                  The sky does not repeat itself{" "}
+                  <span className="text-slate-200">— this configuration is yours alone</span>,{" "}
+                  read through <span className="text-slate-200">every layer your chart holds</span>,{" "}
+                  weighed against <span className="text-slate-200">what is moving toward you now</span>.{" "}
+                  What surfaces next may be quiet, or it may change how you see the next few weeks
                   — take note of the dates it gives.
                 </p>
               </div>
