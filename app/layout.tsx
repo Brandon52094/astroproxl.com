@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased bg-[#040611]`}
     >
       {/*
         h-full on html+body locks the viewport — nothing scrolls at the root level.
@@ -51,7 +51,7 @@ export default function RootLayout({
           `}
         </Script>
         <ClerkProvider>
-          <main className="h-full">
+          <main className="h-full w-full bg-[#040611]">
             {children}
           </main>
         </ClerkProvider>
