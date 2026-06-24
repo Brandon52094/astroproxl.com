@@ -213,12 +213,12 @@ export default function SignInPage() {
         </motion.div>
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-10">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 pt-16 pb-10">
         <motion.div
           initial={shouldReduceMotion ? undefined : { opacity: 0, y: 18 }}
           animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className="mb-7 flex flex-col items-center text-center"
+          className="mb-5 flex flex-col items-center text-center"
         >
           <div className="relative mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-teal-300/25 bg-teal-300/[0.08] shadow-[0_0_30px_rgba(45,212,191,0.22)] backdrop-blur-md">
             <div className="absolute inset-[6px] rounded-full border border-white/10" />
@@ -246,16 +246,25 @@ export default function SignInPage() {
         >
           <div className="absolute inset-0 rounded-[30px] bg-[radial-gradient(circle_at_top,rgba(94,234,212,0.09),transparent_42%)]" />
 
-          <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.04] p-[1px] shadow-[0_18px_80px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
-            <div className="rounded-[29px] bg-[#07111c]/90">
+          <div className="relative rounded-[30px] p-[1px]">
+            <div
+              className="absolute inset-0 rounded-[30px] opacity-90"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(94,234,212,0.18) 45%, rgba(94,234,212,0.08) 100%)",
+                boxShadow:
+                  "0 0 0 1px rgba(148,163,184,0.12), 0 0 28px rgba(45,212,191,0.12), 0 0 80px rgba(45,212,191,0.08)",
+              }}
+            />
+            <div className="relative overflow-hidden rounded-[30px] bg-[#07111c]/92 shadow-[0_24px_90px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
               <SignIn
                 appearance={{
                   variables: {
                     colorPrimary: "#5eead4",
                     colorBackground: "transparent",
-                    colorText: "#e2e8f0",
-                    colorTextSecondary: "#94a3b8",
-                    colorInputBackground: "rgba(255,255,255,0.04)",
+                    colorText: "#f8fafc",
+                    colorTextSecondary: "#cbd5e1",
+                    colorInputBackground: "rgba(255,255,255,0.06)",
                     colorInputText: "#ffffff",
                     colorDanger: "#fb7185",
                     borderRadius: "18px",
@@ -265,29 +274,32 @@ export default function SignInPage() {
                     rootBox: "w-full",
                     card: "bg-transparent shadow-none border-0 rounded-none",
                     header: "pt-6 px-6",
-                    headerTitle: "text-white text-[1.55rem] font-semibold tracking-tight",
-                    headerSubtitle: "text-slate-400 text-sm",
+                    headerTitle: "text-white text-[1.9rem] font-semibold tracking-tight leading-tight",
+                    headerSubtitle: "text-slate-300 text-[15px]",
                     socialButtonsBlockButton:
                       "h-12 rounded-2xl border border-white/10 bg-white/[0.03] text-white shadow-none hover:bg-white/[0.05]",
                     socialButtonsBlockButtonText: "text-sm font-medium text-white",
-                    dividerLine: "bg-white/8",
+                    dividerLine: "bg-white/10",
                     dividerText: "text-slate-500 text-[11px] uppercase tracking-[0.18em]",
-                    formFieldLabel: "text-slate-300 text-[13px] font-medium",
+                    formFieldLabel: "text-slate-200 text-[13px] font-medium",
                     formFieldInput:
-                      "h-12 rounded-2xl border border-white/10 bg-white/[0.04] text-white placeholder:text-slate-500 focus:border-teal-300/50 focus:ring-0",
+                      "h-14 rounded-[22px] border border-white/10 bg-white text-slate-700 placeholder:text-slate-500 focus:border-teal-300/60 focus:ring-0",
                     formButtonPrimary:
-                      "h-12 rounded-2xl border-0 bg-teal-300 text-[14px] font-semibold text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.18)] hover:bg-teal-200",
+                      "h-14 rounded-[22px] border-0 bg-teal-300 text-[15px] font-semibold text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] hover:bg-teal-200",
                     footer: "pb-6 px-6",
                     footerActionText: "text-slate-500",
-                    footerActionLink: "text-teal-300 hover:text-teal-200",
-                    identityPreviewText: "text-slate-300",
+                    footerActionLink: "text-teal-300 hover:text-teal-200 font-medium",
+                    identityPreviewText: "text-slate-200",
                     identityPreviewEditButton: "text-teal-300 hover:text-teal-200",
                     formResendCodeLink: "text-teal-300 hover:text-teal-200",
                     otpCodeFieldInput:
-                      "h-12 w-10 rounded-2xl border border-white/10 bg-white/[0.04] text-white",
+                      "h-12 w-10 rounded-2xl border border-white/10 bg-white/[0.06] text-white",
                     alert:
                       "rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200",
                     formFieldWarningText: "text-rose-300",
+                    formFieldSuccessText: "text-teal-200",
+                    formHeaderTitle: "text-white",
+                    formHeaderSubtitle: "text-slate-300",
                   },
                 }}
               />
