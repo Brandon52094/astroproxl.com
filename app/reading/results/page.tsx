@@ -146,8 +146,16 @@ function ResultsPageInner() {
           originalReading: storedReading.pages[0]?.content ?? "",
           originalTitle: storedReading.pages[0]?.title ?? "",
           topic: storedReading.topic,
+          // ── Full chart payload ──
           tropical: chart.chartData.tropical,
+          sidereal: chart.chartData.sidereal,
+          transits: chart.chartData.transits,
           profection: chart.chartData.profection,
+          progressions: chart.chartData.progressions,
+          solarArcs: chart.chartData.solarArcs,
+          upcomingTrigger: chart.chartData.upcomingTrigger,
+          planetaryStations: chart.chartData.planetaryStations,
+          solarReturn: chart.chartData.solarReturn,
           conversationHistory: conversationHistory || undefined,
         }),
       });
