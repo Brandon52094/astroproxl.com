@@ -3,14 +3,66 @@
 import { SignIn } from "@clerk/nextjs";
 import { motion, useReducedMotion } from "framer-motion";
 
+const ZODIAC_SIGNS = [
+  { name: "Capricorn", start: [12, 22], end: [1, 19] },
+  { name: "Aquarius", start: [1, 20], end: [2, 18] },
+  { name: "Pisces", start: [2, 19], end: [3, 20] },
+  { name: "Aries", start: [3, 21], end: [4, 19] },
+  { name: "Taurus", start: [4, 20], end: [5, 20] },
+  { name: "Gemini", start: [5, 21], end: [6, 20] },
+  { name: "Cancer", start: [6, 21], end: [7, 22] },
+  { name: "Leo", start: [7, 23], end: [8, 22] },
+  { name: "Virgo", start: [8, 23], end: [9, 22] },
+  { name: "Libra", start: [9, 23], end: [10, 22] },
+  { name: "Scorpio", start: [10, 23], end: [11, 21] },
+  { name: "Sagittarius", start: [11, 22], end: [12, 21] },
+];
+
+function getSunSign(date: Date) {
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  for (const sign of ZODIAC_SIGNS) {
+    const [startMonth, startDay] = sign.start;
+    const [endMonth, endDay] = sign.end;
+    if (startMonth === endMonth) {
+      if (month === startMonth && day >= startDay && day <= endDay) return sign.name;
+    } else if (
+      (month === startMonth && day >= startDay) ||
+      (month === endMonth && day <= endDay)
+    ) {
+      return sign.name;
+    }
+  }
+  return "Capricorn";
+}
+
+function getMoonPhase(date: Date) {
+  const synodicMonth = 29.530588853;
+  const knownNewMoon = new Date("2000-01-06T18:14:00Z").getTime();
+  const diffDays = (date.getTime() - knownNewMoon) / 86400000;
+  const phase = ((diffDays % synodicMonth) + synodicMonth) % synodicMonth;
+  const fraction = phase / synodicMonth;
+
+  if (fraction < 0.03 || fraction > 0.97) return { label: "New moon", glyph: "○" };
+  if (fraction < 0.22) return { label: "Waxing crescent", glyph: "◐" };
+  if (fraction < 0.28) return { label: "First quarter", glyph: "◑" };
+  if (fraction < 0.47) return { label: "Waxing gibbous", glyph: "◕" };
+  if (fraction < 0.53) return { label: "Full moon", glyph: "●" };
+  if (fraction < 0.72) return { label: "Waning gibbous", glyph: "◔" };
+  if (fraction < 0.78) return { label: "Last quarter", glyph: "◒" };
+  return { label: "Waning crescent", glyph: "◓" };
+}
+
 function BirthChartRing({
   size = 540,
   opacity = 0.16,
   className = "",
+  shouldReduceMotion = false,
 }: {
   size?: number;
   opacity?: number;
   className?: string;
+  shouldReduceMotion?: boolean;
 }) {
   return (
     <div
@@ -29,28 +81,6 @@ function BirthChartRing({
       >
         <circle cx="270" cy="270" r="220" stroke="rgba(148,163,184,0.12)" strokeWidth="1.2" />
         <circle cx="270" cy="270" r="185" stroke="rgba(94,234,212,0.15)" strokeWidth="1" />
-        <circle cx="270" cy="270" r="150" stroke="rgba(148,163,184,0.10)" strokeWidth="1" />
-        <circle cx="270" cy="270" r="114" stroke="rgba(251,191,36,0.10)" strokeWidth="1" />
-
-        {Array.from({ length: 12 }).map((_, i) => {
-          const angle = (i / 12) * Math.PI * 2;
-          const x1 = 270 + Math.cos(angle) * 114;
-          const y1 = 270 + Math.sin(angle) * 114;
-          const x2 = 270 + Math.cos(angle) * 220;
-          const y2 = 270 + Math.sin(angle) * 220;
-
-          return (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke="rgba(148,163,184,0.10)"
-              strokeWidth="1"
-            />
-          );
-        })}
 
         {Array.from({ length: 12 }).map((_, i) => {
           const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
@@ -67,6 +97,39 @@ function BirthChartRing({
           );
         })}
 
+        <motion.g
+          style={{ transformOrigin: "270px 270px" }}
+          animate={shouldReduceMotion ? undefined : { rotate: -360 }}
+          transition={
+            shouldReduceMotion
+              ? undefined
+              : { duration: 130, repeat: Infinity, ease: "linear" }
+          }
+        >
+          <circle cx="270" cy="270" r="150" stroke="rgba(148,163,184,0.10)" strokeWidth="1" />
+          <circle cx="270" cy="270" r="114" stroke="rgba(251,191,36,0.10)" strokeWidth="1" />
+
+          {Array.from({ length: 12 }).map((_, i) => {
+            const angle = (i / 12) * Math.PI * 2;
+            const x1 = 270 + Math.cos(angle) * 114;
+            const y1 = 270 + Math.sin(angle) * 114;
+            const x2 = 270 + Math.cos(angle) * 150;
+            const y2 = 270 + Math.sin(angle) * 150;
+
+            return (
+              <line
+                key={i}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="rgba(148,163,184,0.10)"
+                strokeWidth="1"
+              />
+            );
+          })}
+        </motion.g>
+
         <circle cx="270" cy="270" r="10" fill="rgba(94,234,212,0.52)" />
         <circle cx="270" cy="270" r="24" stroke="rgba(94,234,212,0.12)" strokeWidth="1" />
       </svg>
@@ -76,6 +139,9 @@ function BirthChartRing({
 
 export default function SignInPage() {
   const shouldReduceMotion = useReducedMotion();
+  const now = new Date();
+  const sunSign = getSunSign(now);
+  const moon = getMoonPhase(now);
 
   const stars = Array.from({ length: 28 }).map((_, i) => {
     const left = `${((i * 37) % 100)}%`;
@@ -149,10 +215,10 @@ export default function SignInPage() {
           transition={
             shouldReduceMotion
               ? undefined
-              : { duration: 90, repeat: Infinity, ease: "linear" }
+              : { duration: 220, repeat: Infinity, ease: "linear" }
           }
         >
-          <BirthChartRing className="blur-[0.2px]" />
+          <BirthChartRing className="blur-[0.2px]" shouldReduceMotion={!!shouldReduceMotion} />
         </motion.div>
       </div>
 
@@ -169,12 +235,19 @@ export default function SignInPage() {
               <span className="relative text-xl text-teal-200">✦</span>
             </div>
 
+            <div className="mb-3 flex items-center gap-2 text-[11px] text-slate-400">
+              <span className="text-teal-200/80">{moon.glyph}</span>
+              <span>
+                {moon.label} · Sun in {sunSign}
+              </span>
+            </div>
+
             <p className="mb-3 text-[10px] uppercase tracking-[0.34em] text-slate-500">
               Direct Future Predictions
             </p>
 
             <h1 className="text-[2rem] font-semibold leading-[1.02] tracking-tight text-white">
-              Direct Future Predictions
+              Personal. Accurate. Unbiased.
             </h1>
           </motion.div>
 
@@ -221,7 +294,7 @@ export default function SignInPage() {
                     dividerText: "text-slate-500 text-[11px] uppercase tracking-[0.18em]",
                     formFieldLabel: "text-slate-200 text-[13px] font-medium",
                     formFieldInput:
-                      "h-14 rounded-[22px] border border-white/10 bg-white text-slate-700 placeholder:text-slate-500 focus:border-teal-300/60 focus:ring-0",
+                      "h-14 rounded-[22px] border border-white/10 bg-white/[0.06] text-white placeholder:text-slate-500 focus:border-teal-300/60 focus:bg-white/[0.08] focus:ring-0",
                     formButtonPrimary:
                       "h-14 rounded-[22px] border-0 bg-teal-300 text-[15px] font-semibold text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] hover:bg-teal-200",
                     footer: "pb-6 px-6",
