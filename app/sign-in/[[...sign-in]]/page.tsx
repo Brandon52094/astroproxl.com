@@ -205,25 +205,22 @@ export default function SignInPage() {
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-5 py-8">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-sm">
           <motion.div
             initial={shouldReduceMotion ? undefined : { opacity: 0, y: 18 }}
             animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
             className="mb-6 flex flex-col items-center text-center"
           >
-            <div className="relative mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-teal-300/25 bg-teal-300/[0.08] shadow-[0_0_30px_rgba(45,212,191,0.22)] backdrop-blur-md">
-              <div className="absolute inset-[6px] rounded-full border border-white/10" />
-              <span className="relative text-xl text-teal-200">✦</span>
-            </div>
-
-            <p className="mb-3 text-[10px] uppercase tracking-[0.34em] text-slate-500">
+            <p className="mb-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">
               Direct Future Predictions
             </p>
-
-            <h1 className="text-[2rem] font-semibold leading-[1.02] tracking-tight text-white">
-              Sign In
+            <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-white">
+              Enter your portal
             </h1>
+            <p className="mt-2 max-w-[28ch] text-sm leading-6 text-slate-400">
+              Sign in to continue your readings, timelines, and chart-based guidance.
+            </p>
           </motion.div>
 
           <motion.div
@@ -232,18 +229,20 @@ export default function SignInPage() {
             transition={{ duration: 0.5, delay: 0.08, ease: "easeOut" }}
             className="relative"
           >
+            {/* Clean glass card with subtle glow - matches reference style */}
             <div
-              className="absolute inset-0 rounded-[30px]"
+              className="absolute inset-0 rounded-[24px]"
               style={{
                 boxShadow:
-                  "0 0 0 1px rgba(148,163,184,0.15), 0 0 34px rgba(45,212,191,0.12), 0 0 90px rgba(45,212,191,0.07)",
+                  "0 0 0 1px rgba(148,163,184,0.15), 0 0 40px rgba(45,212,191,0.08), 0 0 80px rgba(45,212,191,0.04)",
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(94,234,212,0.14) 46%, rgba(94,234,212,0.05) 100%)",
+                  "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(94,234,212,0.08) 46%, rgba(94,234,212,0.02) 100%)",
               }}
             />
 
-            <div className="relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-200/30 to-transparent" />
+            <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.02] backdrop-blur-2xl">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-200/20 to-transparent" />
+
               <SignIn
                 appearance={{
                   variables: {
@@ -263,9 +262,9 @@ export default function SignInPage() {
                     header: "hidden",
                     headerTitle: "hidden",
                     headerSubtitle: "hidden",
-                    main: "gap-5",
+                    main: "gap-4",
                     socialButtonsBlockButton:
-                      "h-12 rounded-2xl border border-white/10 bg-white/[0.03] text-white shadow-none transition hover:bg-white/[0.05]",
+                      "h-12 rounded-2xl border border-white/10 bg-white/[0.02] text-white shadow-none transition hover:bg-white/[0.06]",
                     socialButtonsBlockButtonText: "text-sm font-medium text-white",
                     dividerRow: "px-6",
                     dividerLine: "bg-white/10",
@@ -274,9 +273,9 @@ export default function SignInPage() {
                     formFieldRow: "gap-2",
                     formFieldLabel: "text-[12px] font-medium text-slate-300",
                     formFieldInput:
-                      "h-14 rounded-2xl border border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus:border-teal-300/50 focus:ring-1 focus:ring-teal-300/20",
+                      "h-12 rounded-2xl border border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus:border-teal-300/50 focus:ring-1 focus:ring-teal-300/20",
                     formButtonPrimary:
-                      "h-14 rounded-2xl border-0 bg-teal-300 text-[15px] font-medium text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] transition hover:bg-teal-200 active:scale-[0.99]",
+                      "h-12 rounded-2xl border-0 bg-teal-300 text-[15px] font-medium text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] transition hover:bg-teal-200 active:scale-[0.99]",
                     footer: "px-6 pb-6 pt-3",
                     footerAction: "pt-1",
                     footerActionText: "text-slate-300",
@@ -297,6 +296,15 @@ export default function SignInPage() {
               />
             </div>
           </motion.div>
+
+          <motion.p
+            initial={shouldReduceMotion ? undefined : { opacity: 0 }}
+            animate={shouldReduceMotion ? undefined : { opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.18 }}
+            className="mt-6 text-center text-[11px] leading-5 text-slate-500"
+          >
+            Secure access to your readings, chart data, and future timelines.
+          </motion.p>
         </div>
       </div>
     </main>
