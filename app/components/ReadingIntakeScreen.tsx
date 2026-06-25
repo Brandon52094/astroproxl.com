@@ -517,9 +517,9 @@ export default function ReadingIntakeScreen() {
       `}</style>
 
       <div
-        className="mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
-        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
-      >
+  className="mx-auto flex w-full max-w-[430px] flex-col px-4 pt-4"
+  style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
+>
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -913,7 +913,7 @@ export default function ReadingIntakeScreen() {
           </motion.div>
 
           <div className="mt-6 border-t border-white/[0.08]" />
-          <div className="mt-4 space-y-3 pb-2">
+          <div className="mt-4 space-y-3 pb-6">
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}
