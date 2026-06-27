@@ -771,10 +771,10 @@ export default function ReadingIntakeScreen() {
             <div className="relative space-y-2">
               <div className="hero-halo" aria-hidden="true" />
               <h1 className="text-[30px] font-semibold leading-[1.05] tracking-tight text-white">
-                Ask Anything, or Nothing at all.
+                You Can Ask Anything
               </h1>
-              <p className="max-w-[32ch] text-sm leading-6 text-slate-300">
-                Download your readings, they are not saved. 
+              <p className="max-w-[38ch] text-sm leading-6 text-slate-300">
+                Readings Are Private and Not Saved. Please download them.
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
