@@ -471,10 +471,9 @@ export default function ReadingIntakeScreen() {
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
     const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((ms % (1000 * 60)) / 1000);
     const parts = [];
     if (days > 0) parts.push(`${days}d`);
-    parts.push(`${hours}h`, `${minutes}m`, `${seconds}s`);
+    parts.push(`${hours}h`, `${minutes}m`);
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
@@ -796,7 +795,7 @@ export default function ReadingIntakeScreen() {
             #040611 100%
           );
           background-size: 200% 200%;
-          animation: driftGradient 26s ease-in-out infinite;
+          animation: none;
         }
 
         .drift-bg::after {
@@ -806,7 +805,7 @@ export default function ReadingIntakeScreen() {
           background:
             radial-gradient(circle at 30% 20%, rgba(45, 212, 191, 0.05), transparent 45%),
             radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.04), transparent 45%);
-          animation: driftGradient 26s ease-in-out infinite reverse;
+          animation: none;
         }
 
         .cosmic-grid {
@@ -1039,9 +1038,6 @@ export default function ReadingIntakeScreen() {
             </motion.button>
 
             <div className="text-center">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                Direct Future Predictions
-              </p>
               <p className="mt-1 text-xs text-slate-400">Reading Setup</p>
             </div>
 
@@ -1065,13 +1061,13 @@ export default function ReadingIntakeScreen() {
 
             <div className="relative space-y-2 text-left">
               <div className="hero-halo" aria-hidden="true" />
-              <div className="hero-pill">
+              <div className="mt-8 hero-pill rounded-2xl border-teal-300/30 bg-black/40">
                 <h1 className="text-[26px] font-semibold leading-[1.05] tracking-tight text-white">
                   You Can Ask Anything
                 </h1>
               </div>
               <p className="mx-auto max-w-[38ch] text-sm leading-6 text-slate-300">
-                Download your readings, they are not saved. 
+                Your Direct Future Insights
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
@@ -1500,34 +1496,10 @@ export default function ReadingIntakeScreen() {
 
             <div
               className={cn(
-                "glitch-border glitch-container relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none",
-                glitchActive && "glitching"
+                "glitch-border relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
               )}
-              style={{
-                "--glitch-offset": `${glitchOffset}px`,
-              } as React.CSSProperties}
               aria-hidden="true"
             >
-              {/* ── Glitch layers ── */}
-              <div
-                className={cn(
-                  "glitch-layer glitch-layer-cyan",
-                  glitchActive && glitchColor === "cyan" && "active"
-                )}
-              />
-              <div
-                className={cn(
-                  "glitch-layer glitch-layer-magenta",
-                  glitchActive && glitchColor === "magenta" && "active"
-                )}
-              />
-              <div
-                className={cn(
-                  "glitch-layer glitch-layer-yellow",
-                  glitchActive && glitchColor === "yellow" && "active"
-                )}
-              />
-
               {/* ── Sparkles ── */}
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
@@ -1564,26 +1536,23 @@ export default function ReadingIntakeScreen() {
               {/* ── Gradient overlay ── */}
               <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
 
-              {/* ── Lock overlay with glitch text ── */}
+              {/* ── Lock overlay ── */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
                   <div
                     className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10 transition-all duration-100",
-                      glitchActive && "border-cyan-400/60 bg-cyan-400/20"
+                      "flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10 transition-all duration-100"
                     )}
                   >
                     <Lock
                       className={cn(
-                        "h-4 w-4 text-indigo-300/70 transition-all duration-100",
-                        glitchActive && "text-cyan-300"
+                        "h-4 w-4 text-indigo-300/70 transition-all duration-100"
                       )}
                     />
                   </div>
                   <span
                     className={cn(
-                      "glitch-text text-[11px] tracking-wide text-indigo-300/60 transition-all duration-100",
-                      glitchActive && "glitching"
+                      "text-[11px] tracking-wide text-indigo-300/60 transition-all duration-100"
                     )}
                   >
                     Something Great is in Development — Coming Soon
