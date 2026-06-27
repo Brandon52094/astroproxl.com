@@ -134,6 +134,19 @@ export default function ReadingIntakeScreen() {
     []
   );
 
+  const comingSoonSparkles = useMemo(
+    () => [
+      { left: "12%", top: "22%", size: 3, delay: 0.1, color: "indigo" as const },
+      { left: "28%", top: "62%", size: 2, delay: 0.7, color: "gold" as const },
+      { left: "46%", top: "30%", size: 2.5, delay: 1.5, color: "indigo" as const },
+      { left: "62%", top: "70%", size: 2, delay: 2.3, color: "gold" as const },
+      { left: "78%", top: "38%", size: 3, delay: 3.1, color: "indigo" as const },
+      { left: "90%", top: "58%", size: 2, delay: 3.9, color: "gold" as const },
+    ],
+    []
+  );
+
+
   const getIconPulseAnimation = (isSelected = false) => {
     if (shouldReduceMotion) return {};
 
@@ -499,6 +512,46 @@ export default function ReadingIntakeScreen() {
             rgba(165, 180, 252, 0.12) 60%,
             rgba(165, 180, 252, 0) 100%
           );
+        }
+
+        @keyframes jxlGlint {
+          0%, 78%, 100% {
+            opacity: 0;
+            transform: scale(0.4);
+          }
+          88% {
+            opacity: 1;
+            transform: scale(1.3);
+          }
+          94% {
+            opacity: 0.6;
+            transform: scale(1);
+          }
+        }
+
+        .jxl-sparkle {
+          position: absolute;
+          border-radius: 9999px;
+          pointer-events: none;
+          z-index: 2;
+          animation: jxlGlint 5s ease-in-out infinite;
+        }
+
+        .jxl-sparkle--indigo {
+          background: rgba(199, 210, 254, 0.95);
+          box-shadow: 0 0 6px rgba(129, 140, 248, 0.8), 0 0 12px rgba(129, 140, 248, 0.4);
+        }
+
+        .jxl-sparkle--gold {
+          background: rgba(253, 230, 138, 0.95);
+          box-shadow: 0 0 6px rgba(250, 204, 21, 0.8), 0 0 12px rgba(250, 204, 21, 0.4);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .jxl-sparkle {
+            animation: none !important;
+            opacity: 0 !important;
+          }
         }
 
         .selected-card-shell {
@@ -1203,6 +1256,22 @@ export default function ReadingIntakeScreen() {
               className="jxl-teaser jxl-teaser--subtle jxl-teaser--indigo relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
               aria-hidden="true"
             >
+              {comingSoonSparkles.map((sparkle, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "jxl-sparkle",
+                    sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold"
+                  )}
+                  style={{
+                    left: sparkle.left,
+                    top: sparkle.top,
+                    width: sparkle.size,
+                    height: sparkle.size,
+                    animationDelay: `${sparkle.delay}s`,
+                  }}
+                />
+              ))}
               <div className="blur-[6px] px-5 py-5 opacity-60">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-indigo-300" />
