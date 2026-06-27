@@ -569,10 +569,7 @@ export default function ReadingIntakeScreen() {
           position: relative;
           overflow: hidden;
           background: linear-gradient(180deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0.03));
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.04),
-            0 12px 30px rgba(0, 0, 0, 0.2),
-            0 0 24px rgba(251, 191, 36, 0.06);
+          animation: jxlAmberPulse 2.8s ease-in-out infinite;
         }
 
         .subscription-shell::before {
@@ -583,6 +580,27 @@ export default function ReadingIntakeScreen() {
             radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
             radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
           pointer-events: none;
+          z-index: 0;
+        }
+
+        .subscription-shell::after {
+          content: "";
+          position: absolute;
+          inset: -40%;
+          background-image: linear-gradient(
+            120deg,
+            rgba(253, 230, 138, 0) 0%,
+            rgba(253, 230, 138, 0.12) 40%,
+            rgba(250, 204, 21, 0.3) 50%,
+            rgba(253, 230, 138, 0.12) 60%,
+            rgba(253, 230, 138, 0) 100%
+          );
+          mix-blend-mode: screen;
+          pointer-events: none;
+          opacity: 0.55;
+          transform: translateX(-60%);
+          animation: jxlShimmer 5s linear infinite;
+          z-index: 0;
         }
 
         .subscription-shell > * {
@@ -607,19 +625,29 @@ export default function ReadingIntakeScreen() {
           inset: -10%;
           background: linear-gradient(
             120deg,
-            #050816 0%,
-            #0a1330 22%,
-            #0f1a3a 38%,
-            #1a1230 55%,
-            #0a1330 72%,
-            #050816 100%
+            #040611 0%,
+            #061120 25%,
+            #050816 50%,
+            #061120 75%,
+            #040611 100%
           );
           background-size: 200% 200%;
           animation: driftGradient 26s ease-in-out infinite;
         }
 
+        .drift-bg::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 30% 20%, rgba(45, 212, 191, 0.05), transparent 45%),
+            radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.04), transparent 45%);
+          animation: driftGradient 26s ease-in-out infinite reverse;
+        }
+
         @media (prefers-reduced-motion: reduce) {
-          .drift-bg {
+          .drift-bg,
+          .drift-bg::after {
             animation: none !important;
             background-position: 50% 50% !important;
           }
@@ -665,7 +693,7 @@ export default function ReadingIntakeScreen() {
               shouldReduceMotion
                 ? undefined
                 : {
-                    duration: 2.8 + (star.id % 5) * 0.6,
+                    duration: 1.6 + (star.id % 5) * 0.35,
                     repeat: Infinity,
                     ease: "easeInOut",
                     delay: star.delay,
@@ -902,7 +930,7 @@ export default function ReadingIntakeScreen() {
                             }
                       }
                       data-selected={isSelected ? "true" : "false"}
-                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm"
+                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
                       style={{ willChange: "transform, opacity" }}
                     >
                       {isSelected && !shouldReduceMotion && (
@@ -1032,7 +1060,7 @@ export default function ReadingIntakeScreen() {
                   type="button"
                   onClick={handleStartReading}
                   disabled={!canSubmit || isCreatingReading}
-                  className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                  className="h-14 w-full rounded-2xl border border-teal-300/30 bg-black/40 text-teal-200 shadow-lg shadow-teal-500/10 transition hover:bg-black/30 hover:border-teal-300/50 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
                 >
                   {buttonCopy}
                 </Button>
