@@ -765,7 +765,7 @@ export default function ReadingIntakeScreen() {
             )}
 
             <div className="inline-flex rounded-full border border-teal-400/20 bg-teal-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-teal-200">
-              Reading Setup
+
             </div>
 
             <div className="relative space-y-2">
@@ -780,7 +780,7 @@ export default function ReadingIntakeScreen() {
                 const chart = loadChart();
                 return chart ? (
                   <div className="pt-1 text-xs text-slate-500">
-                    <span>My Details {chart.birthPlace}</span>
+                    <span> {chart.birthPlace}</span>
                     <span className="mx-1.5">·</span>
                     <button
                       type="button"
