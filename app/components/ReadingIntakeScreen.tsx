@@ -119,7 +119,68 @@ export default function ReadingIntakeScreen() {
   const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
+  // ── Glitch state for Coming Soon ────────────────────────────────
+  const [glitchActive, setGlitchActive] = useState(false);
+  const [glitchOffset, setGlitchOffset] = useState(0);
+  const [glitchColor, setGlitchColor] = useState<"cyan" | "magenta" | "yellow" | null>(null);
+  const glitchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const shouldReduceMotion = useReducedMotion();
+
+  // ── Glitch effect handler ────────────────────────────────────────
+  const triggerGlitch = useCallback(() => {
+    if (shouldReduceMotion) return;
+
+    // Random glitch intensity
+    const offset = (Math.random() - 0.5) * 6;
+    const colors: ("cyan" | "magenta" | "yellow")[] = ["cyan", "magenta", "yellow"];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+
+    setGlitchOffset(offset);
+    setGlitchColor(color);
+    setGlitchActive(true);
+
+    // Clear previous timeout
+    if (glitchTimeoutRef.current) {
+      clearTimeout(glitchTimeoutRef.current);
+    }
+
+    // Reset glitch after 80-150ms
+    glitchTimeoutRef.current = setTimeout(() => {
+      setGlitchActive(false);
+      setGlitchOffset(0);
+      setGlitchColor(null);
+    }, 80 + Math.random() * 70);
+  }, [shouldReduceMotion]);
+
+  // ── Random glitch triggers ──────────────────────────────────────
+  useEffect(() => {
+    if (shouldReduceMotion) return;
+
+    const intervals: NodeJS.Timeout[] = [];
+
+    // Random glitch every 3-8 seconds
+    const randomGlitch = setInterval(() => {
+      if (Math.random() > 0.4) {
+        triggerGlitch();
+      }
+    }, 3000 + Math.random() * 5000);
+    intervals.push(randomGlitch);
+
+    // Double-glitch occasionally
+    const doubleGlitch = setInterval(() => {
+      if (Math.random() > 0.7) {
+        triggerGlitch();
+        setTimeout(() => triggerGlitch(), 150 + Math.random() * 200);
+      }
+    }, 8000 + Math.random() * 4000);
+    intervals.push(doubleGlitch);
+
+    return () => {
+      intervals.forEach(clearInterval);
+      if (glitchTimeoutRef.current) clearTimeout(glitchTimeoutRef.current);
+    };
+  }, [triggerGlitch, shouldReduceMotion]);
 
   const stars = useMemo(
     () =>
@@ -302,7 +363,6 @@ export default function ReadingIntakeScreen() {
     setIsCreatingReading(true);
     setSubmitError(null);
 
-    // AddToCart — user has committed to this specific reading (area + question)
     trackTtq("AddToCart", { content_id: selectedArea });
 
     try {
@@ -338,7 +398,6 @@ export default function ReadingIntakeScreen() {
           const paywallsCompleted = Number(creditsData.paywallsCompleted ?? 0);
           const paywallIndex = Math.min(paywallsCompleted + 1, 4);
 
-          // InitiateCheckout — about to redirect to Stripe for payment
           trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.00, currency: "USD" });
 
           const checkoutRes = await fetch("/api/stripe/checkout", {
@@ -551,53 +610,191 @@ export default function ReadingIntakeScreen() {
             0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
-        @media (prefers-reduced-motion: reduce) {
-          .jxl-sparkle {
-            animation: none !important;
-            opacity: 0 !important;
-          }
+        /* ── GLITCH KEYFRAMES ────────────────────────────────────────── */
+        @keyframes glitchFlicker {
+          0%, 100% { opacity: 0; }
+          10% { opacity: 1; }
+          20% { opacity: 0; }
+          30% { opacity: 1; }
+          32% { opacity: 0; }
+          35% { opacity: 1; }
+          40% { opacity: 0; }
+          100% { opacity: 0; }
         }
 
-        .selected-card-shell {
+        @keyframes glitchScanline {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(100%); }
+        }
+
+        .glitch-container {
           position: relative;
           overflow: hidden;
-          isolation: isolate;
-          will-change: transform, opacity;
+          transition: all 0.05s ease;
         }
 
-        .selected-card-shell::before {
-          content: "";
-          position: absolute;
-          inset: -1px;
-          border-radius: 24px;
-          background:
-            radial-gradient(circle at 20% 20%, rgba(94, 234, 212, 0.14), transparent 42%),
-            radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%),
-            linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03));
-          opacity: 0;
-          z-index: 0;
-          pointer-events: none;
-          transition: opacity 260ms ease;
-        }
-
-        .selected-card-shell::after {
+        .glitch-container::after {
           content: "";
           position: absolute;
           inset: 0;
-          border-radius: 24px;
-          opacity: 0;
-          z-index: 0;
           pointer-events: none;
-          box-shadow:
-            0 0 0 1px rgba(94, 234, 212, 0.14),
-            0 10px 30px rgba(20, 184, 166, 0.14),
-            0 0 24px rgba(94, 234, 212, 0.08);
-          transition: opacity 260ms ease;
+          z-index: 10;
+          background: repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0) 0px,
+            rgba(0, 0, 0, 0) 3px,
+            rgba(255, 255, 255, 0.03) 3px,
+            rgba(255, 255, 255, 0.03) 4px,
+            rgba(0, 0, 0, 0) 4px,
+            rgba(0, 0, 0, 0) 6px
+          );
+          opacity: 0;
+          animation: none;
         }
 
-        .selected-card-shell[data-selected="true"]::before,
-        .selected-card-shell[data-selected="true"]::after {
-          opacity: 1;
+        .glitch-container.glitching::after {
+          opacity: 0.4;
+          animation: glitchScanline 0.4s linear infinite;
+        }
+
+        .glitch-layer {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 5;
+          mix-blend-mode: screen;
+          opacity: 0;
+          transition: opacity 0.05s ease;
+        }
+
+        .glitch-layer.active {
+          opacity: 0.35;
+        }
+
+        .glitch-layer-cyan {
+          background: rgba(0, 255, 255, 0.15);
+          transform: translateX(var(--glitch-offset, 0px));
+          clip-path: inset(20% 0 60% 0);
+        }
+
+        .glitch-layer-magenta {
+          background: rgba(255, 0, 255, 0.12);
+          transform: translateX(calc(var(--glitch-offset, 0px) * -0.7));
+          clip-path: inset(50% 0 10% 0);
+        }
+
+        .glitch-layer-yellow {
+          background: rgba(255, 255, 0, 0.1);
+          transform: translateX(calc(var(--glitch-offset, 0px) * 0.5));
+          clip-path: inset(70% 0 5% 0);
+        }
+
+        .glitch-text {
+          position: relative;
+          z-index: 2;
+          transition: all 0.05s ease;
+        }
+
+        .glitch-text.glitching {
+          text-shadow:
+            2px 0 rgba(0, 255, 255, 0.6),
+            -2px 0 rgba(255, 0, 255, 0.6),
+            0 0 20px rgba(129, 140, 248, 0.3);
+          letter-spacing: 0.5px;
+        }
+
+        @keyframes glitchPulse {
+          0%, 100% {
+            box-shadow:
+              0 0 0 1px rgba(129, 140, 248, 0.2),
+              0 0 30px rgba(129, 140, 248, 0.06),
+              0 0 60px rgba(129, 140, 248, 0.03);
+          }
+          25% {
+            box-shadow:
+              0 0 0 1px rgba(0, 255, 255, 0.4),
+              0 0 40px rgba(0, 255, 255, 0.15),
+              0 0 80px rgba(0, 255, 255, 0.06);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(255, 0, 255, 0.4),
+              0 0 40px rgba(255, 0, 255, 0.15),
+              0 0 80px rgba(255, 0, 255, 0.06);
+          }
+          75% {
+            box-shadow:
+              0 0 0 1px rgba(255, 255, 0, 0.4),
+              0 0 40px rgba(255, 255, 0, 0.15),
+              0 0 80px rgba(255, 255, 0, 0.06);
+          }
+        }
+
+        .glitch-border {
+          animation: glitchPulse 3.2s ease-in-out infinite;
+          position: relative;
+        }
+
+        /* ── SPARKLE BURST ──────────────────────────────────────────── */
+        @keyframes sparkleBurst {
+          0% {
+            opacity: 0;
+            transform: scale(0) rotate(0deg);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.8) rotate(180deg);
+          }
+          100% {
+            opacity: 0;
+            transform: scale(0.5) rotate(360deg);
+          }
+        }
+
+        .sparkle-burst {
+          position: absolute;
+          border-radius: 50%;
+          pointer-events: none;
+          z-index: 8;
+          animation: sparkleBurst 0.8s ease-out forwards;
+        }
+
+        /* ── DRIFT BACKGROUND ───────────────────────────────────────── */
+        @keyframes driftGradient {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+
+        .drift-bg {
+          position: absolute;
+          inset: -10%;
+          background: linear-gradient(
+            120deg,
+            #040611 0%,
+            #061120 25%,
+            #050816 50%,
+            #061120 75%,
+            #040611 100%
+          );
+          background-size: 200% 200%;
+          animation: driftGradient 26s ease-in-out infinite;
+        }
+
+        .drift-bg::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 30% 20%, rgba(45, 212, 191, 0.05), transparent 45%),
+            radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.04), transparent 45%);
+          animation: driftGradient 26s ease-in-out infinite reverse;
         }
 
         .cosmic-grid {
@@ -680,48 +877,64 @@ export default function ReadingIntakeScreen() {
           z-index: 1;
         }
 
-        @keyframes driftGradient {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
+        .selected-card-shell {
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+          will-change: transform, opacity;
         }
 
-        .drift-bg {
+        .selected-card-shell::before {
+          content: "";
           position: absolute;
-          inset: -10%;
-          background: linear-gradient(
-            120deg,
-            #040611 0%,
-            #061120 25%,
-            #050816 50%,
-            #061120 75%,
-            #040611 100%
-          );
-          background-size: 200% 200%;
-          animation: driftGradient 26s ease-in-out infinite;
+          inset: -1px;
+          border-radius: 24px;
+          background:
+            radial-gradient(circle at 20% 20%, rgba(94, 234, 212, 0.14), transparent 42%),
+            radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%),
+            linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03));
+          opacity: 0;
+          z-index: 0;
+          pointer-events: none;
+          transition: opacity 260ms ease;
         }
 
-        .drift-bg::after {
+        .selected-card-shell::after {
           content: "";
           position: absolute;
           inset: 0;
-          background:
-            radial-gradient(circle at 30% 20%, rgba(45, 212, 191, 0.05), transparent 45%),
-            radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.04), transparent 45%);
-          animation: driftGradient 26s ease-in-out infinite reverse;
+          border-radius: 24px;
+          opacity: 0;
+          z-index: 0;
+          pointer-events: none;
+          box-shadow:
+            0 0 0 1px rgba(94, 234, 212, 0.14),
+            0 10px 30px rgba(20, 184, 166, 0.14),
+            0 0 24px rgba(94, 234, 212, 0.08);
+          transition: opacity 260ms ease;
+        }
+
+        .selected-card-shell[data-selected="true"]::before,
+        .selected-card-shell[data-selected="true"]::after {
+          opacity: 1;
         }
 
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
-          .drift-bg::after {
+          .drift-bg::after,
+          .jxl-sparkle,
+          .glitch-container::after,
+          .glitch-layer,
+          .glitch-text,
+          .glitch-border,
+          .jxl-teaser,
+          .jxl-teaser::before,
+          .subscription-shell::after {
             animation: none !important;
-            background-position: 50% 50% !important;
+            opacity: 0 !important;
+          }
+          .glitch-container.glitching::after {
+            opacity: 0 !important;
           }
         }
       `}</style>
@@ -738,8 +951,7 @@ export default function ReadingIntakeScreen() {
           }
           transition={
             shouldReduceMotion
-              ? undefined
-              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
+              ? undefined              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
           }
         />
         {stars.map((star) => (
@@ -822,7 +1034,6 @@ export default function ReadingIntakeScreen() {
             )}
 
             <div className="inline-flex rounded-full border border-teal-400/20 bg-teal-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-teal-200">
-
             </div>
 
             <div className="relative space-y-2">
@@ -831,7 +1042,7 @@ export default function ReadingIntakeScreen() {
                 You Can Ask Anything
               </h1>
               <p className="max-w-[38ch] text-sm leading-6 text-slate-300">
-                Please Download Your Readings to Support. 
+                Please Download Your Readings to Support.
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
@@ -949,7 +1160,7 @@ export default function ReadingIntakeScreen() {
                   )}
                   <div className="mt-5 border-t border-white/10 pt-5">
                     <p className="mb-3 text-[12px] leading-5 text-slate-400">
-                      You can do this one time per cycle. 
+                      You can do this one time per cycle.
                     </p>
                     <motion.button
                       whileTap={{ scale: 0.97 }}
@@ -1244,6 +1455,7 @@ export default function ReadingIntakeScreen() {
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
+          {/* ── ENHANCED COMING SOON WITH GLITCH ────────────────────── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1256,10 +1468,38 @@ export default function ReadingIntakeScreen() {
                 Coming Soon
               </span>
             </div>
+
             <div
-              className="jxl-teaser jxl-teaser--subtle jxl-teaser--indigo relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
+              className={cn(
+                "glitch-border glitch-container relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none",
+                glitchActive && "glitching"
+              )}
+              style={{
+                "--glitch-offset": `${glitchOffset}px`,
+              } as React.CSSProperties}
               aria-hidden="true"
             >
+              {/* ── Glitch layers ── */}
+              <div
+                className={cn(
+                  "glitch-layer glitch-layer-cyan",
+                  glitchActive && glitchColor === "cyan" && "active"
+                )}
+              />
+              <div
+                className={cn(
+                  "glitch-layer glitch-layer-magenta",
+                  glitchActive && glitchColor === "magenta" && "active"
+                )}
+              />
+              <div
+                className={cn(
+                  "glitch-layer glitch-layer-yellow",
+                  glitchActive && glitchColor === "yellow" && "active"
+                )}
+              />
+
+              {/* ── Sparkles ── */}
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
                   key={i}
@@ -1276,6 +1516,8 @@ export default function ReadingIntakeScreen() {
                   }}
                 />
               ))}
+
+              {/* ── Blurred preview content ── */}
               <div className="blur-[6px] px-5 py-5 opacity-60">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-indigo-300" />
@@ -1289,13 +1531,32 @@ export default function ReadingIntakeScreen() {
                   <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
                 </div>
               </div>
+
+              {/* ── Gradient overlay ── */}
               <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
+
+              {/* ── Lock overlay with glitch text ── */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
-                    <Lock className="h-4 w-4 text-indigo-300/70" />
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10 transition-all duration-100",
+                      glitchActive && "border-cyan-400/60 bg-cyan-400/20"
+                    )}
+                  >
+                    <Lock
+                      className={cn(
+                        "h-4 w-4 text-indigo-300/70 transition-all duration-100",
+                        glitchActive && "text-cyan-300"
+                      )}
+                    />
                   </div>
-                  <span className="text-[11px] text-indigo-300/60 tracking-wide">
+                  <span
+                    className={cn(
+                      "glitch-text text-[11px] tracking-wide text-indigo-300/60 transition-all duration-100",
+                      glitchActive && "glitching"
+                    )}
+                  >
                     Something Great is in Development — Coming Soon
                   </span>
                 </div>
