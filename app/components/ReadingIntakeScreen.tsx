@@ -1413,19 +1413,20 @@ export default function ReadingIntakeScreen() {
                       <div className="border-t border-amber-300/15 px-5 py-4 space-y-4">
                         <div>
                           <h3 className="text-[15px] font-semibold leading-snug text-white">
-                            Never wait. Never guess. Never pay per question.
+                            More Readings, No Waiting. 
                           </h3>
                           <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-                            Your chart, on demand — a fresh reading almost every 4 days, real answers when something's actually bothering you, and nothing ever locked behind a timer.
+                            Readings, on demand — 8 total readings with real answers when something's actually bothering you, and nothing ever locked behind a timer.
                           </p>
                         </div>
 
                         <div className="space-y-2">
                           {[
-                            "8 full readings every month",
-                            "2 free follow-ups on every reading",
-                            "Never wait out a cooldown",
+                            "8 Readings Included",
+                            "Follow Up Replies",
+                            "No Weekly Cool Down",
                             "Downloads always included",
+                            "Access to Special Feature Coming Soon"
                           ].map((perk) => (
                             <div key={perk} className="flex items-center gap-2.5">
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
@@ -1466,7 +1467,7 @@ export default function ReadingIntakeScreen() {
                           }}
                           className="h-11 w-full rounded-xl bg-amber-300 text-[13px] font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
                         >
-                          {isSubscribeLoading ? "Loading…" : "Subscribe — $12.99/mo"}
+                          {isSubscribeLoading ? "Loading…" : "Lock In — $12.99/mo"}
                         </motion.button>
                       </div>
                     </motion.div>
@@ -1479,7 +1480,7 @@ export default function ReadingIntakeScreen() {
           <div className="mt-8 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
-              Premium
+              Unlimited Access
             </span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
@@ -1494,7 +1495,7 @@ export default function ReadingIntakeScreen() {
             <div className="mb-2 flex items-center justify-center">
               <span className="flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
                 <Lock className="h-2.5 w-2.5" />
-                Coming Soon
+                In Development
               </span>
             </div>
 
