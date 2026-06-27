@@ -136,16 +136,15 @@ export default function ReadingIntakeScreen() {
 
   const comingSoonSparkles = useMemo(
     () => [
-      { left: "12%", top: "22%", size: 3, delay: 0.1, color: "indigo" as const },
-      { left: "28%", top: "62%", size: 2, delay: 0.7, color: "gold" as const },
-      { left: "46%", top: "30%", size: 2.5, delay: 1.5, color: "indigo" as const },
-      { left: "62%", top: "70%", size: 2, delay: 2.3, color: "gold" as const },
-      { left: "78%", top: "38%", size: 3, delay: 3.1, color: "indigo" as const },
-      { left: "90%", top: "58%", size: 2, delay: 3.9, color: "gold" as const },
+      { left: "12%", top: "22%", size: 7, delay: 0.1, color: "indigo" as const },
+      { left: "28%", top: "62%", size: 5, delay: 0.7, color: "gold" as const },
+      { left: "46%", top: "30%", size: 6, delay: 1.5, color: "indigo" as const },
+      { left: "62%", top: "70%", size: 5, delay: 2.3, color: "gold" as const },
+      { left: "78%", top: "38%", size: 7, delay: 3.1, color: "indigo" as const },
+      { left: "90%", top: "58%", size: 5, delay: 3.9, color: "gold" as const },
     ],
     []
   );
-
 
   const getIconPulseAnimation = (isSelected = false) => {
     if (shouldReduceMotion) return {};
@@ -517,14 +516,14 @@ export default function ReadingIntakeScreen() {
         @keyframes jxlGlint {
           0%, 78%, 100% {
             opacity: 0;
-            transform: scale(0.4);
+            transform: scale(0.3);
           }
           88% {
             opacity: 1;
-            transform: scale(1.3);
+            transform: scale(1.4);
           }
           94% {
-            opacity: 0.6;
+            opacity: 0.7;
             transform: scale(1);
           }
         }
@@ -533,18 +532,23 @@ export default function ReadingIntakeScreen() {
           position: absolute;
           border-radius: 9999px;
           pointer-events: none;
-          z-index: 2;
+          z-index: 5;
+          opacity: 0;
           animation: jxlGlint 5s ease-in-out infinite;
         }
 
         .jxl-sparkle--indigo {
-          background: rgba(199, 210, 254, 0.95);
-          box-shadow: 0 0 6px rgba(129, 140, 248, 0.8), 0 0 12px rgba(129, 140, 248, 0.4);
+          background: rgb(199, 210, 254);
+          box-shadow:
+            0 0 8px 2px rgba(129, 140, 248, 0.9),
+            0 0 16px 4px rgba(129, 140, 248, 0.5);
         }
 
         .jxl-sparkle--gold {
-          background: rgba(253, 230, 138, 0.95);
-          box-shadow: 0 0 6px rgba(250, 204, 21, 0.8), 0 0 12px rgba(250, 204, 21, 0.4);
+          background: rgb(253, 230, 138);
+          box-shadow:
+            0 0 8px 2px rgba(250, 204, 21, 0.9),
+            0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1266,8 +1270,8 @@ export default function ReadingIntakeScreen() {
                   style={{
                     left: sparkle.left,
                     top: sparkle.top,
-                    width: sparkle.size,
-                    height: sparkle.size,
+                    width: `${sparkle.size}px`,
+                    height: `${sparkle.size}px`,
                     animationDelay: `${sparkle.delay}s`,
                   }}
                 />
