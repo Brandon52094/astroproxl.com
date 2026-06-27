@@ -3,7 +3,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
-  ArrowLeft,
   Heart,
   Briefcase,
   Wallet,
@@ -979,19 +978,9 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          <header className="mb-1 flex items-center py-1">
-            <motion.button
-              whileTap={{ scale: 0.94 }}
-              transition={{ duration: 0.12 }}
-              type="button"
-              onClick={() => router.push("/chart-data")}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </motion.button>
-          </header>
+          <div className="h-1" />
 
-          <section className="mb-3 space-y-1.5">
+          <section className="mb-5 space-y-2">
             {chartStatus === "recalculating" && (
               <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1008,26 +997,46 @@ export default function ReadingIntakeScreen() {
             <div className="relative flex flex-col items-center text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              <h1 className="hero-outline text-[32px] font-semibold leading-[1.02] tracking-tight">
+              <div className="mb-2 inline-flex items-center rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-teal-200">
+                You can ask something specific
+              </div>
+
+              <h1 className="hero-outline text-[30px] font-semibold leading-[1.02] tracking-tight">
                 You Can Ask Anything
               </h1>
 
-              <p className="mt-0.5 max-w-[28ch] text-sm leading-5 text-slate-300">
+              <p className="mt-1 max-w-[28ch] text-sm leading-5 text-slate-300">
                 Please Download Your Readings to Support.
               </p>
+
+              {chartStatus === "ready" && (() => {
+                const chart = loadChart();
+                return chart ? (
+                  <div className="mt-2 flex flex-col items-center gap-1">
+                    <span className="text-xs text-slate-500">{chart.birthPlace}</span>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/chart-data")}
+                      className="text-xs text-slate-400 transition hover:text-teal-300"
+                    >
+                      Check My Chart
+                    </button>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </section>
 
           {freeReadingCooldownLine && (
-            <div className="mb-2 flex items-center justify-center gap-2 text-center">
+            <div className="mb-4 flex items-center justify-center gap-2 text-center">
               <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
               <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
           )}
 
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-4 space-y-1.5">
-              <div className="flex items-center justify-between">
+            <div className="mb-6 flex flex-col items-center space-y-2 text-center">
+              <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
                   Reading cycle
                 </span>
@@ -1035,7 +1044,7 @@ export default function ReadingIntakeScreen() {
                   {onCooldown ? 4 : readingsCompleted} / 4
                 </span>
               </div>
-              <div className="flex gap-1.5">
+              <div className="flex w-full max-w-[220px] gap-1.5">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div
                     key={i}
