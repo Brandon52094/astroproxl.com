@@ -1463,11 +1463,11 @@ export default function ReadingIntakeScreen() {
             className="mt-4"
           >
             <div className="mb-2 flex items-center justify-center">
-              <span className="flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
-                <Lock className="h-2.5 w-2.5" />
-                Coming Soon
-              </span>
-            </div>
+  <span className="flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/80">
+    <Lock className="h-2.5 w-2.5" />
+    Coming Soon
+  </span>
+</div>
 
             <div
               className={cn(
