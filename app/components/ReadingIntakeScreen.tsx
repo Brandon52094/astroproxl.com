@@ -121,6 +121,19 @@ export default function ReadingIntakeScreen() {
 
   const shouldReduceMotion = useReducedMotion();
 
+  const stars = useMemo(
+    () =>
+      Array.from({ length: 24 }).map((_, i) => {
+        const left = `${(i * 41) % 100}%`;
+        const top = `${(i * 23 + 7) % 100}%`;
+        const size = i % 7 === 0 ? 2 : 1;
+        const opacity = i % 5 === 0 ? 0.5 : 0.22;
+        const delay = (i * 0.41) % 4;
+        return { left, top, size, opacity, delay, id: i };
+      }),
+    []
+  );
+
   const getIconPulseAnimation = (isSelected = false) => {
     if (shouldReduceMotion) return {};
 
@@ -514,12 +527,122 @@ export default function ReadingIntakeScreen() {
         .selected-card-shell[data-selected="true"]::after {
           opacity: 1;
         }
+
+        .cosmic-grid {
+          position: absolute;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+          background-size: 36px 36px;
+          mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+          opacity: 0.18;
+        }
+
+        .aurora-orb--violet {
+          position: absolute;
+          top: 8rem;
+          right: -4rem;
+          width: 14rem;
+          height: 14rem;
+          border-radius: 9999px;
+          filter: blur(60px);
+          background: radial-gradient(circle, rgba(129, 140, 248, 0.18) 0%, rgba(129, 140, 248, 0.06) 48%, transparent 74%);
+          will-change: transform, opacity;
+        }
+
+        .hero-halo {
+          position: absolute;
+          left: 50%;
+          top: -20%;
+          width: 18rem;
+          height: 18rem;
+          transform: translateX(-50%);
+          border-radius: 9999px;
+          background: radial-gradient(circle, rgba(94, 234, 212, 0.12) 0%, rgba(94, 234, 212, 0.05) 34%, transparent 70%);
+          filter: blur(28px);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .subscription-shell {
+          position: relative;
+          overflow: hidden;
+          background: linear-gradient(180deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0.03));
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.04),
+            0 12px 30px rgba(0, 0, 0, 0.2),
+            0 0 24px rgba(251, 191, 36, 0.06);
+        }
+
+        .subscription-shell::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
+            radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
+          pointer-events: none;
+        }
+
+        .subscription-shell > * {
+          position: relative;
+          z-index: 1;
+        }
       `}</style>
 
+      <div className="pointer-events-none fixed inset-0">
+        <div className="cosmic-grid" />
+        <motion.div
+          className="aurora-orb--violet"
+          animate={
+            shouldReduceMotion
+              ? undefined
+              : { y: [0, -8, 0], x: [0, -6, 0], opacity: [0.12, 0.2, 0.12] }
+          }
+          transition={
+            shouldReduceMotion
+              ? undefined
+              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
+          }
+        />
+        {stars.map((star) => (
+          <motion.span
+            key={star.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+            }}
+            animate={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
+                    scale: [1, 1.6, 1],
+                  }
+            }
+            transition={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    duration: 2.8 + (star.id % 5) * 0.6,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: star.delay,
+                  }
+            }
+          />
+        ))}
+      </div>
+
       <div
-  className="mx-auto flex w-full max-w-[430px] flex-col px-4 pt-4"
-  style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
->
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
+        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -566,7 +689,8 @@ export default function ReadingIntakeScreen() {
               Reading Setup
             </div>
 
-            <div className="space-y-2">
+            <div className="relative space-y-2">
+              <div className="hero-halo" aria-hidden="true" />
               <h1 className="text-[30px] font-semibold leading-[1.05] tracking-tight text-white">
                 What do you want insight on?
               </h1>
@@ -913,7 +1037,7 @@ export default function ReadingIntakeScreen() {
           </motion.div>
 
           <div className="mt-6 border-t border-white/[0.08]" />
-          <div className="mt-4 space-y-3 pb-6">
+          <div className="mt-4 space-y-3 pb-2">
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}
@@ -932,13 +1056,13 @@ export default function ReadingIntakeScreen() {
             )}
 
             {!userStatus?.isSubscribed && (
-              <div className="rounded-2xl border border-amber-300/30 bg-amber-400/[0.06] overflow-hidden">
+              <div className="subscription-shell rounded-[24px] border border-amber-300/30 overflow-hidden">
                 <motion.button
                   whileTap={{ scale: 0.995 }}
                   transition={{ duration: 0.12 }}
                   type="button"
                   onClick={() => setShowSubscriptionDetails((s) => !s)}
-                  className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-amber-400/[0.04]"
+                  className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-white/[0.03]"
                 >
                   <span className="text-[13px] font-semibold text-amber-200">Subscribe</span>
                   <span className="flex items-center gap-2">
