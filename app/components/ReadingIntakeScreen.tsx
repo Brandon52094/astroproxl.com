@@ -1063,7 +1063,7 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative space-y-2 text-center">
+            <div className="relative space-y-2 text-left">
               <div className="hero-halo" aria-hidden="true" />
               <div className="hero-pill">
                 <h1 className="text-[26px] font-semibold leading-[1.05] tracking-tight text-white">
