@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
+  ArrowLeft,
   Heart,
   Briefcase,
   Wallet,
@@ -126,79 +127,57 @@ export default function ReadingIntakeScreen() {
 
   const shouldReduceMotion = useReducedMotion();
 
-  // ── Glitch effect handler (intensity-aware) ─────────────────────
-  const triggerGlitch = useCallback(
-    (intensity: "full" | "half" = "full") => {
-      if (shouldReduceMotion) return;
+  // ── Glitch effect handler ────────────────────────────────────────
+  const triggerGlitch = useCallback(() => {
+    if (shouldReduceMotion) return;
 
-      const spread = intensity === "full" ? 6 : 2.8;
-      const offset = (Math.random() - 0.5) * spread;
-      const colors: ("cyan" | "magenta" | "yellow")[] = ["cyan", "magenta", "yellow"];
-      const color = colors[Math.floor(Math.random() * colors.length)];
+    // Random glitch intensity
+    const offset = (Math.random() - 0.5) * 6;
+    const colors: ("cyan" | "magenta" | "yellow")[] = ["cyan", "magenta", "yellow"];
+    const color = colors[Math.floor(Math.random() * colors.length)];
 
-      setGlitchOffset(offset);
-      setGlitchColor(color);
-      setGlitchActive(true);
+    setGlitchOffset(offset);
+    setGlitchColor(color);
+    setGlitchActive(true);
 
-      if (glitchTimeoutRef.current) {
-        clearTimeout(glitchTimeoutRef.current);
-      }
+    // Clear previous timeout
+    if (glitchTimeoutRef.current) {
+      clearTimeout(glitchTimeoutRef.current);
+    }
 
-      glitchTimeoutRef.current = setTimeout(
-        () => {
-          setGlitchActive(false);
-          setGlitchOffset(0);
-          setGlitchColor(null);
-        },
-        intensity === "full" ? 110 : 70
-      );
-    },
-    [shouldReduceMotion]
-  );
+    // Reset glitch after 80-150ms
+    glitchTimeoutRef.current = setTimeout(() => {
+      setGlitchActive(false);
+      setGlitchOffset(0);
+      setGlitchColor(null);
+    }, 80 + Math.random() * 70);
+  }, [shouldReduceMotion]);
 
-  // ── Glitch pattern: hit, quick lighter after-hit, repeat ────────
+  // ── Random glitch triggers ──────────────────────────────────────
   useEffect(() => {
     if (shouldReduceMotion) return;
 
-    let cancelled = false;
-    const timeouts: NodeJS.Timeout[] = [];
+    const intervals: NodeJS.Timeout[] = [];
 
-    const schedulePattern = () => {
-      const baseDelay = 2200 + Math.random() * 1800;
+    // Random glitch every 3-8 seconds
+    const randomGlitch = setInterval(() => {
+      if (Math.random() > 0.4) {
+        triggerGlitch();
+      }
+    }, 3000 + Math.random() * 5000);
+    intervals.push(randomGlitch);
 
-      const t1 = setTimeout(() => {
-        if (cancelled) return;
-        triggerGlitch("full");
-
-        const t1a = setTimeout(() => {
-          if (cancelled) return;
-          triggerGlitch("half");
-        }, 120);
-
-        timeouts.push(t1a);
-      }, baseDelay);
-
-      const t2 = setTimeout(() => {
-        if (cancelled) return;
-        triggerGlitch("full");
-
-        const t2a = setTimeout(() => {
-          if (cancelled) return;
-          triggerGlitch("half");
-        }, 140);
-
-        timeouts.push(t2a);
-        schedulePattern();
-      }, baseDelay + 1900);
-
-      timeouts.push(t1, t2);
-    };
-
-    schedulePattern();
+    // Double-glitch occasionally
+    const doubleGlitch = setInterval(() => {
+      if (Math.random() > 0.7) {
+        triggerGlitch();
+        setTimeout(() => triggerGlitch(), 150 + Math.random() * 200);
+      }
+    }, 8000 + Math.random() * 4000);
+    intervals.push(doubleGlitch);
 
     return () => {
-      cancelled = true;
-      timeouts.forEach(clearTimeout);
+      intervals.forEach(clearInterval);
       if (glitchTimeoutRef.current) clearTimeout(glitchTimeoutRef.current);
     };
   }, [triggerGlitch, shouldReduceMotion]);
@@ -631,7 +610,18 @@ export default function ReadingIntakeScreen() {
             0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
-        /* ── GLITCH: now lives on the box outline, not the text ──────── */
+        /* ── GLITCH KEYFRAMES ────────────────────────────────────────── */
+        @keyframes glitchFlicker {
+          0%, 100% { opacity: 0; }
+          10% { opacity: 1; }
+          20% { opacity: 0; }
+          30% { opacity: 1; }
+          32% { opacity: 0; }
+          35% { opacity: 1; }
+          40% { opacity: 0; }
+          100% { opacity: 0; }
+        }
+
         @keyframes glitchScanline {
           0% { transform: translateY(-100%); }
           100% { transform: translateY(100%); }
@@ -659,40 +649,12 @@ export default function ReadingIntakeScreen() {
             rgba(0, 0, 0, 0) 6px
           );
           opacity: 0;
+          animation: none;
         }
 
         .glitch-container.glitching::after {
           opacity: 0.4;
           animation: glitchScanline 0.4s linear infinite;
-        }
-
-        .glitch-border {
-          position: relative;
-          box-shadow:
-            0 0 0 1px rgba(129, 140, 248, 0.22),
-            0 10px 30px rgba(0, 0, 0, 0.28),
-            0 0 24px rgba(129, 140, 248, 0.08);
-        }
-
-        .glitch-border.glitching::before,
-        .glitch-border.glitching::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: 28px;
-          pointer-events: none;
-        }
-
-        .glitch-border.glitching::before {
-          border: 1px solid rgba(0, 255, 255, 0.65);
-          transform: translateX(var(--glitch-offset, 0px));
-          opacity: 0.75;
-        }
-
-        .glitch-border.glitching::after {
-          border: 1px solid rgba(255, 0, 255, 0.55);
-          transform: translateX(calc(var(--glitch-offset, 0px) * -0.65));
-          opacity: 0.65;
         }
 
         .glitch-layer {
@@ -725,6 +687,76 @@ export default function ReadingIntakeScreen() {
           background: rgba(255, 255, 0, 0.1);
           transform: translateX(calc(var(--glitch-offset, 0px) * 0.5));
           clip-path: inset(70% 0 5% 0);
+        }
+
+        .glitch-text {
+          position: relative;
+          z-index: 2;
+          transition: all 0.05s ease;
+        }
+
+        .glitch-text.glitching {
+          text-shadow:
+            2px 0 rgba(0, 255, 255, 0.6),
+            -2px 0 rgba(255, 0, 255, 0.6),
+            0 0 20px rgba(129, 140, 248, 0.3);
+          letter-spacing: 0.5px;
+        }
+
+        @keyframes glitchPulse {
+          0%, 100% {
+            box-shadow:
+              0 0 0 1px rgba(129, 140, 248, 0.2),
+              0 0 30px rgba(129, 140, 248, 0.06),
+              0 0 60px rgba(129, 140, 248, 0.03);
+          }
+          25% {
+            box-shadow:
+              0 0 0 1px rgba(0, 255, 255, 0.4),
+              0 0 40px rgba(0, 255, 255, 0.15),
+              0 0 80px rgba(0, 255, 255, 0.06);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(255, 0, 255, 0.4),
+              0 0 40px rgba(255, 0, 255, 0.15),
+              0 0 80px rgba(255, 0, 255, 0.06);
+          }
+          75% {
+            box-shadow:
+              0 0 0 1px rgba(255, 255, 0, 0.4),
+              0 0 40px rgba(255, 255, 0, 0.15),
+              0 0 80px rgba(255, 255, 0, 0.06);
+          }
+        }
+
+        .glitch-border {
+          animation: glitchPulse 3.2s ease-in-out infinite;
+          position: relative;
+        }
+
+        /* ── SPARKLE BURST ──────────────────────────────────────────── */
+        @keyframes sparkleBurst {
+          0% {
+            opacity: 0;
+            transform: scale(0) rotate(0deg);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.8) rotate(180deg);
+          }
+          100% {
+            opacity: 0;
+            transform: scale(0.5) rotate(360deg);
+          }
+        }
+
+        .sparkle-burst {
+          position: absolute;
+          border-radius: 50%;
+          pointer-events: none;
+          z-index: 8;
+          animation: sparkleBurst 0.8s ease-out forwards;
         }
 
         /* ── DRIFT BACKGROUND ───────────────────────────────────────── */
@@ -802,14 +834,6 @@ export default function ReadingIntakeScreen() {
           z-index: 0;
         }
 
-        .hero-outline {
-          color: rgba(255, 255, 255, 0.97);
-          -webkit-text-stroke: 1px rgba(94, 234, 212, 0.42);
-          text-shadow:
-            0 0 18px rgba(94, 234, 212, 0.08),
-            0 0 36px rgba(94, 234, 212, 0.04);
-        }
-
         .subscription-shell {
           position: relative;
           overflow: hidden;
@@ -885,8 +909,7 @@ export default function ReadingIntakeScreen() {
           pointer-events: none;
           box-shadow:
             0 0 0 1px rgba(94, 234, 212, 0.14),
-            0 18px 42px rgba(0, 0, 0, 0.42),
-            0 12px 28px rgba(20, 184, 166, 0.12),
+            0 10px 30px rgba(20, 184, 166, 0.14),
             0 0 24px rgba(94, 234, 212, 0.08);
           transition: opacity 260ms ease;
         }
@@ -902,8 +925,8 @@ export default function ReadingIntakeScreen() {
           .jxl-sparkle,
           .glitch-container::after,
           .glitch-layer,
-          .glitch-border::before,
-          .glitch-border::after,
+          .glitch-text,
+          .glitch-border,
           .jxl-teaser,
           .jxl-teaser::before,
           .subscription-shell::after {
@@ -928,8 +951,7 @@ export default function ReadingIntakeScreen() {
           }
           transition={
             shouldReduceMotion
-              ? undefined
-              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
+              ? undefined              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
           }
         />
         {stars.map((star) => (
@@ -979,38 +1001,44 @@ export default function ReadingIntakeScreen() {
 
           <section className="mb-6 space-y-3">
             {chartStatus === "recalculating" && (
-              <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
+              <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                 <RefreshCw className="h-3 w-3 animate-spin" />
                 Refreshing your chart…
               </div>
             )}
-
             {chartStatus === "error" && (
-              <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100">
+              <div className="flex w-fit items-center gap-2 rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100">
                 Chart data unavailable — please go back and recalculate
               </div>
             )}
 
-            <div className="relative space-y-3 text-center">
+            <div className="inline-flex rounded-full border border-teal-400/20 bg-teal-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-teal-200">
+            </div>
+
+            <div className="relative space-y-2">
               <div className="hero-halo" aria-hidden="true" />
-              <h1 className="hero-outline text-[30px] font-semibold leading-[1.03] tracking-tight">
+              <h1 className="text-[30px] font-semibold leading-[1.05] tracking-tight text-white">
                 You Can Ask Anything
               </h1>
-              <p className="mx-auto max-w-[30ch] text-sm leading-6 text-slate-300">
+              <p className="max-w-[38ch] text-sm leading-6 text-slate-300">
                 Please Download Your Readings to Support.
               </p>
-
-              {chartStatus === "ready" && loadChart() ? (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/chart-data")}
-                    className="text-xs text-slate-400 transition hover:text-teal-300"
-                  >
-                    Check My Chart
-                  </button>
-                </div>
-              ) : null}
+              {chartStatus === "ready" && (() => {
+                const chart = loadChart();
+                return chart ? (
+                  <div className="pt-1 text-xs text-slate-500">
+                    <span> {chart.birthPlace}</span>
+                    <span className="mx-1.5">·</span>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/chart-data")}
+                      className="text-slate-400 transition hover:text-teal-300"
+                    >
+                      Check My Chart
+                    </button>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </section>
 
@@ -1164,7 +1192,7 @@ export default function ReadingIntakeScreen() {
                             }
                       }
                       data-selected={isSelected ? "true" : "false"}
-                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm shadow-[0_14px_34px_rgba(0,0,0,0.42)]"
+                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
                       style={{ willChange: "transform, opacity" }}
                     >
                       {isSelected && !shouldReduceMotion && (
@@ -1406,7 +1434,7 @@ export default function ReadingIntakeScreen() {
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── COMING SOON: glitch now lives on the box outline ────────── */}
+          {/* ── ENHANCED COMING SOON WITH GLITCH ────────────────────── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1414,25 +1442,23 @@ export default function ReadingIntakeScreen() {
             className="mt-4"
           >
             <div className="mb-2 flex items-center justify-center">
-              <span className="flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/80">
-                <Lock className="h-2.5 w-2.5" />
-                Coming Soon
-              </span>
-            </div>
+  <span className="flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/80">
+    <Lock className="h-2.5 w-2.5" />
+    Coming Soon
+  </span>
+</div>
 
             <div
               className={cn(
                 "glitch-border glitch-container relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none",
                 glitchActive && "glitching"
               )}
-              style={
-                {
-                  "--glitch-offset": `${glitchOffset}px`,
-                } as React.CSSProperties
-              }
+              style={{
+                "--glitch-offset": `${glitchOffset}px`,
+              } as React.CSSProperties}
               aria-hidden="true"
             >
-              {/* ── Glitch color layers ── */}
+              {/* ── Glitch layers ── */}
               <div
                 className={cn(
                   "glitch-layer glitch-layer-cyan",
@@ -1452,7 +1478,7 @@ export default function ReadingIntakeScreen() {
                 )}
               />
 
-              {/* ── Sparkles riding the sweep ── */}
+              {/* ── Sparkles ── */}
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
                   key={i}
@@ -1485,15 +1511,31 @@ export default function ReadingIntakeScreen() {
                 </div>
               </div>
 
+              {/* ── Gradient overlay ── */}
               <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
 
-              {/* ── Lock overlay (no longer glitches itself) ── */}
+              {/* ── Lock overlay with glitch text ── */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
-                    <Lock className="h-4 w-4 text-indigo-300/70" />
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10 transition-all duration-100",
+                      glitchActive && "border-cyan-400/60 bg-cyan-400/20"
+                    )}
+                  >
+                    <Lock
+                      className={cn(
+                        "h-4 w-4 text-indigo-300/70 transition-all duration-100",
+                        glitchActive && "text-cyan-300"
+                      )}
+                    />
                   </div>
-                  <span className="text-[11px] tracking-wide text-indigo-300/60">
+                  <span
+                    className={cn(
+                      "glitch-text text-[11px] tracking-wide text-indigo-300/60 transition-all duration-100",
+                      glitchActive && "glitching"
+                    )}
+                  >
                     Something Great is in Development — Coming Soon
                   </span>
                 </div>
