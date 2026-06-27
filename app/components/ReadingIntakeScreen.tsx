@@ -1071,7 +1071,7 @@ export default function ReadingIntakeScreen() {
                 </h1>
               </div>
               <p className="mx-auto max-w-[38ch] text-sm leading-6 text-slate-300">
-                Please Download Your Readings to Support.
+                Download your readings, they are not saved. 
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
