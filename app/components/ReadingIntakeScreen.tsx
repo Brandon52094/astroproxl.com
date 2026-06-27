@@ -631,7 +631,7 @@ export default function ReadingIntakeScreen() {
             0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
-        /* ── GLITCH: lives on the box outline, not the text ──────────── */
+        /* ── GLITCH: now lives on the box outline, not the text ──────── */
         @keyframes glitchScanline {
           0% { transform: translateY(-100%); }
           100% { transform: translateY(100%); }
@@ -966,11 +966,8 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto flex w-full max-w-[430px] flex-col px-4 pt-0"
-        style={{
-          paddingTop: "max(0.35rem, env(safe-area-inset-top))",
-          paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))",
-        }}
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
+        style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -978,9 +975,9 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          <div className="h-1" />
+          <div className="h-3" />
 
-          <section className="mb-5 space-y-2">
+          <section className="mb-6 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -994,49 +991,39 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative flex flex-col items-center text-center">
+            <div className="relative space-y-3 text-center">
               <div className="hero-halo" aria-hidden="true" />
-
-              <div className="mb-2 inline-flex items-center rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-teal-200">
-                You can ask something specific
-              </div>
-
-              <h1 className="hero-outline text-[30px] font-semibold leading-[1.02] tracking-tight">
+              <h1 className="hero-outline text-[30px] font-semibold leading-[1.03] tracking-tight">
                 You Can Ask Anything
               </h1>
-
-              <p className="mt-1 max-w-[28ch] text-sm leading-5 text-slate-300">
+              <p className="mx-auto max-w-[30ch] text-sm leading-6 text-slate-300">
                 Please Download Your Readings to Support.
               </p>
 
-              {chartStatus === "ready" && (() => {
-                const chart = loadChart();
-                return chart ? (
-                  <div className="mt-2 flex flex-col items-center gap-1">
-                    <span className="text-xs text-slate-500">{chart.birthPlace}</span>
-                    <button
-                      type="button"
-                      onClick={() => router.push("/chart-data")}
-                      className="text-xs text-slate-400 transition hover:text-teal-300"
-                    >
-                      Check My Chart
-                    </button>
-                  </div>
-                ) : null;
-              })()}
+              {chartStatus === "ready" && loadChart() ? (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/chart-data")}
+                    className="text-xs text-slate-400 transition hover:text-teal-300"
+                  >
+                    Check My Chart
+                  </button>
+                </div>
+              ) : null}
             </div>
           </section>
 
           {freeReadingCooldownLine && (
-            <div className="mb-4 flex items-center justify-center gap-2 text-center">
+            <div className="mb-3 flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
               <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
           )}
 
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-6 flex flex-col items-center space-y-2 text-center">
-              <div className="flex flex-col items-center gap-1">
+            <div className="mb-6 space-y-2">
+              <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
                   Reading cycle
                 </span>
@@ -1044,7 +1031,7 @@ export default function ReadingIntakeScreen() {
                   {onCooldown ? 4 : readingsCompleted} / 4
                 </span>
               </div>
-              <div className="flex w-full max-w-[220px] gap-1.5">
+              <div className="flex gap-1.5">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div
                     key={i}
@@ -1419,7 +1406,7 @@ export default function ReadingIntakeScreen() {
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── COMING SOON: glitch lives on the box outline ────────────── */}
+          {/* ── COMING SOON: glitch now lives on the box outline ────────── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1445,6 +1432,7 @@ export default function ReadingIntakeScreen() {
               }
               aria-hidden="true"
             >
+              {/* ── Glitch color layers ── */}
               <div
                 className={cn(
                   "glitch-layer glitch-layer-cyan",
@@ -1464,6 +1452,7 @@ export default function ReadingIntakeScreen() {
                 )}
               />
 
+              {/* ── Sparkles riding the sweep ── */}
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
                   key={i}
@@ -1481,6 +1470,7 @@ export default function ReadingIntakeScreen() {
                 />
               ))}
 
+              {/* ── Blurred preview content ── */}
               <div className="blur-[6px] px-5 py-5 opacity-60">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-indigo-300" />
@@ -1497,6 +1487,7 @@ export default function ReadingIntakeScreen() {
 
               <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
 
+              {/* ── Lock overlay (no longer glitches itself) ── */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
