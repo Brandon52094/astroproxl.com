@@ -1416,7 +1416,7 @@ export default function ReadingIntakeScreen() {
                             More Readings, No Waiting. 
                           </h3>
                           <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-                            Readings, on demand — 8 total readings with real answers when something's actually bothering you, and nothing ever locked behind a timer.
+                            Readings, on demand — Immediate insights answers when something's actually bothering you, or you need instant clarity. No Cool Down timer. 
                           </p>
                         </div>
 
@@ -1438,7 +1438,7 @@ export default function ReadingIntakeScreen() {
                         </div>
 
                         <p className="text-[11px] text-amber-300/60">
-                          Less than the price of 3 readings — unlimited access for a month.
+                          More, for less, still premium. 
                         </p>
 
                         <motion.button
@@ -1467,7 +1467,7 @@ export default function ReadingIntakeScreen() {
                           }}
                           className="h-11 w-full rounded-xl bg-amber-300 text-[13px] font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
                         >
-                          {isSubscribeLoading ? "Loading…" : "Lock In — $12.99/mo"}
+                          {isSubscribeLoading ? "Loading…" : "Subscribe — $12.99/mo"}
                         </motion.button>
                       </div>
                     </motion.div>
