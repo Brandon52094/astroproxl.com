@@ -774,7 +774,7 @@ export default function ReadingIntakeScreen() {
                 You Can Ask Anything
               </h1>
               <p className="max-w-[38ch] text-sm leading-6 text-slate-300">
-                Readings Are Private and Not Saved. Please download them.
+                Please Download Your Readings to Support. 
               </p>
               {chartStatus === "ready" && (() => {
                 const chart = loadChart();
