@@ -60,15 +60,24 @@ export interface PlanetaryStationData {
   natalHouse: number | null;
 }
 
-// ── NEW: Solar Return data ────────────────────────────────────────────────────
 export interface SolarReturnData {
-  sunReturnDate: string;           // e.g. "May 20, 2025"
-  location: string;                // "current location" or birth place
+  sunReturnDate: string;
+  location: string;
   ascendant: { sign: string; degree: string };
   midheaven: { sign: string; degree: string };
   planets: Array<{ name: string; sign: string; degree: string; house: string }>;
-  timeLordInSR: string | null;     // where the profection Time Lord falls in the SR chart
+  timeLordInSR: string | null;
   timeLordSRHouse: number | null;
+}
+
+// ── NEW: Moon Phase data ──────────────────────────────────────────────────────
+export interface MoonPhaseData {
+  phaseName: string;           // e.g. "Waxing Gibbous"
+  illuminationPercent: number; // 0-100
+  nextEventName: "New Moon" | "Full Moon";
+  daysUntilNextEvent: number;
+  moonSign: string;            // current transiting Moon sign — for display
+  moonDegree: string;
 }
 
 export interface ChartCalculateResponse {
@@ -81,7 +90,8 @@ export interface ChartCalculateResponse {
   solarArcs: SolarArcPlanet[];
   upcomingTrigger?: UpcomingTriggerData;
   planetaryStations: PlanetaryStationData[];
-  solarReturn?: SolarReturnData;   // NEW
+  solarReturn?: SolarReturnData;
+  moonPhase?: MoonPhaseData;   // NEW
   error?: string;
 }
 
@@ -123,7 +133,6 @@ function parseTimeTo24h(birthTime: string): [number, number] {
   }
 
   // Plain digit format — "1048" (10:48), "848" (8:48), optionally with am/pm
-  // e.g. "1048", "1048pm", "848am"
   const digitMatch = trimmed.match(/^(\d{3,4})\s*(am|pm)?$/i);
   if (digitMatch) {
     const digits = digitMatch[1];
@@ -134,7 +143,6 @@ function parseTimeTo24h(birthTime: string): [number, number] {
       hour = Number(digits.slice(0, 2));
       minute = Number(digits.slice(2));
     } else {
-      // 3 digits — first digit is the hour, last two are minutes
       hour = Number(digits.slice(0, 1));
       minute = Number(digits.slice(1));
     }
@@ -428,10 +436,6 @@ function calculatePlanetaryStations(natalRaw: ReturnType<typeof calculatePlanets
   return stations;
 }
 
-// ── NEW: Solar Return ─────────────────────────────────────────────────────────
-// Finds the exact JD when transiting Sun returns to natal Sun degree this year.
-// Cast for current location (if provided) or birth location.
-
 function calculateSolarReturn(
   jdBirth: number,
   natalSunLongitude: number,
@@ -446,15 +450,12 @@ function calculateSolarReturn(
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  // Search for Solar Return JD — scan ±3 days around approximate solar return date
-  // Approximate: natal Sun returns once per year, ~365.25 days after birth
   const yearsSinceBirth = currentYear - new Date(jdBirth * 86400000 - 210866760000).getFullYear();
   const approxJD = jdBirth + yearsSinceBirth * 365.25;
 
   let bestJD = approxJD;
   let smallestDiff = 360;
 
-  // Scan ±3 days in 1-hour increments for the exact return
   for (let offset = -3 * 24; offset <= 3 * 24; offset++) {
     const jdCheck = approxJD + offset / 24;
     const sunResult = swisseph.swe_calc_ut(jdCheck, swisseph.SE_SUN, 4);
@@ -466,7 +467,6 @@ function calculateSolarReturn(
     }
   }
 
-  // Cast SR chart for current or birth location
   const srRaw = calculatePlanets(bestJD, srLat, srLng, "W");
 
   const ascDeg = longitudeToSignDegree(srRaw.ascLongitude);
@@ -481,10 +481,8 @@ function calculateSolarReturn(
       return { name, sign, degree: isRetrograde ? `${degree} Rx` : degree, house };
     });
 
-  // Find where the profection Time Lord falls in the SR chart
   const timeLordInSR = planets.find(p => p.name === timeLord);
 
-  // Convert bestJD to a readable date
   const srDate = new Date((bestJD - 2440587.5) * 86400000);
   const sunReturnDate = srDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
@@ -496,6 +494,96 @@ function calculateSolarReturn(
     planets,
     timeLordInSR: timeLordInSR ? `${timeLordInSR.sign} House ${timeLordInSR.house}` : null,
     timeLordSRHouse: timeLordInSR ? Number(timeLordInSR.house) : null,
+  };
+}
+
+// ── NEW: Moon Phase ────────────────────────────────────────────────────────────
+// Phase is determined by the angular distance between Moon and Sun longitudes:
+//   0°   = New Moon          90°  = First Quarter
+//   180° = Full Moon         270° = Last Quarter
+// Illumination % follows from that same angle via (1 - cos(angle)) / 2.
+// "Days until next event" sweeps forward day-by-day until the angle crosses
+// 0° (New Moon) or 180° (Full Moon), whichever comes first.
+
+const MOON_PHASE_NAMES: Array<{ maxAngle: number; name: string }> = [
+  { maxAngle: 11.25,  name: "New Moon" },
+  { maxAngle: 78.75,  name: "Waxing Crescent" },
+  { maxAngle: 101.25, name: "First Quarter" },
+  { maxAngle: 168.75, name: "Waxing Gibbous" },
+  { maxAngle: 191.25, name: "Full Moon" },
+  { maxAngle: 258.75, name: "Waning Gibbous" },
+  { maxAngle: 281.25, name: "Last Quarter" },
+  { maxAngle: 348.75, name: "Waning Crescent" },
+  { maxAngle: 360.01, name: "New Moon" },
+];
+
+function getMoonPhaseName(moonSunAngle: number): string {
+  for (const { maxAngle, name } of MOON_PHASE_NAMES) {
+    if (moonSunAngle < maxAngle) return name;
+  }
+  return "New Moon";
+}
+
+function getMoonIllumination(moonSunAngle: number): number {
+  const radians = (moonSunAngle * Math.PI) / 180;
+  const illumination = (1 - Math.cos(radians)) / 2;
+  return Math.round(illumination * 100);
+}
+
+function calculateMoonPhase(
+  jdNow: number,
+  moonLongitude: number,
+  moonSign: string,
+  moonDegree: string,
+  lat: number,
+  lng: number
+): MoonPhaseData {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  const sunResult = swisseph.swe_calc_ut(jdNow, swisseph.SE_SUN, 4);
+  const sunLongitude = sunResult.longitude;
+
+  let moonSunAngle = moonLongitude - sunLongitude;
+  moonSunAngle = ((moonSunAngle % 360) + 360) % 360;
+
+  const phaseName = getMoonPhaseName(moonSunAngle);
+  const illuminationPercent = getMoonIllumination(moonSunAngle);
+
+  // Sweep forward up to 30 days to find the next New Moon (angle crosses 0/360)
+  // or Full Moon (angle crosses 180), whichever happens first.
+  let daysUntilNextEvent = 30;
+  let nextEventName: "New Moon" | "Full Moon" = moonSunAngle < 180 ? "Full Moon" : "New Moon";
+
+  for (let dayOffset = 0; dayOffset <= 30; dayOffset++) {
+    const jdCheck = jdNow + dayOffset;
+    const sunCheck = swisseph.swe_calc_ut(jdCheck, swisseph.SE_SUN, 4);
+    const moonCheck = swisseph.swe_calc_ut(jdCheck, swisseph.SE_MOON, 4);
+    let angleCheck = moonCheck.longitude - sunCheck.longitude;
+    angleCheck = ((angleCheck % 360) + 360) % 360;
+
+    const closeToNew = angleCheck < 2 || angleCheck > 358;
+    const closeToFull = angleCheck > 178 && angleCheck < 182;
+
+    if (closeToNew) {
+      daysUntilNextEvent = dayOffset;
+      nextEventName = "New Moon";
+      break;
+    }
+    if (closeToFull) {
+      daysUntilNextEvent = dayOffset;
+      nextEventName = "Full Moon";
+      break;
+    }
+  }
+
+  return {
+    phaseName,
+    illuminationPercent,
+    nextEventName,
+    daysUntilNextEvent,
+    moonSign,
+    moonDegree,
   };
 }
 
@@ -560,7 +648,6 @@ export async function POST(req: NextRequest) {
       console.warn("[chart-calculate] Planetary stations sweep failed:", e);
     }
 
-    // Solar Return — use current location if provided, otherwise birth location
     let solarReturn: SolarReturnData | undefined;
     try {
       const natalSun = tropicalRaw.planets.find(p => p.name === "Sun");
@@ -574,6 +661,18 @@ export async function POST(req: NextRequest) {
       console.warn("[chart-calculate] Solar return calculation failed:", e);
     }
 
+    // ── NEW: Moon Phase ──────────────────────────────────────────────────────
+    let moonPhase: MoonPhaseData | undefined;
+    try {
+      const transitMoon = transitRaw.planets.find(p => p.name === "Moon");
+      if (transitMoon) {
+        const { sign: moonSign, degree: moonDegree } = longitudeToSignDegree(transitMoon.longitude);
+        moonPhase = calculateMoonPhase(jdNow, transitMoon.longitude, moonSign, moonDegree, lat, lng);
+      }
+    } catch (e) {
+      console.warn("[chart-calculate] Moon phase calculation failed:", e);
+    }
+
     const response: ChartCalculateResponse = {
       success: true,
       tropical: tropicalChart,
@@ -585,6 +684,7 @@ export async function POST(req: NextRequest) {
       upcomingTrigger,
       planetaryStations,
       solarReturn,
+      moonPhase,
     };
 
     return NextResponse.json(response, { status: 200 });
