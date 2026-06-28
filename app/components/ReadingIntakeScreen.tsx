@@ -3,7 +3,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
-  ArrowLeft,
   Heart,
   Briefcase,
   Wallet,
@@ -139,7 +138,6 @@ export default function ReadingIntakeScreen() {
   const triggerGlitch = useCallback(() => {
     if (shouldReduceMotion) return;
 
-    // Random glitch intensity
     const offset = (Math.random() - 0.5) * 6;
     const colors: ("cyan" | "magenta" | "yellow")[] = ["cyan", "magenta", "yellow"];
     const color = colors[Math.floor(Math.random() * colors.length)];
@@ -148,12 +146,10 @@ export default function ReadingIntakeScreen() {
     setGlitchColor(color);
     setGlitchActive(true);
 
-    // Clear previous timeout
     if (glitchTimeoutRef.current) {
       clearTimeout(glitchTimeoutRef.current);
     }
 
-    // Reset glitch after 80-150ms
     glitchTimeoutRef.current = setTimeout(() => {
       setGlitchActive(false);
       setGlitchOffset(0);
@@ -161,13 +157,11 @@ export default function ReadingIntakeScreen() {
     }, 80 + Math.random() * 70);
   }, [shouldReduceMotion]);
 
-  // ── Random glitch triggers ──────────────────────────────────────
   useEffect(() => {
     if (shouldReduceMotion) return;
 
     const intervals: NodeJS.Timeout[] = [];
 
-    // Random glitch every 3-8 seconds
     const randomGlitch = setInterval(() => {
       if (Math.random() > 0.4) {
         triggerGlitch();
@@ -175,7 +169,6 @@ export default function ReadingIntakeScreen() {
     }, 3000 + Math.random() * 5000);
     intervals.push(randomGlitch);
 
-    // Double-glitch occasionally
     const doubleGlitch = setInterval(() => {
       if (Math.random() > 0.7) {
         triggerGlitch();
@@ -524,14 +517,10 @@ export default function ReadingIntakeScreen() {
 
         @keyframes whiteGlowPulse {
           0%, 100% {
-            box-shadow:
-              0 0 20px rgba(255, 255, 255, 0.04),
-              0 0 40px rgba(255, 255, 255, 0.02);
+            opacity: 0.5;
           }
           50% {
-            box-shadow:
-              0 0 30px rgba(255, 255, 255, 0.08),
-              0 0 60px rgba(255, 255, 255, 0.04);
+            opacity: 1;
           }
         }
 
@@ -856,7 +845,7 @@ export default function ReadingIntakeScreen() {
         .hero-halo {
           position: absolute;
           left: 50%;
-          top: -20%;
+          top: -30%;
           width: 18rem;
           height: 18rem;
           transform: translateX(-50%);
@@ -867,32 +856,12 @@ export default function ReadingIntakeScreen() {
           z-index: 0;
         }
 
-        .hero-pill {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0.55rem 1.4rem;
-          border-radius: 9999px;
-          border: 1px solid rgba(94, 234, 212, 0.32);
-          background:
-            radial-gradient(circle at 30% 20%, rgba(94, 234, 212, 0.14), transparent 55%),
-            linear-gradient(180deg, rgba(45, 212, 191, 0.1), rgba(20, 184, 166, 0.04));
-          box-shadow:
-            0 0 0 1px rgba(94, 234, 212, 0.1),
-            0 10px 26px rgba(0, 0, 0, 0.38),
-            0 0 22px rgba(94, 234, 212, 0.1);
-        }
-
         .white-glow-shimmer {
-          animation: whiteGlowPulse 4s ease-in-out infinite;
           position: relative;
           background: linear-gradient(
             90deg,
             rgba(255, 255, 255, 0) 0%,
-            rgba(255, 255, 255, 0.03) 30%,
-            rgba(255, 255, 255, 0.06) 50%,
-            rgba(255, 255, 255, 0.03) 70%,
+            rgba(255, 255, 255, 0.5) 50%,
             rgba(255, 255, 255, 0) 100%
           );
           background-size: 200% 100%;
@@ -997,7 +966,7 @@ export default function ReadingIntakeScreen() {
           .subscription-shell::after,
           .white-glow-shimmer {
             animation: none !important;
-            opacity: 0 !important;
+            opacity: 0.4 !important;
           }
           .glitch-container.glitching::after {
             opacity: 0 !important;
@@ -1055,7 +1024,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-8"
         style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1064,28 +1033,8 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          <header className="mb-6 flex items-center justify-between py-2">
-            <motion.button
-              whileTap={{ scale: 0.94 }}
-              transition={{ duration: 0.12 }}
-              type="button"
-              onClick={() => router.push("/chart-data")}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </motion.button>
-
-            <div className="text-center"></div>
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[11px] font-medium text-slate-400 opacity-0 pointer-events-none">
-              3/4
-            </div>
-          </header>
-
-          {/* ── INTENTIONAL EMPTY SPACE FOR FUTURE PROFILE ── */}
-          <div className="h-16"></div>
-
-          <section className="mb-6 space-y-3">
+          {/* ── Hero — two disconnected floating lines, no box ───────── */}
+          <section className="mb-3 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1098,21 +1047,25 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative space-y-2 text-left">
+            <div className="relative space-y-3 text-center">
               <div className="hero-halo" aria-hidden="true" />
-              <div className="-mx-4">
-                <div className="white-glow-shimmer rounded-3xl border border-white/30 bg-black/40 px-6 py-5 shadow-[0_0_40px_rgba(255,255,255,0.08)]">
-                  <h1 className="text-center text-[22px] font-semibold leading-[1.05] tracking-tight text-white">
-                    Your Direct Future Insights
-                  </h1>
-                </div>
-              </div>
+
+              {/* Top line — long, full width, floating, disconnected */}
+              <div className="white-glow-shimmer h-px w-full bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+
+              <h1 className="text-[22px] font-semibold leading-[1.05] tracking-tight text-white">
+                Your Direct Future Insights
+              </h1>
+
+              {/* Bottom line — matches heading width, centered, disconnected from top line */}
+              <div className="mx-auto white-glow-shimmer h-px w-[min(280px,80%)] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
             </div>
           </section>
 
+          {/* ── Reading cycle — centered ─────────────────────────────── */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-1 space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="mb-1 mx-auto w-full max-w-[280px] space-y-2">
+              <div className="flex items-center justify-center gap-2">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
                   Reading cycle
                 </span>
