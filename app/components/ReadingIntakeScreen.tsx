@@ -1427,7 +1427,7 @@ export default function ReadingIntakeScreen() {
                             "Follow Up Replies",
                             "No Weekly Cool Down",
                             "Downloads always included",
-                            "Access to Special Feature Coming Soon"
+                            "Access to the Feedback box"
                           ].map((perk) => (
                             <div key={perk} className="flex items-center gap-2.5">
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
