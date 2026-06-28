@@ -522,6 +522,28 @@ export default function ReadingIntakeScreen() {
           }
         }
 
+        @keyframes whiteGlowPulse {
+          0%, 100% {
+            box-shadow:
+              0 0 20px rgba(255, 255, 255, 0.04),
+              0 0 40px rgba(255, 255, 255, 0.02);
+          }
+          50% {
+            box-shadow:
+              0 0 30px rgba(255, 255, 255, 0.08),
+              0 0 60px rgba(255, 255, 255, 0.04);
+          }
+        }
+
+        @keyframes shimmerFlow {
+          0% {
+            background-position: -200% center;
+          }
+          100% {
+            background-position: 200% center;
+          }
+        }
+
         .jxl-teaser {
           animation: jxlAmberPulse 2.8s ease-in-out infinite;
           position: relative;
@@ -862,6 +884,21 @@ export default function ReadingIntakeScreen() {
             0 0 22px rgba(94, 234, 212, 0.1);
         }
 
+        .white-glow-shimmer {
+          animation: whiteGlowPulse 4s ease-in-out infinite;
+          position: relative;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.03) 30%,
+            rgba(255, 255, 255, 0.06) 50%,
+            rgba(255, 255, 255, 0.03) 70%,
+            rgba(255, 255, 255, 0) 100%
+          );
+          background-size: 200% 100%;
+          animation: shimmerFlow 4s ease-in-out infinite, whiteGlowPulse 4s ease-in-out infinite;
+        }
+
         .subscription-shell {
           position: relative;
           overflow: hidden;
@@ -957,7 +994,8 @@ export default function ReadingIntakeScreen() {
           .glitch-border,
           .jxl-teaser,
           .jxl-teaser::before,
-          .subscription-shell::after {
+          .subscription-shell::after,
+          .white-glow-shimmer {
             animation: none !important;
             opacity: 0 !important;
           }
@@ -1037,14 +1075,15 @@ export default function ReadingIntakeScreen() {
               <ArrowLeft className="h-4 w-4" />
             </motion.button>
 
-            <div className="text-center">
-              <p className="mt-1 text-xs text-slate-400">Reading Setup</p>
-            </div>
+            <div className="text-center"></div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[11px] font-medium text-slate-400">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[11px] font-medium text-slate-400 opacity-0 pointer-events-none">
               3/4
             </div>
           </header>
+
+          {/* ── INTENTIONAL EMPTY SPACE FOR FUTURE PROFILE ── */}
+          <div className="h-16"></div>
 
           <section className="mb-6 space-y-3">
             {chartStatus === "recalculating" && (
@@ -1061,18 +1100,15 @@ export default function ReadingIntakeScreen() {
 
             <div className="relative space-y-2 text-left">
               <div className="hero-halo" aria-hidden="true" />
-              <div className="-mx-4 rounded-2xl border border-white/40 bg-black/40 px-4 py-4 shadow-[0_0_30px_rgba(251,191,36,0.08)]">
-                <h1 className="text-center text-[26px] font-semibold leading-[1.05] tracking-tight text-white">
-                  You Can Ask Anything
-                </h1>
+              <div className="-mx-4">
+                <div className="white-glow-shimmer rounded-3xl border border-white/30 bg-black/40 px-6 py-5 shadow-[0_0_40px_rgba(255,255,255,0.08)]">
+                  <h1 className="text-center text-[22px] font-semibold leading-[1.05] tracking-tight text-white">
+                    Your Direct Future Insights
+                  </h1>
+                </div>
               </div>
-              <p className="mx-auto max-w-[38ch] text-center text-sm leading-6 text-slate-300">
-                Your Direct Future Insights
-              </p>
             </div>
           </section>
-
-          <div className="mt-8"></div>
 
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
             <div className="mb-1 space-y-2">
