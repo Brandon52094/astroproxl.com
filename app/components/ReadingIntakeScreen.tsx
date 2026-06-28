@@ -1202,7 +1202,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-40"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-28"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1212,7 +1212,7 @@ export default function ReadingIntakeScreen() {
           className="flex flex-col"
         >
           {/* ── Hero — two disconnected floating lines, no box ───────── */}
-          <section className="mb-3 space-y-3">
+          <section className="mb-3 mt-12 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1225,7 +1225,7 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative space-y-2 text-center">
+            <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
               <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
