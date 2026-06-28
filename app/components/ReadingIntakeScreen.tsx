@@ -1131,49 +1131,89 @@ export default function ReadingIntakeScreen() {
           opacity: 1;
         }
 
-        /* ── PROFILE MODULE — corner brackets, no solid box ──────────── */
+        /* ── PROFILE MODULE — four disconnected frame lines ─────────── */
         .profile-frame {
           position: relative;
+          padding: 20px 18px 18px;
         }
 
-        .profile-corner {
+        .profile-rail {
           position: absolute;
-          width: 14px;
-          height: 14px;
           pointer-events: none;
           z-index: 2;
+          border-radius: 9999px;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0),
+            rgba(255, 255, 255, 0.72),
+            rgba(255, 255, 255, 0)
+          );
+          box-shadow:
+            0 0 10px rgba(255, 255, 255, 0.12),
+            0 0 22px rgba(94, 234, 212, 0.12),
+            0 0 34px rgba(255, 255, 255, 0.08);
+          animation: shimmerFlow 4s ease-in-out infinite, whiteGlowPulse 3.2s ease-in-out infinite;
         }
 
-        .profile-corner--tl {
-          top: -4px;
-          left: -4px;
-          border-top: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-left: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 4px 0 0 0;
+        .profile-rail--top-left,
+        .profile-rail--top-right,
+        .profile-rail--bottom-left,
+        .profile-rail--bottom-right {
+          height: 2px;
+          width: calc(50% - 18px);
         }
 
-        .profile-corner--tr {
-          top: -4px;
-          right: -4px;
-          border-top: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-right: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 0 4px 0 0;
+        .profile-rail--top-left {
+          top: 0;
+          left: 0;
         }
 
-        .profile-corner--bl {
-          bottom: -4px;
-          left: -4px;
-          border-bottom: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-left: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 0 0 0 4px;
+        .profile-rail--top-right {
+          top: 0;
+          right: 0;
         }
 
-        .profile-corner--br {
-          bottom: -4px;
-          right: -4px;
-          border-bottom: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-right: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 0 0 4px 0;
+        .profile-rail--bottom-left {
+          bottom: 0;
+          left: 0;
+        }
+
+        .profile-rail--bottom-right {
+          bottom: 0;
+          right: 0;
+        }
+
+        .profile-name-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          transition: opacity 180ms ease;
+        }
+
+        .profile-name-button:hover {
+          opacity: 0.82;
+        }
+
+        .big3-row {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .big3-value {
+          font-size: 13px;
+          line-height: 1.25;
+          color: rgba(226, 232, 240, 0.96);
+        }
+
+        .big3-label {
+          flex-shrink: 0;
+          font-size: 11px;
+          line-height: 1;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: rgba(94, 234, 212, 0.72);
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1187,7 +1227,8 @@ export default function ReadingIntakeScreen() {
           .jxl-teaser,
           .jxl-teaser::before,
           .subscription-shell::after,
-          .white-glow-shimmer {
+          .white-glow-shimmer,
+          .profile-rail {
             animation: none !important;
             opacity: 0.4 !important;
           }
@@ -1259,74 +1300,74 @@ export default function ReadingIntakeScreen() {
           {/* ═══════════════════════════════════════════════════════════
               PROFILE MODULE — Welcome pill (editable nickname) +
               natal Sun/Moon/Rising with full degree precision.
-              Framed with corner brackets on all four corners.
+              Framed with four disconnected glowing rails.
           ═══════════════════════════════════════════════════════════ */}
           <div className="mb-8 px-1">
-            {/* ── Welcome headline + nickname — top-left, no brackets ── */}
-            <div className="mb-4">
-              <h2 className="text-[26px] font-semibold leading-[1.1] text-white">
-                Welcome
-              </h2>
-              {isEditingNickname ? (
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    ref={nicknameInputRef}
-                    type="text"
-                    value={nicknameInput}
-                    onChange={(e) => setNicknameInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSaveNickname();
-                      if (e.key === "Escape") setIsEditingNickname(false);
-                    }}
-                    onBlur={handleSaveNickname}
-                    maxLength={24}
-                    disabled={isSavingNickname}
-                    className="w-40 border-b border-teal-300/40 bg-transparent text-[15px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
-                    placeholder="Your name"
-                  />
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleStartEditingNickname}
-                  className="mt-1 flex items-center gap-1.5 transition hover:opacity-80"
-                >
-                  <span className="text-[15px] font-medium text-teal-200">{displayName}</span>
-                  <Pencil className="h-3 w-3 text-slate-500" />
-                </button>
-              )}
-            </div>
+            <div className="profile-frame">
+              <div className="profile-rail profile-rail--top-left" aria-hidden="true" />
+              <div className="profile-rail profile-rail--top-right" aria-hidden="true" />
+              <div className="profile-rail profile-rail--bottom-left" aria-hidden="true" />
+              <div className="profile-rail profile-rail--bottom-right" aria-hidden="true" />
 
-            {/* ── Sun / Moon / Rising — tightly bracket-framed ────────── */}
-            <div className="profile-frame px-3 py-3">
-              <div className="profile-corner profile-corner--tl" aria-hidden="true" />
-              <div className="profile-corner profile-corner--tr" aria-hidden="true" />
-              <div className="profile-corner profile-corner--bl" aria-hidden="true" />
-              <div className="profile-corner profile-corner--br" aria-hidden="true" />
+              <div className="mb-5">
+                <h2 className="text-[28px] font-semibold leading-[1.02] tracking-tight text-white">
+                  Welcome
+                </h2>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Sun</span>
-                  <span className="text-[12px] text-slate-300">
+                {isEditingNickname ? (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <input
+                      ref={nicknameInputRef}
+                      type="text"
+                      value={nicknameInput}
+                      onChange={(e) => setNicknameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveNickname();
+                        if (e.key === "Escape") setIsEditingNickname(false);
+                      }}
+                      onBlur={handleSaveNickname}
+                      maxLength={24}
+                      disabled={isSavingNickname}
+                      className="w-40 border-b border-teal-300/40 bg-transparent text-[15px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
+                      placeholder="Your name"
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartEditingNickname}
+                    className="profile-name-button mt-1.5"
+                  >
+                    <span className="text-[15px] font-medium text-teal-200">{displayName}</span>
+                    <Pencil className="h-3 w-3 text-slate-500" />
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="big3-row">
+                  <span className="big3-value">
                     {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
                   </span>
+                  <span className="big3-label">Sun</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Moon</span>
-                  <span className="text-[12px] text-slate-300">
+
+                <div className="big3-row">
+                  <span className="big3-value">
                     {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
                   </span>
+                  <span className="big3-label">Moon</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Rising</span>
-                  <span className="text-[12px] text-slate-300">
+
+                <div className="big3-row">
+                  <span className="big3-value">
                     {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
                   </span>
+                  <span className="big3-label">Rising</span>
                 </div>
               </div>
             </div>
 
-            {/* ── Bottom half — Moon Phase Cycle (left) + Current Chart (right) ── */}
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
@@ -1385,18 +1426,16 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative space-y-3 text-center">
+            <div className="relative space-y-4 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              {/* Top line — long, full width, floating, disconnected */}
-              <div className="white-glow-shimmer h-px w-full bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+              <div className="white-glow-shimmer h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
 
-              <h1 className="text-[22px] font-semibold leading-[1.05] tracking-tight text-white">
+              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
                 Your Direct Future Insights
               </h1>
 
-              {/* Bottom line — matches heading width, centered, disconnected from top line */}
-              <div className="mx-auto white-glow-shimmer h-px w-[min(280px,80%)] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+              <div className="mx-auto white-glow-shimmer h-[2px] w-[min(320px,88%)] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
             </div>
           </section>
 
