@@ -1274,7 +1274,7 @@ export default function ReadingIntakeScreen() {
           )}
 
           {freeReadingCooldownLine && (
-            <div className="mb-14 flex items-center justify-center gap-2">
+            <div className="mb-20 flex items-center justify-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
               <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
