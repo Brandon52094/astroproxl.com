@@ -138,7 +138,7 @@ export default function ReadingIntakeScreen() {
   // clusterTopRef = the selected card (top of the visible cluster)
   // textareaRef = the textarea itself, focused after scroll settles
   // clusterBottomRef = sits right after the subscribe pill (bottom of cluster)
-  const clusterTopRef = useRef<HTMLDivElement | null>(null);
+  const clusterTopRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
