@@ -1024,7 +1024,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-50"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-60"
         style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1387,17 +1387,18 @@ export default function ReadingIntakeScreen() {
                             More Readings, No Waiting. 
                           </h3>
                           <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-                            Readings, on demand — Immediate insights answers when something's actually bothering you, or you need instant clarity. No Cool Down timer. 
+                            Incase you need more than one reading a week, would like a good value. This is the best route. Financially & Mathematheically. See what you get below!
                           </p>
                         </div>
 
                         <div className="space-y-2">
                           {[
-                            "8 Readings Included",
-                            "Follow Up Replies",
-                            "No Weekly Cool Down",
-                            "Downloads always included",
-                            "Access to the Feedback box"
+                            "8 Readings, not 1",
+                            "Ask Follow Ups Free",
+                            "No 2-week wait, no $6 to skip it",
+                            "Downloads Always Free.",
+                            "1 free Feedback Submission per month"
+                            "First Access to New Features" 
                           ].map((perk) => (
                             <div key={perk} className="flex items-center gap-2.5">
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
