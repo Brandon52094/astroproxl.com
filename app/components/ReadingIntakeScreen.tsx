@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Lock,
   Timer,
+  Moon,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -95,6 +96,23 @@ interface UserStatus {
   freeReadingAvailable: boolean;
 }
 
+// ── Profile module data shapes — mirrors lib/chartStore + chart-calculate ──────
+interface MoonPhaseData {
+  phaseName: string;
+  illuminationPercent: number;
+  nextEventName: "New Moon" | "Full Moon";
+  daysUntilNextEvent: number;
+  moonSign: string;
+  moonDegree: string;
+}
+
+interface TodayTransitPlanet {
+  name: string;
+  sign: string;
+  degree: string;
+  isRetrograde: boolean;
+}
+
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "soon";
@@ -102,6 +120,21 @@ function formatTimeRemaining(expiresAt: string): string {
   const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   if (days > 0) return `${days}d ${hours}h`;
   return `${hours}h`;
+}
+
+// Visual moon glyph by phase name — simple, no external image needed
+function getMoonGlyph(phaseName: string): string {
+  const glyphs: Record<string, string> = {
+    "New Moon": "🌑",
+    "Waxing Crescent": "🌒",
+    "First Quarter": "🌓",
+    "Waxing Gibbous": "🌔",
+    "Full Moon": "🌕",
+    "Waning Gibbous": "🌖",
+    "Last Quarter": "🌗",
+    "Waning Crescent": "🌘",
+  };
+  return glyphs[phaseName] ?? "🌙";
 }
 
 export default function ReadingIntakeScreen() {
@@ -117,6 +150,11 @@ export default function ReadingIntakeScreen() {
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
+
+  // ── Profile module state — Moon Phase Cycle + Current Chart ────────
+  const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
+  const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
+  const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
 
   // ── Glitch state for Coming Soon ────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
@@ -135,9 +173,6 @@ export default function ReadingIntakeScreen() {
   }, []);
 
   // ── Refs for scroll-then-focus sequencing ───────────────────────
-  // clusterTopRef = the selected card (top of the visible cluster)
-  // textareaRef = the textarea itself, focused after scroll settles
-  // clusterBottomRef = sits right after the subscribe pill (bottom of cluster)
   const clusterTopRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
@@ -285,6 +320,32 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
+  // ── Load profile module data (moon phase + today's Sun/Moon) ──────
+  // Reads from the same chart object already cached by ensureChart() above.
+  // Runs whenever chartStatus flips to "ready" so it works both on first
+  // load and after a silent recalculation.
+  useEffect(() => {
+    if (chartStatus !== "ready") return;
+    const chart = loadChart();
+    if (!chart?.chartData) return;
+
+    const data = chart.chartData as unknown as {
+      moonPhase?: MoonPhaseData;
+      transits?: TodayTransitPlanet[];
+    };
+
+    if (data.moonPhase) {
+      setMoonPhase(data.moonPhase);
+    }
+
+    if (data.transits) {
+      const sun = data.transits.find((p) => p.name === "Sun") ?? null;
+      const moon = data.transits.find((p) => p.name === "Moon") ?? null;
+      setTodaySun(sun);
+      setTodayMoon(moon);
+    }
+  }, [chartStatus]);
+
   const fetchInFlight = useRef(false);
 
   const fetchStatus = useCallback(async (): Promise<number> => {
@@ -368,20 +429,11 @@ export default function ReadingIntakeScreen() {
     return question.trim().length > 0;
   }, [question, selectedArea, chartStatus, userStatus]);
 
-  // ── Scroll-then-focus sequence ───────────────────────────────────
-  // 1. Card tap selects the area (textarea renders for love/money/career)
-  // 2. Wait one frame for the textarea to mount in the DOM
-  // 3. Calculate a scroll position that fits: selected card → textarea →
-  //    Begin button → subscribe pill, anchored near the top of the
-  //    space that will remain visible once the keyboard opens
-  // 4. After the scroll finishes, focus the textarea — THIS is what
-  //    opens the keyboard, not the card tap itself
   const scrollClusterIntoViewThenFocus = useCallback(() => {
     if (scrollFocusTimeoutRef.current) {
       clearTimeout(scrollFocusTimeoutRef.current);
     }
 
-    // Wait a frame so the textarea has mounted and refs are attached
     requestAnimationFrame(() => {
       const topEl = clusterTopRef.current;
       if (!topEl) return;
@@ -389,11 +441,7 @@ export default function ReadingIntakeScreen() {
       const topRect = topEl.getBoundingClientRect();
       const currentScrollY = window.scrollY || document.documentElement.scrollTop;
 
-      // Target: bring the selected card to sit near the top of the
-      // viewport (with a small offset for breathing room), which in
-      // practice leaves the textarea + both buttons visible in the
-      // remaining space above where the keyboard will appear.
-      const topOffset = 12; // px of breathing room above the selected card
+      const topOffset = 12;
       const targetScrollY = currentScrollY + topRect.top - topOffset;
 
       window.scrollTo({
@@ -401,9 +449,6 @@ export default function ReadingIntakeScreen() {
         behavior: "smooth",
       });
 
-      // Focus the textarea only after the scroll has had time to settle.
-      // This is the deliberate delay that makes the keyboard open AFTER
-      // scrolling finishes, not at the same time as it.
       scrollFocusTimeoutRef.current = setTimeout(() => {
         textareaRef.current?.focus();
       }, 420);
@@ -1010,6 +1055,43 @@ export default function ReadingIntakeScreen() {
           opacity: 1;
         }
 
+        /* ── PROFILE MODULE — corner brackets, no solid box ──────────── */
+        .profile-frame {
+          position: relative;
+        }
+
+        .profile-corner {
+          position: absolute;
+          width: 22px;
+          height: 22px;
+          pointer-events: none;
+          z-index: 2;
+        }
+
+        .profile-corner--tl {
+          top: -6px;
+          left: -6px;
+          border-top: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-left: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-radius: 6px 0 0 0;
+        }
+
+        .profile-corner--tr {
+          top: -6px;
+          right: -6px;
+          border-top: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-right: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-radius: 0 6px 0 0;
+        }
+
+        .profile-corner--bl {
+          bottom: -6px;
+          left: -6px;
+          border-bottom: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-left: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-radius: 0 0 0 6px;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1081,7 +1163,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-60"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-6"
         style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1090,6 +1172,68 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
+          {/* ═══════════════════════════════════════════════════════════
+              PROFILE MODULE — Moon Phase Cycle (top) + Current Chart (bottom)
+              Framed with corner brackets, no solid box — matches the
+              hero's "floating lines, no box" treatment below it.
+              Right side intentionally left blank for a future feature.
+          ═══════════════════════════════════════════════════════════ */}
+          <div className="profile-frame mb-8 px-1 pt-2 pb-3">
+            <div className="profile-corner profile-corner--tl" aria-hidden="true" />
+            <div className="profile-corner profile-corner--tr" aria-hidden="true" />
+            <div className="profile-corner profile-corner--bl" aria-hidden="true" />
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* ── Moon Phase Cycle (top, spans left column) ───────── */}
+              <div className="col-span-2 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-2xl">
+                  {moonPhase ? getMoonGlyph(moonPhase.phaseName) : <Moon className="h-5 w-5 text-teal-300/60" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                    Moon Phase Cycle
+                  </p>
+                  {moonPhase ? (
+                    <>
+                      <p className="mt-0.5 text-[13px] font-medium text-white">
+                        {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        Moon in {moonPhase.moonSign} · {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-0.5 text-[12px] text-slate-500">Loading…</p>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Current Chart (bottom-left) — today's Sun + Moon ── */}
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                <p className="mb-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                  Current Chart
+                </p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Sun</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Moon</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Intentionally blank — reserved for a future feature ── */}
+              <div aria-hidden="true" />
+            </div>
+          </div>
+
           {/* ── Hero — two disconnected floating lines, no box ───────── */}
           <section className="mb-3 space-y-3">
             {chartStatus === "recalculating" && (
@@ -1243,8 +1387,6 @@ export default function ReadingIntakeScreen() {
                   return (
                     <motion.button
                       key={area.id}
-                      // Attach the "cluster top" ref to whichever card is
-                      // currently selected — this is what we scroll to.
                       ref={isSelected ? clusterTopRef : undefined}
                       whileTap={{ scale: 0.985 }}
                       transition={{ duration: 0.12 }}
@@ -1255,9 +1397,6 @@ export default function ReadingIntakeScreen() {
                         setQuestion("");
                         trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
 
-                        // Only the three areas with a free-text textarea
-                        // (love/money/career) need the scroll-then-focus
-                        // sequence. "other" has no textarea to focus.
                         if (isFirstSelection && area.id !== "other") {
                           scrollClusterIntoViewThenFocus();
                         }
@@ -1390,10 +1529,6 @@ export default function ReadingIntakeScreen() {
                         AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
-                      // text-[16px] forced explicitly here too — this screen's
-                      // own className wins over the base component's default,
-                      // so the 16px-minimum fix has to be applied at both levels
-                      // to fully stop iOS Safari's auto-zoom-on-focus.
                       className="min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300"
                     />
                     <p className="text-xs leading-5 text-slate-400">
