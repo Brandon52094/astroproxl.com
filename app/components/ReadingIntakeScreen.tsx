@@ -1225,7 +1225,7 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative space-y-5 text-center">
+            <div className="relative space-y-2 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
               <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
