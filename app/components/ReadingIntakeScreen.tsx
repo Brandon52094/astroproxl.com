@@ -1212,7 +1212,7 @@ export default function ReadingIntakeScreen() {
           className="flex flex-col"
         >
           {/* ── Hero — two disconnected floating lines, no box ───────── */}
-          <section className="mb-3 mt-12 space-y-3">
+          <section className="mb- mt-12 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1274,7 +1274,7 @@ export default function ReadingIntakeScreen() {
           )}
 
           {freeReadingCooldownLine && (
-            <div className="mb-3 flex items-center justify-center gap-2">
+            <div className="mb-10 flex items-center justify-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
               <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
