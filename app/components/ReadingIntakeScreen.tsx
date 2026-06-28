@@ -134,6 +134,15 @@ export default function ReadingIntakeScreen() {
     return () => clearInterval(tick);
   }, []);
 
+  // ── Refs for scroll-then-focus sequencing ───────────────────────
+  // clusterTopRef = the selected card (top of the visible cluster)
+  // textareaRef = the textarea itself, focused after scroll settles
+  // clusterBottomRef = sits right after the subscribe pill (bottom of cluster)
+  const clusterTopRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const clusterBottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // ── Glitch effect handler ────────────────────────────────────────
   const triggerGlitch = useCallback(() => {
     if (shouldReduceMotion) return;
@@ -358,6 +367,54 @@ export default function ReadingIntakeScreen() {
     if (selectedArea === "other") return true;
     return question.trim().length > 0;
   }, [question, selectedArea, chartStatus, userStatus]);
+
+  // ── Scroll-then-focus sequence ───────────────────────────────────
+  // 1. Card tap selects the area (textarea renders for love/money/career)
+  // 2. Wait one frame for the textarea to mount in the DOM
+  // 3. Calculate a scroll position that fits: selected card → textarea →
+  //    Begin button → subscribe pill, anchored near the top of the
+  //    space that will remain visible once the keyboard opens
+  // 4. After the scroll finishes, focus the textarea — THIS is what
+  //    opens the keyboard, not the card tap itself
+  const scrollClusterIntoViewThenFocus = useCallback(() => {
+    if (scrollFocusTimeoutRef.current) {
+      clearTimeout(scrollFocusTimeoutRef.current);
+    }
+
+    // Wait a frame so the textarea has mounted and refs are attached
+    requestAnimationFrame(() => {
+      const topEl = clusterTopRef.current;
+      if (!topEl) return;
+
+      const topRect = topEl.getBoundingClientRect();
+      const currentScrollY = window.scrollY || document.documentElement.scrollTop;
+
+      // Target: bring the selected card to sit near the top of the
+      // viewport (with a small offset for breathing room), which in
+      // practice leaves the textarea + both buttons visible in the
+      // remaining space above where the keyboard will appear.
+      const topOffset = 12; // px of breathing room above the selected card
+      const targetScrollY = currentScrollY + topRect.top - topOffset;
+
+      window.scrollTo({
+        top: Math.max(0, targetScrollY),
+        behavior: "smooth",
+      });
+
+      // Focus the textarea only after the scroll has had time to settle.
+      // This is the deliberate delay that makes the keyboard open AFTER
+      // scrolling finishes, not at the same time as it.
+      scrollFocusTimeoutRef.current = setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 420);
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scrollFocusTimeoutRef.current) clearTimeout(scrollFocusTimeoutRef.current);
+    };
+  }, []);
 
   const handleStartReading = async () => {
     if (!canSubmit || !selectedArea) return;
@@ -1024,7 +1081,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-60"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
         style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1186,13 +1243,24 @@ export default function ReadingIntakeScreen() {
                   return (
                     <motion.button
                       key={area.id}
+                      // Attach the "cluster top" ref to whichever card is
+                      // currently selected — this is what we scroll to.
+                      ref={isSelected ? clusterTopRef : undefined}
                       whileTap={{ scale: 0.985 }}
                       transition={{ duration: 0.12 }}
                       type="button"
                       onClick={() => {
+                        const isFirstSelection = selectedArea !== area.id;
                         setSelectedArea(area.id);
                         setQuestion("");
                         trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
+
+                        // Only the three areas with a free-text textarea
+                        // (love/money/career) need the scroll-then-focus
+                        // sequence. "other" has no textarea to focus.
+                        if (isFirstSelection && area.id !== "other") {
+                          scrollClusterIntoViewThenFocus();
+                        }
                       }}
                       animate={
                         isSelected
@@ -1314,6 +1382,7 @@ export default function ReadingIntakeScreen() {
                   >
                     <Textarea
                       id="question"
+                      ref={textareaRef}
                       rows={5}
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
@@ -1321,7 +1390,11 @@ export default function ReadingIntakeScreen() {
                         AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
-                      className="min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[15px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300"
+                      // text-[16px] forced explicitly here too — this screen's
+                      // own className wins over the base component's default,
+                      // so the 16px-minimum fix has to be applied at both levels
+                      // to fully stop iOS Safari's auto-zoom-on-focus.
+                      className="min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300"
                     />
                     <p className="text-xs leading-5 text-slate-400">
                       Be specific. The clearer your question, the sharper the reading.
@@ -1332,7 +1405,7 @@ export default function ReadingIntakeScreen() {
             </>
           )}
 
-          <div className="mt-6 space-y-3 pb-2">
+          <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
             )}
