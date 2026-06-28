@@ -471,10 +471,9 @@ export default function ReadingIntakeScreen() {
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
     const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((ms % (1000 * 60)) / 1000);
     const parts = [];
     if (days > 0) parts.push(`${days}d`);
-    parts.push(`${hours}h`, `${minutes}m`, `${seconds}s`);
+    parts.push(`${hours}h`, `${minutes}m`);
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
@@ -1032,16 +1031,13 @@ export default function ReadingIntakeScreen() {
               whileTap={{ scale: 0.94 }}
               transition={{ duration: 0.12 }}
               type="button"
-              onClick={() => router.back()}
+              onClick={() => router.push("/chart-data")}
               className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />
             </motion.button>
 
             <div className="text-center">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                Direct Future Predictions
-              </p>
               <p className="mt-1 text-xs text-slate-400">Reading Setup</p>
             </div>
 
@@ -1065,7 +1061,7 @@ export default function ReadingIntakeScreen() {
 
             <div className="relative space-y-2 text-left">
               <div className="hero-halo" aria-hidden="true" />
-              <div className="w-full border border-teal-300/30 bg-black/40 px-4 py-3">
+              <div className="-mx-4 rounded-2xl border border-white/40 bg-black/40 px-4 py-4 shadow-[0_0_30px_rgba(251,191,36,0.08)]">
                 <h1 className="text-center text-[26px] font-semibold leading-[1.05] tracking-tight text-white">
                   You Can Ask Anything
                 </h1>
@@ -1076,22 +1072,7 @@ export default function ReadingIntakeScreen() {
             </div>
           </section>
 
-          {chartStatus === "ready" && (() => {
-            const chart = loadChart();
-            return chart ? (
-              <div className="-mt-2 mb-1 text-xs text-slate-500">
-                <span>{chart.birthPlace}</span>
-                <span className="mx-1.5">·</span>
-                <button
-                  type="button"
-                  onClick={() => router.push("/chart-data")}
-                  className="text-slate-400 transition hover:text-teal-300"
-                >
-                  Check My Chart
-                </button>
-              </div>
-            ) : null;
-          })()}
+          <div className="mt-8"></div>
 
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
             <div className="mb-1 space-y-2">
@@ -1132,7 +1113,7 @@ export default function ReadingIntakeScreen() {
           )}
 
           {freeReadingCooldownLine && (
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex items-center justify-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
               <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
