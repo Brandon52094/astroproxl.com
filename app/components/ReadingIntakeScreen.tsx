@@ -1065,42 +1065,36 @@ export default function ReadingIntakeScreen() {
 
             <div className="relative space-y-2 text-left">
               <div className="hero-halo" aria-hidden="true" />
-              <div className="hero-pill">
-                <h1 className="text-[26px] font-semibold leading-[1.05] tracking-tight text-white">
+              <div className="w-full border border-teal-300/30 bg-black/40 px-4 py-3">
+                <h1 className="text-center text-[26px] font-semibold leading-[1.05] tracking-tight text-white">
                   You Can Ask Anything
                 </h1>
               </div>
-              <p className="mx-auto max-w-[38ch] text-sm leading-6 text-slate-300">
-                Download your readings, they are not saved. 
+              <p className="mx-auto max-w-[38ch] text-center text-sm leading-6 text-slate-300">
+                Your Direct Future Insights
               </p>
-              {chartStatus === "ready" && (() => {
-                const chart = loadChart();
-                return chart ? (
-                  <div className="pt-1 text-xs text-slate-500">
-                    <span>{chart.birthPlace}</span>
-                    <span className="mx-1.5">·</span>
-                    <button
-                      type="button"
-                      onClick={() => router.push("/chart-data")}
-                      className="text-slate-400 transition hover:text-teal-300"
-                    >
-                      Check My Chart
-                    </button>
-                  </div>
-                ) : null;
-              })()}
             </div>
           </section>
 
-          {freeReadingCooldownLine && (
-            <div className="mb-3 flex items-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
-              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
-            </div>
-          )}
+          {chartStatus === "ready" && (() => {
+            const chart = loadChart();
+            return chart ? (
+              <div className="-mt-2 mb-1 text-xs text-slate-500">
+                <span>{chart.birthPlace}</span>
+                <span className="mx-1.5">·</span>
+                <button
+                  type="button"
+                  onClick={() => router.push("/chart-data")}
+                  className="text-slate-400 transition hover:text-teal-300"
+                >
+                  Check My Chart
+                </button>
+              </div>
+            ) : null;
+          })()}
 
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-6 space-y-2">
+            <div className="mb-1 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
                   Reading cycle
@@ -1134,6 +1128,13 @@ export default function ReadingIntakeScreen() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {freeReadingCooldownLine && (
+            <div className="mb-3 flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
+              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
           )}
 
@@ -1388,7 +1389,7 @@ export default function ReadingIntakeScreen() {
                   onClick={() => setShowSubscriptionDetails((s) => !s)}
                   className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-white/[0.03]"
                 >
-                  <span className="text-[13px] font-semibold text-amber-200">Subscribe</span>
+                  <span className="text-[13px] font-semibold text-amber-200">The Plot</span>
                   <span className="flex items-center gap-2">
                     <span className="text-[12px] text-slate-400">$12.99/mo</span>
                     <motion.span
