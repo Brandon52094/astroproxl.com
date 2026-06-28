@@ -1426,7 +1426,7 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative space-y-4 text-center">
+            <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
               <div className="white-glow-shimmer h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
