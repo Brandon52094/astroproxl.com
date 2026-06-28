@@ -109,14 +109,44 @@ function parseDateParts(birthDate: string): [number, number, number] {
 }
 
 function parseTimeTo24h(birthTime: string): [number, number] {
-  const timeMatch = birthTime.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
-  if (!timeMatch) throw new Error(`Unrecognized birthTime format: ${birthTime}`);
-  let hour = Number(timeMatch[1]);
-  const minute = Number(timeMatch[2]);
-  const meridiem = timeMatch[3]?.toLowerCase();
-  if (meridiem === "pm" && hour !== 12) hour += 12;
-  if (meridiem === "am" && hour === 12) hour = 0;
-  return [hour, minute];
+  const trimmed = birthTime.trim();
+
+  // Standard colon format — "2:22 AM", "14:22", "2:22pm" (with or without space)
+  const colonMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+  if (colonMatch) {
+    let hour = Number(colonMatch[1]);
+    const minute = Number(colonMatch[2]);
+    const meridiem = colonMatch[3]?.toLowerCase();
+    if (meridiem === "pm" && hour !== 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+    return [hour, minute];
+  }
+
+  // Plain digit format — "1048" (10:48), "848" (8:48), optionally with am/pm
+  // e.g. "1048", "1048pm", "848am"
+  const digitMatch = trimmed.match(/^(\d{3,4})\s*(am|pm)?$/i);
+  if (digitMatch) {
+    const digits = digitMatch[1];
+    const meridiem = digitMatch[2]?.toLowerCase();
+    let hour: number;
+    let minute: number;
+    if (digits.length === 4) {
+      hour = Number(digits.slice(0, 2));
+      minute = Number(digits.slice(2));
+    } else {
+      // 3 digits — first digit is the hour, last two are minutes
+      hour = Number(digits.slice(0, 1));
+      minute = Number(digits.slice(1));
+    }
+    if (meridiem === "pm" && hour !== 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+    if (hour > 23 || minute > 59) {
+      throw new Error(`Unrecognized birthTime format: ${birthTime}`);
+    }
+    return [hour, minute];
+  }
+
+  throw new Error(`Unrecognized birthTime format: ${birthTime}`);
 }
 
 function toJulianDay(birthDate: string, birthTime: string, utcOffsetHours: number = 0): number {
