@@ -1538,7 +1538,7 @@ export default function ReadingIntakeScreen() {
                   onClick={() => setShowSubscriptionDetails((s) => !s)}
                   className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-white/[0.03]"
                 >
-                  <span className="text-[13px] font-semibold text-amber-200">The Plot</span>
+                  <span className="text-[13px] font-semibold text-amber-200">Unlimited Access</span>
                   <span className="flex items-center gap-2">
                     <span className="text-[12px] text-slate-400">$12.99/mo</span>
                     <motion.span
