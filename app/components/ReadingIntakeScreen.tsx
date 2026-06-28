@@ -1397,8 +1397,8 @@ export default function ReadingIntakeScreen() {
                             "Ask Follow Ups Free",
                             "No 2-week wait, no $6 to skip it",
                             "Downloads Always Free.",
-                            "1 free Feedback Submission per month"
-                            "First Access to New Features" 
+                            "1 free Feedback Submission per month",
+                            "First Access to New Features"
                           ].map((perk) => (
                             <div key={perk} className="flex items-center gap-2.5">
                               <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
