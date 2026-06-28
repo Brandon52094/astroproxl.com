@@ -103,6 +103,38 @@ interface NatalPlacement {
   degree: string;
 }
 
+// ── Moon Phase Cycle — bottom-left card ────────────────────────────────────────
+interface MoonPhaseData {
+  phaseName: string;
+  illuminationPercent: number;
+  nextEventName: "New Moon" | "Full Moon";
+  daysUntilNextEvent: number;
+  moonSign: string;
+  moonDegree: string;
+}
+
+interface TodayTransitPlanet {
+  name: string;
+  sign: string;
+  degree: string;
+  isRetrograde: boolean;
+}
+
+// Visual moon glyph by phase name — simple, no external image needed
+function getMoonGlyph(phaseName: string): string {
+  const glyphs: Record<string, string> = {
+    "New Moon": "🌑",
+    "Waxing Crescent": "🌒",
+    "First Quarter": "🌓",
+    "Waxing Gibbous": "🌔",
+    "Full Moon": "🌕",
+    "Waning Gibbous": "🌖",
+    "Last Quarter": "🌗",
+    "Waning Crescent": "🌘",
+  };
+  return glyphs[phaseName] ?? "🌙";
+}
+
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "soon";
@@ -135,6 +167,11 @@ export default function ReadingIntakeScreen() {
   const [nicknameInput, setNicknameInput] = useState("");
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const nicknameInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── Bottom-half profile state — Moon Phase Cycle + Current Chart ──
+  const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
+  const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
+  const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
 
   // ── Glitch state for Coming Soon ────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
@@ -309,6 +346,8 @@ export default function ReadingIntakeScreen() {
 
     const data = chart.chartData as unknown as {
       tropical?: { planets?: Array<{ name: string; sign: string; degree: string }> };
+      moonPhase?: MoonPhaseData;
+      transits?: TodayTransitPlanet[];
     };
 
     const planets = data.tropical?.planets ?? [];
@@ -319,6 +358,17 @@ export default function ReadingIntakeScreen() {
     setNatalSun(sun);
     setNatalMoon(moon);
     setNatalRising(rising);
+
+    if (data.moonPhase) {
+      setMoonPhase(data.moonPhase);
+    }
+
+    if (data.transits) {
+      const todaySunPlanet = data.transits.find((p) => p.name === "Sun") ?? null;
+      const todayMoonPlanet = data.transits.find((p) => p.name === "Moon") ?? null;
+      setTodaySun(todaySunPlanet);
+      setTodayMoon(todayMoonPlanet);
+    }
   }, [chartStatus]);
 
   // ── Load saved nickname ─────────────────────────────────────────────
@@ -1271,6 +1321,50 @@ export default function ReadingIntakeScreen() {
                 <span className="text-[12px] text-slate-300">
                   {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
                 </span>
+              </div>
+            </div>
+
+            {/* ── Bottom half — Moon Phase Cycle (left) + Current Chart (right) ── */}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
+                  {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
+                </div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  Moon Phase Cycle
+                </p>
+                {moonPhase ? (
+                  <>
+                    <p className="text-[12px] font-medium text-white">
+                      {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-slate-500">Loading…</p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  Current Chart
+                </p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Sun</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Moon</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
