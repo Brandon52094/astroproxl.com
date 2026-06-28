@@ -144,11 +144,6 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${hours}h`;
 }
 
-// ── Top module cycle — three panels that auto-rotate with manual override ──
-const TOP_MODULES = ["profile", "transits", "hero"] as const;
-type TopModule = (typeof TOP_MODULES)[number];
-const TOP_MODULE_INTERVAL_MS = 6000;
-
 export default function ReadingIntakeScreen() {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
@@ -177,37 +172,6 @@ export default function ReadingIntakeScreen() {
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
-
-  // ── Top module cycle — profile / transits / hero, auto + manual ────
-  const [activeTopModule, setActiveTopModule] = useState<TopModule>("profile");
-  const topModuleTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const goToTopModule = useCallback((index: number) => {
-    const wrapped = ((index % TOP_MODULES.length) + TOP_MODULES.length) % TOP_MODULES.length;
-    setActiveTopModule(TOP_MODULES[wrapped]);
-  }, []);
-
-  const activeTopModuleIndex = TOP_MODULES.indexOf(activeTopModule);
-
-  // Auto-rotate. Restarts its own clock whenever the active panel changes,
-  // including from a manual click — so a manual jump doesn't get immediately
-  // overridden by a stale timer.
-  useEffect(() => {
-    if (topModuleTimerRef.current) clearTimeout(topModuleTimerRef.current);
-    topModuleTimerRef.current = setTimeout(() => {
-      goToTopModule(activeTopModuleIndex + 1);
-    }, TOP_MODULE_INTERVAL_MS);
-    return () => {
-      if (topModuleTimerRef.current) clearTimeout(topModuleTimerRef.current);
-    };
-  }, [activeTopModuleIndex, goToTopModule]);
-
-  const handleManualTopModuleSelect = useCallback(
-    (mod: TopModule) => {
-      setActiveTopModule(mod);
-    },
-    []
-  );
 
   // ── Glitch state for Coming Soon ────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
@@ -1252,21 +1216,6 @@ export default function ReadingIntakeScreen() {
           color: rgba(94, 234, 212, 0.72);
         }
 
-        /* ── TOP CYCLE — dot rail for manual override ───────────────── */
-        .top-cycle-dot {
-          height: 6px;
-          width: 6px;
-          border-radius: 9999px;
-          background: rgba(255, 255, 255, 0.18);
-          transition: background-color 200ms ease, width 200ms ease;
-        }
-
-        .top-cycle-dot[data-active="true"] {
-          width: 18px;
-          background: rgba(94, 234, 212, 0.85);
-          box-shadow: 0 0 8px rgba(94, 234, 212, 0.5);
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1339,7 +1288,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-10 pt-40"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-6"
         style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1349,237 +1298,192 @@ export default function ReadingIntakeScreen() {
           className="flex flex-col"
         >
           {/* ═══════════════════════════════════════════════════════════
-              TOP CYCLE — three panels share this space and rotate:
-              1) Profile (welcome pill + natal Sun/Moon/Rising)
-              2) Transits (Moon Phase Cycle + Current Chart)
-              3) Hero (Your Direct Future Insights + reading cycle reset)
-              Auto-advances every 6s; a tap on a dot jumps directly and
-              resets the auto-advance clock from that point.
+              PROFILE MODULE — Welcome pill (editable nickname) +
+              natal Sun/Moon/Rising with full degree precision.
+              Framed with four disconnected glowing rails.
           ═══════════════════════════════════════════════════════════ */}
-          <div className="relative mb-6 px-1">
-            {/* Floating white line sits above the cycling content */}
-            <div className="white-glow-shimmer mb-6 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+          <div className="mb-8 px-1">
+            <div className="profile-frame">
+              <div className="profile-rail profile-rail--top-left" aria-hidden="true" />
+              <div className="profile-rail profile-rail--top-right" aria-hidden="true" />
+              <div className="profile-rail profile-rail--bottom-left" aria-hidden="true" />
+              <div className="profile-rail profile-rail--bottom-right" aria-hidden="true" />
 
-            <AnimatePresence mode="wait">
-              {activeTopModule === "profile" && (
-                <motion.div
-                  key="profile"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                >
-                  <div className="profile-frame">
-                    <div className="profile-rail profile-rail--top-left" aria-hidden="true" />
-                    <div className="profile-rail profile-rail--top-right" aria-hidden="true" />
-                    <div className="profile-rail profile-rail--bottom-left" aria-hidden="true" />
-                    <div className="profile-rail profile-rail--bottom-right" aria-hidden="true" />
+              <div className="mb-5">
+                <h2 className="text-[28px] font-semibold leading-[1.02] tracking-tight text-white">
+                  Welcome
+                </h2>
 
-                    <div className="mb-5">
-                      <h2 className="text-[28px] font-semibold leading-[1.02] tracking-tight text-white">
-                        Welcome
-                      </h2>
-
-                      {isEditingNickname ? (
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <input
-                            ref={nicknameInputRef}
-                            type="text"
-                            value={nicknameInput}
-                            onChange={(e) => setNicknameInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleSaveNickname();
-                              if (e.key === "Escape") setIsEditingNickname(false);
-                            }}
-                            onBlur={handleSaveNickname}
-                            maxLength={24}
-                            disabled={isSavingNickname}
-                            className="w-40 border-b border-teal-300/40 bg-transparent text-[15px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
-                            placeholder="Your name"
-                          />
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleStartEditingNickname}
-                          className="profile-name-button mt-1.5"
-                        >
-                          <span className="text-[15px] font-medium text-teal-200">{displayName}</span>
-                          <Pencil className="h-3 w-3 text-slate-500" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="big3-row">
-                        <span className="big3-value">
-                          {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
-                        </span>
-                        <span className="big3-label">Sun</span>
-                      </div>
-
-                      <div className="big3-row">
-                        <span className="big3-value">
-                          {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
-                        </span>
-                        <span className="big3-label">Moon</span>
-                      </div>
-
-                      <div className="big3-row">
-                        <span className="big3-value">
-                          {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
-                        </span>
-                        <span className="big3-label">Rising</span>
-                      </div>
-                    </div>
+                {isEditingNickname ? (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <input
+                      ref={nicknameInputRef}
+                      type="text"
+                      value={nicknameInput}
+                      onChange={(e) => setNicknameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveNickname();
+                        if (e.key === "Escape") setIsEditingNickname(false);
+                      }}
+                      onBlur={handleSaveNickname}
+                      maxLength={24}
+                      disabled={isSavingNickname}
+                      className="w-40 border-b border-teal-300/40 bg-transparent text-[15px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
+                      placeholder="Your name"
+                    />
                   </div>
-                </motion.div>
-              )}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartEditingNickname}
+                    className="profile-name-button mt-1.5"
+                  >
+                    <span className="text-[15px] font-medium text-teal-200">{displayName}</span>
+                    <Pencil className="h-3 w-3 text-slate-500" />
+                  </button>
+                )}
+              </div>
 
-              {activeTopModule === "transits" && (
-                <motion.div
-                  key="transits"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="grid grid-cols-2 gap-3"
-                >
-                  <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
-                      {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
-                    </div>
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                      Moon Phase Cycle
+              <div className="space-y-2">
+                <div className="big3-row">
+                  <span className="big3-value">
+                    {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
+                  </span>
+                  <span className="big3-label">Sun</span>
+                </div>
+
+                <div className="big3-row">
+                  <span className="big3-value">
+                    {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
+                  </span>
+                  <span className="big3-label">Moon</span>
+                </div>
+
+                <div className="big3-row">
+                  <span className="big3-value">
+                    {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
+                  </span>
+                  <span className="big3-label">Rising</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
+                  {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
+                </div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  Moon Phase Cycle
+                </p>
+                {moonPhase ? (
+                  <>
+                    <p className="text-[12px] font-medium text-white">
+                      {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
                     </p>
-                    {moonPhase ? (
-                      <>
-                        <p className="text-[12px] font-medium text-white">
-                          {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-[11px] text-slate-500">Loading…</p>
-                    )}
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
-                    <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                      Current Chart
+                    <p className="text-[10px] text-slate-400">
+                      {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
                     </p>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500">Sun</span>
-                        <span className="text-[11px] text-slate-300">
-                          {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500">Moon</span>
-                        <span className="text-[11px] text-slate-300">
-                          {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
-                        </span>
-                      </div>
-                    </div>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-slate-500">Loading…</p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  Current Chart
+                </p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Sun</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
+                    </span>
                   </div>
-                </motion.div>
-              )}
-
-              {activeTopModule === "hero" && (
-                <motion.div
-                  key="hero"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                >
-                  {chartStatus === "recalculating" && (
-                    <div className="mb-3 flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                      Refreshing your chart…
-                    </div>
-                  )}
-                  {chartStatus === "error" && (
-                    <div className="mb-3 flex w-fit items-center gap-2 rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100">
-                      Chart data unavailable — please go back and recalculate
-                    </div>
-                  )}
-
-                  <div className="relative space-y-5 text-center">
-                    <div className="hero-halo" aria-hidden="true" />
-
-                    <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
-                      Your Direct Future Insights
-                    </h1>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Moon</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
+                    </span>
                   </div>
-
-                  {(userStatus?.firstReadingUsed ||
-                    (userStatus?.readingsCompleted ?? 0) > 0 ||
-                    onCooldown) && (
-                    <div className="mx-auto mt-5 w-full max-w-[280px] space-y-2">
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                          Reading cycle
-                        </span>
-                        <span className="text-[10px] text-slate-600">
-                          {onCooldown ? 4 : readingsCompleted} / 4
-                        </span>
-                      </div>
-                      <div className="flex gap-1.5">
-                        {Array.from({ length: 4 }).map((_, i) => (
-                          <div
-                            key={i}
-                            className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]"
-                          >
-                            {(onCooldown || i < readingsCompleted) && (
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: "100%" }}
-                                transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
-                                className={cn(
-                                  "absolute inset-y-0 left-0 rounded-full",
-                                  onCooldown ? "bg-indigo-400" : "bg-teal-300"
-                                )}
-                                style={{
-                                  boxShadow: onCooldown
-                                    ? "0 0 8px rgba(99,102,241,0.6)"
-                                    : "0 0 8px rgba(94,234,212,0.6)",
-                                }}
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {freeReadingCooldownLine && (
-                    <div className="mt-3 flex items-center justify-center gap-2">
-                      <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
-                      <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Manual override — tap a dot to jump straight to that panel */}
-            <div className="mt-5 flex items-center justify-center gap-2">
-              {TOP_MODULES.map((mod) => (
-                <button
-                  key={mod}
-                  type="button"
-                  aria-label={`Show ${mod} panel`}
-                  data-active={activeTopModule === mod ? "true" : "false"}
-                  onClick={() => handleManualTopModuleSelect(mod)}
-                  className="top-cycle-dot"
-                />
-              ))}
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* ── Hero — two disconnected floating lines, no box ───────── */}
+          <section className="mb-3 space-y-3">
+            {chartStatus === "recalculating" && (
+              <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Refreshing your chart…
+              </div>
+            )}
+            {chartStatus === "error" && (
+              <div className="flex w-fit items-center gap-2 rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100">
+                Chart data unavailable — please go back and recalculate
+              </div>
+            )}
+
+            <div className="relative space-y-5 text-center">
+              <div className="hero-halo" aria-hidden="true" />
+
+              <div className="white-glow-shimmer h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+
+              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
+                Your Direct Future Insights
+              </h1>
+
+              <div className="mx-auto white-glow-shimmer h-[2px] w-[min(320px,88%)] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+            </div>
+          </section>
+
+          {/* ── Reading cycle — centered ─────────────────────────────── */}
+          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
+            <div className="mb-1 mx-auto w-full max-w-[280px] space-y-2">
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                  Reading cycle
+                </span>
+                <span className="text-[10px] text-slate-600">
+                  {onCooldown ? 4 : readingsCompleted} / 4
+                </span>
+              </div>
+              <div className="flex gap-1.5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]"
+                  >
+                    {(onCooldown || i < readingsCompleted) && (
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: "100%" }}
+                        transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
+                        className={cn(
+                          "absolute inset-y-0 left-0 rounded-full",
+                          onCooldown ? "bg-indigo-400" : "bg-teal-300"
+                        )}
+                        style={{
+                          boxShadow: onCooldown
+                            ? "0 0 8px rgba(99,102,241,0.6)"
+                            : "0 0 8px rgba(94,234,212,0.6)",
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {freeReadingCooldownLine && (
+            <div className="mb-3 flex items-center justify-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
+              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
+            </div>
+          )}
 
           {onCooldown ? (
             <motion.div
