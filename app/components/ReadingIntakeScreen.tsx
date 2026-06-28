@@ -1138,42 +1138,42 @@ export default function ReadingIntakeScreen() {
 
         .profile-corner {
           position: absolute;
-          width: 22px;
-          height: 22px;
+          width: 14px;
+          height: 14px;
           pointer-events: none;
           z-index: 2;
         }
 
         .profile-corner--tl {
-          top: -6px;
-          left: -6px;
+          top: -4px;
+          left: -4px;
           border-top: 1.5px solid rgba(94, 234, 212, 0.45);
           border-left: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 6px 0 0 0;
+          border-radius: 4px 0 0 0;
         }
 
         .profile-corner--tr {
-          top: -6px;
-          right: -6px;
+          top: -4px;
+          right: -4px;
           border-top: 1.5px solid rgba(94, 234, 212, 0.45);
           border-right: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 0 6px 0 0;
+          border-radius: 0 4px 0 0;
         }
 
         .profile-corner--bl {
-          bottom: -6px;
-          left: -6px;
+          bottom: -4px;
+          left: -4px;
           border-bottom: 1.5px solid rgba(94, 234, 212, 0.45);
           border-left: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 0 0 0 6px;
+          border-radius: 0 0 0 4px;
         }
 
         .profile-corner--br {
-          bottom: -6px;
-          right: -6px;
+          bottom: -4px;
+          right: -4px;
           border-bottom: 1.5px solid rgba(94, 234, 212, 0.45);
           border-right: 1.5px solid rgba(94, 234, 212, 0.45);
-          border-radius: 0 0 6px 0;
+          border-radius: 0 0 4px 0;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1261,17 +1261,14 @@ export default function ReadingIntakeScreen() {
               natal Sun/Moon/Rising with full degree precision.
               Framed with corner brackets on all four corners.
           ═══════════════════════════════════════════════════════════ */}
-          <div className="profile-frame mb-8 px-4 pt-6 pb-5">
-            <div className="profile-corner profile-corner--tl" aria-hidden="true" />
-            <div className="profile-corner profile-corner--tr" aria-hidden="true" />
-            <div className="profile-corner profile-corner--bl" aria-hidden="true" />
-            <div className="profile-corner profile-corner--br" aria-hidden="true" />
-
-            {/* ── Welcome pill — centered, tap to edit nickname ──────── */}
-            <div className="flex justify-center">
+          <div className="mb-8 px-1">
+            {/* ── Welcome headline + nickname — top-left, no brackets ── */}
+            <div className="mb-4">
+              <h2 className="text-[26px] font-semibold leading-[1.1] text-white">
+                Welcome
+              </h2>
               {isEditingNickname ? (
-                <div className="flex items-center gap-2 rounded-full border border-teal-300/40 bg-teal-400/[0.06] px-5 py-2.5">
-                  <span className="text-[13px] text-slate-400">Welcome,</span>
+                <div className="mt-1 flex items-center gap-2">
                   <input
                     ref={nicknameInputRef}
                     type="text"
@@ -1284,7 +1281,7 @@ export default function ReadingIntakeScreen() {
                     onBlur={handleSaveNickname}
                     maxLength={24}
                     disabled={isSavingNickname}
-                    className="w-32 bg-transparent text-[13px] font-semibold text-white outline-none placeholder:text-slate-500"
+                    className="w-40 border-b border-teal-300/40 bg-transparent text-[15px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
                     placeholder="Your name"
                   />
                 </div>
@@ -1292,35 +1289,40 @@ export default function ReadingIntakeScreen() {
                 <button
                   type="button"
                   onClick={handleStartEditingNickname}
-                  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-5 py-2.5 transition hover:border-teal-300/30 hover:bg-teal-400/[0.04]"
+                  className="mt-1 flex items-center gap-1.5 transition hover:opacity-80"
                 >
-                  <span className="text-[13px] text-slate-400">
-                    Welcome, <span className="font-semibold text-white">{displayName}</span>
-                  </span>
+                  <span className="text-[15px] font-medium text-teal-200">{displayName}</span>
                   <Pencil className="h-3 w-3 text-slate-500" />
                 </button>
               )}
             </div>
 
-            {/* ── Natal Sun / Moon / Rising — full degree precision ──── */}
-            <div className="mt-4 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Sun</span>
-                <span className="text-[12px] text-slate-300">
-                  {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Moon</span>
-                <span className="text-[12px] text-slate-300">
-                  {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Rising</span>
-                <span className="text-[12px] text-slate-300">
-                  {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
-                </span>
+            {/* ── Sun / Moon / Rising — tightly bracket-framed ────────── */}
+            <div className="profile-frame px-3 py-3">
+              <div className="profile-corner profile-corner--tl" aria-hidden="true" />
+              <div className="profile-corner profile-corner--tr" aria-hidden="true" />
+              <div className="profile-corner profile-corner--bl" aria-hidden="true" />
+              <div className="profile-corner profile-corner--br" aria-hidden="true" />
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Sun</span>
+                  <span className="text-[12px] text-slate-300">
+                    {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Moon</span>
+                  <span className="text-[12px] text-slate-300">
+                    {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Rising</span>
+                  <span className="text-[12px] text-slate-300">
+                    {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
+                  </span>
+                </div>
               </div>
             </div>
 
