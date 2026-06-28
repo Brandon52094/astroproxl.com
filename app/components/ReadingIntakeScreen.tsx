@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Lock,
   Timer,
-  Moon,
+  Pencil,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -96,21 +96,11 @@ interface UserStatus {
   freeReadingAvailable: boolean;
 }
 
-// ── Profile module data shapes — mirrors lib/chartStore + chart-calculate ──────
-interface MoonPhaseData {
-  phaseName: string;
-  illuminationPercent: number;
-  nextEventName: "New Moon" | "Full Moon";
-  daysUntilNextEvent: number;
-  moonSign: string;
-  moonDegree: string;
-}
-
-interface TodayTransitPlanet {
+// ── Natal Big 3 — Sun, Moon, Rising with full degree precision ────────────────
+interface NatalPlacement {
   name: string;
   sign: string;
   degree: string;
-  isRetrograde: boolean;
 }
 
 function formatTimeRemaining(expiresAt: string): string {
@@ -120,21 +110,6 @@ function formatTimeRemaining(expiresAt: string): string {
   const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   if (days > 0) return `${days}d ${hours}h`;
   return `${hours}h`;
-}
-
-// Visual moon glyph by phase name — simple, no external image needed
-function getMoonGlyph(phaseName: string): string {
-  const glyphs: Record<string, string> = {
-    "New Moon": "🌑",
-    "Waxing Crescent": "🌒",
-    "First Quarter": "🌓",
-    "Waxing Gibbous": "🌔",
-    "Full Moon": "🌕",
-    "Waning Gibbous": "🌖",
-    "Last Quarter": "🌗",
-    "Waning Crescent": "🌘",
-  };
-  return glyphs[phaseName] ?? "🌙";
 }
 
 export default function ReadingIntakeScreen() {
@@ -151,10 +126,15 @@ export default function ReadingIntakeScreen() {
   const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
-  // ── Profile module state — Moon Phase Cycle + Current Chart ────────
-  const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
-  const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
-  const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
+  // ── Profile module state — welcome pill + natal Big 3 ──────────────
+  const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
+  const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
+  const [natalRising, setNatalRising] = useState<NatalPlacement | null>(null);
+  const [nickname, setNickname] = useState<string | null>(null);
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [isSavingNickname, setIsSavingNickname] = useState(false);
+  const nicknameInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Glitch state for Coming Soon ────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
@@ -320,31 +300,77 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
-  // ── Load profile module data (moon phase + today's Sun/Moon) ──────
-  // Reads from the same chart object already cached by ensureChart() above.
-  // Runs whenever chartStatus flips to "ready" so it works both on first
-  // load and after a silent recalculation.
+  // ── Load profile module data — natal Sun/Moon/Rising ──────────────
+  // Pulled from the existing tropical natal chart, already cached.
   useEffect(() => {
     if (chartStatus !== "ready") return;
     const chart = loadChart();
     if (!chart?.chartData) return;
 
     const data = chart.chartData as unknown as {
-      moonPhase?: MoonPhaseData;
-      transits?: TodayTransitPlanet[];
+      tropical?: { planets?: Array<{ name: string; sign: string; degree: string }> };
     };
 
-    if (data.moonPhase) {
-      setMoonPhase(data.moonPhase);
-    }
+    const planets = data.tropical?.planets ?? [];
+    const sun = planets.find((p) => p.name === "Sun") ?? null;
+    const moon = planets.find((p) => p.name === "Moon") ?? null;
+    const rising = planets.find((p) => p.name === "Ascendant") ?? null;
 
-    if (data.transits) {
-      const sun = data.transits.find((p) => p.name === "Sun") ?? null;
-      const moon = data.transits.find((p) => p.name === "Moon") ?? null;
-      setTodaySun(sun);
-      setTodayMoon(moon);
-    }
+    setNatalSun(sun);
+    setNatalMoon(moon);
+    setNatalRising(rising);
   }, [chartStatus]);
+
+  // ── Load saved nickname ─────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch("/api/user/nickname");
+        const data = await response.json();
+        if (data.nickname) {
+          setNickname(data.nickname);
+        }
+      } catch {
+        // silent — falls back to Sun sign default
+      }
+    })();
+  }, []);
+
+  const handleStartEditingNickname = useCallback(() => {
+    setNicknameInput(nickname ?? natalSun?.sign ?? "");
+    setIsEditingNickname(true);
+    setTimeout(() => {
+      nicknameInputRef.current?.focus();
+      nicknameInputRef.current?.select();
+    }, 50);
+  }, [nickname, natalSun]);
+
+  const handleSaveNickname = useCallback(async () => {
+    const trimmed = nicknameInput.trim();
+    if (!trimmed) {
+      setIsEditingNickname(false);
+      return;
+    }
+    setIsSavingNickname(true);
+    try {
+      const response = await fetch("/api/user/nickname", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nickname: trimmed }),
+      });
+      const data = await response.json();
+      if (response.ok && data.nickname) {
+        setNickname(data.nickname);
+      }
+    } catch {
+      // silent — keeps previous nickname on failure
+    } finally {
+      setIsSavingNickname(false);
+      setIsEditingNickname(false);
+    }
+  }, [nicknameInput]);
+
+  const displayName = nickname ?? natalSun?.sign ?? "there";
 
   const fetchInFlight = useRef(false);
 
@@ -1092,6 +1118,14 @@ export default function ReadingIntakeScreen() {
           border-radius: 0 0 0 6px;
         }
 
+        .profile-corner--br {
+          bottom: -6px;
+          right: -6px;
+          border-bottom: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-right: 1.5px solid rgba(94, 234, 212, 0.45);
+          border-radius: 0 0 6px 0;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1163,8 +1197,8 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-18"
-        style={{ paddingBottom: "calc(9.5rem + env(safe-area-inset-bottom))" }}
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-6"
+        style={{ paddingBottom: "calc(7.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -1173,64 +1207,71 @@ export default function ReadingIntakeScreen() {
           className="flex flex-col"
         >
           {/* ═══════════════════════════════════════════════════════════
-              PROFILE MODULE — Moon Phase Cycle (top) + Current Chart (bottom)
-              Framed with corner brackets, no solid box — matches the
-              hero's "floating lines, no box" treatment below it.
-              Right side intentionally left blank for a future feature.
+              PROFILE MODULE — Welcome pill (editable nickname) +
+              natal Sun/Moon/Rising with full degree precision.
+              Framed with corner brackets on all four corners.
           ═══════════════════════════════════════════════════════════ */}
-          <div className="profile-frame mb-8 px-1 pt-2 pb-3">
+          <div className="profile-frame mb-8 px-4 pt-6 pb-5">
             <div className="profile-corner profile-corner--tl" aria-hidden="true" />
             <div className="profile-corner profile-corner--tr" aria-hidden="true" />
             <div className="profile-corner profile-corner--bl" aria-hidden="true" />
+            <div className="profile-corner profile-corner--br" aria-hidden="true" />
 
-            <div className="grid grid-cols-2 gap-3">
-              {/* ── Moon Phase Cycle (top, spans left column) ───────── */}
-              <div className="col-span-2 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-2xl">
-                  {moonPhase ? getMoonGlyph(moonPhase.phaseName) : <Moon className="h-5 w-5 text-teal-300/60" />}
+            {/* ── Welcome pill — centered, tap to edit nickname ──────── */}
+            <div className="flex justify-center">
+              {isEditingNickname ? (
+                <div className="flex items-center gap-2 rounded-full border border-teal-300/40 bg-teal-400/[0.06] px-5 py-2.5">
+                  <span className="text-[13px] text-slate-400">Welcome,</span>
+                  <input
+                    ref={nicknameInputRef}
+                    type="text"
+                    value={nicknameInput}
+                    onChange={(e) => setNicknameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveNickname();
+                      if (e.key === "Escape") setIsEditingNickname(false);
+                    }}
+                    onBlur={handleSaveNickname}
+                    maxLength={24}
+                    disabled={isSavingNickname}
+                    className="w-32 bg-transparent text-[13px] font-semibold text-white outline-none placeholder:text-slate-500"
+                    placeholder="Your name"
+                  />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                    Moon Phase Cycle
-                  </p>
-                  {moonPhase ? (
-                    <>
-                      <p className="mt-0.5 text-[13px] font-medium text-white">
-                        {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        Moon in {moonPhase.moonSign} · {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-0.5 text-[12px] text-slate-500">Loading…</p>
-                  )}
-                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStartEditingNickname}
+                  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-5 py-2.5 transition hover:border-teal-300/30 hover:bg-teal-400/[0.04]"
+                >
+                  <span className="text-[13px] text-slate-400">
+                    Welcome, <span className="font-semibold text-white">{displayName}</span>
+                  </span>
+                  <Pencil className="h-3 w-3 text-slate-500" />
+                </button>
+              )}
+            </div>
+
+            {/* ── Natal Sun / Moon / Rising — full degree precision ──── */}
+            <div className="mt-4 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Sun</span>
+                <span className="text-[12px] text-slate-300">
+                  {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
+                </span>
               </div>
-
-              {/* ── Current Chart (bottom-left) — today's Sun + Moon ── */}
-              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
-                <p className="mb-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                  Current Chart
-                </p>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500">Sun</span>
-                    <span className="text-[11px] text-slate-300">
-                      {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500">Moon</span>
-                    <span className="text-[11px] text-slate-300">
-                      {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
-                    </span>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Moon</span>
+                <span className="text-[12px] text-slate-300">
+                  {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
+                </span>
               </div>
-
-              {/* ── Intentionally blank — reserved for a future feature ── */}
-              <div aria-hidden="true" />
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Rising</span>
+                <span className="text-[12px] text-slate-300">
+                  {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
+                </span>
+              </div>
             </div>
           </div>
 
