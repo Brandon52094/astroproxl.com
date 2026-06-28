@@ -1211,10 +1211,7 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          {/* ── Top-of-page white shimmer line — sits at the very top, before everything else ── */}
-          <div className="white-glow-shimmer mb-6 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
-
-          {/* ── Hero — heading only, no surrounding lines ───────── */}
+          {/* ── Hero — two disconnected floating lines, no box ───────── */}
           <section className="mb-3 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
@@ -1231,9 +1228,13 @@ export default function ReadingIntakeScreen() {
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
+              <div className="white-glow-shimmer h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+
               <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
                 Your Direct Future Insights
               </h1>
+
+              <div className="mx-auto white-glow-shimmer h-[2px] w-[min(320px,88%)] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
             </div>
           </section>
 
