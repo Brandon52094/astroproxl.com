@@ -1202,7 +1202,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-25"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-28"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1228,13 +1228,9 @@ export default function ReadingIntakeScreen() {
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              <div className="white-glow-shimmer h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
-
               <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
                 Your Direct Future Insights
               </h1>
-
-              <div className="mx-auto white-glow-shimmer h-[2px] w-[min(320px,88%)] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
             </div>
           </section>
 
