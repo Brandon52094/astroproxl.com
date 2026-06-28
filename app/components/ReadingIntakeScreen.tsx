@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence, useReducedMotion, PanInfo } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Heart,
   Briefcase,
@@ -172,12 +172,6 @@ export default function ReadingIntakeScreen() {
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
-
-  // ── Carousel state ──────────────────────────────────────────────────
-  const [topPanelIndex, setTopPanelIndex] = useState(2); // Default to slide 3 (index 2)
-  const [isDragging, setIsDragging] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const dragStartX = useRef<number | null>(null);
 
   // ── Glitch state for Coming Soon ────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
@@ -653,44 +647,6 @@ export default function ReadingIntakeScreen() {
     parts.push(`${hours}h`, `${minutes}m`);
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
-
-  // ── Carousel navigation handlers ──────────────────────────────────
-  const goToSlide = useCallback((index: number) => {
-    const clampedIndex = Math.max(0, Math.min(2, index));
-    setTopPanelIndex(clampedIndex);
-  }, []);
-
-  const handleDragEnd = useCallback((event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const offset = info.offset.x;
-    const velocity = info.velocity.x;
-    const threshold = 30;
-
-    if (Math.abs(offset) > threshold || Math.abs(velocity) > 200) {
-      if (offset < 0 && topPanelIndex < 2) {
-        goToSlide(topPanelIndex + 1);
-      } else if (offset > 0 && topPanelIndex > 0) {
-        goToSlide(topPanelIndex - 1);
-      }
-    }
-    setIsDragging(false);
-  }, [topPanelIndex, goToSlide]);
-
-  const handleDragStart = useCallback(() => {
-    setIsDragging(true);
-  }, []);
-
-  // ── Keyboard navigation ────────────────────────────────────────────
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft" && topPanelIndex > 0) {
-        goToSlide(topPanelIndex - 1);
-      } else if (e.key === "ArrowRight" && topPanelIndex < 2) {
-        goToSlide(topPanelIndex + 1);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [topPanelIndex, goToSlide]);
 
   return (
     <div
@@ -1260,53 +1216,6 @@ export default function ReadingIntakeScreen() {
           color: rgba(94, 234, 212, 0.72);
         }
 
-        /* ── CAROUSEL ──────────────────────────────────────────────────── */
-        .carousel-container {
-          position: relative;
-          overflow: hidden;
-          touch-action: pan-y;
-        }
-
-        .carousel-track {
-          display: flex;
-          will-change: transform;
-          cursor: grab;
-        }
-
-        .carousel-track:active {
-          cursor: grabbing;
-        }
-
-        .carousel-slide {
-          flex: 0 0 100%;
-          min-width: 0;
-        }
-
-        .carousel-dots {
-          display: flex;
-          justify-content: center;
-          gap: 8px;
-          padding-top: 12px;
-        }
-
-        .carousel-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 9999px;
-          background: rgba(255, 255, 255, 0.15);
-          transition: all 0.3s ease;
-          cursor: pointer;
-        }
-
-        .carousel-dot.active {
-          background: rgba(255, 255, 255, 0.6);
-          width: 18px;
-        }
-
-        .carousel-dot:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1389,188 +1298,146 @@ export default function ReadingIntakeScreen() {
           className="flex flex-col"
         >
           {/* ═══════════════════════════════════════════════════════════
-              CAROUSEL — 3 panels: Profile | Moon + Chart | Hero
-              Defaults to slide 3 (index 2)
+              PROFILE MODULE — Welcome pill (editable nickname) +
+              natal Sun/Moon/Rising with full degree precision.
+              Framed with four disconnected glowing rails.
           ═══════════════════════════════════════════════════════════ */}
-          <div className="mb-4">
-            <div className="carousel-container">
-              <motion.div
-                className="carousel-track"
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.1}
-                dragMomentum={false}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                animate={{ x: `-${topPanelIndex * 100}%` }}
-                transition={
-                  shouldReduceMotion
-                    ? { duration: 0.2, ease: "easeOut" }
-                    : { type: "spring", stiffness: 300, damping: 30 }
-                }
-                style={{ width: "300%" }}
-              >
-                {/* ── SLIDE 1: Welcome + Profile ──────────────────── */}
-                <div className="carousel-slide px-1">
-                  <div className="profile-frame">
-                    <div className="profile-rail profile-rail--top-left" aria-hidden="true" />
-                    <div className="profile-rail profile-rail--top-right" aria-hidden="true" />
-                    <div className="profile-rail profile-rail--bottom-left" aria-hidden="true" />
-                    <div className="profile-rail profile-rail--bottom-right" aria-hidden="true" />
+          <div className="mb-8 px-1">
+            <div className="profile-frame">
+              <div className="profile-rail profile-rail--top-left" aria-hidden="true" />
+              <div className="profile-rail profile-rail--top-right" aria-hidden="true" />
+              <div className="profile-rail profile-rail--bottom-left" aria-hidden="true" />
+              <div className="profile-rail profile-rail--bottom-right" aria-hidden="true" />
 
-                    <div className="mb-5">
-                      <h2 className="text-[28px] font-semibold leading-[1.02] tracking-tight text-white">
-                        Welcome
-                      </h2>
+              <div className="mb-5">
+                <h2 className="text-[28px] font-semibold leading-[1.02] tracking-tight text-white">
+                  Welcome
+                </h2>
 
-                      {isEditingNickname ? (
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <input
-                            ref={nicknameInputRef}
-                            type="text"
-                            value={nicknameInput}
-                            onChange={(e) => setNicknameInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleSaveNickname();
-                              if (e.key === "Escape") setIsEditingNickname(false);
-                            }}
-                            onBlur={handleSaveNickname}
-                            maxLength={24}
-                            disabled={isSavingNickname}
-                            className="w-40 border-b border-teal-300/40 bg-transparent text-[15px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
-                            placeholder="Your name"
-                          />
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleStartEditingNickname}
-                          className="profile-name-button mt-1.5"
-                        >
-                          <span className="text-[15px] font-medium text-teal-200">{displayName}</span>
-                          <Pencil className="h-3 w-3 text-slate-500" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="big3-row">
-                        <span className="big3-value">
-                          {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
-                        </span>
-                        <span className="big3-label">Sun</span>
-                      </div>
-
-                      <div className="big3-row">
-                        <span className="big3-value">
-                          {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
-                        </span>
-                        <span className="big3-label">Moon</span>
-                      </div>
-
-                      <div className="big3-row">
-                        <span className="big3-value">
-                          {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
-                        </span>
-                        <span className="big3-label">Rising</span>
-                      </div>
-                    </div>
+                {isEditingNickname ? (
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <input
+                      ref={nicknameInputRef}
+                      type="text"
+                      value={nicknameInput}
+                      onChange={(e) => setNicknameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveNickname();
+                        if (e.key === "Escape") setIsEditingNickname(false);
+                      }}
+                      onBlur={handleSaveNickname}
+                      maxLength={24}
+                      disabled={isSavingNickname}
+                      className="w-40 border-b border-teal-300/40 bg-transparent text-[15px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
+                      placeholder="Your name"
+                    />
                   </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartEditingNickname}
+                    className="profile-name-button mt-1.5"
+                  >
+                    <span className="text-[15px] font-medium text-teal-200">{displayName}</span>
+                    <Pencil className="h-3 w-3 text-slate-500" />
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="big3-row">
+                  <span className="big3-value">
+                    {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
+                  </span>
+                  <span className="big3-label">Sun</span>
                 </div>
 
-                {/* ── SLIDE 2: Moon Phase + Current Chart ────────── */}
-                <div className="carousel-slide px-1">
-                  <div className="grid grid-cols-1 gap-3">
-                    <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
-                        {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
-                      </div>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                        Moon Phase Cycle
-                      </p>
-                      {moonPhase ? (
-                        <>
-                          <p className="text-[12px] font-medium text-white">
-                            {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
-                          </p>
-                          <p className="text-[10px] text-slate-400">
-                            {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-[11px] text-slate-500">Loading…</p>
-                      )}
-                    </div>
-
-                    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
-                      <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                        Current Chart
-                      </p>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500">Sun</span>
-                          <span className="text-[11px] text-slate-300">
-                            {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500">Moon</span>
-                          <span className="text-[11px] text-slate-300">
-                            {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div className="big3-row">
+                  <span className="big3-value">
+                    {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
+                  </span>
+                  <span className="big3-label">Moon</span>
                 </div>
 
-                {/* ── SLIDE 3: Hero ──────────────────────────────── */}
-                <div className="carousel-slide px-1">
-                  <section className="space-y-3">
-                    {chartStatus === "recalculating" && (
-                      <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
-                        <RefreshCw className="h-3 w-3 animate-spin" />
-                        Refreshing your chart…
-                      </div>
-                    )}
-                    {chartStatus === "error" && (
-                      <div className="flex w-fit items-center gap-2 rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100">
-                        Chart data unavailable — please go back and recalculate
-                      </div>
-                    )}
-
-                    <div className="relative space-y-4 text-center">
-                      <div className="hero-halo" aria-hidden="true" />
-
-                      <div className="white-glow-shimmer h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
-
-                      <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
-                        Your Direct Future Insights
-                      </h1>
-
-                      <div className="mx-auto white-glow-shimmer h-[2px] w-[min(320px,88%)] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
-                    </div>
-                  </section>
+                <div className="big3-row">
+                  <span className="big3-value">
+                    {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
+                  </span>
+                  <span className="big3-label">Rising</span>
                 </div>
-              </motion.div>
+              </div>
             </div>
 
-            {/* ── Pagination Dots ────────────────────────────────── */}
-            <div className="carousel-dots">
-              {[0, 1, 2].map((index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => goToSlide(index)}
-                  className={cn(
-                    "carousel-dot",
-                    topPanelIndex === index && "active"
-                  )}
-                  aria-label={`Go to slide ${index + 1}`}
-                />
-              ))}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-center">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
+                  {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
+                </div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  Moon Phase Cycle
+                </p>
+                {moonPhase ? (
+                  <>
+                    <p className="text-[12px] font-medium text-white">
+                      {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-slate-500">Loading…</p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  Current Chart
+                </p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Sun</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500">Moon</span>
+                    <span className="text-[11px] text-slate-300">
+                      {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* ── Hero — two disconnected floating lines, no box ───────── */}
+          <section className="mb-3 space-y-3">
+            {chartStatus === "recalculating" && (
+              <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Refreshing your chart…
+              </div>
+            )}
+            {chartStatus === "error" && (
+              <div className="flex w-fit items-center gap-2 rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100">
+                Chart data unavailable — please go back and recalculate
+              </div>
+            )}
+
+            <div className="relative space-y-5 text-center">
+              <div className="hero-halo" aria-hidden="true" />
+
+              <div className="white-glow-shimmer h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+
+              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
+                Your Direct Future Insights
+              </h1>
+
+              <div className="mx-auto white-glow-shimmer h-[2px] w-[min(320px,88%)] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+            </div>
+          </section>
 
           {/* ── Reading cycle — centered ─────────────────────────────── */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
