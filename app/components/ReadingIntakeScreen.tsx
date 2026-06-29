@@ -1392,6 +1392,8 @@ export default function ReadingIntakeScreen() {
                   </motion.div>
                 )}
               </AnimatePresence>
+              {/* ── Separator line ── */}
+<div className="absolute bottom-0 left-0 h-[2px] w-[25%] bg-gradient-to-r from-teal-300/60 to-transparent" />
             </div>
           </button>
 
@@ -1404,7 +1406,7 @@ export default function ReadingIntakeScreen() {
               <div className="hero-halo" aria-hidden="true" />
 
               <h1 className="text-[36px] font-semibold leading-[0.98] tracking-[0.02em] text-transparent bg-gradient-to-b from-white via-white to-teal-200/80 bg-clip-text sm:text-[42px] drop-shadow-[0_0_30px_rgba(94,234,212,0.15)]">
-  Direct Future Insights
+  Your Direct Insights
 </h1>
             </div>
           </section>
