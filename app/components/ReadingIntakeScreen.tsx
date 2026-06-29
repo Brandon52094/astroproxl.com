@@ -1349,104 +1349,7 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── STATUS BAR ────────────────────────────────────────────── */}
-          <div
-            ref={statusBarRef}
-            className={`relative h-[120px] overflow-hidden rounded-[26px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,14,24,0.96),rgba(5,8,22,0.94))] shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-300 ${
-              isScrubbing ? "status-bar-scrubbing" : ""
-            }`}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onClick={handleTap}
-          >
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_30%),radial-gradient(circle_at_85%_20%,rgba(94,234,212,0.07),transparent_22%),radial-gradient(circle_at_75%_100%,rgba(168,85,247,0.08),transparent_26%)]" />
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-            <div className="pointer-events-none absolute inset-y-3 left-[30%] w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
-
-            {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
-            <div className="absolute left-0 top-0 flex h-full w-[30%] flex-col items-center justify-center px-3">
-              <div className="flex h-[84px] w-full flex-col items-center justify-center rounded-[20px] border border-white/[0.06] bg-white/[0.025] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">
-                  Live Sky
-                </div>
-
-                <div className="flex flex-col items-center gap-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[20px] drop-shadow-[0_0_12px_rgba(255,255,255,0.12)]">
-                      {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
-                    </span>
-                    <span className="text-[10px] font-medium tracking-[0.08em] text-emerald-200/85">
-                      {moonPhase ? `${moonPhase.moonSign} ${moonPhase.moonDegree}` : "—"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[13px] text-amber-200/80">☀︎</span>
-                    <span className="text-[10px] font-medium tracking-[0.08em] text-amber-200/80">
-                      {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── RIGHT SECTION: Two-row ticker ── */}
-            <div className="absolute inset-0 flex flex-col justify-center overflow-hidden pl-[32%] pr-4">
-              {/* Row 1: Today's Astrological Calendar */}
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
-                  Today's Astrological Calendar
-                </span>
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70 shadow-[0_0_10px_rgba(110,231,183,0.5)]" />
-              </div>
-
-              <div className={`relative mb-2 overflow-hidden rounded-full border border-cyan-400/[0.08] bg-cyan-400/[0.03] px-3 py-1.5 ${
-                isPaused || isScrubbing ? "opacity-80" : ""
-              }`}>
-                <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
-                  <div 
-                    className="ticker-animate"
-                    style={{
-                      transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
-                    }}
-                  >
-                    {getDailyTickerContent()}
-                    {getDailyTickerContent()}
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2: Your Astrological Chart — centered */}
-              <div className="mb-1.5 flex items-center justify-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
-                  Your Astrological Chart
-                </span>
-                <span className="h-1.5 w-1.5 rounded-full bg-violet-300/70 shadow-[0_0_10px_rgba(196,181,253,0.45)]" />
-              </div>
-
-              <div className={`relative overflow-hidden rounded-full border border-purple-400/[0.08] bg-purple-400/[0.03] px-3 py-1.5 ${
-                isPaused || isScrubbing ? "opacity-80" : ""
-              }`}>
-                <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
-                  <div 
-                    className="ticker-animate"
-                    style={{
-                      transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
-                    }}
-                  >
-                    {getNatalTickerContent()}
-                    {getNatalTickerContent()}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Premium accent line ── */}
-            <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-emerald-300/70 via-teal-300/35 to-transparent" />
-          </div>
-
-          {/* ── GLOWING LIGHT BAR ── */}
+          {/* ── GLOWING LIGHT BAR ── (Now at the top) */}
           <div className="glow-light-bar mb-6 opacity-80" />
 
           {/* ── HERO: Your Direct Insights ───────────────────────────── */}
@@ -1454,7 +1357,7 @@ export default function ReadingIntakeScreen() {
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              <h1 className="bg-gradient-to-b from-white via-white to-teal-200/75 bg-clip-text text-[36px] font-semibold leading-[0.98] tracking-[0.015em] text-transparent drop-shadow-[0_10px_28px_rgba(0,0,0,0.55)] sm:text-[42px]">
+              <h1 className="bg-gradient-to-b from-white via-white to-teal-200/75 bg-clip-text text-[36px] font-semibold leading-[0.98] tracking-[0.015em] text-transparent drop-shadow-[0_10px_28px_rgba(0,0,0,0.55)] sm:text-[42px] shadow-[0_8px_32px_rgba(0,0,0,0.4)] rounded-2xl px-6 py-2 inline-block">
                 Your Direct Insights
               </h1>
             </div>
@@ -1863,6 +1766,105 @@ export default function ReadingIntakeScreen() {
               Unlimited Access
             </span>
             <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+
+          {/* ── STATUS BAR ── (Moved here, underneath Unlimited Access) ── */}
+          <div className="mt-4">
+            <div
+              ref={statusBarRef}
+              className={`relative h-[120px] overflow-hidden rounded-[26px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,14,24,0.96),rgba(5,8,22,0.94))] shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-300 ${
+                isScrubbing ? "status-bar-scrubbing" : ""
+              }`}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onClick={handleTap}
+            >
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_30%),radial-gradient(circle_at_85%_20%,rgba(94,234,212,0.07),transparent_22%),radial-gradient(circle_at_75%_100%,rgba(168,85,247,0.08),transparent_26%)]" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+              <div className="pointer-events-none absolute inset-y-3 left-[30%] w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+
+              {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
+              <div className="absolute left-0 top-0 flex h-full w-[30%] flex-col items-center justify-center px-3">
+                <div className="flex h-[84px] w-full flex-col items-center justify-center rounded-[20px] border border-white/[0.06] bg-white/[0.025] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">
+                    Live Sky
+                  </div>
+
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[20px] drop-shadow-[0_0_12px_rgba(255,255,255,0.12)]">
+                        {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
+                      </span>
+                      <span className="text-[10px] font-medium tracking-[0.08em] text-emerald-200/85">
+                        {moonPhase ? `${moonPhase.moonSign} ${moonPhase.moonDegree}` : "—"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] text-amber-200/80">☀︎</span>
+                      <span className="text-[10px] font-medium tracking-[0.08em] text-amber-200/80">
+                        {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── RIGHT SECTION: Two-row ticker ── */}
+              <div className="absolute inset-0 flex flex-col justify-center overflow-hidden pl-[32%] pr-4">
+                {/* Row 1: Today's Astrological Calendar */}
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
+                    Today's Astrological Calendar
+                  </span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70 shadow-[0_0_10px_rgba(110,231,183,0.5)]" />
+                </div>
+
+                <div className={`relative mb-2 overflow-hidden rounded-full border border-cyan-400/[0.08] bg-cyan-400/[0.03] px-3 py-1.5 ${
+                  isPaused || isScrubbing ? "opacity-80" : ""
+                }`}>
+                  <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
+                    <div 
+                      className="ticker-animate"
+                      style={{
+                        transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
+                      }}
+                    >
+                      {getDailyTickerContent()}
+                      {getDailyTickerContent()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Your Astrological Chart — centered */}
+                <div className="mb-1.5 flex items-center justify-center gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
+                    Your Astrological Chart
+                  </span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-300/70 shadow-[0_0_10px_rgba(196,181,253,0.45)]" />
+                </div>
+
+                <div className={`relative overflow-hidden rounded-full border border-purple-400/[0.08] bg-purple-400/[0.03] px-3 py-1.5 ${
+                  isPaused || isScrubbing ? "opacity-80" : ""
+                }`}>
+                  <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
+                    <div 
+                      className="ticker-animate"
+                      style={{
+                        transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
+                      }}
+                    >
+                      {getNatalTickerContent()}
+                      {getNatalTickerContent()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Premium accent line ── */}
+              <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-emerald-300/70 via-teal-300/35 to-transparent" />
+            </div>
           </div>
 
           {/* ── ENHANCED COMING SOON WITH GLITCH ────────────────────── */}
