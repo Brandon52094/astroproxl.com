@@ -1909,7 +1909,6 @@ export default function ReadingIntakeScreen() {
 
               {/* ── Gradient overlay ── */}
               <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
-
               {/* ── Lock overlay with glitch text ── */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
