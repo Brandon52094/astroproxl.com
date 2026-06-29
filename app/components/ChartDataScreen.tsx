@@ -458,7 +458,7 @@ export default function ChartDataScreen() {
         ))}
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-32 pt-4">
+      <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-32 pt-8">
         <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }} className="flex flex-col">
 
@@ -606,7 +606,7 @@ export default function ChartDataScreen() {
             </Section>
 
             <Section id="chart" title="Your Chart"
-              subtitle="Tropical placements, sidereal timing, and current transits."
+              subtitle="Your Placements, sidereal timing, and current transits."
               isOpen={openSections.includes("chart")} onToggle={toggleSection}
               status={calculating ? getStatus("calculating") : chartComplete ? getStatus("complete") : getStatus("missing")}>
               {chartData ? (
@@ -630,7 +630,7 @@ export default function ChartDataScreen() {
                   </div>
 
                   <div>
-                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-slate-400">Tropical Placements</p>
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-slate-400">Your Placements</p>
                     <div className="space-y-1.5">
                       {tropicalPlanets.map((planet) => (
                         <div key={planet.name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5">
@@ -642,7 +642,7 @@ export default function ChartDataScreen() {
                   </div>
 
                   <div>
-                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-slate-400">Current Transits</p>
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-slate-400">Today's Current Transits</p>
                     <div className="space-y-1.5">
                       {chartData.transits.filter((p) => ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"].includes(p.name)).map((planet) => (
                         <div key={planet.name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5">
