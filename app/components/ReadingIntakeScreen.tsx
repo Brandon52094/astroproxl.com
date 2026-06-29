@@ -1254,31 +1254,8 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          {/* ── Top-of-page white shimmer line ──────────────────────── */}
+          {/* ── Top-of-page white shimmer line (now above transitioning button) ── */}
           <div className="white-glow-shimmer mb-6 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
-
-          {/* ── Static header — never rotates ───────────────────────── */}
-          <section className="mb-4 space-y-3">
-            {chartStatus === "recalculating" && (
-              <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
-                <RefreshCw className="h-3 w-3 animate-spin" />
-                Refreshing your chart…
-              </div>
-            )}
-            {chartStatus === "error" && (
-              <div className="flex w-fit items-center gap-2 rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-100">
-                Chart data unavailable — please go back and recalculate
-              </div>
-            )}
-
-            <div className="relative space-y-5 text-center">
-              <div className="hero-halo" aria-hidden="true" />
-
-              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
-                Your Direct Future Insights
-              </h1>
-            </div>
-          </section>
 
           {/* ── Rotating insight panel — tap to advance, auto-rotates ─── */}
           <button
@@ -1418,8 +1395,19 @@ export default function ReadingIntakeScreen() {
             </div>
           </button>
 
-          {/* ── Separator line — splits rotating info from the buttons ── */}
+          {/* ── Separator line (now above "Your Direct Future Insights") ── */}
           <div className="white-glow-shimmer mb-4 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+
+          {/* ── Static header — "Your Direct Future Insights" ───────── */}
+          <section className="mb-4 space-y-3">
+            <div className="relative space-y-5 text-center">
+              <div className="hero-halo" aria-hidden="true" />
+
+              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
+                Your Direct Future Insights
+              </h1>
+            </div>
+          </section>
 
           {/* ── Reading cycle — centered ─────────────────────────────── */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
