@@ -1280,152 +1280,109 @@ export default function ReadingIntakeScreen() {
           {/* ── Top white line REMOVED ── */}
 
           {/* ── Rotating insight panel — tap to advance, auto-rotates ─── */}
-          <button
-            type="button"
-            onClick={handleRotationTap}
-            aria-label="Show next insight"
-            className="mb-4 w-full text-left"
+          {/* ── Rotating insight panel — tap to advance, auto-rotates ─── */}
+<button
+  type="button"
+  onClick={handleRotationTap}
+  aria-label="Show next insight"
+  className="mb-4 w-full text-left"
+>
+  <div className="relative h-[88px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/90">
+    {/* ── Empty left section ── */}
+    <div className="absolute left-0 top-0 flex h-full w-[60px] flex-col items-center justify-center border-r border-white/[0.06]" />
+
+    <div className="absolute inset-0 flex items-center pl-[72px] overflow-hidden">
+      <AnimatePresence mode="wait">
+        {activeRotationModule === "moonPhase" && (
+          <motion.div
+            key="moonPhase"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="flex items-center gap-6 whitespace-nowrap font-mono text-[13px] text-green-400/80"
           >
-            <div className="relative h-[88px] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]">
-              {/* ── Zodiac symbol on the left ── */}
-              <div className="absolute left-0 top-0 flex h-full w-[60px] flex-col items-center justify-center border-r border-white/[0.06]">
-                <span className="text-[22px] text-white/80">{sunSignSymbol}</span>
-                <span className="text-[8px] uppercase tracking-[0.12em] text-slate-500">
-                  {natalSun?.sign || "Sun"}
-                </span>
-              </div>
+            <span className="text-green-400/60">$</span>
+            <span className="text-green-400/40">[</span>
+            <span className="text-green-300">MoonPhase</span>
+            <span className="text-green-400/40">]</span>
+            <span className="text-green-400/60">▸</span>
+            {moonPhase ? (
+              <>
+                <span className="text-green-300/90">{moonPhase.phaseName}</span>
+                <span className="text-green-400/50">·</span>
+                <span className="text-green-400/80">{moonPhase.illuminationPercent}%</span>
+                <span className="text-green-400/40">|</span>
+                <span className="text-green-400/60">next</span>
+                <span className="text-green-400/40">:</span>
+                <span className="text-green-300">{moonPhase.nextEventName}</span>
+                <span className="text-green-400/40">in</span>
+                <span className="text-green-400/80">{moonPhase.daysUntilNextEvent}d</span>
+              </>
+            ) : (
+              <span className="text-green-500/40">loading...</span>
+            )}
+          </motion.div>
+        )}
 
-              <AnimatePresence mode="wait">
-                {activeRotationModule === "moonPhase" && (
-                  <motion.div
-                    key="moonPhase"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="absolute inset-0 flex items-center justify-center gap-3 px-4 pl-[72px]"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
-                      {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                        Moon Phase
-                      </p>
-                      {moonPhase ? (
-                        <>
-                          <p className="text-[13px] font-medium text-white">
-                            {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
-                          </p>
-                          <p className="text-[11px] text-slate-400">
-                            {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-[12px] text-slate-500">Loading…</p>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
+        {activeRotationModule === "transits" && (
+          <motion.div
+            key="transits"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="flex items-center gap-4 whitespace-nowrap font-mono text-[13px] text-cyan-400/80"
+          >
+            <span className="text-cyan-400/60">$</span>
+            <span className="text-cyan-400/40">[</span>
+            <span className="text-cyan-300">Transits</span>
+            <span className="text-cyan-400/40">]</span>
+            <span className="text-cyan-400/60">▸</span>
+            <span className="text-cyan-400/40">Sun</span>
+            <span className="text-cyan-400/40">:</span>
+            <span className="text-cyan-300/90">{todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}</span>
+            <span className="text-cyan-400/40">|</span>
+            <span className="text-cyan-400/40">Moon</span>
+            <span className="text-cyan-400/40">:</span>
+            <span className="text-cyan-300/90">{todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}</span>
+          </motion.div>
+        )}
 
-                {activeRotationModule === "transits" && (
-                  <motion.div
-                    key="transits"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="absolute inset-0 flex flex-col items-center justify-center px-4 pl-[72px]"
-                  >
-                    <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
-                      Today's Transits
-                    </p>
-                    <div className="mx-auto max-w-[220px] space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500">Sun</span>
-                        <span className="text-[12px] text-slate-300">
-                          {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500">Moon</span>
-                        <span className="text-[12px] text-slate-300">
-                          {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
+        {activeRotationModule === "natalChart" && (
+          <motion.div
+            key="natalChart"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="flex items-center gap-3 whitespace-nowrap font-mono text-[13px] text-purple-400/80"
+          >
+            <span className="text-purple-400/60">$</span>
+            <span className="text-purple-400/40">[</span>
+            <span className="text-purple-300">Natal</span>
+            <span className="text-purple-400/40">]</span>
+            <span className="text-purple-400/60">▸</span>
+            <span className="text-purple-400/40">Sun</span>
+            <span className="text-purple-400/40">:</span>
+            <span className="text-purple-300/90">{natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}</span>
+            <span className="text-purple-400/40">|</span>
+            <span className="text-purple-400/40">Moon</span>
+            <span className="text-purple-400/40">:</span>
+            <span className="text-purple-300/90">{natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}</span>
+            <span className="text-purple-400/40">|</span>
+            <span className="text-purple-400/40">Rising</span>
+            <span className="text-purple-400/40">:</span>
+            <span className="text-purple-300/90">{natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
 
-                {activeRotationModule === "natalChart" && (
-                  <motion.div
-                    key="natalChart"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="absolute inset-0 flex flex-col items-center justify-center px-4 pl-[72px]"
-                  >
-                    <div className="mb-3 flex items-center justify-center gap-2">
-                      {isEditingNickname ? (
-                        <input
-                          ref={nicknameInputRef}
-                          type="text"
-                          value={nicknameInput}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setNicknameInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveNickname();
-                            if (e.key === "Escape") setIsEditingNickname(false);
-                          }}
-                          onBlur={handleSaveNickname}
-                          maxLength={24}
-                          disabled={isSavingNickname}
-                          className="w-40 border-b border-teal-300/40 bg-transparent text-center text-[14px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
-                          placeholder="Your name"
-                        />
-                      ) : (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEditingNickname();
-                          }}
-                          className="profile-name-button"
-                        >
-                          <span className="text-[14px] font-medium text-teal-200">{displayName}</span>
-                          <Pencil className="h-3 w-3 text-slate-500" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="mx-auto max-w-[220px] space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500">Sun</span>
-                        <span className="text-[12px] text-slate-300">
-                          {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500">Moon</span>
-                        <span className="text-[12px] text-slate-300">
-                          {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500">Rising</span>
-                        <span className="text-[12px] text-slate-300">
-                          {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              {/* ── Separator line ── */}
-              <div className="absolute bottom-0 left-0 h-[2px] w-[25%] bg-gradient-to-r from-teal-300/60 to-transparent" />
-            </div>
-          </button>
+    {/* ── Separator line ── */}
+    <div className="absolute bottom-0 left-0 h-[2px] w-[25%] bg-gradient-to-r from-green-400/60 to-transparent" />
+  </div>
+</button>
 
           {/* ── Enhanced separator line (above "Your Direct Insights") ── */}
           <div className="white-glow-shimmer mb-4 h-[2.5px] w-full bg-gradient-to-r from-transparent via-white/80 to-transparent shadow-[0_0_30px_rgba(255,255,255,0.35)]" />
