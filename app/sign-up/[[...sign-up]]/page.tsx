@@ -336,11 +336,23 @@ export default function SignUpPage() {
                 }
               }
 
+              /* Regular text/email/password fields keep the pulse */
               .cl-box :global(input) {
                 color: #ffffff !important;
                 background-color: rgba(255, 255, 255, 0.04) !important;
                 border: 1px solid rgba(99, 102, 241, 0.2) !important;
                 animation: cooldownPulse 3s ease-in-out infinite;
+              }
+
+              /* OTP code boxes: no pulsing animation. Autofill rewrites these
+                 values in rapid succession, and an active box-shadow animation
+                 on each box was causing a visible flicker/glitch as iOS/Android
+                 distributed the pasted code across the six inputs. */
+              .cl-box :global(.cl-otpCodeFieldInput) {
+                animation: none !important;
+                box-shadow:
+                  0 0 0 1px rgba(99, 102, 241, 0.2),
+                  0 0 20px rgba(99, 102, 241, 0.08) !important;
               }
 
               .cl-box :global(input:focus) {
@@ -413,7 +425,7 @@ export default function SignUpPage() {
                     identityPreviewEditButton: "!text-amber-300 hover:!text-amber-200",
                     formResendCodeLink: "!text-amber-300 hover:!text-amber-200",
                     otpCodeFieldInput:
-                      "h-12 w-10 rounded-[16px] border border-white/10 !bg-white/[0.04] !text-white",
+                      "cl-otpCodeFieldInput h-12 w-10 rounded-[16px] border border-white/10 !bg-white/[0.04] !text-white",
                     alert:
                       "rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200",
                     formFieldWarningText: "text-rose-300",
