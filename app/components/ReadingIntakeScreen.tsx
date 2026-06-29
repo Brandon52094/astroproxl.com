@@ -120,6 +120,26 @@ interface TodayTransitPlanet {
   isRetrograde: boolean;
 }
 
+// Zodiac symbol map
+const ZODIAC_SYMBOLS: Record<string, string> = {
+  Aries: "♈",
+  Taurus: "♉",
+  Gemini: "♊",
+  Cancer: "♋",
+  Leo: "♌",
+  Virgo: "♍",
+  Libra: "♎",
+  Scorpio: "♏",
+  Sagittarius: "♐",
+  Capricorn: "♑",
+  Aquarius: "♒",
+  Pisces: "♓",
+};
+
+function getZodiacSymbol(sign: string): string {
+  return ZODIAC_SYMBOLS[sign] || "⭐";
+}
+
 // Visual moon glyph by phase name — simple, no external image needed
 function getMoonGlyph(phaseName: string): string {
   const glyphs: Record<string, string> = {
@@ -678,6 +698,9 @@ export default function ReadingIntakeScreen() {
     parts.push(`${hours}h`, `${minutes}m`);
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
+
+  // ── Get the user's Sun sign symbol ──────────────────────────────────
+  const sunSignSymbol = natalSun ? getZodiacSymbol(natalSun.sign) : "⭐";
 
   return (
     <div
@@ -1254,8 +1277,7 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          {/* ── Top-of-page white shimmer line (now above transitioning button) ── */}
-          <div className="white-glow-shimmer mb-6 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+          {/* ── Top white line REMOVED ── */}
 
           {/* ── Rotating insight panel — tap to advance, auto-rotates ─── */}
           <button
@@ -1265,6 +1287,14 @@ export default function ReadingIntakeScreen() {
             className="mb-4 w-full text-left"
           >
             <div className="relative h-[88px] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+              {/* ── Zodiac symbol on the left ── */}
+              <div className="absolute left-0 top-0 flex h-full w-[60px] flex-col items-center justify-center border-r border-white/[0.06]">
+                <span className="text-[22px] text-white/80">{sunSignSymbol}</span>
+                <span className="text-[8px] uppercase tracking-[0.12em] text-slate-500">
+                  {natalSun?.sign || "Sun"}
+                </span>
+              </div>
+
               <AnimatePresence mode="wait">
                 {activeRotationModule === "moonPhase" && (
                   <motion.div
@@ -1273,7 +1303,7 @@ export default function ReadingIntakeScreen() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="absolute inset-0 flex items-center justify-center gap-3 px-4"
+                    className="absolute inset-0 flex items-center justify-center gap-3 px-4 pl-[72px]"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
                       {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
@@ -1305,7 +1335,7 @@ export default function ReadingIntakeScreen() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="absolute inset-0 flex flex-col items-center justify-center px-4"
+                    className="absolute inset-0 flex flex-col items-center justify-center px-4 pl-[72px]"
                   >
                     <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
                       Today's Transits
@@ -1334,7 +1364,7 @@ export default function ReadingIntakeScreen() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.25, ease: "easeOut" }}
-                    className="absolute inset-0 flex flex-col items-center justify-center px-4"
+                    className="absolute inset-0 flex flex-col items-center justify-center px-4 pl-[72px]"
                   >
                     <div className="mb-3 flex items-center justify-center gap-2">
                       {isEditingNickname ? (
@@ -1393,21 +1423,21 @@ export default function ReadingIntakeScreen() {
                 )}
               </AnimatePresence>
               {/* ── Separator line ── */}
-<div className="absolute bottom-0 left-0 h-[2px] w-[25%] bg-gradient-to-r from-teal-300/60 to-transparent" />
+              <div className="absolute bottom-0 left-0 h-[2px] w-[25%] bg-gradient-to-r from-teal-300/60 to-transparent" />
             </div>
           </button>
 
-          {/* ── Separator line (now above "Your Direct Future Insights") ── */}
-          <div className="white-glow-shimmer mb-4 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+          {/* ── Enhanced separator line (above "Your Direct Insights") ── */}
+          <div className="white-glow-shimmer mb-4 h-[2.5px] w-full bg-gradient-to-r from-transparent via-white/80 to-transparent shadow-[0_0_30px_rgba(255,255,255,0.35)]" />
 
-          {/* ── Static header — "Your Direct Future Insights" ───────── */}
+          {/* ── Static header — "Your Direct Insights" ───────── */}
           <section className="mb-4 space-y-3">
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
               <h1 className="text-[36px] font-semibold leading-[0.98] tracking-[0.02em] text-transparent bg-gradient-to-b from-white via-white to-teal-200/80 bg-clip-text sm:text-[42px] drop-shadow-[0_0_30px_rgba(94,234,212,0.15)]">
-  Your Direct Insights
-</h1>
+                Your Direct Insights
+              </h1>
             </div>
           </section>
 
@@ -1677,7 +1707,10 @@ export default function ReadingIntakeScreen() {
                         AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
-                      className="min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300"
+                      className={cn(
+                        "min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300",
+                        selectedArea && selectedArea !== "other" && "border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.12)]"
+                      )}
                     />
                     <p className="text-xs leading-5 text-slate-400">
                       Be specific. The clearer your question, the sharper the reading.
