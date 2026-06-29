@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   ChevronDown,
@@ -113,6 +113,19 @@ function getStatus(type: "complete" | "missing" | "calculating", count?: number)
 
 export default function ChartDataScreen() {
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
+  const stars = useMemo(
+    () =>
+      Array.from({ length: 28 }).map((_, i) => {
+        const left = `${(i * 41) % 100}%`;
+        const top = `${(i * 23 + 7) % 100}%`;
+        const size = i % 7 === 0 ? 3 : 1.6;
+        const opacity = i % 5 === 0 ? 0.85 : 0.4;
+        const delay = (i * 0.41) % 4;
+        return { left, top, size, opacity, delay, id: i };
+      }),
+    []
+  );
   const [openSections, setOpenSections] = useState<SectionId[]>(["birth"]);
   const [birthDate, setBirthDate] = useState("");
   const [birthTime, setBirthTime] = useState("");
@@ -326,7 +339,126 @@ export default function ChartDataScreen() {
   return (
     <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
       style={{ WebkitOverflowScrolling: "touch" }}>
-      <div className="mx-auto w-full max-w-md px-4 pb-32 pt-4">
+      <style jsx>{`
+        @keyframes driftGradient {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+
+        .drift-bg {
+          position: absolute;
+          inset: -10%;
+          background: linear-gradient(
+            120deg,
+            #040611 0%,
+            #061120 25%,
+            #050816 50%,
+            #061120 75%,
+            #040611 100%
+          );
+          background-size: 200% 200%;
+          animation: driftGradient 26s ease-in-out infinite;
+        }
+
+        .drift-bg::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 30% 20%, rgba(45, 212, 191, 0.05), transparent 45%),
+            radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.04), transparent 45%);
+          animation: driftGradient 26s ease-in-out infinite reverse;
+        }
+
+        .cosmic-grid {
+          position: absolute;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+          background-size: 36px 36px;
+          mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+          opacity: 0.18;
+        }
+
+        .aurora-orb--violet {
+          position: absolute;
+          top: 8rem;
+          right: -4rem;
+          width: 14rem;
+          height: 14rem;
+          border-radius: 9999px;
+          filter: blur(60px);
+          background: radial-gradient(circle, rgba(129, 140, 248, 0.18) 0%, rgba(129, 140, 248, 0.06) 48%, transparent 74%);
+          will-change: transform, opacity;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .drift-bg,
+          .drift-bg::after {
+            animation: none !important;
+            opacity: 0.4 !important;
+          }
+        }
+      `}</style>
+
+      <div className="pointer-events-none fixed inset-0">
+        <div className="drift-bg" />
+        <div className="cosmic-grid" />
+        <motion.div
+          className="aurora-orb--violet"
+          animate={
+            shouldReduceMotion
+              ? undefined
+              : { y: [0, -8, 0], x: [0, -6, 0], opacity: [0.12, 0.2, 0.12] }
+          }
+          transition={
+            shouldReduceMotion
+              ? undefined
+              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
+          }
+        />
+        {stars.map((star) => (
+          <motion.span
+            key={star.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+            }}
+            animate={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
+                    scale: [1, 1.6, 1],
+                  }
+            }
+            transition={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    duration: 1.6 + (star.id % 5) * 0.35,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: star.delay,
+                  }
+            }
+          />
+        ))}
+      </div>
+
+      <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-32 pt-4">
         <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }} className="flex flex-col">
 
@@ -448,7 +580,7 @@ export default function ChartDataScreen() {
                   className={cn(
                     "h-12 w-full rounded-2xl font-medium transition",
                     canCalculate
-                      ? "bg-teal-300 text-slate-950 shadow-[0_10px_30px_rgba(45,212,191,0.22)] hover:bg-teal-200 active:scale-[0.99]"
+                      ? "border border-teal-200/30 bg-teal-300 text-slate-950 shadow-[0_10px_34px_rgba(45,212,191,0.32),0_0_0_1px_rgba(94,234,212,0.15)] hover:bg-teal-200 hover:shadow-[0_12px_38px_rgba(45,212,191,0.4),0_0_0_1px_rgba(94,234,212,0.2)] active:scale-[0.99]"
                       : "border border-white/10 bg-slate-800 text-slate-400 shadow-none"
                   )}>
                   <span className="flex items-center justify-center gap-2">
@@ -558,7 +690,7 @@ export default function ChartDataScreen() {
             </div>
           )}
           <Button type="button" disabled={!canContinue} onClick={handleContinue}
-            className="h-14 w-full rounded-2xl bg-teal-300 text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500">
+            className="h-14 w-full rounded-2xl border border-teal-200/30 bg-teal-300 text-slate-950 shadow-[0_10px_34px_rgba(45,212,191,0.32),0_0_0_1px_rgba(94,234,212,0.15)] transition hover:bg-teal-200 hover:shadow-[0_12px_38px_rgba(45,212,191,0.4),0_0_0_1px_rgba(94,234,212,0.2)] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none">
             Continue
           </Button>
         </div>
