@@ -103,7 +103,7 @@ interface NatalPlacement {
   degree: string;
 }
 
-// ── Moon Phase Cycle — bottom-left card ────────────────────────────────────────
+// ── Moon Phase Cycle ─────────────────────────────────────────────────────────────
 interface MoonPhaseData {
   phaseName: string;
   illuminationPercent: number;
@@ -155,6 +155,20 @@ function getMoonGlyph(phaseName: string): string {
   return glyphs[phaseName] ?? "🌙";
 }
 
+function abbreviateMoonPhase(phaseName: string): string {
+  const map: Record<string, string> = {
+    "New Moon": "New Moon",
+    "Waxing Crescent": "Waxing Cres.",
+    "First Quarter": "1st Quarter",
+    "Waxing Gibbous": "Waxing Gib.",
+    "Full Moon": "Full Moon",
+    "Waning Gibbous": "Waning Gib.",
+    "Last Quarter": "Last Quarter",
+    "Waning Crescent": "Waning Cres.",
+  };
+  return map[phaseName] ?? phaseName;
+}
+
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "soon";
@@ -178,10 +192,11 @@ export default function ReadingIntakeScreen() {
   const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
-  // ── Profile module state — welcome pill + natal Big 3 ──────────────
+  // ── Profile module state — natal data ───────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
   const [natalRising, setNatalRising] = useState<NatalPlacement | null>(null);
+  const [allPlanets, setAllPlanets] = useState<NatalPlacement[]>([]);
   const [nickname, setNickname] = useState<string | null>(null);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState("");
@@ -193,9 +208,7 @@ export default function ReadingIntakeScreen() {
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
 
-  // ── Rotating insight panel — moon phase / transits / natal chart ──
-  // Auto-advances on a timer; tapping the panel jumps to the next one
-  // and resets the timer so a manual tap doesn't get immediately undone.
+  // ── Rotating insight panel — auto-rotates ──────────────────────────
   const ROTATION_MODULES = ["moonPhase", "transits", "natalChart"] as const;
   type RotationModule = (typeof ROTATION_MODULES)[number];
   const ROTATION_INTERVAL_MS = 5000;
@@ -389,7 +402,6 @@ export default function ReadingIntakeScreen() {
   }, [router]);
 
   // ── Load profile module data — natal Sun/Moon/Rising ──────────────
-  // Pulled from the existing tropical natal chart, already cached.
   useEffect(() => {
     if (chartStatus !== "ready") return;
     const chart = loadChart();
@@ -402,13 +414,33 @@ export default function ReadingIntakeScreen() {
     };
 
     const planets = data.tropical?.planets ?? [];
+    
+    // Get all planets for the ticker
+    const planetOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+    const allPlanetsData: NatalPlacement[] = [];
+    
+    planetOrder.forEach(name => {
+      const found = planets.find(p => p.name === name);
+      if (found) {
+        allPlanetsData.push(found);
+      }
+    });
+    
+    // Add Rising (Ascendant) if available
+    const rising = planets.find(p => p.name === "Ascendant");
+    if (rising) {
+      allPlanetsData.push({ ...rising, name: "Rising" });
+    }
+    
+    setAllPlanets(allPlanetsData);
+
     const sun = planets.find((p) => p.name === "Sun") ?? null;
     const moon = planets.find((p) => p.name === "Moon") ?? null;
-    const rising = planets.find((p) => p.name === "Ascendant") ?? null;
+    const risingData = planets.find((p) => p.name === "Ascendant") ?? null;
 
     setNatalSun(sun);
     setNatalMoon(moon);
-    setNatalRising(rising);
+    setNatalRising(risingData);
 
     if (data.moonPhase) {
       setMoonPhase(data.moonPhase);
@@ -699,9 +731,6 @@ export default function ReadingIntakeScreen() {
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
-  // ── Get the user's Sun sign symbol ──────────────────────────────────
-  const sunSignSymbol = natalSun ? getZodiacSymbol(natalSun.sign) : "⭐";
-
   return (
     <div
       className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
@@ -749,10 +778,10 @@ export default function ReadingIntakeScreen() {
 
         @keyframes whiteGlowPulse {
           0%, 100% {
-            opacity: 0.5;
+            opacity: 0.4;
           }
           50% {
-            opacity: 1;
+            opacity: 0.9;
           }
         }
 
@@ -762,6 +791,15 @@ export default function ReadingIntakeScreen() {
           }
           100% {
             background-position: 200% center;
+          }
+        }
+
+        @keyframes tickerScroll {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(-50%);
           }
         }
 
@@ -1100,6 +1138,22 @@ export default function ReadingIntakeScreen() {
           animation: shimmerFlow 4s ease-in-out infinite, whiteGlowPulse 4s ease-in-out infinite;
         }
 
+        .glow-light-bar {
+          position: relative;
+          height: 2.5px;
+          width: 100%;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.7) 30%,
+            rgba(255, 255, 255, 0.9) 50%,
+            rgba(255, 255, 255, 0.7) 70%,
+            rgba(255, 255, 255, 0) 100%
+          );
+          box-shadow: 0 0 30px rgba(255, 255, 255, 0.25), 0 0 60px rgba(255, 255, 255, 0.08);
+          animation: whiteGlowPulse 3.5s ease-in-out infinite;
+        }
+
         .subscription-shell {
           position: relative;
           overflow: hidden;
@@ -1197,6 +1251,29 @@ export default function ReadingIntakeScreen() {
           opacity: 0.82;
         }
 
+        /* ── TICKER CONTAINER ───────────────────────────────────────── */
+        .ticker-wrapper {
+          display: flex;
+          align-items: center;
+          white-space: nowrap;
+          will-change: transform;
+        }
+
+        @keyframes tickerScroll {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(-50%);
+          }
+        }
+
+        .ticker-animate {
+          display: inline-flex;
+          gap: 2rem;
+          animation: tickerScroll 20s linear infinite;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1208,12 +1285,16 @@ export default function ReadingIntakeScreen() {
           .jxl-teaser,
           .jxl-teaser::before,
           .subscription-shell::after,
-          .white-glow-shimmer {
+          .white-glow-shimmer,
+          .glow-light-bar {
             animation: none !important;
             opacity: 0.4 !important;
           }
           .glitch-container.glitching::after {
             opacity: 0 !important;
+          }
+          .ticker-animate {
+            animation: none !important;
           }
         }
       `}</style>
@@ -1277,122 +1358,105 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          {/* ── Top white line REMOVED ── */}
-
-          {/* ── Rotating insight panel — tap to advance, auto-rotates ─── */}
-          {/* ── Rotating insight panel — tap to advance, auto-rotates ─── */}
-<button
-  type="button"
-  onClick={handleRotationTap}
-  aria-label="Show next insight"
-  className="mb-4 w-full text-left"
->
-  <div className="relative h-[88px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/90">
-    {/* ── Empty left section ── */}
-    <div className="absolute left-0 top-0 flex h-full w-[60px] flex-col items-center justify-center border-r border-white/[0.06]" />
-
-    <div className="absolute inset-0 flex items-center pl-[72px] overflow-hidden">
-      <AnimatePresence mode="wait">
-        {activeRotationModule === "moonPhase" && (
-          <motion.div
-            key="moonPhase"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="flex items-center gap-6 whitespace-nowrap font-mono text-[13px] text-green-400/80"
+          {/* ── STATUS BAR ────────────────────────────────────────────── */}
+          <button
+            type="button"
+            onClick={handleRotationTap}
+            aria-label="Show next insight"
+            className="mb-4 w-full text-left"
           >
-            <span className="text-green-400/60">$</span>
-            <span className="text-green-400/40">[</span>
-            <span className="text-green-300">MoonPhase</span>
-            <span className="text-green-400/40">]</span>
-            <span className="text-green-400/60">▸</span>
-            {moonPhase ? (
-              <>
-                <span className="text-green-300/90">{moonPhase.phaseName}</span>
-                <span className="text-green-400/50">·</span>
-                <span className="text-green-400/80">{moonPhase.illuminationPercent}%</span>
-                <span className="text-green-400/40">|</span>
-                <span className="text-green-400/60">next</span>
-                <span className="text-green-400/40">:</span>
-                <span className="text-green-300">{moonPhase.nextEventName}</span>
-                <span className="text-green-400/40">in</span>
-                <span className="text-green-400/80">{moonPhase.daysUntilNextEvent}d</span>
-              </>
-            ) : (
-              <span className="text-green-500/40">loading...</span>
-            )}
-          </motion.div>
-        )}
+            <div className="relative h-[100px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/90">
+              {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
+              <div className="absolute left-0 top-0 flex h-full w-[90px] flex-col items-center justify-center border-r border-white/[0.06] px-1">
+                <div className="flex items-center gap-1">
+                  <span className="text-[18px]">
+                    {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
+                  </span>
+                  <span className="text-[9px] font-mono uppercase tracking-[0.08em] text-green-400/70">
+                    {moonPhase ? abbreviateMoonPhase(moonPhase.phaseName) : "Moon"}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-1">
+                  <span className="text-[14px] text-amber-300/80">☀️</span>
+                  <span className="text-[9px] font-mono text-amber-300/80">
+                    {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
+                  </span>
+                </div>
+              </div>
 
-        {activeRotationModule === "transits" && (
-          <motion.div
-            key="transits"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="flex items-center gap-4 whitespace-nowrap font-mono text-[13px] text-cyan-400/80"
-          >
-            <span className="text-cyan-400/60">$</span>
-            <span className="text-cyan-400/40">[</span>
-            <span className="text-cyan-300">Transits</span>
-            <span className="text-cyan-400/40">]</span>
-            <span className="text-cyan-400/60">▸</span>
-            <span className="text-cyan-400/40">Sun</span>
-            <span className="text-cyan-400/40">:</span>
-            <span className="text-cyan-300/90">{todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}</span>
-            <span className="text-cyan-400/40">|</span>
-            <span className="text-cyan-400/40">Moon</span>
-            <span className="text-cyan-400/40">:</span>
-            <span className="text-cyan-300/90">{todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}</span>
-          </motion.div>
-        )}
+              {/* ── RIGHT SECTION: Two-line ticker ── */}
+              <div className="absolute inset-0 flex flex-col justify-center pl-[100px] pr-4 overflow-hidden">
+                {/* Line 1: Static Header */}
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
+                    Today's Astrological Calendar
+                  </span>
+                  <span className="text-[9px] font-mono text-green-400/40 animate-pulse">⏺</span>
+                </div>
 
-        {activeRotationModule === "natalChart" && (
-          <motion.div
-            key="natalChart"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="flex items-center gap-3 whitespace-nowrap font-mono text-[13px] text-purple-400/80"
-          >
-            <span className="text-purple-400/60">$</span>
-            <span className="text-purple-400/40">[</span>
-            <span className="text-purple-300">Natal</span>
-            <span className="text-purple-400/40">]</span>
-            <span className="text-purple-400/60">▸</span>
-            <span className="text-purple-400/40">Sun</span>
-            <span className="text-purple-400/40">:</span>
-            <span className="text-purple-300/90">{natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}</span>
-            <span className="text-purple-400/40">|</span>
-            <span className="text-purple-400/40">Moon</span>
-            <span className="text-purple-400/40">:</span>
-            <span className="text-purple-300/90">{natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}</span>
-            <span className="text-purple-400/40">|</span>
-            <span className="text-purple-400/40">Rising</span>
-            <span className="text-purple-400/40">:</span>
-            <span className="text-purple-300/90">{natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+                {/* Line 2: Scrolling Ticker */}
+                <div className="relative overflow-hidden">
+                  <div className="ticker-wrapper">
+                    <div className="ticker-animate">
+                      {/* First copy */}
+                      <span className="flex items-center gap-4 font-mono text-[12px] text-green-400/80">
+                        <span className="text-green-400/40">$</span>
+                        <span className="text-green-400/40">[</span>
+                        <span className="text-green-300">Natal</span>
+                        <span className="text-green-400/40">]</span>
+                        <span className="text-green-400/60">▸</span>
+                        {allPlanets.map((planet, idx) => (
+                          <React.Fragment key={idx}>
+                            <span className="text-green-400/50">{planet.name}</span>
+                            <span className="text-green-400/40">:</span>
+                            <span className="text-green-300/90">
+                              {planet.sign} {planet.degree}
+                            </span>
+                            {idx < allPlanets.length - 1 && (
+                              <span className="text-green-400/30">|</span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </span>
+                      {/* Duplicate for seamless loop */}
+                      <span className="flex items-center gap-4 font-mono text-[12px] text-green-400/80">
+                        <span className="text-green-400/40">$</span>
+                        <span className="text-green-400/40">[</span>
+                        <span className="text-green-300">Natal</span>
+                        <span className="text-green-400/40">]</span>
+                        <span className="text-green-400/60">▸</span>
+                        {allPlanets.map((planet, idx) => (
+                          <React.Fragment key={`dup-${idx}`}>
+                            <span className="text-green-400/50">{planet.name}</span>
+                            <span className="text-green-400/40">:</span>
+                            <span className="text-green-300/90">
+                              {planet.sign} {planet.degree}
+                            </span>
+                            {idx < allPlanets.length - 1 && (
+                              <span className="text-green-400/30">|</span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-    {/* ── Separator line ── */}
-    <div className="absolute bottom-0 left-0 h-[2px] w-[25%] bg-gradient-to-r from-green-400/60 to-transparent" />
-  </div>
-</button>
+              {/* ── Separator line ── */}
+              <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-green-400/60 to-transparent" />
+            </div>
+          </button>
 
-          {/* ── Enhanced separator line (above "Your Direct Insights") ── */}
-          <div className="white-glow-shimmer mb-4 h-[2.5px] w-full bg-gradient-to-r from-transparent via-white/80 to-transparent shadow-[0_0_30px_rgba(255,255,255,0.35)]" />
+          {/* ── GLOWING LIGHT BAR ────────────────────────────────────── */}
+          <div className="glow-light-bar mb-4" />
 
-          {/* ── Static header — "Your Direct Insights" ───────── */}
+          {/* ── HERO: Your Direct Insights ───────────────────────────── */}
           <section className="mb-4 space-y-3">
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              <h1 className="text-[36px] font-semibold leading-[0.98] tracking-[0.02em] text-transparent bg-gradient-to-b from-white via-white to-teal-200/80 bg-clip-text sm:text-[42px] drop-shadow-[0_0_30px_rgba(94,234,212,0.15)]">
+              <h1 className="text-[36px] font-semibold leading-[0.98] tracking-[0.02em] text-transparent bg-gradient-to-b from-white via-white to-teal-200/80 bg-clip-text sm:text-[42px] drop-shadow-[0_0_30px_rgba(94,234,212,0.15)] [text-shadow:_0_4px_30px_rgba(0,0,0,0.8)]">
                 Your Direct Insights
               </h1>
             </div>
@@ -1664,10 +1728,7 @@ export default function ReadingIntakeScreen() {
                         AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
-                      className={cn(
-                        "min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300",
-                        selectedArea && selectedArea !== "other" && "border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.12)]"
-                      )}
+                      className="min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300"
                     />
                     <p className="text-xs leading-5 text-slate-400">
                       Be specific. The clearer your question, the sharper the reading.
