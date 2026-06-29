@@ -1288,6 +1288,14 @@ export default function ReadingIntakeScreen() {
             className="mb-4 w-full text-left"
           >
             <AnimatePresence mode="wait">
+              <button
+  type="button"
+  onClick={handleRotationTap}
+  aria-label="Show next insight"
+  className="mb-4 w-full text-left"
+>
+  <div className="relative h-[88px] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+    <AnimatePresence mode="wait">
               {activeRotationModule === "moonPhase" && (
                 <motion.div
                   key="moonPhase"
@@ -1295,7 +1303,7 @@ export default function ReadingIntakeScreen() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.25, ease: "easeOut" }}
-                  className="flex items-center justify-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4"
+                  className="absolute inset-0 flex items-center justify-center gap-3 px-4"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
                     {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
@@ -1327,7 +1335,7 @@ export default function ReadingIntakeScreen() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.25, ease: "easeOut" }}
-                  className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4"
+                  className="absolute inset-0 flex flex-col items-center justify-center px-4"
                 >
                   <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
                     Today's Transits
@@ -1356,7 +1364,7 @@ export default function ReadingIntakeScreen() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.25, ease: "easeOut" }}
-                  className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4"
+                  className="absolute inset-0 flex flex-col items-center justify-center px-4"
                 >
                   <div className="mb-3 flex items-center justify-center gap-2">
                     {isEditingNickname ? (
@@ -1414,7 +1422,8 @@ export default function ReadingIntakeScreen() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </button>
+          </div>
+        </button>
 
           {/* ── Separator line — splits rotating info from the buttons ── */}
           <div className="white-glow-shimmer mb-4 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
