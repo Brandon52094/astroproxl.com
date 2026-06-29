@@ -1354,7 +1354,7 @@ export default function ReadingIntakeScreen() {
 
           {/* ── HERO: Future Direct Insights ───────────────────────────── */}
           <section className="mb-4 space-y-3">
-            <div className="relative space-y-5 text-center">
+            <div className="relative space-y-6 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
               <h1 className="bg-gradient-to-b from-white via-white to-teal-200/75 bg-clip-text text-[36px] font-semibold leading-[0.98] tracking-[0.015em] text-transparent drop-shadow-[0_10px_28px_rgba(0,0,0,0.55)] sm:text-[42px] shadow-[0_8px_32px_rgba(0,0,0,0.4)] rounded-2xl px-6 py-2 inline-block">
