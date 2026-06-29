@@ -179,6 +179,14 @@ export default function ReadingIntakeScreen() {
   const [glitchColor, setGlitchColor] = useState<"cyan" | "magenta" | "yellow" | null>(null);
   const glitchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Hero focus module — rotating Header / Moon / Today panels ──────
+  const HERO_PANEL_COUNT = 3;
+  const HERO_ROTATE_MS = 6000;
+  const HERO_POINTER_PAUSE_MS = 8000;
+  const [heroPanelIndex, setHeroPanelIndex] = useState(0);
+  const heroPauseUntilRef = useRef<number>(0);
+  const heroIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const shouldReduceMotion = useReducedMotion();
 
   // ── Live ticking clock for the free-reading countdown ───────────
@@ -243,6 +251,38 @@ export default function ReadingIntakeScreen() {
       if (glitchTimeoutRef.current) clearTimeout(glitchTimeoutRef.current);
     };
   }, [triggerGlitch, shouldReduceMotion]);
+
+  // ── Hero focus module — auto-rotate every 6s, paused after interaction ──
+  useEffect(() => {
+    if (shouldReduceMotion) {
+      // Reduced motion: no rotation, no crossfade — always the Header panel.
+      setHeroPanelIndex(0);
+      return;
+    }
+
+    heroIntervalRef.current = setInterval(() => {
+      if (Date.now() < heroPauseUntilRef.current) return;
+      setHeroPanelIndex((i) => (i + 1) % HERO_PANEL_COUNT);
+    }, HERO_ROTATE_MS);
+
+    return () => {
+      if (heroIntervalRef.current) clearInterval(heroIntervalRef.current);
+    };
+  }, [shouldReduceMotion]);
+
+  const handleHeroPointerInteraction = useCallback(() => {
+    if (shouldReduceMotion) return;
+    heroPauseUntilRef.current = Date.now() + HERO_POINTER_PAUSE_MS;
+  }, [shouldReduceMotion]);
+
+  const handleHeroManualSelect = useCallback(
+    (index: number) => {
+      if (shouldReduceMotion) return;
+      heroPauseUntilRef.current = Date.now() + HERO_POINTER_PAUSE_MS;
+      setHeroPanelIndex(index);
+    },
+    [shouldReduceMotion]
+  );
 
   const stars = useMemo(
     () =>
@@ -1211,7 +1251,7 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          {/* ── Hero — two disconnected floating lines, no box ───────── */}
+          {/* ── Hero focus module — rotates: Header → Moon → Today ──── */}
           <section className="mb- mt-12 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
@@ -1225,12 +1265,177 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div className="relative space-y-4 text-center">
+            <div
+              className="relative text-center"
+              onPointerDown={handleHeroPointerInteraction}
+              onTouchStart={handleHeroPointerInteraction}
+            >
               <div className="hero-halo" aria-hidden="true" />
 
-              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
-                Your Direct Future Insights
-              </h1>
+              {/* Stable-height stage so rotation doesn't shift the cards below.
+                  min-h (not a hard h-) so larger device text sizes don't clip. */}
+              <div className="relative min-h-[164px] sm:min-h-[168px]">
+                <AnimatePresence mode="wait">
+                  {heroPanelIndex === 0 && (
+                    <motion.div
+                      key="hero-panel-header"
+                      initial={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: 6 }
+                      }
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: -6 }
+                      }
+                      transition={{ duration: 0.45, ease: "easeInOut" }}
+                      className="absolute inset-0 flex flex-col items-center justify-center space-y-4"
+                    >
+                      <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
+                        Your Direct Future Insights
+                      </h1>
+                    </motion.div>
+                  )}
+
+                  {heroPanelIndex === 1 && (
+                    <motion.div
+                      key="hero-panel-moon"
+                      initial={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: 6 }
+                      }
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: -6 }
+                      }
+                      transition={{ duration: 0.45, ease: "easeInOut" }}
+                      className="absolute inset-0 flex flex-col items-center justify-center space-y-2"
+                    >
+                      {moonPhase ? (
+                        <>
+                          <span className="text-[40px] leading-none" aria-hidden="true">
+                            {getMoonGlyph(moonPhase.phaseName)}
+                          </span>
+                          <h2 className="text-[19px] font-semibold text-white">
+                            {moonPhase.phaseName}
+                          </h2>
+                          <p className="text-[12px] text-slate-400">
+                            {moonPhase.illuminationPercent}% illuminated · Moon in{" "}
+                            {moonPhase.moonSign} {moonPhase.moonDegree}°
+                          </p>
+                          <p className="text-[11px] text-indigo-300/70">
+                            {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}{" "}
+                            {moonPhase.daysUntilNextEvent === 1 ? "day" : "days"}
+                          </p>
+                        </>
+                      ) : (
+                        <div className="w-full max-w-[220px] space-y-2.5 animate-pulse">
+                          <div className="mx-auto h-9 w-9 rounded-full bg-white/[0.06]" />
+                          <div className="mx-auto h-4 w-32 rounded-full bg-white/[0.06]" />
+                          <div className="mx-auto h-3 w-44 rounded-full bg-white/[0.04]" />
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+
+                  {heroPanelIndex === 2 && (
+                    <motion.div
+                      key="hero-panel-today"
+                      initial={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: 6 }
+                      }
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: -6 }
+                      }
+                      transition={{ duration: 0.45, ease: "easeInOut" }}
+                      className="absolute inset-0 flex flex-col items-center justify-center space-y-3"
+                    >
+                      {todaySun || todayMoon ? (
+                        <>
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                            Today's Sky
+                          </span>
+                          <div className="flex items-center gap-6">
+                            {todaySun && (
+                              <div className="text-center">
+                                <p className="text-[11px] text-slate-500">Sun</p>
+                                <p className="text-[15px] font-semibold text-white">
+                                  {todaySun.sign} {todaySun.degree}°
+                                  {todaySun.isRetrograde ? " ℞" : ""}
+                                </p>
+                              </div>
+                            )}
+                            {todayMoon && (
+                              <div className="text-center">
+                                <p className="text-[11px] text-slate-500">Moon</p>
+                                <p className="text-[15px] font-semibold text-white">
+                                  {todayMoon.sign} {todayMoon.degree}°
+                                  {todayMoon.isRetrograde ? " ℞" : ""}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full max-w-[220px] space-y-2.5 animate-pulse">
+                          <div className="mx-auto h-3 w-20 rounded-full bg-white/[0.06]" />
+                          <div className="flex justify-center gap-6">
+                            <div className="h-9 w-16 rounded-xl bg-white/[0.04]" />
+                            <div className="h-9 w-16 rounded-xl bg-white/[0.04]" />
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Thin progress indicator — no chips, no dots */}
+              <div
+                className="mx-auto mt-1 flex w-16 gap-1.5"
+                role="tablist"
+                aria-label="Header, moon phase, today's sky"
+              >
+                {Array.from({ length: HERO_PANEL_COUNT }).map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    role="tab"
+                    aria-selected={heroPanelIndex === i}
+                    aria-label={
+                      i === 0
+                        ? "Show header"
+                        : i === 1
+                          ? "Show moon phase"
+                          : "Show today's sky"
+                    }
+                    disabled={!!shouldReduceMotion}
+                    onClick={() => handleHeroManualSelect(i)}
+                    className={cn(
+                      "relative h-[3px] flex-1 overflow-hidden rounded-full bg-white/[0.07]",
+                      shouldReduceMotion && "pointer-events-none opacity-40"
+                    )}
+                  >
+                    {heroPanelIndex === i && (
+                      <motion.span
+                        layoutId="hero-progress-fill"
+                        className="absolute inset-0 rounded-full bg-teal-300/70"
+                        style={{ boxShadow: "0 0 6px rgba(94,234,212,0.5)" }}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
