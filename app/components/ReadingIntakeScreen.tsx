@@ -1459,7 +1459,7 @@ export default function ReadingIntakeScreen() {
                       Resets in {formatTimeRemaining(userStatus.cooldownExpiresAt)}
                     </p>
                   )}
-                  <div className="mt-5 border-t border-white/10 pt-5">
+                  <div className="mt-5 border-t border-white/10 pt-8">
                     <p className="mb-3 text-[12px] leading-5 text-slate-400">
                       You can do this one time per cycle.
                     </p>
