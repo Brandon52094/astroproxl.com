@@ -1403,9 +1403,9 @@ export default function ReadingIntakeScreen() {
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
-                Your Direct Future Insights
-              </h1>
+              <h1 className="text-[36px] font-semibold leading-[0.98] tracking-[0.02em] text-transparent bg-gradient-to-b from-white via-white to-teal-200/80 bg-clip-text sm:text-[42px] drop-shadow-[0_0_30px_rgba(94,234,212,0.15)]">
+  Your Direct Future Insights
+</h1>
             </div>
           </section>
 
