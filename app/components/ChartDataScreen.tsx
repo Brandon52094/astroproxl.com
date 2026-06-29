@@ -475,8 +475,8 @@ export default function ChartDataScreen() {
           </header>
 
           <div className="mb-4 space-y-1">
-            <h1 className="text-[26px] font-semibold leading-tight text-white">Enter your birth details</h1>
-            <p className="text-sm text-slate-400">Accepts any date format — MM/DD/YYYY, YYYY-MM-DD, or YYYYMMDD.</p>
+            <h1 className="text-[26px] font-semibold leading-tight text-white">Enter Your Birth Details</h1>
+            <p className="text-sm text-slate-400">MM/DD/YYYY, YYYY-MM-DD, or YYYYMMDD.</p>
           </div>
 
           <section className="space-y-3">
@@ -489,7 +489,7 @@ export default function ChartDataScreen() {
                   <Label htmlFor="birth-date" className="text-sm font-medium text-slate-200">Birth Date</Label>
                   <Input id="birth-date" type="text" inputMode="numeric" autoComplete="bday"
                     value={birthDate} onChange={(e) => setBirthDate(e.target.value ?? "")}
-                    placeholder="05/20/1994 or 19940520"
+                    placeholder="00/00/0000 or 00000000"
                     className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-teal-300" />
                 </div>
 
@@ -497,7 +497,7 @@ export default function ChartDataScreen() {
                   <Label htmlFor="birth-time" className="text-sm font-medium text-slate-200">Birth Time</Label>
                   <Input id="birth-time" type="text" autoComplete="off"
                     value={birthTime} onChange={(e) => setBirthTime(e.target.value ?? "")}
-                    placeholder="2:22 AM or 14:22"
+                    placeholder="0:00 AM or 00:00"
                     className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-teal-300" />
                 </div>
 
@@ -572,7 +572,7 @@ export default function ChartDataScreen() {
                     >
                       Terms & Conditions
                     </button>{" "}
-                    and understand this reading is for entertainment purposes.
+                    and understand them.
                   </span>
                 </label>
 
