@@ -1447,6 +1447,7 @@ export default function ReadingIntakeScreen() {
           </div>
 
           {/* ── GLOWING LIGHT BAR ── */}
+          <div className="glow-light-bar mb-4 opacity-80" />
 
           {/* ── HERO: Your Direct Insights ───────────────────────────── */}
           <section className="mb-4 space-y-3">
