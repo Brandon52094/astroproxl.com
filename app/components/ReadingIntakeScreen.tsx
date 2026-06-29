@@ -672,7 +672,6 @@ export default function ReadingIntakeScreen() {
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!isScrubbing || dragStartX.current === null) return;
     const delta = e.clientX - dragStartX.current;
-    // Scrub speed: 1px = 0.3% of the ticker width
     const newOffset = dragStartOffset.current + delta * 0.3;
     setScrubOffset(newOffset);
   }, [isScrubbing]);
@@ -681,7 +680,6 @@ export default function ReadingIntakeScreen() {
     const target = e.currentTarget;
     target.releasePointerCapture(e.pointerId);
     setIsScrubbing(false);
-    // Resume after 1.5s
     if (autoResumeTimer.current) {
       clearTimeout(autoResumeTimer.current);
     }
@@ -1263,6 +1261,11 @@ export default function ReadingIntakeScreen() {
           transition: box-shadow 0.3s ease, border-color 0.3s ease;
         }
 
+        .top-section {
+          flex-shrink: 0;
+          overflow: hidden;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1337,14 +1340,14 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-28"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-6"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col"
+          className="flex flex-col top-section"
         >
           {/* ── STATUS BAR ────────────────────────────────────────────── */}
           <div
@@ -1360,15 +1363,6 @@ export default function ReadingIntakeScreen() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_30%),radial-gradient(circle_at_85%_20%,rgba(94,234,212,0.07),transparent_22%),radial-gradient(circle_at_75%_100%,rgba(168,85,247,0.08),transparent_26%)]" />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
             <div className="pointer-events-none absolute inset-y-3 left-[30%] w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
-
-            {/* ── Scrub indicator ── */}
-            {isScrubbing && (
-              <div className="pointer-events-none absolute inset-x-0 top-1 flex justify-center">
-                <div className="rounded-full bg-white/20 px-3 py-0.5 text-[8px] font-medium uppercase tracking-[0.2em] text-white/60 backdrop-blur-sm">
-                  Scrubbing
-                </div>
-              </div>
-            )}
 
             {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
             <div className="absolute left-0 top-0 flex h-full w-[30%] flex-col items-center justify-center px-3">
@@ -1401,8 +1395,8 @@ export default function ReadingIntakeScreen() {
             <div className="absolute inset-0 flex flex-col justify-center overflow-hidden pl-[32%] pr-4">
               {/* Row 1: Today's Astrological Calendar */}
               <div className="mb-1.5 flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78">
-                  Today’s Astrological Calendar
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
+                  Today's Astrological Calendar
                 </span>
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70 shadow-[0_0_10px_rgba(110,231,183,0.5)]" />
               </div>
@@ -1423,9 +1417,9 @@ export default function ReadingIntakeScreen() {
                 </div>
               </div>
 
-              {/* Row 2: Your Astrological Chart */}
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78">
+              {/* Row 2: Your Astrological Chart — centered */}
+              <div className="mb-1.5 flex items-center justify-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
                   Your Astrological Chart
                 </span>
                 <span className="h-1.5 w-1.5 rounded-full bg-violet-300/70 shadow-[0_0_10px_rgba(196,181,253,0.45)]" />
@@ -1460,13 +1454,9 @@ export default function ReadingIntakeScreen() {
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              <div className="mx-auto h-px w-[min(220px,72%)] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-
               <h1 className="bg-gradient-to-b from-white via-white to-teal-200/75 bg-clip-text text-[36px] font-semibold leading-[0.98] tracking-[0.015em] text-transparent drop-shadow-[0_10px_28px_rgba(0,0,0,0.55)] sm:text-[42px]">
                 Your Direct Insights
               </h1>
-
-              <div className="mx-auto h-[2px] w-[min(300px,86%)] rounded-full bg-gradient-to-r from-transparent via-white/55 to-transparent shadow-[0_0_16px_rgba(255,255,255,0.16)]" />
             </div>
           </section>
 
