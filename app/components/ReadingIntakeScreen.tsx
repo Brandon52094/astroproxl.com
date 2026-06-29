@@ -207,6 +207,7 @@ export default function ReadingIntakeScreen() {
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
+  const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
 
   // ── Rotating insight panel — auto-rotates ──────────────────────────
   const ROTATION_MODULES = ["moonPhase", "transits", "natalChart"] as const;
@@ -401,7 +402,7 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
-  // ── Load profile module data — natal Sun/Moon/Rising ──────────────
+  // ── Load profile module data ────────────────────────────────────────
   useEffect(() => {
     if (chartStatus !== "ready") return;
     const chart = loadChart();
@@ -415,7 +416,7 @@ export default function ReadingIntakeScreen() {
 
     const planets = data.tropical?.planets ?? [];
     
-    // Get all planets for the ticker
+    // Get all planets for the natal ticker
     const planetOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
     const allPlanetsData: NatalPlacement[] = [];
     
@@ -446,11 +447,23 @@ export default function ReadingIntakeScreen() {
       setMoonPhase(data.moonPhase);
     }
 
+    // ── Load today's transits ──
     if (data.transits) {
       const todaySunPlanet = data.transits.find((p) => p.name === "Sun") ?? null;
       const todayMoonPlanet = data.transits.find((p) => p.name === "Moon") ?? null;
       setTodaySun(todaySunPlanet);
       setTodayMoon(todayMoonPlanet);
+      
+      // Get all transit planets for the daily ticker
+      const transitOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+      const allTransits: TodayTransitPlanet[] = [];
+      transitOrder.forEach(name => {
+        const found = data.transits?.find(p => p.name === name);
+        if (found) {
+          allTransits.push(found);
+        }
+      });
+      setTodayPlanets(allTransits);
     }
   }, [chartStatus]);
 
@@ -791,15 +804,6 @@ export default function ReadingIntakeScreen() {
           }
           100% {
             background-position: 200% center;
-          }
-        }
-
-        @keyframes tickerScroll {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
           }
         }
 
@@ -1349,7 +1353,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-8"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-28"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1365,75 +1369,134 @@ export default function ReadingIntakeScreen() {
             aria-label="Show next insight"
             className="mb-4 w-full text-left"
           >
-            <div className="relative h-[100px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/90">
+            <div className="relative h-[120px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/90">
               {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
-              <div className="absolute left-0 top-0 flex h-full w-[90px] flex-col items-center justify-center border-r border-white/[0.06] px-1">
-                <div className="flex items-center gap-1">
-                  <span className="text-[18px]">
+              <div className="absolute left-0 top-0 flex h-full w-[35%] flex-col items-center justify-center border-r border-white/[0.06] px-2">
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-[20px]">
                     {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
                   </span>
-                  <span className="text-[9px] font-mono uppercase tracking-[0.08em] text-green-400/70">
+                  <span className="text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-white/90">
                     {moonPhase ? abbreviateMoonPhase(moonPhase.phaseName) : "Moon"}
                   </span>
-                </div>
-                <div className="mt-1 flex items-center gap-1">
-                  <span className="text-[14px] text-amber-300/80">☀️</span>
-                  <span className="text-[9px] font-mono text-amber-300/80">
-                    {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
-                  </span>
+                  {moonPhase && (
+                    <span className="text-[10px] font-mono text-green-400/80">
+                      in {moonPhase.moonSign} {moonPhase.moonDegree}
+                    </span>
+                  )}
+                  <div className="mt-1 flex items-center gap-1">
+                    <span className="text-[14px] text-amber-300/80">☀️</span>
+                    <span className="text-[10px] font-mono text-amber-300/80">
+                      {todaySun ? `in ${todaySun.sign} ${todaySun.degree}` : "—"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* ── RIGHT SECTION: Two-line ticker ── */}
-              <div className="absolute inset-0 flex flex-col justify-center pl-[100px] pr-4 overflow-hidden">
-                {/* Line 1: Static Header */}
+              {/* ── RIGHT SECTION: Two-row ticker ── */}
+              <div className="absolute inset-0 flex flex-col justify-center pl-[37%] pr-4 overflow-hidden">
+                {/* Row 1: Today's Astrological Calendar */}
                 <div className="mb-1 flex items-center gap-2">
-                  <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
                     Today's Astrological Calendar
                   </span>
-                  <span className="text-[9px] font-mono text-green-400/40 animate-pulse">⏺</span>
+                  <span className="text-[8px] font-mono text-green-400/40 animate-pulse">⏺</span>
                 </div>
-
-                {/* Line 2: Scrolling Ticker */}
-                <div className="relative overflow-hidden">
+                <div className="relative overflow-hidden mb-1.5">
                   <div className="ticker-wrapper">
                     <div className="ticker-animate">
-                      {/* First copy */}
-                      <span className="flex items-center gap-4 font-mono text-[12px] text-green-400/80">
-                        <span className="text-green-400/40">$</span>
-                        <span className="text-green-400/40">[</span>
-                        <span className="text-green-300">Natal</span>
-                        <span className="text-green-400/40">]</span>
-                        <span className="text-green-400/60">▸</span>
-                        {allPlanets.map((planet, idx) => (
+                      <span className="flex items-center gap-3 font-mono text-[11px] text-cyan-400/80">
+                        <span className="text-cyan-400/40">$</span>
+                        <span className="text-cyan-400/40">[</span>
+                        <span className="text-cyan-300">Daily</span>
+                        <span className="text-cyan-400/40">]</span>
+                        <span className="text-cyan-400/60">▸</span>
+                        {todayPlanets.map((planet, idx) => (
                           <React.Fragment key={idx}>
-                            <span className="text-green-400/50">{planet.name}</span>
-                            <span className="text-green-400/40">:</span>
-                            <span className="text-green-300/90">
+                            <span className="text-cyan-400/50">{planet.name}</span>
+                            <span className="text-cyan-400/40">:</span>
+                            <span className="text-cyan-300/90">
                               {planet.sign} {planet.degree}
                             </span>
-                            {idx < allPlanets.length - 1 && (
-                              <span className="text-green-400/30">|</span>
+                            {planet.isRetrograde && (
+                              <span className="text-cyan-400/60">℞</span>
+                            )}
+                            {idx < todayPlanets.length - 1 && (
+                              <span className="text-cyan-400/30">|</span>
                             )}
                           </React.Fragment>
                         ))}
                       </span>
-                      {/* Duplicate for seamless loop */}
-                      <span className="flex items-center gap-4 font-mono text-[12px] text-green-400/80">
-                        <span className="text-green-400/40">$</span>
-                        <span className="text-green-400/40">[</span>
-                        <span className="text-green-300">Natal</span>
-                        <span className="text-green-400/40">]</span>
-                        <span className="text-green-400/60">▸</span>
-                        {allPlanets.map((planet, idx) => (
+                      <span className="flex items-center gap-3 font-mono text-[11px] text-cyan-400/80">
+                        <span className="text-cyan-400/40">$</span>
+                        <span className="text-cyan-400/40">[</span>
+                        <span className="text-cyan-300">Daily</span>
+                        <span className="text-cyan-400/40">]</span>
+                        <span className="text-cyan-400/60">▸</span>
+                        {todayPlanets.map((planet, idx) => (
                           <React.Fragment key={`dup-${idx}`}>
-                            <span className="text-green-400/50">{planet.name}</span>
-                            <span className="text-green-400/40">:</span>
-                            <span className="text-green-300/90">
+                            <span className="text-cyan-400/50">{planet.name}</span>
+                            <span className="text-cyan-400/40">:</span>
+                            <span className="text-cyan-300/90">
+                              {planet.sign} {planet.degree}
+                            </span>
+                            {planet.isRetrograde && (
+                              <span className="text-cyan-400/60">℞</span>
+                            )}
+                            {idx < todayPlanets.length - 1 && (
+                              <span className="text-cyan-400/30">|</span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Your Astrological Chart */}
+                <div className="mb-0.5 flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
+                    Your Astrological Chart
+                  </span>
+                  <span className="text-[8px] font-mono text-green-400/40 animate-pulse">⏺</span>
+                </div>
+                <div className="relative overflow-hidden">
+                  <div className="ticker-wrapper">
+                    <div className="ticker-animate">
+                      <span className="flex items-center gap-3 font-mono text-[11px] text-purple-400/80">
+                        <span className="text-purple-400/40">$</span>
+                        <span className="text-purple-400/40">[</span>
+                        <span className="text-purple-300">Natal</span>
+                        <span className="text-purple-400/40">]</span>
+                        <span className="text-purple-400/60">▸</span>
+                        {allPlanets.map((planet, idx) => (
+                          <React.Fragment key={idx}>
+                            <span className="text-purple-400/50">{planet.name}</span>
+                            <span className="text-purple-400/40">:</span>
+                            <span className="text-purple-300/90">
                               {planet.sign} {planet.degree}
                             </span>
                             {idx < allPlanets.length - 1 && (
-                              <span className="text-green-400/30">|</span>
+                              <span className="text-purple-400/30">|</span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </span>
+                      <span className="flex items-center gap-3 font-mono text-[11px] text-purple-400/80">
+                        <span className="text-purple-400/40">$</span>
+                        <span className="text-purple-400/40">[</span>
+                        <span className="text-purple-300">Natal</span>
+                        <span className="text-purple-400/40">]</span>
+                        <span className="text-purple-400/60">▸</span>
+                        {allPlanets.map((planet, idx) => (
+                          <React.Fragment key={`dup-${idx}`}>
+                            <span className="text-purple-400/50">{planet.name}</span>
+                            <span className="text-purple-400/40">:</span>
+                            <span className="text-purple-300/90">
+                              {planet.sign} {planet.degree}
+                            </span>
+                            {idx < allPlanets.length - 1 && (
+                              <span className="text-purple-400/30">|</span>
                             )}
                           </React.Fragment>
                         ))}
@@ -1444,7 +1507,7 @@ export default function ReadingIntakeScreen() {
               </div>
 
               {/* ── Separator line ── */}
-              <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-green-400/60 to-transparent" />
+              <div className="absolute bottom-0 left-0 h-[2px] w-[35%] bg-gradient-to-r from-green-400/60 to-transparent" />
             </div>
           </button>
 
