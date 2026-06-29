@@ -96,14 +96,12 @@ interface UserStatus {
   freeReadingAvailable: boolean;
 }
 
-// ── Natal Big 3 — Sun, Moon, Rising with full degree precision ────────────────
 interface NatalPlacement {
   name: string;
   sign: string;
   degree: string;
 }
 
-// ── Moon Phase Cycle ─────────────────────────────────────────────────────────────
 interface MoonPhaseData {
   phaseName: string;
   illuminationPercent: number;
@@ -120,27 +118,6 @@ interface TodayTransitPlanet {
   isRetrograde: boolean;
 }
 
-// Zodiac symbol map
-const ZODIAC_SYMBOLS: Record<string, string> = {
-  Aries: "♈",
-  Taurus: "♉",
-  Gemini: "♊",
-  Cancer: "♋",
-  Leo: "♌",
-  Virgo: "♍",
-  Libra: "♎",
-  Scorpio: "♏",
-  Sagittarius: "♐",
-  Capricorn: "♑",
-  Aquarius: "♒",
-  Pisces: "♓",
-};
-
-function getZodiacSymbol(sign: string): string {
-  return ZODIAC_SYMBOLS[sign] || "⭐";
-}
-
-// Visual moon glyph by phase name — simple, no external image needed
 function getMoonGlyph(phaseName: string): string {
   const glyphs: Record<string, string> = {
     "New Moon": "🌑",
@@ -153,20 +130,6 @@ function getMoonGlyph(phaseName: string): string {
     "Waning Crescent": "🌘",
   };
   return glyphs[phaseName] ?? "🌙";
-}
-
-function abbreviateMoonPhase(phaseName: string): string {
-  const map: Record<string, string> = {
-    "New Moon": "New Moon",
-    "Waxing Crescent": "Waxing Cres.",
-    "First Quarter": "1st Quarter",
-    "Waxing Gibbous": "Waxing Gib.",
-    "Full Moon": "Full Moon",
-    "Waning Gibbous": "Waning Gib.",
-    "Last Quarter": "Last Quarter",
-    "Waning Crescent": "Waning Cres.",
-  };
-  return map[phaseName] ?? phaseName;
 }
 
 function formatTimeRemaining(expiresAt: string): string {
@@ -192,7 +155,7 @@ export default function ReadingIntakeScreen() {
   const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
-  // ── Profile module state — natal data ───────────────────────────────
+  // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
   const [natalRising, setNatalRising] = useState<NatalPlacement | null>(null);
@@ -203,42 +166,22 @@ export default function ReadingIntakeScreen() {
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const nicknameInputRef = useRef<HTMLInputElement | null>(null);
 
-  // ── Bottom-half profile state — Moon Phase Cycle + Current Chart ──
+  // ── Transit & Moon state ────────────────────────────────────────────
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
 
-  // ── Rotating insight panel — auto-rotates ──────────────────────────
-  const ROTATION_MODULES = ["moonPhase", "transits", "natalChart"] as const;
-  type RotationModule = (typeof ROTATION_MODULES)[number];
-  const ROTATION_INTERVAL_MS = 5000;
+  // ── Scrub state ──────────────────────────────────────────────────────
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [scrubOffset, setScrubOffset] = useState(0);
+  const statusBarRef = useRef<HTMLDivElement | null>(null);
+  const dragStartX = useRef<number | null>(null);
+  const dragStartOffset = useRef<number>(0);
+  const autoResumeTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const [activeRotationModule, setActiveRotationModule] = useState<RotationModule>("moonPhase");
-  const rotationTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const activeRotationIndex = ROTATION_MODULES.indexOf(activeRotationModule);
-
-  const goToRotationModule = useCallback((index: number) => {
-    const wrapped = ((index % ROTATION_MODULES.length) + ROTATION_MODULES.length) % ROTATION_MODULES.length;
-    setActiveRotationModule(ROTATION_MODULES[wrapped]);
-  }, []);
-
-  const handleRotationTap = useCallback(() => {
-    goToRotationModule(activeRotationIndex + 1);
-  }, [activeRotationIndex, goToRotationModule]);
-
-  useEffect(() => {
-    if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
-    rotationTimerRef.current = setTimeout(() => {
-      goToRotationModule(activeRotationIndex + 1);
-    }, ROTATION_INTERVAL_MS);
-    return () => {
-      if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
-    };
-  }, [activeRotationIndex, goToRotationModule]);
-
-  // ── Glitch state for Coming Soon ────────────────────────────────
+  // ── Glitch state ─────────────────────────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
   const [glitchOffset, setGlitchOffset] = useState(0);
   const [glitchColor, setGlitchColor] = useState<"cyan" | "magenta" | "yellow" | null>(null);
@@ -246,7 +189,7 @@ export default function ReadingIntakeScreen() {
 
   const shouldReduceMotion = useReducedMotion();
 
-  // ── Live ticking clock for the free-reading countdown ───────────
+  // ── Live ticking clock ──────────────────────────────────────────────
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -254,28 +197,24 @@ export default function ReadingIntakeScreen() {
     return () => clearInterval(tick);
   }, []);
 
-  // ── Refs for scroll-then-focus sequencing ───────────────────────
+  // ── Refs for scroll-then-focus ──────────────────────────────────────
   const clusterTopRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ── Glitch effect handler ────────────────────────────────────────
+  // ── Glitch effect handler ───────────────────────────────────────────
   const triggerGlitch = useCallback(() => {
     if (shouldReduceMotion) return;
-
     const offset = (Math.random() - 0.5) * 6;
     const colors: ("cyan" | "magenta" | "yellow")[] = ["cyan", "magenta", "yellow"];
     const color = colors[Math.floor(Math.random() * colors.length)];
-
     setGlitchOffset(offset);
     setGlitchColor(color);
     setGlitchActive(true);
-
     if (glitchTimeoutRef.current) {
       clearTimeout(glitchTimeoutRef.current);
     }
-
     glitchTimeoutRef.current = setTimeout(() => {
       setGlitchActive(false);
       setGlitchOffset(0);
@@ -285,16 +224,13 @@ export default function ReadingIntakeScreen() {
 
   useEffect(() => {
     if (shouldReduceMotion) return;
-
     const intervals: NodeJS.Timeout[] = [];
-
     const randomGlitch = setInterval(() => {
       if (Math.random() > 0.4) {
         triggerGlitch();
       }
     }, 3000 + Math.random() * 5000);
     intervals.push(randomGlitch);
-
     const doubleGlitch = setInterval(() => {
       if (Math.random() > 0.7) {
         triggerGlitch();
@@ -302,7 +238,6 @@ export default function ReadingIntakeScreen() {
       }
     }, 8000 + Math.random() * 4000);
     intervals.push(doubleGlitch);
-
     return () => {
       intervals.forEach(clearInterval);
       if (glitchTimeoutRef.current) clearTimeout(glitchTimeoutRef.current);
@@ -336,14 +271,12 @@ export default function ReadingIntakeScreen() {
 
   const getIconPulseAnimation = (isSelected = false) => {
     if (shouldReduceMotion) return {};
-
     if (!isSelected) {
       return {
         scale: 1,
         transition: { duration: 0.2 },
       };
     }
-
     return {
       scale: [1, 1.08, 1],
       transition: {
@@ -402,7 +335,7 @@ export default function ReadingIntakeScreen() {
     ensureChart();
   }, [router]);
 
-  // ── Load profile module data ────────────────────────────────────────
+  // ── Load chart data ──────────────────────────────────────────────────
   useEffect(() => {
     if (chartStatus !== "ready") return;
     const chart = loadChart();
@@ -416,29 +349,23 @@ export default function ReadingIntakeScreen() {
 
     const planets = data.tropical?.planets ?? [];
     
-    // Get all planets for the natal ticker
     const planetOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
     const allPlanetsData: NatalPlacement[] = [];
-    
     planetOrder.forEach(name => {
       const found = planets.find(p => p.name === name);
       if (found) {
         allPlanetsData.push(found);
       }
     });
-    
-    // Add Rising (Ascendant) if available
     const rising = planets.find(p => p.name === "Ascendant");
     if (rising) {
       allPlanetsData.push({ ...rising, name: "Rising" });
     }
-    
     setAllPlanets(allPlanetsData);
 
     const sun = planets.find((p) => p.name === "Sun") ?? null;
     const moon = planets.find((p) => p.name === "Moon") ?? null;
     const risingData = planets.find((p) => p.name === "Ascendant") ?? null;
-
     setNatalSun(sun);
     setNatalMoon(moon);
     setNatalRising(risingData);
@@ -447,14 +374,11 @@ export default function ReadingIntakeScreen() {
       setMoonPhase(data.moonPhase);
     }
 
-    // ── Load today's transits ──
     if (data.transits) {
       const todaySunPlanet = data.transits.find((p) => p.name === "Sun") ?? null;
       const todayMoonPlanet = data.transits.find((p) => p.name === "Moon") ?? null;
       setTodaySun(todaySunPlanet);
       setTodayMoon(todayMoonPlanet);
-      
-      // Get all transit planets for the daily ticker
       const transitOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
       const allTransits: TodayTransitPlanet[] = [];
       transitOrder.forEach(name => {
@@ -467,7 +391,7 @@ export default function ReadingIntakeScreen() {
     }
   }, [chartStatus]);
 
-  // ── Load saved nickname ─────────────────────────────────────────────
+  // ── Load nickname ────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -477,7 +401,7 @@ export default function ReadingIntakeScreen() {
           setNickname(data.nickname);
         }
       } catch {
-        // silent — falls back to Sun sign default
+        // silent
       }
     })();
   }, []);
@@ -509,7 +433,7 @@ export default function ReadingIntakeScreen() {
         setNickname(data.nickname);
       }
     } catch {
-      // silent — keeps previous nickname on failure
+      // silent
     } finally {
       setIsSavingNickname(false);
       setIsEditingNickname(false);
@@ -605,22 +529,17 @@ export default function ReadingIntakeScreen() {
     if (scrollFocusTimeoutRef.current) {
       clearTimeout(scrollFocusTimeoutRef.current);
     }
-
     requestAnimationFrame(() => {
       const topEl = clusterTopRef.current;
       if (!topEl) return;
-
       const topRect = topEl.getBoundingClientRect();
       const currentScrollY = window.scrollY || document.documentElement.scrollTop;
-
       const topOffset = 12;
       const targetScrollY = currentScrollY + topRect.top - topOffset;
-
       window.scrollTo({
         top: Math.max(0, targetScrollY),
         behavior: "smooth",
       });
-
       scrollFocusTimeoutRef.current = setTimeout(() => {
         textareaRef.current?.focus();
       }, 420);
@@ -637,15 +556,12 @@ export default function ReadingIntakeScreen() {
     if (!canSubmit || !selectedArea) return;
     setIsCreatingReading(true);
     setSubmitError(null);
-
     trackTtq("AddToCart", { content_id: selectedArea });
-
     try {
       clearIntake();
       clearReading();
       localStorage.removeItem("dfp_followup_return");
       localStorage.removeItem("dfp_followup_question");
-
       const topic =
         selectedArea === "love"
           ? "love"
@@ -654,7 +570,6 @@ export default function ReadingIntakeScreen() {
             : selectedArea === "money"
               ? "money"
               : "general";
-
       saveIntake({
         topic: topic as "love" | "career" | "money" | "general",
         area: selectedArea,
@@ -665,16 +580,13 @@ export default function ReadingIntakeScreen() {
         timeframeType: "month",
         timeframeValue: "next-45-days",
       });
-
       if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
         const creditsRes = await fetch("/api/user/credits");
         const creditsData = await creditsRes.json();
         if (Number(creditsData.credits ?? 0) <= 0) {
           const paywallsCompleted = Number(creditsData.paywallsCompleted ?? 0);
           const paywallIndex = Math.min(paywallsCompleted + 1, 4);
-
           trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.00, currency: "USD" });
-
           const checkoutRes = await fetch("/api/stripe/checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -691,7 +603,6 @@ export default function ReadingIntakeScreen() {
           }
         }
       }
-
       router.push("/reading/preparing");
     } catch (error) {
       setSubmitError(
@@ -707,7 +618,6 @@ export default function ReadingIntakeScreen() {
     trackTtq("InitiateCheckout", { content_id: "bypass", value: 6.00, currency: "USD" });
     try {
       await fetch("/api/user/bypass-reset", { method: "POST" });
-
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -744,6 +654,104 @@ export default function ReadingIntakeScreen() {
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
+  // ── Scrub handlers ───────────────────────────────────────────────────
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    dragStartX.current = e.clientX;
+    dragStartOffset.current = scrubOffset;
+    setIsScrubbing(true);
+    setIsPaused(true);
+    if (autoResumeTimer.current) {
+      clearTimeout(autoResumeTimer.current);
+      autoResumeTimer.current = null;
+    }
+  }, [scrubOffset]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isScrubbing || dragStartX.current === null) return;
+    const delta = e.clientX - dragStartX.current;
+    // Scrub speed: 1px = 0.3% of the ticker width
+    const newOffset = dragStartOffset.current + delta * 0.3;
+    setScrubOffset(newOffset);
+  }, [isScrubbing]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    target.releasePointerCapture(e.pointerId);
+    setIsScrubbing(false);
+    // Resume after 1.5s
+    if (autoResumeTimer.current) {
+      clearTimeout(autoResumeTimer.current);
+    }
+    autoResumeTimer.current = setTimeout(() => {
+      setIsPaused(false);
+      autoResumeTimer.current = null;
+    }, 1500);
+  }, []);
+
+  const handleTap = useCallback(() => {
+    if (isScrubbing) return;
+    setIsPaused(!isPaused);
+  }, [isPaused, isScrubbing]);
+
+  // ── Cleanup ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (autoResumeTimer.current) {
+        clearTimeout(autoResumeTimer.current);
+        autoResumeTimer.current = null;
+      }
+    };
+  }, []);
+
+  // ── Get the ticker content ──────────────────────────────────────────
+  const getDailyTickerContent = useCallback(() => {
+    return (
+      <span className="flex items-center gap-3 text-[11px] text-cyan-100/78">
+        <span className="rounded-full border border-cyan-300/15 bg-cyan-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-200/80">
+          Daily
+        </span>
+        {todayPlanets.map((planet, idx) => (
+          <React.Fragment key={idx}>
+            <span className="text-cyan-200/45">{planet.name}</span>
+            <span className="text-cyan-100/88">
+              {planet.sign} {planet.degree}
+            </span>
+            {planet.isRetrograde && (
+              <span className="text-cyan-200/55">℞</span>
+            )}
+            {idx < todayPlanets.length - 1 && (
+              <span className="text-white/16">•</span>
+            )}
+          </React.Fragment>
+        ))}
+      </span>
+    );
+  }, [todayPlanets]);
+
+  const getNatalTickerContent = useCallback(() => {
+    return (
+      <span className="flex items-center gap-3 text-[11px] text-purple-100/78">
+        <span className="rounded-full border border-purple-300/15 bg-purple-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-purple-200/80">
+          Natal
+        </span>
+        {allPlanets.map((planet, idx) => (
+          <React.Fragment key={idx}>
+            <span className="text-purple-200/45">{planet.name}</span>
+            <span className="text-purple-100/88">
+              {planet.sign} {planet.degree}
+            </span>
+            {idx < allPlanets.length - 1 && (
+              <span className="text-white/16">•</span>
+            )}
+          </React.Fragment>
+        ))}
+      </span>
+    );
+  }, [allPlanets]);
+
   return (
     <div
       className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
@@ -754,7 +762,6 @@ export default function ReadingIntakeScreen() {
           -ms-overflow-style: none;
           scrollbar-width: none;
         }
-
         .no-scrollbar::-webkit-scrollbar {
           display: none;
           width: 0;
@@ -833,15 +840,9 @@ export default function ReadingIntakeScreen() {
         }
 
         @keyframes jxlShimmer {
-          0% {
-            transform: translateX(-60%);
-          }
-          50% {
-            transform: translateX(40%);
-          }
-          100% {
-            transform: translateX(120%);
-          }
+          0% { transform: translateX(-60%); }
+          50% { transform: translateX(40%); }
+          100% { transform: translateX(120%); }
         }
 
         .cooldown-glow {
@@ -869,18 +870,9 @@ export default function ReadingIntakeScreen() {
         }
 
         @keyframes jxlGlint {
-          0%, 78%, 100% {
-            opacity: 0;
-            transform: scale(0.3);
-          }
-          88% {
-            opacity: 1;
-            transform: scale(1.4);
-          }
-          94% {
-            opacity: 0.7;
-            transform: scale(1);
-          }
+          0%, 78%, 100% { opacity: 0; transform: scale(0.3); }
+          88% { opacity: 1; transform: scale(1.4); }
+          94% { opacity: 0.7; transform: scale(1); }
         }
 
         .jxl-sparkle {
@@ -906,7 +898,6 @@ export default function ReadingIntakeScreen() {
             0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
-        /* ── GLITCH KEYFRAMES ────────────────────────────────────────── */
         @keyframes glitchFlicker {
           0%, 100% { opacity: 0; }
           10% { opacity: 1; }
@@ -1031,20 +1022,10 @@ export default function ReadingIntakeScreen() {
           position: relative;
         }
 
-        /* ── SPARKLE BURST ──────────────────────────────────────────── */
         @keyframes sparkleBurst {
-          0% {
-            opacity: 0;
-            transform: scale(0) rotate(0deg);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1.8) rotate(180deg);
-          }
-          100% {
-            opacity: 0;
-            transform: scale(0.5) rotate(360deg);
-          }
+          0% { opacity: 0; transform: scale(0) rotate(0deg); }
+          50% { opacity: 1; transform: scale(1.8) rotate(180deg); }
+          100% { opacity: 0; transform: scale(0.5) rotate(360deg); }
         }
 
         .sparkle-burst {
@@ -1055,17 +1036,10 @@ export default function ReadingIntakeScreen() {
           animation: sparkleBurst 0.8s ease-out forwards;
         }
 
-        /* ── DRIFT BACKGROUND ───────────────────────────────────────── */
         @keyframes driftGradient {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
         }
 
         .drift-bg {
@@ -1128,18 +1102,6 @@ export default function ReadingIntakeScreen() {
           filter: blur(28px);
           pointer-events: none;
           z-index: 0;
-        }
-
-        .white-glow-shimmer {
-          position: relative;
-          background: linear-gradient(
-            90deg,
-            rgba(255, 255, 255, 0) 0%,
-            rgba(255, 255, 255, 0.5) 50%,
-            rgba(255, 255, 255, 0) 100%
-          );
-          background-size: 200% 100%;
-          animation: shimmerFlow 4s ease-in-out infinite, whiteGlowPulse 4s ease-in-out infinite;
         }
 
         .glow-light-bar {
@@ -1264,6 +1226,7 @@ export default function ReadingIntakeScreen() {
           cursor: grab;
           user-select: none;
           overflow: hidden;
+          width: 100%;
         }
 
         .ticker-wrapper:active {
@@ -1283,10 +1246,21 @@ export default function ReadingIntakeScreen() {
           display: inline-flex;
           gap: 2rem;
           animation: tickerScroll 30s linear infinite;
+          will-change: transform;
         }
 
-        .ticker-wrapper.dragging .ticker-animate {
+        .ticker-wrapper.paused .ticker-animate {
           animation-play-state: paused;
+        }
+
+        .ticker-wrapper.scrubbing .ticker-animate {
+          animation-play-state: paused;
+        }
+
+        .status-bar-scrubbing {
+          box-shadow: 0 0 40px rgba(255, 255, 255, 0.08), 0 0 80px rgba(94, 234, 212, 0.06), 0 0 120px rgba(168, 85, 247, 0.04);
+          border-color: rgba(255, 255, 255, 0.2);
+          transition: box-shadow 0.3s ease, border-color 0.3s ease;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1300,7 +1274,6 @@ export default function ReadingIntakeScreen() {
           .jxl-teaser,
           .jxl-teaser::before,
           .subscription-shell::after,
-          .white-glow-shimmer,
           .glow-light-bar {
             animation: none !important;
             opacity: 0.4 !important;
@@ -1364,7 +1337,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-6"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-28"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1374,162 +1347,126 @@ export default function ReadingIntakeScreen() {
           className="flex flex-col"
         >
           {/* ── STATUS BAR ────────────────────────────────────────────── */}
-          <button
-            type="button"
-            onClick={handleRotationTap}
-            aria-label="Show next insight"
-            className="mb-4 w-full text-left"
+          <div
+            ref={statusBarRef}
+            className={`relative h-[120px] overflow-hidden rounded-[26px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,14,24,0.96),rgba(5,8,22,0.94))] shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-300 ${
+              isScrubbing ? "status-bar-scrubbing" : ""
+            }`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onClick={handleTap}
           >
-            <div className="relative h-[120px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/90">
-              {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
-              <div className="absolute left-0 top-0 flex h-full w-[30%] flex-col items-center justify-center border-r border-white/[0.06] px-2">
-                <div className="flex flex-col items-center gap-0.5">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[20px]">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_30%),radial-gradient(circle_at_85%_20%,rgba(94,234,212,0.07),transparent_22%),radial-gradient(circle_at_75%_100%,rgba(168,85,247,0.08),transparent_26%)]" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            <div className="pointer-events-none absolute inset-y-3 left-[30%] w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+
+            {/* ── Scrub indicator ── */}
+            {isScrubbing && (
+              <div className="pointer-events-none absolute inset-x-0 top-1 flex justify-center">
+                <div className="rounded-full bg-white/20 px-3 py-0.5 text-[8px] font-medium uppercase tracking-[0.2em] text-white/60 backdrop-blur-sm">
+                  Scrubbing
+                </div>
+              </div>
+            )}
+
+            {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
+            <div className="absolute left-0 top-0 flex h-full w-[30%] flex-col items-center justify-center px-3">
+              <div className="flex h-[84px] w-full flex-col items-center justify-center rounded-[20px] border border-white/[0.06] bg-white/[0.025] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">
+                  Live Sky
+                </div>
+
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[20px] drop-shadow-[0_0_12px_rgba(255,255,255,0.12)]">
                       {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
                     </span>
-                    <span className="text-[10px] font-mono text-green-400/80">
+                    <span className="text-[10px] font-medium tracking-[0.08em] text-emerald-200/85">
                       {moonPhase ? `${moonPhase.moonSign} ${moonPhase.moonDegree}` : "—"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-[14px] text-amber-300/80">☀️</span>
-                    <span className="text-[10px] font-mono text-amber-300/80">
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] text-amber-200/80">☀︎</span>
+                    <span className="text-[10px] font-medium tracking-[0.08em] text-amber-200/80">
                       {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
                     </span>
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* ── RIGHT SECTION: Two-row ticker ── */}
-              <div className="absolute inset-0 flex flex-col justify-center pl-[32%] pr-4 overflow-hidden">
-                {/* Row 1: Today's Astrological Calendar */}
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
-                    Today's Astrological Calendar
-                  </span>
-                  <span className="text-[8px] font-mono text-green-400/40 animate-pulse">⏺</span>
-                </div>
-                <div className="relative overflow-hidden mb-1.5">
-                  <div className="ticker-wrapper" id="ticker-daily">
-                    <div className="ticker-animate">
-                      <span className="flex items-center gap-3 font-mono text-[11px] text-cyan-400/80">
-                        <span className="text-cyan-400/40">$</span>
-                        <span className="text-cyan-400/40">[</span>
-                        <span className="text-cyan-300">Daily</span>
-                        <span className="text-cyan-400/40">]</span>
-                        <span className="text-cyan-400/60">▸</span>
-                        {todayPlanets.map((planet, idx) => (
-                          <React.Fragment key={idx}>
-                            <span className="text-cyan-400/50">{planet.name}</span>
-                            <span className="text-cyan-400/40">:</span>
-                            <span className="text-cyan-300/90">
-                              {planet.sign} {planet.degree}
-                            </span>
-                            {planet.isRetrograde && (
-                              <span className="text-cyan-400/60">℞</span>
-                            )}
-                            {idx < todayPlanets.length - 1 && (
-                              <span className="text-cyan-400/30">|</span>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </span>
-                      <span className="flex items-center gap-3 font-mono text-[11px] text-cyan-400/80">
-                        <span className="text-cyan-400/40">$</span>
-                        <span className="text-cyan-400/40">[</span>
-                        <span className="text-cyan-300">Daily</span>
-                        <span className="text-cyan-400/40">]</span>
-                        <span className="text-cyan-400/60">▸</span>
-                        {todayPlanets.map((planet, idx) => (
-                          <React.Fragment key={`dup-${idx}`}>
-                            <span className="text-cyan-400/50">{planet.name}</span>
-                            <span className="text-cyan-400/40">:</span>
-                            <span className="text-cyan-300/90">
-                              {planet.sign} {planet.degree}
-                            </span>
-                            {planet.isRetrograde && (
-                              <span className="text-cyan-400/60">℞</span>
-                            )}
-                            {idx < todayPlanets.length - 1 && (
-                              <span className="text-cyan-400/30">|</span>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+            {/* ── RIGHT SECTION: Two-row ticker ── */}
+            <div className="absolute inset-0 flex flex-col justify-center overflow-hidden pl-[32%] pr-4">
+              {/* Row 1: Today's Astrological Calendar */}
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78">
+                  Today’s Astrological Calendar
+                </span>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70 shadow-[0_0_10px_rgba(110,231,183,0.5)]" />
+              </div>
 
-                {/* Row 2: Your Astrological Chart */}
-                <div className="mb-0.5 flex items-center gap-2">
-                  <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
-                    Your Astrological Chart
-                  </span>
-                  <span className="text-[8px] font-mono text-green-400/40 animate-pulse">⏺</span>
-                </div>
-                <div className="relative overflow-hidden">
-                  <div className="ticker-wrapper" id="ticker-natal">
-                    <div className="ticker-animate">
-                      <span className="flex items-center gap-3 font-mono text-[11px] text-purple-400/80">
-                        <span className="text-purple-400/40">$</span>
-                        <span className="text-purple-400/40">[</span>
-                        <span className="text-purple-300">Natal</span>
-                        <span className="text-purple-400/40">]</span>
-                        <span className="text-purple-400/60">▸</span>
-                        {allPlanets.map((planet, idx) => (
-                          <React.Fragment key={idx}>
-                            <span className="text-purple-400/50">{planet.name}</span>
-                            <span className="text-purple-400/40">:</span>
-                            <span className="text-purple-300/90">
-                              {planet.sign} {planet.degree}
-                            </span>
-                            {idx < allPlanets.length - 1 && (
-                              <span className="text-purple-400/30">|</span>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </span>
-                      <span className="flex items-center gap-3 font-mono text-[11px] text-purple-400/80">
-                        <span className="text-purple-400/40">$</span>
-                        <span className="text-purple-400/40">[</span>
-                        <span className="text-purple-300">Natal</span>
-                        <span className="text-purple-400/40">]</span>
-                        <span className="text-purple-400/60">▸</span>
-                        {allPlanets.map((planet, idx) => (
-                          <React.Fragment key={`dup-${idx}`}>
-                            <span className="text-purple-400/50">{planet.name}</span>
-                            <span className="text-purple-400/40">:</span>
-                            <span className="text-purple-300/90">
-                              {planet.sign} {planet.degree}
-                            </span>
-                            {idx < allPlanets.length - 1 && (
-                              <span className="text-purple-400/30">|</span>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </span>
-                    </div>
+              <div className={`relative mb-2 overflow-hidden rounded-full border border-cyan-400/[0.08] bg-cyan-400/[0.03] px-3 py-1.5 ${
+                isPaused || isScrubbing ? "opacity-80" : ""
+              }`}>
+                <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
+                  <div 
+                    className="ticker-animate"
+                    style={{
+                      transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
+                    }}
+                  >
+                    {getDailyTickerContent()}
+                    {getDailyTickerContent()}
                   </div>
                 </div>
               </div>
 
-              {/* ── Separator line ── */}
-              <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-green-400/60 to-transparent" />
+              {/* Row 2: Your Astrological Chart */}
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78">
+                  Your Astrological Chart
+                </span>
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-300/70 shadow-[0_0_10px_rgba(196,181,253,0.45)]" />
+              </div>
+
+              <div className={`relative overflow-hidden rounded-full border border-purple-400/[0.08] bg-purple-400/[0.03] px-3 py-1.5 ${
+                isPaused || isScrubbing ? "opacity-80" : ""
+              }`}>
+                <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
+                  <div 
+                    className="ticker-animate"
+                    style={{
+                      transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
+                    }}
+                  >
+                    {getNatalTickerContent()}
+                    {getNatalTickerContent()}
+                  </div>
+                </div>
+              </div>
             </div>
-          </button>
+
+            {/* ── Premium accent line ── */}
+            <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-emerald-300/70 via-teal-300/35 to-transparent" />
+          </div>
 
           {/* ── GLOWING LIGHT BAR ── */}
-          <div className="glow-light-bar mb-4" />
+          <div className="glow-light-bar mb-4 opacity-80" />
 
           {/* ── HERO: Your Direct Insights ───────────────────────────── */}
           <section className="mb-4 space-y-3">
             <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              <h1 className="text-[36px] font-semibold leading-[0.98] tracking-[0.02em] text-transparent bg-gradient-to-b from-white via-white to-teal-200/80 bg-clip-text sm:text-[42px] drop-shadow-[0_0_30px_rgba(94,234,212,0.15)] [text-shadow:_0_4px_30px_rgba(0,0,0,0.8)]">
+              <div className="mx-auto h-px w-[min(220px,72%)] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+
+              <h1 className="bg-gradient-to-b from-white via-white to-teal-200/75 bg-clip-text text-[36px] font-semibold leading-[0.98] tracking-[0.015em] text-transparent drop-shadow-[0_10px_28px_rgba(0,0,0,0.55)] sm:text-[42px]">
                 Your Direct Insights
               </h1>
+
+              <div className="mx-auto h-[2px] w-[min(300px,86%)] rounded-full bg-gradient-to-r from-transparent via-white/55 to-transparent shadow-[0_0_16px_rgba(255,255,255,0.16)]" />
             </div>
           </section>
 
