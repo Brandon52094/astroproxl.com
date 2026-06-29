@@ -1148,13 +1148,13 @@ export default function ReadingIntakeScreen() {
           width: 100%;
           background: linear-gradient(
             90deg,
-            rgba(255, 255, 255, 0) 0%,
-            rgba(255, 255, 255, 0.7) 30%,
+            rgba(255, 255, 255, 0.4) 0%,
+            rgba(255, 255, 255, 0.8) 30%,
             rgba(255, 255, 255, 0.9) 50%,
-            rgba(255, 255, 255, 0.7) 70%,
-            rgba(255, 255, 255, 0) 100%
+            rgba(255, 255, 255, 0.8) 70%,
+            rgba(255, 255, 255, 0.4) 100%
           );
-          box-shadow: 0 0 30px rgba(255, 255, 255, 0.25), 0 0 60px rgba(255, 255, 255, 0.08);
+          box-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
           animation: whiteGlowPulse 3.5s ease-in-out infinite;
         }
 
@@ -1261,6 +1261,13 @@ export default function ReadingIntakeScreen() {
           align-items: center;
           white-space: nowrap;
           will-change: transform;
+          cursor: grab;
+          user-select: none;
+          overflow: hidden;
+        }
+
+        .ticker-wrapper:active {
+          cursor: grabbing;
         }
 
         @keyframes tickerScroll {
@@ -1275,7 +1282,11 @@ export default function ReadingIntakeScreen() {
         .ticker-animate {
           display: inline-flex;
           gap: 2rem;
-          animation: tickerScroll 20s linear infinite;
+          animation: tickerScroll 30s linear infinite;
+        }
+
+        .ticker-wrapper.dragging .ticker-animate {
+          animation-play-state: paused;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1353,7 +1364,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-6"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-28"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1371,39 +1382,36 @@ export default function ReadingIntakeScreen() {
           >
             <div className="relative h-[120px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/90">
               {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
-              <div className="absolute left-0 top-0 flex h-full w-[35%] flex-col items-center justify-center border-r border-white/[0.06] px-2">
+              <div className="absolute left-0 top-0 flex h-full w-[30%] flex-col items-center justify-center border-r border-white/[0.06] px-2">
                 <div className="flex flex-col items-center gap-0.5">
-                  <span className="text-[20px]">
-                    {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
-                  </span>
-                  <span className="text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-white/90">
-                    {moonPhase ? abbreviateMoonPhase(moonPhase.phaseName) : "Moon"}
-                  </span>
-                  {moonPhase && (
-                    <span className="text-[10px] font-mono text-green-400/80">
-                      in {moonPhase.moonSign} {moonPhase.moonDegree}
+                  <div className="flex items-center gap-1">
+                    <span className="text-[20px]">
+                      {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
                     </span>
-                  )}
-                  <div className="mt-1 flex items-center gap-1">
+                    <span className="text-[10px] font-mono text-green-400/80">
+                      {moonPhase ? `${moonPhase.moonSign} ${moonPhase.moonDegree}` : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
                     <span className="text-[14px] text-amber-300/80">☀️</span>
                     <span className="text-[10px] font-mono text-amber-300/80">
-                      {todaySun ? `in ${todaySun.sign} ${todaySun.degree}` : "—"}
+                      {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
                     </span>
                   </div>
                 </div>
               </div>
 
               {/* ── RIGHT SECTION: Two-row ticker ── */}
-              <div className="absolute inset-0 flex flex-col justify-center pl-[37%] pr-4 overflow-hidden">
+              <div className="absolute inset-0 flex flex-col justify-center pl-[32%] pr-4 overflow-hidden">
                 {/* Row 1: Today's Astrological Calendar */}
                 <div className="mb-1 flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
+                  <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
                     Today's Astrological Calendar
                   </span>
                   <span className="text-[8px] font-mono text-green-400/40 animate-pulse">⏺</span>
                 </div>
                 <div className="relative overflow-hidden mb-1.5">
-                  <div className="ticker-wrapper">
+                  <div className="ticker-wrapper" id="ticker-daily">
                     <div className="ticker-animate">
                       <span className="flex items-center gap-3 font-mono text-[11px] text-cyan-400/80">
                         <span className="text-cyan-400/40">$</span>
@@ -1455,13 +1463,13 @@ export default function ReadingIntakeScreen() {
 
                 {/* Row 2: Your Astrological Chart */}
                 <div className="mb-0.5 flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
+                  <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.12em] text-white/90">
                     Your Astrological Chart
                   </span>
                   <span className="text-[8px] font-mono text-green-400/40 animate-pulse">⏺</span>
                 </div>
                 <div className="relative overflow-hidden">
-                  <div className="ticker-wrapper">
+                  <div className="ticker-wrapper" id="ticker-natal">
                     <div className="ticker-animate">
                       <span className="flex items-center gap-3 font-mono text-[11px] text-purple-400/80">
                         <span className="text-purple-400/40">$</span>
@@ -1507,11 +1515,11 @@ export default function ReadingIntakeScreen() {
               </div>
 
               {/* ── Separator line ── */}
-              <div className="absolute bottom-0 left-0 h-[2px] w-[35%] bg-gradient-to-r from-green-400/60 to-transparent" />
+              <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-green-400/60 to-transparent" />
             </div>
           </button>
 
-          {/* ── GLOWING LIGHT BAR ────────────────────────────────────── */}
+          {/* ── GLOWING LIGHT BAR ── */}
           <div className="glow-light-bar mb-4" />
 
           {/* ── HERO: Your Direct Insights ───────────────────────────── */}
@@ -1791,7 +1799,10 @@ export default function ReadingIntakeScreen() {
                         AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
-                      className="min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300"
+                      className={cn(
+                        "min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300",
+                        selectedArea && selectedArea !== "other" && "border-white/60 shadow-[0_0_25px_rgba(255,255,255,0.25)] animate-pulse"
+                      )}
                     />
                     <p className="text-xs leading-5 text-slate-400">
                       Be specific. The clearer your question, the sharper the reading.
