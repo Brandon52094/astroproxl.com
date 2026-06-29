@@ -173,19 +173,42 @@ export default function ReadingIntakeScreen() {
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
 
+  // ── Rotating insight panel — moon phase / transits / natal chart ──
+  // Auto-advances on a timer; tapping the panel jumps to the next one
+  // and resets the timer so a manual tap doesn't get immediately undone.
+  const ROTATION_MODULES = ["moonPhase", "transits", "natalChart"] as const;
+  type RotationModule = (typeof ROTATION_MODULES)[number];
+  const ROTATION_INTERVAL_MS = 5000;
+
+  const [activeRotationModule, setActiveRotationModule] = useState<RotationModule>("moonPhase");
+  const rotationTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const activeRotationIndex = ROTATION_MODULES.indexOf(activeRotationModule);
+
+  const goToRotationModule = useCallback((index: number) => {
+    const wrapped = ((index % ROTATION_MODULES.length) + ROTATION_MODULES.length) % ROTATION_MODULES.length;
+    setActiveRotationModule(ROTATION_MODULES[wrapped]);
+  }, []);
+
+  const handleRotationTap = useCallback(() => {
+    goToRotationModule(activeRotationIndex + 1);
+  }, [activeRotationIndex, goToRotationModule]);
+
+  useEffect(() => {
+    if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
+    rotationTimerRef.current = setTimeout(() => {
+      goToRotationModule(activeRotationIndex + 1);
+    }, ROTATION_INTERVAL_MS);
+    return () => {
+      if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
+    };
+  }, [activeRotationIndex, goToRotationModule]);
+
   // ── Glitch state for Coming Soon ────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
   const [glitchOffset, setGlitchOffset] = useState(0);
   const [glitchColor, setGlitchColor] = useState<"cyan" | "magenta" | "yellow" | null>(null);
   const glitchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ── Hero focus module — rotating Header / Moon / Today panels ──────
-  const HERO_PANEL_COUNT = 3;
-  const HERO_ROTATE_MS = 6000;
-  const HERO_POINTER_PAUSE_MS = 8000;
-  const [heroPanelIndex, setHeroPanelIndex] = useState(0);
-  const heroPauseUntilRef = useRef<number>(0);
-  const heroIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -251,38 +274,6 @@ export default function ReadingIntakeScreen() {
       if (glitchTimeoutRef.current) clearTimeout(glitchTimeoutRef.current);
     };
   }, [triggerGlitch, shouldReduceMotion]);
-
-  // ── Hero focus module — auto-rotate every 6s, paused after interaction ──
-  useEffect(() => {
-    if (shouldReduceMotion) {
-      // Reduced motion: no rotation, no crossfade — always the Header panel.
-      setHeroPanelIndex(0);
-      return;
-    }
-
-    heroIntervalRef.current = setInterval(() => {
-      if (Date.now() < heroPauseUntilRef.current) return;
-      setHeroPanelIndex((i) => (i + 1) % HERO_PANEL_COUNT);
-    }, HERO_ROTATE_MS);
-
-    return () => {
-      if (heroIntervalRef.current) clearInterval(heroIntervalRef.current);
-    };
-  }, [shouldReduceMotion]);
-
-  const handleHeroPointerInteraction = useCallback(() => {
-    if (shouldReduceMotion) return;
-    heroPauseUntilRef.current = Date.now() + HERO_POINTER_PAUSE_MS;
-  }, [shouldReduceMotion]);
-
-  const handleHeroManualSelect = useCallback(
-    (index: number) => {
-      if (shouldReduceMotion) return;
-      heroPauseUntilRef.current = Date.now() + HERO_POINTER_PAUSE_MS;
-      setHeroPanelIndex(index);
-    },
-    [shouldReduceMotion]
-  );
 
   const stars = useMemo(
     () =>
@@ -1171,6 +1162,18 @@ export default function ReadingIntakeScreen() {
           opacity: 1;
         }
 
+        .profile-name-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: opacity 180ms ease;
+        }
+
+        .profile-name-button:hover {
+          opacity: 0.82;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1242,8 +1245,8 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-18"
-        style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-28"
+        style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -1251,8 +1254,11 @@ export default function ReadingIntakeScreen() {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col"
         >
-          {/* ── Hero focus module — rotates: Header → Moon → Today ──── */}
-          <section className="mb- mt-12 space-y-3">
+          {/* ── Top-of-page white shimmer line ──────────────────────── */}
+          <div className="white-glow-shimmer mb-6 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
+
+          {/* ── Static header — never rotates ───────────────────────── */}
+          <section className="mb-4 space-y-3">
             {chartStatus === "recalculating" && (
               <div className="flex w-fit items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -1265,179 +1271,153 @@ export default function ReadingIntakeScreen() {
               </div>
             )}
 
-            <div
-              className="relative text-center"
-              onPointerDown={handleHeroPointerInteraction}
-              onTouchStart={handleHeroPointerInteraction}
-            >
+            <div className="relative space-y-5 text-center">
               <div className="hero-halo" aria-hidden="true" />
 
-              {/* Stable-height stage so rotation doesn't shift the cards below.
-                  min-h (not a hard h-) so larger device text sizes don't clip. */}
-              <div className="relative min-h-[164px] sm:min-h-[168px]">
-                <AnimatePresence mode="wait">
-                  {heroPanelIndex === 0 && (
-                    <motion.div
-                      key="hero-panel-header"
-                      initial={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: 6 }
-                      }
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: -6 }
-                      }
-                      transition={{ duration: 0.45, ease: "easeInOut" }}
-                      className="absolute inset-0 flex flex-col items-center justify-center space-y-4"
-                    >
-                      <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
-                        Your Direct Future Insights
-                      </h1>
-                    </motion.div>
-                  )}
-
-                  {heroPanelIndex === 1 && (
-                    <motion.div
-                      key="hero-panel-moon"
-                      initial={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: 6 }
-                      }
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: -6 }
-                      }
-                      transition={{ duration: 0.45, ease: "easeInOut" }}
-                      className="absolute inset-0 flex flex-col items-center justify-center space-y-2"
-                    >
-                      {moonPhase ? (
-                        <>
-                          <span className="text-[40px] leading-none" aria-hidden="true">
-                            {getMoonGlyph(moonPhase.phaseName)}
-                          </span>
-                          <h2 className="text-[19px] font-semibold text-white">
-                            {moonPhase.phaseName}
-                          </h2>
-                          <p className="text-[12px] text-slate-400">
-                            {moonPhase.illuminationPercent}% illuminated · Moon in{" "}
-                            {moonPhase.moonSign} {moonPhase.moonDegree}°
-                          </p>
-                          <p className="text-[11px] text-indigo-300/70">
-                            {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}{" "}
-                            {moonPhase.daysUntilNextEvent === 1 ? "day" : "days"}
-                          </p>
-                        </>
-                      ) : (
-                        <div className="w-full max-w-[220px] space-y-2.5 animate-pulse">
-                          <div className="mx-auto h-9 w-9 rounded-full bg-white/[0.06]" />
-                          <div className="mx-auto h-4 w-32 rounded-full bg-white/[0.06]" />
-                          <div className="mx-auto h-3 w-44 rounded-full bg-white/[0.04]" />
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-
-                  {heroPanelIndex === 2 && (
-                    <motion.div
-                      key="hero-panel-today"
-                      initial={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: 6 }
-                      }
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: -6 }
-                      }
-                      transition={{ duration: 0.45, ease: "easeInOut" }}
-                      className="absolute inset-0 flex flex-col items-center justify-center space-y-3"
-                    >
-                      {todaySun || todayMoon ? (
-                        <>
-                          <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                            Today's Sky
-                          </span>
-                          <div className="flex items-center gap-6">
-                            {todaySun && (
-                              <div className="text-center">
-                                <p className="text-[11px] text-slate-500">Sun</p>
-                                <p className="text-[15px] font-semibold text-white">
-                                  {todaySun.sign} {todaySun.degree}°
-                                  {todaySun.isRetrograde ? " ℞" : ""}
-                                </p>
-                              </div>
-                            )}
-                            {todayMoon && (
-                              <div className="text-center">
-                                <p className="text-[11px] text-slate-500">Moon</p>
-                                <p className="text-[15px] font-semibold text-white">
-                                  {todayMoon.sign} {todayMoon.degree}°
-                                  {todayMoon.isRetrograde ? " ℞" : ""}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="w-full max-w-[220px] space-y-2.5 animate-pulse">
-                          <div className="mx-auto h-3 w-20 rounded-full bg-white/[0.06]" />
-                          <div className="flex justify-center gap-6">
-                            <div className="h-9 w-16 rounded-xl bg-white/[0.04]" />
-                            <div className="h-9 w-16 rounded-xl bg-white/[0.04]" />
-                          </div>
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Thin progress indicator — no chips, no dots */}
-              <div
-                className="mx-auto mt-1 flex w-16 gap-1.5"
-                role="tablist"
-                aria-label="Header, moon phase, today's sky"
-              >
-                {Array.from({ length: HERO_PANEL_COUNT }).map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    role="tab"
-                    aria-selected={heroPanelIndex === i}
-                    aria-label={
-                      i === 0
-                        ? "Show header"
-                        : i === 1
-                          ? "Show moon phase"
-                          : "Show today's sky"
-                    }
-                    disabled={!!shouldReduceMotion}
-                    onClick={() => handleHeroManualSelect(i)}
-                    className={cn(
-                      "relative h-[3px] flex-1 overflow-hidden rounded-full bg-white/[0.07]",
-                      shouldReduceMotion && "pointer-events-none opacity-40"
-                    )}
-                  >
-                    {heroPanelIndex === i && (
-                      <motion.span
-                        layoutId="hero-progress-fill"
-                        className="absolute inset-0 rounded-full bg-teal-300/70"
-                        style={{ boxShadow: "0 0 6px rgba(94,234,212,0.5)" }}
-                      />
-                    )}
-                  </button>
-                ))}
-              </div>
+              <h1 className="text-[30px] font-semibold leading-[0.98] tracking-tight text-white sm:text-[34px]">
+                Your Direct Future Insights
+              </h1>
             </div>
           </section>
+
+          {/* ── Rotating insight panel — tap to advance, auto-rotates ─── */}
+          <button
+            type="button"
+            onClick={handleRotationTap}
+            aria-label="Show next insight"
+            className="mb-4 w-full text-left"
+          >
+            <AnimatePresence mode="wait">
+              {activeRotationModule === "moonPhase" && (
+                <motion.div
+                  key="moonPhase"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="flex items-center justify-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/5 text-xl">
+                    {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                      Moon Phase
+                    </p>
+                    {moonPhase ? (
+                      <>
+                        <p className="text-[13px] font-medium text-white">
+                          {moonPhase.phaseName} · {moonPhase.illuminationPercent}%
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {moonPhase.nextEventName} in {moonPhase.daysUntilNextEvent}d
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[12px] text-slate-500">Loading…</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {activeRotationModule === "transits" && (
+                <motion.div
+                  key="transits"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4"
+                >
+                  <p className="mb-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                    Today's Transits
+                  </p>
+                  <div className="mx-auto max-w-[220px] space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500">Sun</span>
+                      <span className="text-[12px] text-slate-300">
+                        {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500">Moon</span>
+                      <span className="text-[12px] text-slate-300">
+                        {todayMoon ? `${todayMoon.sign} ${todayMoon.degree}` : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {activeRotationModule === "natalChart" && (
+                <motion.div
+                  key="natalChart"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-4"
+                >
+                  <div className="mb-3 flex items-center justify-center gap-2">
+                    {isEditingNickname ? (
+                      <input
+                        ref={nicknameInputRef}
+                        type="text"
+                        value={nicknameInput}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setNicknameInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveNickname();
+                          if (e.key === "Escape") setIsEditingNickname(false);
+                        }}
+                        onBlur={handleSaveNickname}
+                        maxLength={24}
+                        disabled={isSavingNickname}
+                        className="w-40 border-b border-teal-300/40 bg-transparent text-center text-[14px] font-medium text-teal-200 outline-none placeholder:text-slate-500"
+                        placeholder="Your name"
+                      />
+                    ) : (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEditingNickname();
+                        }}
+                        className="profile-name-button"
+                      >
+                        <span className="text-[14px] font-medium text-teal-200">{displayName}</span>
+                        <Pencil className="h-3 w-3 text-slate-500" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="mx-auto max-w-[220px] space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500">Sun</span>
+                      <span className="text-[12px] text-slate-300">
+                        {natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500">Moon</span>
+                      <span className="text-[12px] text-slate-300">
+                        {natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500">Rising</span>
+                      <span className="text-[12px] text-slate-300">
+                        {natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </button>
+
+          {/* ── Separator line — splits rotating info from the buttons ── */}
+          <div className="white-glow-shimmer mb-4 h-[2px] w-full bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.22)]" />
 
           {/* ── Reading cycle — centered ─────────────────────────────── */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
@@ -1479,7 +1459,7 @@ export default function ReadingIntakeScreen() {
           )}
 
           {freeReadingCooldownLine && (
-            <div className="mb-18 flex items-center justify-center gap-2">
+            <div className="mb-8 flex items-center justify-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
               <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
             </div>
@@ -1743,7 +1723,7 @@ export default function ReadingIntakeScreen() {
                   onClick={() => setShowSubscriptionDetails((s) => !s)}
                   className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-white/[0.03]"
                 >
-                  <span className="text-[13px] font-semibold text-amber-200">Unlimited Access</span>
+                  <span className="text-[13px] font-semibold text-amber-200">The Plot</span>
                   <span className="flex items-center gap-2">
                     <span className="text-[12px] text-slate-400">$12.99/mo</span>
                     <motion.span
@@ -1848,7 +1828,7 @@ export default function ReadingIntakeScreen() {
             transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
             className="mt-4"
           >
-            <div className="mb-4 flex items-center justify-center">
+            <div className="mb-2 flex items-center justify-center">
               <span className="flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
                 <Lock className="h-2.5 w-2.5" />
                 In Development
