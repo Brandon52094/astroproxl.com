@@ -11,6 +11,8 @@ import {
   Lock,
   Timer,
   Pencil,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -154,6 +156,8 @@ export default function ReadingIntakeScreen() {
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [isCarouselOpen, setIsCarouselOpen] = useState(false);
 
   // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
@@ -171,6 +175,7 @@ export default function ReadingIntakeScreen() {
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
+  const [chartData, setChartDataState] = useState<any>(null);
 
   // ── Scrub state ──────────────────────────────────────────────────────
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -180,6 +185,7 @@ export default function ReadingIntakeScreen() {
   const dragStartX = useRef<number | null>(null);
   const dragStartOffset = useRef<number>(0);
   const autoResumeTimer = useRef<NodeJS.Timeout | null>(null);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
 
   // ── Glitch state ─────────────────────────────────────────────────────
   const [glitchActive, setGlitchActive] = useState(false);
@@ -346,6 +352,8 @@ export default function ReadingIntakeScreen() {
       moonPhase?: MoonPhaseData;
       transits?: TodayTransitPlanet[];
     };
+
+    setChartDataState(data);
 
     const planets = data.tropical?.planets ?? [];
 
@@ -694,6 +702,23 @@ export default function ReadingIntakeScreen() {
     setIsPaused(!isPaused);
   }, [isPaused, isScrubbing]);
 
+  // ── Carousel navigation ─────────────────────────────────────────────
+  const totalCards = 4;
+  const cardTitles = [
+    "Your Natal Chart",
+    "Today's Astrological Calendar",
+    "Current Important Transits",
+    "Coming Soon"
+  ];
+
+  const goToPrevious = useCallback(() => {
+    setCurrentCardIndex((prev) => (prev === 0 ? totalCards - 1 : prev - 1));
+  }, []);
+
+  const goToNext = useCallback(() => {
+    setCurrentCardIndex((prev) => (prev === totalCards - 1 ? 0 : prev + 1));
+  }, []);
+
   // ── Cleanup ──────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
@@ -749,6 +774,114 @@ export default function ReadingIntakeScreen() {
       </span>
     );
   }, [allPlanets]);
+
+  // ── Render individual card content ──────────────────────────────────
+  const renderCardContent = (index: number) => {
+    switch (index) {
+      case 0: // Your Natal Chart
+        return (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Sun</span>
+                <p className="text-sm text-white font-medium">{natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon</span>
+                <p className="text-sm text-white font-medium">{natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Rising</span>
+                <p className="text-sm text-white font-medium">{natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Planets</span>
+                <p className="text-sm text-white font-medium">{allPlanets.length}</p>
+              </div>
+            </div>
+            <div className="max-h-[100px] overflow-y-auto space-y-1">
+              {allPlanets.slice(0, 5).map((planet) => (
+                <div key={planet.name} className="flex justify-between text-xs">
+                  <span className="text-slate-400">{planet.name}</span>
+                  <span className="text-white">{planet.sign} {planet.degree}</span>
+                </div>
+              ))}
+              {allPlanets.length > 5 && (
+                <div className="text-xs text-slate-500">+{allPlanets.length - 5} more</div>
+              )}
+            </div>
+          </div>
+        );
+      case 1: // Today's Astrological Calendar
+        return (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon Phase</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.phaseName || "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Illumination</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.illuminationPercent || "—"}%</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon Sign</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.moonSign || "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Retrogrades</span>
+                <p className="text-sm text-white font-medium">
+                  {todayPlanets.filter(p => p.isRetrograde).length || 0}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1 max-h-[80px] overflow-y-auto">
+              {todayPlanets.slice(0, 4).map((planet) => (
+                <div key={planet.name} className="flex justify-between text-xs">
+                  <span className="text-slate-400">{planet.name}</span>
+                  <span className="text-white">{planet.sign} {planet.degree}{planet.isRetrograde ? " ℞" : ""}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 2: // Current Important Transits
+        const majorPlanets = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+        const majorTransits = todayPlanets.filter(p => majorPlanets.includes(p.name));
+        return (
+          <div className="space-y-3">
+            <div className="text-xs text-slate-400 mb-2">Major planetary transits</div>
+            {majorTransits.length > 0 ? (
+              <div className="space-y-2">
+                {majorTransits.map((planet) => (
+                  <div key={planet.name} className="flex justify-between items-center rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-sm text-slate-300">{planet.name}</span>
+                    <span className="text-sm text-white">
+                      {planet.sign} {planet.degree}
+                      {planet.isRetrograde && " ℞"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-sm text-slate-500 py-4">Loading transits...</div>
+            )}
+          </div>
+        );
+      case 3: // Coming Soon
+        return (
+          <div className="flex flex-col items-center justify-center h-full py-8">
+            <Sparkles className="h-12 w-12 text-amber-300/40 mb-4" />
+            <p className="text-center text-sm text-slate-400">More features coming soon</p>
+            <p className="text-center text-xs text-slate-500 mt-2">Stay tuned for updates</p>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div
@@ -1215,55 +1348,167 @@ export default function ReadingIntakeScreen() {
           opacity: 0.82;
         }
 
-        /* ── TICKER CONTAINER ───────────────────────────────────────── */
-        .ticker-wrapper {
+        /* ── CAROUSEL STYLES ── */
+        .carousel-container {
+          position: relative;
+          overflow: hidden;
+          border-radius: 24px;
+          border: 1px solid rgba(251, 191, 36, 0.2);
+          background: linear-gradient(180deg, rgba(251, 191, 36, 0.06), rgba(251, 191, 36, 0.02));
+          animation: jxlAmberPulse 2.8s ease-in-out infinite;
+        }
+
+        .carousel-container::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
+            radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .carousel-container::after {
+          content: "";
+          position: absolute;
+          inset: -40%;
+          background-image: linear-gradient(
+            120deg,
+            rgba(253, 230, 138, 0) 0%,
+            rgba(253, 230, 138, 0.12) 40%,
+            rgba(250, 204, 21, 0.3) 50%,
+            rgba(253, 230, 138, 0.12) 60%,
+            rgba(253, 230, 138, 0) 100%
+          );
+          mix-blend-mode: screen;
+          pointer-events: none;
+          opacity: 0.55;
+          transform: translateX(-60%);
+          animation: jxlShimmer 5s linear infinite;
+          z-index: 0;
+        }
+
+        .carousel-container > * {
+          position: relative;
+          z-index: 1;
+        }
+
+        .carousel-header {
           display: flex;
           align-items: center;
-          white-space: nowrap;
-          will-change: transform;
-          cursor: grab;
-          user-select: none;
-          overflow: hidden;
+          justify-content: space-between;
+          padding: 16px 20px;
+          cursor: pointer;
+          transition: background 0.15s ease;
           width: 100%;
+          text-align: left;
+          background: transparent;
+          border: none;
+          color: inherit;
+          font: inherit;
         }
 
-        .ticker-wrapper:active {
-          cursor: grabbing;
+        .carousel-header:hover {
+          background: rgba(255, 255, 255, 0.02);
         }
 
-        @keyframes tickerScroll {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
+        .carousel-content {
+          border-top: 1px solid rgba(251, 191, 36, 0.1);
+          padding: 16px 20px 20px;
         }
 
-        .ticker-animate {
-          display: inline-flex;
-          gap: 2rem;
-          animation: tickerScroll 30s linear infinite;
+        .carousel-track {
+          display: flex;
+          transition: transform 0.4s ease;
           will-change: transform;
         }
 
-        .ticker-wrapper.paused .ticker-animate {
-          animation-play-state: paused;
+        .carousel-card {
+          min-width: 100%;
+          padding: 4px 0;
         }
 
-        .ticker-wrapper.scrubbing .ticker-animate {
-          animation-play-state: paused;
+        .carousel-dots {
+          display: flex;
+          justify-content: center;
+          gap: 8px;
+          margin-top: 12px;
         }
 
-        .status-bar-scrubbing {
-          box-shadow: 0 0 40px rgba(255, 255, 255, 0.08), 0 0 80px rgba(94, 234, 212, 0.06), 0 0 120px rgba(168, 85, 247, 0.04);
-          border-color: rgba(255, 255, 255, 0.2);
-          transition: box-shadow 0.3s ease, border-color 0.3s ease;
+        .carousel-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.15);
+          transition: all 0.3s ease;
+          cursor: pointer;
+          border: none;
+          padding: 0;
         }
 
-        .top-section {
-          flex-shrink: 0;
-          overflow: hidden;
+        .carousel-dot.active {
+          background: rgba(251, 191, 36, 0.7);
+          width: 24px;
+          border-radius: 4px;
+        }
+
+        .carousel-dot:hover {
+          background: rgba(251, 191, 36, 0.4);
+        }
+
+        .carousel-nav-button {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 5;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: 1px solid rgba(251, 191, 36, 0.2);
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(8px);
+          color: rgba(251, 191, 36, 0.7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          padding: 0;
+        }
+
+        .carousel-nav-button:hover {
+          background: rgba(0, 0, 0, 0.8);
+          border-color: rgba(251, 191, 36, 0.4);
+          color: rgba(251, 191, 36, 0.9);
+        }
+
+        .carousel-nav-button-left {
+          left: 8px;
+        }
+
+        .carousel-nav-button-right {
+          right: 8px;
+        }
+
+        .locked-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          background: rgba(5, 8, 22, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 16px;
+          z-index: 10;
+        }
+
+        .blur-content {
+          filter: blur(6px);
+          opacity: 0.4;
+          pointer-events: none;
+          user-select: none;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1277,15 +1522,13 @@ export default function ReadingIntakeScreen() {
           .jxl-teaser,
           .jxl-teaser::before,
           .subscription-shell::after,
-          .glow-light-bar {
+          .glow-light-bar,
+          .carousel-container::after {
             animation: none !important;
             opacity: 0.4 !important;
           }
           .glitch-container.glitching::after {
             opacity: 0 !important;
-          }
-          .ticker-animate {
-            animation: none !important;
           }
         }
       `}</style>
@@ -1682,7 +1925,7 @@ export default function ReadingIntakeScreen() {
                   onClick={() => setShowSubscriptionDetails((s) => !s)}
                   className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-white/[0.03]"
                 >
-                  <span className="text-[13px] font-semibold text-amber-200">Unliminted Access</span>
+                  <span className="text-[13px] font-semibold text-amber-200">Unlimited Access</span>
                   <span className="flex items-center gap-2">
                     <span className="text-[12px] text-slate-400">$12.99/mo</span>
                     <motion.span
@@ -1777,6 +2020,131 @@ export default function ReadingIntakeScreen() {
               Unlimited Access
             </span>
             <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+
+          {/* ── CAROUSEL: Unlimited Access Dashboard ── */}
+          <div className="mt-4">
+            <div className="carousel-container">
+              {/* Header */}
+              <button
+                type="button"
+                onClick={() => setIsCarouselOpen(!isCarouselOpen)}
+                className="carousel-header"
+                aria-expanded={isCarouselOpen}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-200">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="text-left">
+                    <h2 className="text-[15px] font-semibold text-amber-200">Unlimited Access Dashboard</h2>
+                    <p className="text-[11px] text-slate-400">Your astrological data at a glance</p>
+                  </div>
+                </div>
+                <div className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-black/20 text-amber-300/70 transition-transform duration-200",
+                  isCarouselOpen && "rotate-180"
+                )}>
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              </button>
+
+              <AnimatePresence>
+                {isCarouselOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="carousel-content">
+                      {/* Carousel Track */}
+                      <div className="relative">
+                        <div 
+                          className="carousel-track"
+                          style={{ transform: `translateX(-${currentCardIndex * 100}%)` }}
+                        >
+                          {[0, 1, 2, 3].map((index) => (
+                            <div key={index} className="carousel-card">
+                              <div className="relative rounded-2xl border border-amber-300/20 bg-black/20 p-4 min-h-[220px]">
+                                {/* Card Title */}
+                                <h3 className="text-sm font-semibold text-amber-200 mb-3">
+                                  {cardTitles[index]}
+                                </h3>
+                                
+                                {/* Blurred Content */}
+                                <div className="blur-content">
+                                  {renderCardContent(index)}
+                                </div>
+
+                                {/* Lock Overlay (for non-subscribers) */}
+                                {!userStatus?.isSubscribed && (
+                                  <div className="locked-overlay">
+                                    <Lock className="h-8 w-8 text-amber-300/60 mb-2" />
+                                    <p className="text-xs text-amber-200/60 font-medium">Premium Feature</p>
+                                    <p className="text-[10px] text-slate-400 mt-1">Subscribe to unlock</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Navigation Buttons */}
+                        <button
+                          type="button"
+                          onClick={goToPrevious}
+                          className="carousel-nav-button carousel-nav-button-left"
+                          aria-label="Previous card"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={goToNext}
+                          className="carousel-nav-button carousel-nav-button-right"
+                          aria-label="Next card"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Dots */}
+                      <div className="carousel-dots">
+                        {[0, 1, 2, 3].map((index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => setCurrentCardIndex(index)}
+                            className={cn(
+                              "carousel-dot",
+                              currentCardIndex === index && "active"
+                            )}
+                            aria-label={`Go to card ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Subscribe CTA (if not subscribed) */}
+                      {!userStatus?.isSubscribed && (
+                        <div className="mt-4 pt-3 border-t border-amber-300/10">
+                          <motion.button
+                            whileTap={{ scale: 0.985 }}
+                            transition={{ duration: 0.12 }}
+                            type="button"
+                            onClick={() => setShowSubscriptionDetails(true)}
+                            className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
+                          >
+                            Unlock All Features — $12.99/mo
+                          </motion.button>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* ── ENHANCED COMING SOON WITH GLITCH ────────────────────── */}
@@ -1885,105 +2253,6 @@ export default function ReadingIntakeScreen() {
               </div>
             </div>
           </motion.div>
-
-          {/* ── STATUS BAR ── (Now below Coming Soon) ── */}
-          <div className="mt-4">
-            <div
-              ref={statusBarRef}
-              className={`relative h-[120px] overflow-hidden rounded-[26px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,14,24,0.96),rgba(5,8,22,0.94))] shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-300 ${
-                isScrubbing ? "status-bar-scrubbing" : ""
-              }`}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onClick={handleTap}
-            >
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_30%),radial-gradient(circle_at_85%_20%,rgba(94,234,212,0.07),transparent_22%),radial-gradient(circle_at_75%_100%,rgba(168,85,247,0.08),transparent_26%)]" />
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-              <div className="pointer-events-none absolute inset-y-3 left-[30%] w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
-
-              {/* ── LEFT SECTION: Moon + Sun mini hub ── */}
-              <div className="absolute left-0 top-0 flex h-full w-[30%] flex-col items-center justify-center px-3">
-                <div className="flex h-[84px] w-full flex-col items-center justify-center rounded-[20px] border border-white/[0.06] bg-white/[0.025] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                  <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">
-                    Live Sky
-                  </div>
-
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[20px] drop-shadow-[0_0_12px_rgba(255,255,255,0.12)]">
-                        {moonPhase ? getMoonGlyph(moonPhase.phaseName) : "🌙"}
-                      </span>
-                      <span className="text-[10px] font-medium tracking-[0.08em] text-emerald-200/85">
-                        {moonPhase ? `${moonPhase.moonSign} ${moonPhase.moonDegree}` : "—"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] text-amber-200/80">☀︎</span>
-                      <span className="text-[10px] font-medium tracking-[0.08em] text-amber-200/80">
-                        {todaySun ? `${todaySun.sign} ${todaySun.degree}` : "—"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── RIGHT SECTION: Two-row ticker ── */}
-              <div className="absolute inset-0 flex flex-col justify-center overflow-hidden pl-[32%] pr-4">
-                {/* Row 1: Today's Astrological Calendar */}
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
-                    Today's Astrological Calendar
-                  </span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300/70 shadow-[0_0_10px_rgba(110,231,183,0.5)]" />
-                </div>
-
-                <div className={`relative mb-2 overflow-hidden rounded-full border border-cyan-400/[0.08] bg-cyan-400/[0.03] px-3 py-1.5 ${
-                  isPaused || isScrubbing ? "opacity-80" : ""
-                }`}>
-                  <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
-                    <div 
-                      className="ticker-animate"
-                      style={{
-                        transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
-                      }}
-                    >
-                      {getDailyTickerContent()}
-                      {getDailyTickerContent()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Row 2: Your Astrological Chart — centered */}
-                <div className="mb-1.5 flex items-center justify-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/78 whitespace-nowrap">
-                    Your Astrological Chart
-                  </span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-violet-300/70 shadow-[0_0_10px_rgba(196,181,253,0.45)]" />
-                </div>
-
-                <div className={`relative overflow-hidden rounded-full border border-purple-400/[0.08] bg-purple-400/[0.03] px-3 py-1.5 ${
-                  isPaused || isScrubbing ? "opacity-80" : ""
-                }`}>
-                  <div className={`ticker-wrapper ${isPaused ? "paused" : ""} ${isScrubbing ? "scrubbing" : ""}`}>
-                    <div 
-                      className="ticker-animate"
-                      style={{
-                        transform: isScrubbing ? `translateX(${scrubOffset}%)` : undefined,
-                      }}
-                    >
-                      {getNatalTickerContent()}
-                      {getNatalTickerContent()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Premium accent line ── */}
-              <div className="absolute bottom-0 left-0 h-[2px] w-[30%] bg-gradient-to-r from-emerald-300/70 via-teal-300/35 to-transparent" />
-            </div>
-          </div>
         </motion.div>
       </div>
     </div>
