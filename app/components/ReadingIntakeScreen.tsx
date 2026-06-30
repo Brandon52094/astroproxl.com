@@ -520,6 +520,8 @@ export default function ReadingIntakeScreen() {
     }
 
     // ── Set theme based on Sun sign ──────────────────────────────────
+    // First check: is the user subscribed? If so, use their element theme.
+    // If not, use teal (default).
     const isUserSubscribed = userStatus?.isSubscribed || false;
     setIsSubscribed(isUserSubscribed);
 
@@ -1136,216 +1138,6 @@ export default function ReadingIntakeScreen() {
     }
   };
 
-  // ── Theme-specific helper functions ────────────────────────────────
-
-  // Get card animation based on theme
-  const getCardAnimation = (isSelected: boolean) => {
-    if (!isSelected) {
-      return {
-        backgroundColor: "rgba(255, 255, 255, 0.03)",
-        borderColor: theme.name === "fire" ? "rgba(196, 74, 42, 0.35)" : theme.unselectedBorder,
-        y: 0,
-      };
-    }
-
-    const baseAnimation = {
-      borderColor: theme.selectedBorder,
-      y: shouldReduceMotion ? 0 : -2,
-    };
-
-    switch (theme.name) {
-      case "water":
-        return {
-          ...baseAnimation,
-          backgroundColor: shouldReduceMotion ? "rgba(7, 26, 51, 0.58)" : "rgba(7, 26, 51, 0.68)",
-        };
-      case "earth":
-        return {
-          ...baseAnimation,
-          backgroundColor: shouldReduceMotion ? "rgba(209, 194, 166, 0.08)" : "rgba(209, 194, 166, 0.10)",
-        };
-      case "air":
-        return {
-          ...baseAnimation,
-          backgroundColor: shouldReduceMotion ? "rgba(43, 45, 58, 0.72)" : "rgba(43, 45, 58, 0.78)",
-        };
-      case "fire":
-        return {
-          ...baseAnimation,
-          backgroundColor: shouldReduceMotion ? "rgba(46, 15, 15, 0.72)" : "rgba(46, 15, 15, 0.80)",
-        };
-      default:
-        return {
-          ...baseAnimation,
-          backgroundColor: shouldReduceMotion ? "rgba(45, 212, 191, 0.08)" : "rgba(45, 212, 191, 0.10)",
-        };
-    }
-  };
-
-  // Get glow overlay based on theme
-  const getGlowOverlay = () => {
-    switch (theme.name) {
-      case "water":
-        return "radial-gradient(circle at 50% 45%, rgba(255,243,230,0.10), rgba(46,111,182,0.10) 34%, rgba(18,60,102,0.06) 54%, transparent 74%)";
-      case "earth":
-        return "radial-gradient(circle at 50% 50%, rgba(209,194,166,0.12), rgba(37,75,58,0.08) 38%, transparent 72%)";
-      case "air":
-        return "radial-gradient(circle at 50% 45%, rgba(214,219,226,0.16), rgba(214,219,226,0.08) 34%, rgba(242,183,5,0.05) 56%, transparent 74%)";
-      case "fire":
-        return "radial-gradient(circle at 50% 45%, rgba(196,74,42,0.18), rgba(196,74,42,0.09) 34%, rgba(232,200,122,0.06) 58%, transparent 76%)";
-      default:
-        return `radial-gradient(circle at 50% 50%, ${theme.selectedGlow}, rgba(0,0,0,0) 72%)`;
-    }
-  };
-
-  // Get selected wash based on theme
-  const getSelectedWash = () => {
-    switch (theme.name) {
-      case "water":
-        return "radial-gradient(circle at 20% 18%, rgba(255,243,230,0.10), transparent 34%), radial-gradient(circle at 78% 28%, rgba(46,111,182,0.14), transparent 42%), linear-gradient(180deg, rgba(18,60,102,0.14), rgba(7,26,51,0.12))";
-      case "earth":
-        return "radial-gradient(circle at 20% 20%, rgba(209,194,166,0.14), transparent 42%), radial-gradient(circle at 80% 30%, rgba(37,75,58,0.10), transparent 46%), linear-gradient(180deg, rgba(209,194,166,0.07), rgba(37,75,58,0.03))";
-      case "air":
-        return "radial-gradient(circle at 20% 18%, rgba(214,219,226,0.16), transparent 34%), radial-gradient(circle at 78% 28%, rgba(242,183,5,0.07), transparent 42%), linear-gradient(180deg, rgba(214,219,226,0.10), rgba(43,45,58,0.06))";
-      case "fire":
-        return "radial-gradient(circle at 20% 18%, rgba(196,74,42,0.18), transparent 36%), radial-gradient(circle at 78% 24%, rgba(232,200,122,0.10), transparent 34%), linear-gradient(180deg, rgba(196,74,42,0.10), rgba(74,26,26,0.05))";
-      default:
-        return "radial-gradient(circle at 20% 20%, rgba(45,212,191,0.14), transparent 42%), radial-gradient(circle at 80% 30%, rgba(45,212,191,0.08), transparent 46%), linear-gradient(180deg, rgba(45,212,191,0.08), rgba(20,184,166,0.03))";
-    }
-  };
-
-  // Get selected shadow based on theme
-  const getSelectedShadow = () => {
-    switch (theme.name) {
-      case "water":
-        return "0 0 0 1px rgba(255,243,230,0.16), 0 10px 30px rgba(46,111,182,0.20), 0 0 26px rgba(46,111,182,0.10)";
-      case "earth":
-        return "0 0 0 1px rgba(209,194,166,0.16), 0 10px 30px rgba(37,75,58,0.18), 0 0 24px rgba(209,194,166,0.08)";
-      case "air":
-        return "0 0 0 1px rgba(242,183,5,0.16), 0 10px 30px rgba(214,219,226,0.12), 0 0 24px rgba(214,219,226,0.08)";
-      case "fire":
-        return "0 0 0 1px rgba(232,200,122,0.16), 0 10px 30px rgba(196,74,42,0.16), 0 0 24px rgba(196,74,42,0.10)";
-      default:
-        return `0 0 0 1px ${theme.selectedBorder}, 0 10px 30px ${theme.selectedGlow}, 0 0 24px ${theme.selectedGlow}`;
-    }
-  };
-
-  // Get icon tile shadow based on theme
-  const getIconTileShadow = () => {
-    switch (theme.name) {
-      case "water":
-        return "0 0 16px rgba(46,111,182,0.18)";
-      case "earth":
-        return "0 0 12px rgba(37,75,58,0.18)";
-      case "air":
-        return "0 0 16px rgba(214,219,226,0.16)";
-      case "fire":
-        return "0 0 16px rgba(196,74,42,0.18)";
-      default:
-        return `0 0 12px ${theme.selectedGlow}`;
-    }
-  };
-
-  // Get badge background based on theme
-  const getBadgeBackground = () => {
-    switch (theme.name) {
-      case "water":
-        return "#071A33";
-      case "earth":
-        return "rgba(37,75,58,0.28)";
-      case "air":
-        return "#2B2D3A";
-      case "fire":
-        return "#2E0F0F";
-      default:
-        return theme.selectedGlow;
-    }
-  };
-
-  // Get badge shadow based on theme
-  const getBadgeShadow = () => {
-    switch (theme.name) {
-      case "water":
-        return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(46,111,182,0.08)";
-      case "air":
-        return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(214,219,226,0.05)";
-      case "fire":
-        return "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(196,74,42,0.08)";
-      default:
-        return undefined;
-    }
-  };
-
-  // Get CTA background based on theme
-  const getCTABackground = () => {
-    switch (theme.name) {
-      case "water":
-        return "linear-gradient(180deg, #123C66 0%, #0B2D4B 100%)";
-      case "earth":
-        return "linear-gradient(180deg, #254B3A 0%, #1E352A 100%)";
-      case "air":
-        return "linear-gradient(180deg, #2B2D3A 0%, #1F222D 100%)";
-      case "fire":
-        return "linear-gradient(180deg, #4A1A1A 0%, #2E0F0F 100%)";
-      default:
-        return "rgba(0,0,0,0.40)";
-    }
-  };
-
-  // Get CTA shadow based on theme
-  const getCTAShadow = () => {
-    switch (theme.name) {
-      case "water":
-        return "0 10px 30px rgba(46,111,182,0.24), inset 0 1px 0 rgba(255,255,255,0.08)";
-      case "earth":
-        return "0 10px 30px rgba(37,75,58,0.28), inset 0 1px 0 rgba(255,255,255,0.06)";
-      case "air":
-        return "0 10px 28px rgba(214,219,226,0.10), inset 0 1px 0 rgba(255,255,255,0.08)";
-      case "fire":
-        return "0 10px 28px rgba(196,74,42,0.14), inset 0 1px 0 rgba(255,255,255,0.06)";
-      default:
-        return `0 4px 24px ${theme.selectedGlow}`;
-    }
-  };
-
-  // Get textarea focus styles based on theme
-  const getTextareaFocusStyles = (isFocused: boolean) => {
-    if (!isFocused) {
-      return {
-        borderColor: "rgba(255,255,255,0.10)",
-        boxShadow: "none",
-      };
-    }
-
-    switch (theme.name) {
-      case "water":
-        return {
-          borderColor: "#2E6FB6",
-          boxShadow: "0 0 22px rgba(46,111,182,0.18)",
-        };
-      case "earth":
-        return {
-          borderColor: "#254B3A",
-          boxShadow: "0 0 22px rgba(37,75,58,0.18)",
-        };
-      case "air":
-        return {
-          borderColor: "#F2B705",
-          boxShadow: "0 0 20px rgba(214,219,226,0.12)",
-        };
-      case "fire":
-        return {
-          borderColor: "rgba(232,200,122,0.42)",
-          boxShadow: "0 0 22px rgba(196,74,42,0.14)",
-        };
-      default:
-        return {
-          borderColor: theme.accentLine,
-          boxShadow: `0 0 22px ${theme.selectedGlow}`,
-        };
-    }
-  };
-
   return (
     <div
       className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
@@ -1712,7 +1504,10 @@ export default function ReadingIntakeScreen() {
           position: absolute;
           inset: -1px;
           border-radius: 24px;
-          background: var(--selected-wash, radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.14), transparent 42%), radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%), linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03)));
+          background:
+            radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.14), transparent 42%),
+            radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%),
+            linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03));
           opacity: 0;
           z-index: 0;
           pointer-events: none;
@@ -1727,7 +1522,10 @@ export default function ReadingIntakeScreen() {
           opacity: 0;
           z-index: 0;
           pointer-events: none;
-          box-shadow: var(--selected-shadow, 0 0 0 1px rgba(45, 212, 191, 0.14), 0 10px 30px rgba(20, 184, 166, 0.14), 0 0 24px rgba(45, 212, 191, 0.08));
+          box-shadow:
+            0 0 0 1px rgba(45, 212, 191, 0.14),
+            0 10px 30px rgba(20, 184, 166, 0.14),
+            0 0 24px rgba(45, 212, 191, 0.08);
           transition: opacity 260ms ease;
         }
 
@@ -2089,7 +1887,6 @@ export default function ReadingIntakeScreen() {
                 {AREAS.map((area) => {
                   const Icon = area.icon;
                   const isSelected = selectedArea === area.id;
-                  const cardAnimation = getCardAnimation(isSelected);
 
                   return (
                     <motion.button
@@ -2108,21 +1905,42 @@ export default function ReadingIntakeScreen() {
                           scrollClusterIntoViewThenFocus();
                         }
                       }}
-                      animate={cardAnimation}
+                      animate={
+                        isSelected
+                          ? shouldReduceMotion
+                            ? {
+                                backgroundColor: "rgba(45, 212, 191, 0.08)",
+                                borderColor: "rgba(94, 234, 212, 0.45)",
+                              }
+                            : {
+                                backgroundColor: "rgba(45, 212, 191, 0.10)",
+                                borderColor: "rgba(94, 234, 212, 0.55)",
+                                y: -2,
+                              }
+                          : {
+                              backgroundColor: "rgba(255, 255, 255, 0.03)",
+                              borderColor: "rgba(255, 255, 255, 0.10)",
+                              y: 0,
+                            }
+                      }
                       data-selected={isSelected ? "true" : "false"}
                       className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm shadow-[0_18px_40px_rgba(0,0,0,0.5)]"
-                      style={{ 
-                        willChange: "transform, opacity",
-                        '--selected-wash': getSelectedWash(),
-                        '--selected-shadow': getSelectedShadow(),
-                      } as React.CSSProperties}
+                      style={{ willChange: "transform, opacity" }}
                     >
-                      {isSelected && (
-                        <div
+                      {isSelected && !shouldReduceMotion && (
+                        <motion.div
+                          aria-hidden="true"
                           className="pointer-events-none absolute inset-0 rounded-[24px]"
                           style={{
-                            background: getGlowOverlay(),
+                            background:
+                              "radial-gradient(circle at 50% 50%, rgba(45,212,191,0.14), rgba(45,212,191,0.04) 42%, transparent 72%)",
                             zIndex: 0,
+                          }}
+                          animate={{ opacity: [0.42, 0.68, 0.42] }}
+                          transition={{
+                            duration: 3.4,
+                            repeat: Infinity,
+                            ease: "easeInOut",
                           }}
                         />
                       )}
@@ -2133,14 +1951,14 @@ export default function ReadingIntakeScreen() {
                           className={cn(
                             "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
                             isSelected
-                              ? ""
+                              ? `bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]`
                               : "border-white/10 bg-black/20 text-slate-300"
                           )}
                           style={{
                             borderColor: isSelected ? theme.selectedBorder : undefined,
                             backgroundColor: isSelected ? theme.selectedGlow : undefined,
                             color: isSelected ? theme.selectedIcon : undefined,
-                            boxShadow: isSelected ? getIconTileShadow() : undefined,
+                            boxShadow: isSelected ? `0 0 12px ${theme.selectedGlow}` : undefined,
                           }}
                         >
                           <Icon className="h-4 w-4" />
@@ -2159,14 +1977,11 @@ export default function ReadingIntakeScreen() {
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.92, y: 4 }}
                                   transition={{ duration: 0.18, ease: "easeOut" }}
-                                  className="relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
+                                  className="relative overflow-hidden rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
                                   style={{
                                     color: theme.selectedTag,
                                     borderColor: theme.selectedBorder,
-                                    backgroundColor: getBadgeBackground(),
-                                    borderWidth: 1,
-                                    borderStyle: "solid",
-                                    boxShadow: getBadgeShadow(),
+                                    backgroundColor: theme.selectedGlow,
                                   }}
                                 >
                                   {!shouldReduceMotion && (
@@ -2229,22 +2044,10 @@ export default function ReadingIntakeScreen() {
                         AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
-                      className="min-h-[132px] rounded-[24px] border px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 transition-all duration-300 focus:outline-none focus:ring-1"
-                      style={{
-                        borderColor: "rgba(255,255,255,0.10)",
-                        backgroundColor: "rgba(0,0,0,0.20)",
-                        outlineColor: theme.accentLine,
-                      }}
-                      onFocus={(e) => {
-                        const styles = getTextareaFocusStyles(true);
-                        e.currentTarget.style.borderColor = styles.borderColor;
-                        e.currentTarget.style.boxShadow = styles.boxShadow;
-                      }}
-                      onBlur={(e) => {
-                        const styles = getTextareaFocusStyles(false);
-                        e.currentTarget.style.borderColor = styles.borderColor;
-                        e.currentTarget.style.boxShadow = styles.boxShadow;
-                      }}
+                      className={cn(
+                        "min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300",
+                        selectedArea && selectedArea !== "other" && "border-white/60 shadow-[0_0_25px_rgba(255,255,255,0.25)] animate-pulse"
+                      )}
                     />
                     <p className="text-xs leading-5 text-slate-400">
                       Be specific. The clearer your question, the sharper the reading.
@@ -2266,12 +2069,11 @@ export default function ReadingIntakeScreen() {
                   type="button"
                   onClick={handleStartReading}
                   disabled={!canSubmit || isCreatingReading}
-                  className="h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+                  className="h-14 w-full rounded-2xl border border-teal-300/30 bg-black/40 text-teal-200 shadow-lg shadow-teal-500/10 transition hover:bg-black/30 hover:border-teal-300/50 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
                   style={{
-                    borderColor: theme.selectedBorder,
+                    borderColor: theme.accentLine,
                     color: theme.tagText,
-                    background: getCTABackground(),
-                    boxShadow: getCTAShadow(),
+                    boxShadow: `0 4px 24px ${theme.selectedGlow}`,
                   }}
                 >
                   {buttonCopy}
