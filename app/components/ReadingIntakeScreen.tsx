@@ -156,6 +156,9 @@ export default function ReadingIntakeScreen() {
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
+  const [touchStartX, setTouchStartX] = useState(0);
+  const [touchEndX, setTouchEndX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
@@ -718,6 +721,64 @@ export default function ReadingIntakeScreen() {
     setCurrentCardIndex((prev) => (prev === totalCards - 1 ? 0 : prev + 1));
   }, []);
 
+  // ── Swipe handlers ──────────────────────────────────────────────────
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+    setTouchEndX(e.touches[0].clientX);
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    setTouchEndX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    const swipeDistance = touchStartX - touchEndX;
+    const minSwipeDistance = 50;
+    
+    if (swipeDistance > minSwipeDistance) {
+      goToNext();
+    } else if (swipeDistance < -minSwipeDistance) {
+      goToPrevious();
+    }
+    
+    setTouchStartX(0);
+    setTouchEndX(0);
+  };
+
+  // ── Mouse drag for desktop swipe ────────────────────────────────────
+  const [mouseStartX, setMouseStartX] = useState(0);
+  const [mouseEndX, setMouseEndX] = useState(0);
+  const [isMouseDragging, setIsMouseDragging] = useState(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setMouseStartX(e.clientX);
+    setMouseEndX(e.clientX);
+    setIsMouseDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isMouseDragging) return;
+    setMouseEndX(e.clientX);
+  };
+
+  const handleMouseUp = () => {
+    setIsMouseDragging(false);
+    const swipeDistance = mouseStartX - mouseEndX;
+    const minSwipeDistance = 50;
+    
+    if (swipeDistance > minSwipeDistance) {
+      goToNext();
+    } else if (swipeDistance < -minSwipeDistance) {
+      goToPrevious();
+    }
+    
+    setMouseStartX(0);
+    setMouseEndX(0);
+  };
+
   // ── Cleanup ──────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
@@ -813,35 +874,6 @@ export default function ReadingIntakeScreen() {
                 <p className="text-[11px] text-amber-300/60">
                   More, for less, still premium.
                 </p>
-
-                <motion.button
-                  whileTap={{ scale: 0.985 }}
-                  transition={{ duration: 0.12 }}
-                  type="button"
-                  disabled={isSubscribeLoading}
-                  onClick={async () => {
-                    setIsSubscribeLoading(true);
-                    trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
-                    try {
-                      const res = await fetch("/api/stripe/checkout", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          returnUrl: `${window.location.origin}/reading/intake`,
-                          mode: "subscription",
-                          paywallIndex: 1,
-                        }),
-                      });
-                      const data = await res.json();
-                      if (data.url) window.location.href = data.url;
-                    } finally {
-                      setIsSubscribeLoading(false);
-                    }
-                  }}
-                  className="h-11 w-full rounded-xl bg-amber-300 text-[13px] font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
-                >
-                  {isSubscribeLoading ? "Loading…" : "Subscribe — $12.99/mo"}
-                </motion.button>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-4">
@@ -1459,6 +1491,12 @@ export default function ReadingIntakeScreen() {
           display: flex;
           transition: transform 0.4s ease;
           will-change: transform;
+          cursor: grab;
+          user-select: none;
+        }
+
+        .carousel-track:active {
+          cursor: grabbing;
         }
 
         .carousel-card {
@@ -1486,64 +1524,6 @@ export default function ReadingIntakeScreen() {
           user-select: none;
         }
 
-        /* ── DOT INDICATORS ── */
-        .carousel-dots {
-          display: flex;
-          justify-content: center;
-          gap: 8px;
-          padding: 12px 0 16px 0;
-        }
-
-        .carousel-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.15);
-          transition: all 0.3s ease;
-          cursor: pointer;
-          border: none;
-          padding: 0;
-        }
-
-        .carousel-dot.active {
-          background: rgba(251, 191, 36, 0.7);
-          width: 24px;
-          border-radius: 4px;
-        }
-
-        .carousel-dot:hover {
-          background: rgba(251, 191, 36, 0.4);
-        }
-
-        /* ── SWIPE HINT ── */
-        .swipe-hint {
-          display: flex;
-          justify-content: center;
-          gap: 6px;
-          padding: 4px 0 12px 0;
-          opacity: 0.4;
-          animation: swipePulse 2.5s ease-in-out infinite;
-        }
-
-        .swipe-hint span {
-          display: block;
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: rgba(251, 191, 36, 0.5);
-        }
-
-        .swipe-hint span:nth-child(1) { animation-delay: 0s; }
-        .swipe-hint span:nth-child(2) { animation-delay: 0.3s; }
-        .swipe-hint span:nth-child(3) { animation-delay: 0.6s; }
-        .swipe-hint span:nth-child(4) { animation-delay: 0.9s; }
-        .swipe-hint span:nth-child(5) { animation-delay: 1.2s; }
-
-        @keyframes swipePulse {
-          0%, 100% { opacity: 0.4; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.3); }
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1555,8 +1535,7 @@ export default function ReadingIntakeScreen() {
           .jxl-teaser,
           .jxl-teaser::before,
           .glow-light-bar,
-          .carousel-container::after,
-          .swipe-hint {
+          .carousel-container::after {
             animation: none !important;
             opacity: 0.4 !important;
           }
@@ -1633,7 +1612,7 @@ export default function ReadingIntakeScreen() {
 
           {/* ── HERO: Future Direct Insights ─────────────────────────── */}
           <section className="mb-5 pt-1">
-            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.02] px-5 py-7 text-center shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
+            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.02] px-5 py-7 text-center shadow-[0_8px_32px_rgba(0,0,0,0.5),0_20px_60px_rgba(0,0,0,0.3)]">
               <div className="hero-halo opacity-70" aria-hidden="true" />
 
               <div className="relative z-10 mx-auto max-w-[560px]">
@@ -1999,13 +1978,23 @@ export default function ReadingIntakeScreen() {
                   >
                     {/* ── CAROUSEL - Fills entire space with no padding ── */}
                     <div className="carousel-content">
-                      <div className="relative" style={{ padding: 0, overflow: "hidden" }}>
+                      <div 
+                        className="relative" 
+                        style={{ padding: 0, overflow: "hidden" }}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                      >
                         <div 
                           className="carousel-track"
                           style={{ 
                             display: "flex",
                             transform: `translateX(-${currentCardIndex * 100}%)`,
-                            transition: "transform 0.4s ease"
+                            transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
                           }}
                         >
                           {[0, 1, 2, 3, 4].map((index) => {
@@ -2035,31 +2024,6 @@ export default function ReadingIntakeScreen() {
                               </div>
                             );
                           })}
-                        </div>
-
-                        {/* DOT INDICATORS - shows which card you're on */}
-                        <div className="carousel-dots">
-                          {[0, 1, 2, 3, 4].map((index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={() => setCurrentCardIndex(index)}
-                              className={cn(
-                                "carousel-dot",
-                                currentCardIndex === index && "active"
-                              )}
-                              aria-label={`Go to card ${index + 1}`}
-                            />
-                          ))}
-                        </div>
-
-                        {/* SWIPE HINT - animated dots suggesting swipe */}
-                        <div className="swipe-hint">
-                          <span></span>
-                          <span></span>
-                          <span></span>
-                          <span></span>
-                          <span></span>
                         </div>
                       </div>
 
