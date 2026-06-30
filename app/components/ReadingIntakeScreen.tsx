@@ -749,16 +749,16 @@ export default function ReadingIntakeScreen() {
     }
 
     // ── Set theme based on Sun sign ──────────────────────────────────
-    const isUserSubscribed = userStatus?.isSubscribed || false;
-    setIsSubscribed(isUserSubscribed);
+     const isUserSubscribed = userStatus?.isSubscribed || false;
+  setIsSubscribed(isUserSubscribed);
 
-    if (sun && isUserSubscribed) {
-      const element = getElementFromSign(sun.sign);
-      setTheme(THEMES[element]);
-    } else {
-      setTheme(THEMES.teal);
-    }
-  }, [chartStatus, userStatus]);
+  if (sun) {
+    const element = getElementFromSign(sun.sign);
+    setTheme(THEMES[element]);
+  } else {
+    setTheme(THEMES.teal);
+  }
+}, [chartStatus, userStatus]);
 
   // ── Load nickname ────────────────────────────────────────────────────
   useEffect(() => {
