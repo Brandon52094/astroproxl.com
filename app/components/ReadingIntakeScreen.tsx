@@ -1414,15 +1414,14 @@ export default function ReadingIntakeScreen() {
         }
 
         .carousel-content {
-          border-top: 1px solid rgba(251, 191, 36, 0.1);
-          padding: 16px 20px 20px;
-        }
+  border-top: 1px solid rgba(251, 191, 36, 0.1);
+  padding: 0;
+}
 
-        .carousel-track {
-          display: flex;
-          transition: transform 0.4s ease;
-          will-change: transform;
-        }
+.carousel-card {
+  min-width: 100%;
+  padding: 0;
+}
 
         .carousel-card {
           min-width: 100%;
@@ -2058,7 +2057,7 @@ export default function ReadingIntakeScreen() {
                     transition={{ duration: 0.25, ease: "easeOut" }}
                     className="overflow-hidden"
                   >
-                    <div className="carousel-content">
+                    <div className="carousel-content" style={{ padding: 0 }}>
                       {/* Carousel Track */}
                       <div className="relative">
                         <div 
@@ -2067,7 +2066,7 @@ export default function ReadingIntakeScreen() {
                         >
                           {[0, 1, 2, 3].map((index) => (
                             <div key={index} className="carousel-card">
-                              <div className="relative rounded-2xl border border-amber-300/20 bg-black/20 p-4 min-h-[220px]">
+                              <div className="relative w-full min-h-[220px] bg-black/20 p-6">
                                 {/* Card Title */}
                                 <h3 className="text-sm font-semibold text-amber-200 mb-3">
                                   {cardTitles[index]}
@@ -2108,22 +2107,6 @@ export default function ReadingIntakeScreen() {
                         >
                           <ChevronRight className="h-4 w-4" />
                         </button>
-                      </div>
-
-                      {/* Dots */}
-                      <div className="carousel-dots">
-                        {[0, 1, 2, 3].map((index) => (
-                          <button
-                            key={index}
-                            type="button"
-                            onClick={() => setCurrentCardIndex(index)}
-                            className={cn(
-                              "carousel-dot",
-                              currentCardIndex === index && "active"
-                            )}
-                            aria-label={`Go to card ${index + 1}`}
-                          />
-                        ))}
                       </div>
 
                       {/* Subscribe CTA (if not subscribed) */}
