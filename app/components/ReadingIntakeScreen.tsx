@@ -120,79 +120,105 @@ interface TodayTransitPlanet {
 }
 
 // ── THEME SYSTEM ──────────────────────────────────────────────────────
-type ThemeName = "earth" | "water" | "fire" | "air";
+type ThemeName = "teal" | "earth" | "water" | "fire" | "air";
 
 interface ThemeColors {
   name: ThemeName;
-  primary: string; // Main accent color
-  secondary: string; // Lighter accent
-  glow: string; // Glow color for hero and highlights
-  accent: string; // Warm accent (brown for earth, navy for water, etc.)
-  light: string; // Lightest accent
-  tagBg: string; // Background for tags
-  tagBorder: string; // Border for tags
-  tickerText: string; // Ticker data text
-  tickerLabel: string; // Ticker label text
-  dot: string; // Dot indicator color
-  ring: string; // Ring/border color
+  tagBg: string;
+  tagText: string;
+  gradientEnd: string;
+  progressBar: string;
+  unselectedBorder: string;
+  selectedBorder: string;
+  selectedGlow: string;
+  selectedIcon: string;
+  selectedTag: string;
+  tickerTagBg: string;
+  tickerTagText: string;
+  tickerDataText: string;
+  accentLine: string;
 }
 
 const THEMES: Record<ThemeName, ThemeColors> = {
+  teal: {
+    name: "teal",
+    tagBg: "rgba(45, 212, 191, 0.05)",
+    tagText: "#5EEAD4",
+    gradientEnd: "#2DD4BF",
+    progressBar: "#5EEAD4",
+    unselectedBorder: "rgba(255,255,255,0.10)",
+    selectedBorder: "#2DD4BF",
+    selectedGlow: "rgba(45,212,191,0.15)",
+    selectedIcon: "#5EEAD4",
+    selectedTag: "#5EEAD4",
+    tickerTagBg: "rgba(45,212,191,0.10)",
+    tickerTagText: "#5EEAD4",
+    tickerDataText: "rgba(226,232,240,0.88)",
+    accentLine: "#2DD4BF",
+  },
   earth: {
     name: "earth",
-    primary: "#93C572", // Pistachio
-    secondary: "#8A9A5B", // Moss
-    glow: "#50C878", // Emerald
-    accent: "#A0522D", // Sienna/Brown
-    light: "#ACE1AF", // Celadon
-    tagBg: "rgba(147, 197, 114, 0.10)",
-    tagBorder: "rgba(147, 197, 114, 0.15)",
-    tickerText: "rgba(226, 232, 240, 0.88)",
-    tickerLabel: "rgba(147, 197, 114, 0.45)",
-    dot: "rgba(147, 197, 114, 0.70)",
-    ring: "rgba(147, 197, 114, 0.30)",
+    tagBg: "#254B3A",
+    tagText: "#D1C2A6",
+    gradientEnd: "#D1C2A6",
+    progressBar: "#6A5A43",
+    unselectedBorder: "#6A5A43",
+    selectedBorder: "#D1C2A6",
+    selectedGlow: "rgba(37,75,58,0.15)",
+    selectedIcon: "#D1C2A6",
+    selectedTag: "#D1C2A6",
+    tickerTagBg: "#3A2B24",
+    tickerTagText: "#D1C2A6",
+    tickerDataText: "rgba(226,232,240,0.88)",
+    accentLine: "#254B3A",
   },
   water: {
     name: "water",
-    primary: "#3B82F6", // Blue
-    secondary: "#60A5FA", // Sky
-    glow: "#93C5FD", // Light Blue
-    accent: "#1E3A5F", // Deep Navy
-    light: "#DBEAFE", // Very Light Blue
-    tagBg: "rgba(59, 130, 246, 0.10)",
-    tagBorder: "rgba(59, 130, 246, 0.15)",
-    tickerText: "rgba(226, 232, 240, 0.88)",
-    tickerLabel: "rgba(59, 130, 246, 0.45)",
-    dot: "rgba(59, 130, 246, 0.70)",
-    ring: "rgba(59, 130, 246, 0.30)",
+    tagBg: "#123C66",
+    tagText: "#FFF3E6",
+    gradientEnd: "#123C66",
+    progressBar: "#2E6FB6",
+    unselectedBorder: "#123C66",
+    selectedBorder: "#FFF3E6",
+    selectedGlow: "rgba(46,111,182,0.15)",
+    selectedIcon: "#FFF3E6",
+    selectedTag: "#FFF3E6",
+    tickerTagBg: "#071A33",
+    tickerTagText: "#FFF3E6",
+    tickerDataText: "rgba(226,232,240,0.88)",
+    accentLine: "#2E6FB6",
   },
   fire: {
     name: "fire",
-    primary: "#F97316", // Orange
-    secondary: "#FB923C", // Light Orange
-    glow: "#FCD34D", // Gold/Yellow
-    accent: "#DC2626", // Red
-    light: "#FED7AA", // Peach
-    tagBg: "rgba(249, 115, 22, 0.10)",
-    tagBorder: "rgba(249, 115, 22, 0.15)",
-    tickerText: "rgba(226, 232, 240, 0.88)",
-    tickerLabel: "rgba(249, 115, 22, 0.45)",
-    dot: "rgba(249, 115, 22, 0.70)",
-    ring: "rgba(249, 115, 22, 0.30)",
+    tagBg: "#4A1A1A",
+    tagText: "#F5E6D3",
+    gradientEnd: "#E8C87A",
+    progressBar: "#C44A2A",
+    unselectedBorder: "#C44A2A",
+    selectedBorder: "#E8C87A",
+    selectedGlow: "rgba(196,74,42,0.15)",
+    selectedIcon: "#E8C87A",
+    selectedTag: "#E8C87A",
+    tickerTagBg: "#2E0F0F",
+    tickerTagText: "#F5E6D3",
+    tickerDataText: "rgba(226,232,240,0.88)",
+    accentLine: "#C44A2A",
   },
   air: {
     name: "air",
-    primary: "#9CA3AF", // Gray
-    secondary: "#D1D5DB", // Light Gray
-    glow: "#E5E7EB", // Very Light Gray
-    accent: "#4B5563", // Dark Gray
-    light: "#F3F4F6", // Off-White
-    tagBg: "rgba(156, 163, 175, 0.10)",
-    tagBorder: "rgba(156, 163, 175, 0.15)",
-    tickerText: "rgba(226, 232, 240, 0.88)",
-    tickerLabel: "rgba(156, 163, 175, 0.45)",
-    dot: "rgba(156, 163, 175, 0.70)",
-    ring: "rgba(156, 163, 175, 0.30)",
+    tagBg: "#A2A9B3",
+    tagText: "#F7F8FA",
+    gradientEnd: "#D6DBE2",
+    progressBar: "#F2B705",
+    unselectedBorder: "#A2A9B3",
+    selectedBorder: "#F2B705",
+    selectedGlow: "rgba(214,219,226,0.15)",
+    selectedIcon: "#F2B705",
+    selectedTag: "#F2B705",
+    tickerTagBg: "#2B2D3A",
+    tickerTagText: "#F7F8FA",
+    tickerDataText: "rgba(226,232,240,0.88)",
+    accentLine: "#F2B705",
   },
 };
 
@@ -206,7 +232,7 @@ function getElementFromSign(sign: string): ThemeName {
   if (waterSigns.includes(sign)) return "water";
   if (fireSigns.includes(sign)) return "fire";
   if (airSigns.includes(sign)) return "air";
-  return "earth"; // default fallback
+  return "teal"; // fallback to teal
 }
 
 function getMoonGlyph(phaseName: string): string {
@@ -269,7 +295,8 @@ export default function ReadingIntakeScreen() {
   const [chartData, setChartDataState] = useState<any>(null);
 
   // ── Theme state ──────────────────────────────────────────────────────
-  const [theme, setTheme] = useState<ThemeColors>(THEMES.earth);
+  const [theme, setTheme] = useState<ThemeColors>(THEMES.teal);
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
   // ── Scrub state ──────────────────────────────────────────────────────
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -493,11 +520,18 @@ export default function ReadingIntakeScreen() {
     }
 
     // ── Set theme based on Sun sign ──────────────────────────────────
-    if (sun) {
+    // First check: is the user subscribed? If so, use their element theme.
+    // If not, use teal (default).
+    const isUserSubscribed = userStatus?.isSubscribed || false;
+    setIsSubscribed(isUserSubscribed);
+
+    if (sun && isUserSubscribed) {
       const element = getElementFromSign(sun.sign);
       setTheme(THEMES[element]);
+    } else {
+      setTheme(THEMES.teal);
     }
-  }, [chartStatus]);
+  }, [chartStatus, userStatus]);
 
   // ── Load nickname ────────────────────────────────────────────────────
   useEffect(() => {
@@ -891,23 +925,23 @@ export default function ReadingIntakeScreen() {
   // ── Get the ticker content ──────────────────────────────────────────
   const getDailyTickerContent = useCallback(() => {
     return (
-      <span className="flex items-center gap-3 text-[11px]" style={{ color: `${theme.tickerText}` }}>
+      <span className="flex items-center gap-3 text-[11px]" style={{ color: theme.tickerDataText }}>
         <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ 
-          color: theme.primary, 
-          backgroundColor: theme.tagBg, 
-          borderColor: theme.tagBorder,
+          color: theme.tickerTagText, 
+          backgroundColor: theme.tickerTagBg,
+          borderColor: theme.accentLine,
           borderWidth: 1
         }}>
           Daily
         </span>
         {todayPlanets.map((planet, idx) => (
           <React.Fragment key={idx}>
-            <span style={{ color: theme.tickerLabel }}>{planet.name}</span>
-            <span style={{ color: theme.tickerText }}>
+            <span style={{ color: theme.tickerTagText, opacity: 0.45 }}>{planet.name}</span>
+            <span style={{ color: theme.tickerDataText }}>
               {planet.sign} {planet.degree}
             </span>
             {planet.isRetrograde && (
-              <span style={{ color: theme.primary }}>℞</span>
+              <span style={{ color: theme.accentLine }}>℞</span>
             )}
             {idx < todayPlanets.length - 1 && (
               <span className="text-white/16">•</span>
@@ -920,19 +954,19 @@ export default function ReadingIntakeScreen() {
 
   const getNatalTickerContent = useCallback(() => {
     return (
-      <span className="flex items-center gap-3 text-[11px]" style={{ color: `${theme.tickerText}` }}>
+      <span className="flex items-center gap-3 text-[11px]" style={{ color: theme.tickerDataText }}>
         <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ 
-          color: theme.primary, 
-          backgroundColor: theme.tagBg, 
-          borderColor: theme.tagBorder,
+          color: theme.tickerTagText, 
+          backgroundColor: theme.tickerTagBg,
+          borderColor: theme.accentLine,
           borderWidth: 1
         }}>
           Natal
         </span>
         {allPlanets.map((planet, idx) => (
           <React.Fragment key={idx}>
-            <span style={{ color: theme.tickerLabel }}>{planet.name}</span>
-            <span style={{ color: theme.tickerText }}>
+            <span style={{ color: theme.tickerTagText, opacity: 0.45 }}>{planet.name}</span>
+            <span style={{ color: theme.tickerDataText }}>
               {planet.sign} {planet.degree}
             </span>
             {idx < allPlanets.length - 1 && (
@@ -1715,8 +1749,8 @@ export default function ReadingIntakeScreen() {
               <div className="hero-halo opacity-70" aria-hidden="true" />
 
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.ring}`, backgroundColor: theme.tagBg }}>
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.primary }}>
+                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.accentLine}`, backgroundColor: theme.tagBg }}>
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.tagText }}>
                     Your Year Ahead
                   </span>
                 </div>
@@ -1724,7 +1758,7 @@ export default function ReadingIntakeScreen() {
                 <h1 
                   className="bg-gradient-to-b from-white via-white bg-clip-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.45)] sm:text-[48px]"
                   style={{ 
-                    backgroundImage: `linear-gradient(to bottom, #ffffff, #ffffff, ${theme.primary})` 
+                    backgroundImage: `linear-gradient(to bottom, #ffffff, #ffffff, ${theme.gradientEnd})` 
                   }}
                 >
                   Future Direct Insights
@@ -1759,14 +1793,10 @@ export default function ReadingIntakeScreen() {
                         initial={{ width: 0 }}
                         animate={{ width: "100%" }}
                         transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
-                        className={cn(
-                          "absolute inset-y-0 left-0 rounded-full",
-                          onCooldown ? "bg-indigo-400" : "bg-teal-300"
-                        )}
+                        className="absolute inset-y-0 left-0 rounded-full"
                         style={{
-                          boxShadow: onCooldown
-                            ? "0 0 8px rgba(99,102,241,0.6)"
-                            : `0 0 8px ${theme.glow}`,
+                          backgroundColor: theme.progressBar,
+                          boxShadow: `0 0 8px ${theme.progressBar}`,
                         }}
                       />
                     )}
@@ -1879,12 +1909,12 @@ export default function ReadingIntakeScreen() {
                         isSelected
                           ? shouldReduceMotion
                             ? {
-                                backgroundColor: `rgba(45, 212, 191, 0.08)`,
-                                borderColor: `rgba(94, 234, 212, 0.45)`,
+                                backgroundColor: "rgba(45, 212, 191, 0.08)",
+                                borderColor: "rgba(94, 234, 212, 0.45)",
                               }
                             : {
-                                backgroundColor: `rgba(45, 212, 191, 0.10)`,
-                                borderColor: `rgba(94, 234, 212, 0.55)`,
+                                backgroundColor: "rgba(45, 212, 191, 0.10)",
+                                borderColor: "rgba(94, 234, 212, 0.55)",
                                 y: -2,
                               }
                           : {
@@ -1921,9 +1951,15 @@ export default function ReadingIntakeScreen() {
                           className={cn(
                             "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
                             isSelected
-                              ? `border-teal-300/40 bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]`
+                              ? `bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]`
                               : "border-white/10 bg-black/20 text-slate-300"
                           )}
+                          style={{
+                            borderColor: isSelected ? theme.selectedBorder : undefined,
+                            backgroundColor: isSelected ? theme.selectedGlow : undefined,
+                            color: isSelected ? theme.selectedIcon : undefined,
+                            boxShadow: isSelected ? `0 0 12px ${theme.selectedGlow}` : undefined,
+                          }}
                         >
                           <Icon className="h-4 w-4" />
                         </motion.div>
@@ -1942,6 +1978,11 @@ export default function ReadingIntakeScreen() {
                                   exit={{ opacity: 0, scale: 0.92, y: 4 }}
                                   transition={{ duration: 0.18, ease: "easeOut" }}
                                   className="relative overflow-hidden rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
+                                  style={{
+                                    color: theme.selectedTag,
+                                    borderColor: theme.selectedBorder,
+                                    backgroundColor: theme.selectedGlow,
+                                  }}
                                 >
                                   {!shouldReduceMotion && (
                                     <motion.span
@@ -2029,6 +2070,11 @@ export default function ReadingIntakeScreen() {
                   onClick={handleStartReading}
                   disabled={!canSubmit || isCreatingReading}
                   className="h-14 w-full rounded-2xl border border-teal-300/30 bg-black/40 text-teal-200 shadow-lg shadow-teal-500/10 transition hover:bg-black/30 hover:border-teal-300/50 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+                  style={{
+                    borderColor: theme.accentLine,
+                    color: theme.tagText,
+                    boxShadow: `0 4px 24px ${theme.selectedGlow}`,
+                  }}
                 >
                   {buttonCopy}
                 </Button>
