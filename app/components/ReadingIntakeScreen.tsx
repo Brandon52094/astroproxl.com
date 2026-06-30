@@ -137,6 +137,15 @@ interface ThemeColors {
   tickerTagText: string;
   tickerDataText: string;
   accentLine: string;
+  // Per-area color gradients
+  areaColors: {
+    love: { bg: string; border: string; glow: string; text: string; gradient: string };
+    money: { bg: string; border: string; glow: string; text: string; gradient: string };
+    career: { bg: string; border: string; glow: string; text: string; gradient: string };
+    other: { bg: string; border: string; glow: string; text: string; gradient: string };
+    cta: { bg: string; border: string; glow: string; text: string; gradient: string };
+    hero: { bg: string; border: string; glow: string; text: string; gradient: string };
+  };
 }
 
 const THEMES: Record<ThemeName, ThemeColors> = {
@@ -155,6 +164,50 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     tickerTagText: "#5EEAD4",
     tickerDataText: "rgba(226,232,240,0.88)",
     accentLine: "#2DD4BF",
+    areaColors: {
+      love: {
+        bg: "rgba(45,212,191,0.08)",
+        border: "rgba(45,212,191,0.35)",
+        glow: "rgba(45,212,191,0.12)",
+        text: "#5EEAD4",
+        gradient: "linear-gradient(135deg, rgba(45,212,191,0.12), rgba(20,184,166,0.06))"
+      },
+      money: {
+        bg: "rgba(251,191,36,0.08)",
+        border: "rgba(251,191,36,0.35)",
+        glow: "rgba(251,191,36,0.12)",
+        text: "#FCD34D",
+        gradient: "linear-gradient(135deg, rgba(251,191,36,0.12), rgba(245,158,11,0.06))"
+      },
+      career: {
+        bg: "rgba(129,140,248,0.08)",
+        border: "rgba(129,140,248,0.35)",
+        glow: "rgba(129,140,248,0.12)",
+        text: "#A5B4FC",
+        gradient: "linear-gradient(135deg, rgba(129,140,248,0.12), rgba(99,102,241,0.06))"
+      },
+      other: {
+        bg: "rgba(232,200,122,0.08)",
+        border: "rgba(232,200,122,0.35)",
+        glow: "rgba(232,200,122,0.12)",
+        text: "#E8C87A",
+        gradient: "linear-gradient(135deg, rgba(232,200,122,0.12), rgba(200,160,80,0.06))"
+      },
+      cta: {
+        bg: "rgba(45,212,191,0.15)",
+        border: "rgba(94,234,212,0.45)",
+        glow: "rgba(45,212,191,0.20)",
+        text: "#5EEAD4",
+        gradient: "linear-gradient(180deg, rgba(45,212,191,0.25), rgba(20,184,166,0.10))"
+      },
+      hero: {
+        bg: "rgba(45,212,191,0.05)",
+        border: "rgba(45,212,191,0.20)",
+        glow: "rgba(45,212,191,0.08)",
+        text: "#5EEAD4",
+        gradient: "linear-gradient(135deg, rgba(45,212,191,0.08), rgba(20,184,166,0.04))"
+      }
+    }
   },
   earth: {
     name: "earth",
@@ -171,6 +224,50 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     tickerTagText: "#D1C2A6",
     tickerDataText: "rgba(226,232,240,0.88)",
     accentLine: "#254B3A",
+    areaColors: {
+      love: {
+        bg: "rgba(209,194,166,0.10)",
+        border: "rgba(209,194,166,0.35)",
+        glow: "rgba(209,194,166,0.12)",
+        text: "#D1C2A6",
+        gradient: "linear-gradient(135deg, rgba(209,194,166,0.14), rgba(37,75,58,0.08))"
+      },
+      money: {
+        bg: "rgba(106,90,67,0.12)",
+        border: "rgba(106,90,67,0.35)",
+        glow: "rgba(106,90,67,0.12)",
+        text: "#D1C2A6",
+        gradient: "linear-gradient(135deg, rgba(106,90,67,0.14), rgba(37,75,58,0.08))"
+      },
+      career: {
+        bg: "rgba(37,75,58,0.12)",
+        border: "rgba(37,75,58,0.35)",
+        glow: "rgba(37,75,58,0.12)",
+        text: "#D1C2A6",
+        gradient: "linear-gradient(135deg, rgba(37,75,58,0.14), rgba(20,50,35,0.08))"
+      },
+      other: {
+        bg: "rgba(209,194,166,0.08)",
+        border: "rgba(209,194,166,0.30)",
+        glow: "rgba(209,194,166,0.10)",
+        text: "#D1C2A6",
+        gradient: "linear-gradient(135deg, rgba(209,194,166,0.12), rgba(106,90,67,0.08))"
+      },
+      cta: {
+        bg: "rgba(37,75,58,0.25)",
+        border: "rgba(209,194,166,0.45)",
+        glow: "rgba(37,75,58,0.25)",
+        text: "#D1C2A6",
+        gradient: "linear-gradient(180deg, #254B3A 0%, #1E352A 100%)"
+      },
+      hero: {
+        bg: "rgba(209,194,166,0.05)",
+        border: "rgba(209,194,166,0.20)",
+        glow: "rgba(209,194,166,0.08)",
+        text: "#D1C2A6",
+        gradient: "linear-gradient(135deg, rgba(209,194,166,0.08), rgba(37,75,58,0.04))"
+      }
+    }
   },
   water: {
     name: "water",
@@ -187,6 +284,50 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     tickerTagText: "#FFF3E6",
     tickerDataText: "rgba(226,232,240,0.88)",
     accentLine: "#2E6FB6",
+    areaColors: {
+      love: {
+        bg: "rgba(255,243,230,0.08)",
+        border: "rgba(255,243,230,0.30)",
+        glow: "rgba(255,243,230,0.10)",
+        text: "#FFF3E6",
+        gradient: "linear-gradient(135deg, rgba(255,243,230,0.12), rgba(46,111,182,0.08))"
+      },
+      money: {
+        bg: "rgba(46,111,182,0.10)",
+        border: "rgba(46,111,182,0.35)",
+        glow: "rgba(46,111,182,0.12)",
+        text: "#FFF3E6",
+        gradient: "linear-gradient(135deg, rgba(46,111,182,0.14), rgba(18,60,102,0.08))"
+      },
+      career: {
+        bg: "rgba(7,26,51,0.12)",
+        border: "rgba(255,243,230,0.25)",
+        glow: "rgba(7,26,51,0.12)",
+        text: "#FFF3E6",
+        gradient: "linear-gradient(135deg, rgba(7,26,51,0.14), rgba(18,60,102,0.08))"
+      },
+      other: {
+        bg: "rgba(46,111,182,0.08)",
+        border: "rgba(46,111,182,0.30)",
+        glow: "rgba(46,111,182,0.10)",
+        text: "#FFF3E6",
+        gradient: "linear-gradient(135deg, rgba(46,111,182,0.12), rgba(7,26,51,0.08))"
+      },
+      cta: {
+        bg: "rgba(18,60,102,0.30)",
+        border: "rgba(255,243,230,0.45)",
+        glow: "rgba(46,111,182,0.25)",
+        text: "#FFF3E6",
+        gradient: "linear-gradient(180deg, #123C66 0%, #0B2D4B 100%)"
+      },
+      hero: {
+        bg: "rgba(255,243,230,0.04)",
+        border: "rgba(255,243,230,0.15)",
+        glow: "rgba(255,243,230,0.06)",
+        text: "#FFF3E6",
+        gradient: "linear-gradient(135deg, rgba(255,243,230,0.08), rgba(46,111,182,0.04))"
+      }
+    }
   },
   fire: {
     name: "fire",
@@ -203,6 +344,50 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     tickerTagText: "#F5E6D3",
     tickerDataText: "rgba(226,232,240,0.88)",
     accentLine: "#C44A2A",
+    areaColors: {
+      love: {
+        bg: "rgba(232,200,122,0.08)",
+        border: "rgba(232,200,122,0.30)",
+        glow: "rgba(232,200,122,0.10)",
+        text: "#E8C87A",
+        gradient: "linear-gradient(135deg, rgba(232,200,122,0.12), rgba(196,74,42,0.08))"
+      },
+      money: {
+        bg: "rgba(196,74,42,0.10)",
+        border: "rgba(196,74,42,0.35)",
+        glow: "rgba(196,74,42,0.12)",
+        text: "#F5E6D3",
+        gradient: "linear-gradient(135deg, rgba(196,74,42,0.14), rgba(74,26,26,0.08))"
+      },
+      career: {
+        bg: "rgba(74,26,26,0.12)",
+        border: "rgba(232,200,122,0.25)",
+        glow: "rgba(74,26,26,0.12)",
+        text: "#F5E6D3",
+        gradient: "linear-gradient(135deg, rgba(74,26,26,0.14), rgba(46,15,15,0.08))"
+      },
+      other: {
+        bg: "rgba(196,74,42,0.08)",
+        border: "rgba(196,74,42,0.30)",
+        glow: "rgba(196,74,42,0.10)",
+        text: "#F5E6D3",
+        gradient: "linear-gradient(135deg, rgba(196,74,42,0.12), rgba(232,200,122,0.06))"
+      },
+      cta: {
+        bg: "rgba(74,26,26,0.30)",
+        border: "rgba(232,200,122,0.45)",
+        glow: "rgba(196,74,42,0.25)",
+        text: "#F5E6D3",
+        gradient: "linear-gradient(180deg, #4A1A1A 0%, #2E0F0F 100%)"
+      },
+      hero: {
+        bg: "rgba(232,200,122,0.04)",
+        border: "rgba(232,200,122,0.15)",
+        glow: "rgba(232,200,122,0.06)",
+        text: "#F5E6D3",
+        gradient: "linear-gradient(135deg, rgba(232,200,122,0.08), rgba(196,74,42,0.04))"
+      }
+    }
   },
   air: {
     name: "air",
@@ -219,7 +404,51 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     tickerTagText: "#F7F8FA",
     tickerDataText: "rgba(226,232,240,0.88)",
     accentLine: "#F2B705",
-  },
+    areaColors: {
+      love: {
+        bg: "rgba(242,183,5,0.08)",
+        border: "rgba(242,183,5,0.30)",
+        glow: "rgba(242,183,5,0.10)",
+        text: "#F2B705",
+        gradient: "linear-gradient(135deg, rgba(242,183,5,0.12), rgba(214,219,226,0.08))"
+      },
+      money: {
+        bg: "rgba(214,219,226,0.10)",
+        border: "rgba(214,219,226,0.35)",
+        glow: "rgba(214,219,226,0.12)",
+        text: "#F7F8FA",
+        gradient: "linear-gradient(135deg, rgba(214,219,226,0.14), rgba(162,169,179,0.08))"
+      },
+      career: {
+        bg: "rgba(43,45,58,0.12)",
+        border: "rgba(242,183,5,0.25)",
+        glow: "rgba(43,45,58,0.12)",
+        text: "#F7F8FA",
+        gradient: "linear-gradient(135deg, rgba(43,45,58,0.14), rgba(162,169,179,0.08))"
+      },
+      other: {
+        bg: "rgba(162,169,179,0.08)",
+        border: "rgba(162,169,179,0.30)",
+        glow: "rgba(162,169,179,0.10)",
+        text: "#F7F8FA",
+        gradient: "linear-gradient(135deg, rgba(162,169,179,0.12), rgba(242,183,5,0.06))"
+      },
+      cta: {
+        bg: "rgba(43,45,58,0.30)",
+        border: "rgba(242,183,5,0.45)",
+        glow: "rgba(214,219,226,0.20)",
+        text: "#F7F8FA",
+        gradient: "linear-gradient(180deg, #2B2D3A 0%, #1F222D 100%)"
+      },
+      hero: {
+        bg: "rgba(214,219,226,0.04)",
+        border: "rgba(214,219,226,0.15)",
+        glow: "rgba(214,219,226,0.06)",
+        text: "#F7F8FA",
+        gradient: "linear-gradient(135deg, rgba(214,219,226,0.08), rgba(162,169,179,0.04))"
+      }
+    }
+  }
 };
 
 function getElementFromSign(sign: string): ThemeName {
@@ -232,7 +461,7 @@ function getElementFromSign(sign: string): ThemeName {
   if (waterSigns.includes(sign)) return "water";
   if (fireSigns.includes(sign)) return "fire";
   if (airSigns.includes(sign)) return "air";
-  return "teal"; // fallback to teal
+  return "teal";
 }
 
 function getMoonGlyph(phaseName: string): string {
@@ -520,8 +749,6 @@ export default function ReadingIntakeScreen() {
     }
 
     // ── Set theme based on Sun sign ──────────────────────────────────
-    // First check: is the user subscribed? If so, use their element theme.
-    // If not, use teal (default).
     const isUserSubscribed = userStatus?.isSubscribed || false;
     setIsSubscribed(isUserSubscribed);
 
@@ -1138,6 +1365,165 @@ export default function ReadingIntakeScreen() {
     }
   };
 
+  // ── Theme-specific helper functions ────────────────────────────────
+
+  // Get area-specific colors
+  const getAreaColors = (areaId: string) => {
+    const areaMap: Record<string, keyof ThemeColors['areaColors']> = {
+      love: 'love',
+      money: 'money',
+      career: 'career',
+      other: 'other'
+    };
+    const key = areaMap[areaId] || 'other';
+    return theme.areaColors[key];
+  };
+
+  // Get card animation based on theme and area
+  const getCardAnimation = (isSelected: boolean, areaId: string) => {
+    const areaColors = getAreaColors(areaId);
+    
+    if (!isSelected) {
+      return {
+        backgroundColor: "rgba(255, 255, 255, 0.03)",
+        borderColor: theme.name === "fire" ? "rgba(196, 74, 42, 0.35)" : theme.unselectedBorder,
+        y: 0,
+      };
+    }
+
+    return {
+      backgroundColor: areaColors.bg,
+      borderColor: areaColors.border,
+      y: shouldReduceMotion ? 0 : -2,
+    };
+  };
+
+  // Get glow overlay based on theme and area
+  const getGlowOverlay = (areaId: string) => {
+    const areaColors = getAreaColors(areaId);
+    
+    switch (theme.name) {
+      case "water":
+        return `radial-gradient(circle at 50% 45%, rgba(255,243,230,0.10), ${areaColors.glow} 34%, rgba(18,60,102,0.06) 54%, transparent 74%)`;
+      case "earth":
+        return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(37,75,58,0.08) 38%, transparent 72%)`;
+      case "air":
+        return `radial-gradient(circle at 50% 45%, ${areaColors.glow}, rgba(214,219,226,0.08) 34%, rgba(242,183,5,0.05) 56%, transparent 74%)`;
+      case "fire":
+        return `radial-gradient(circle at 50% 45%, ${areaColors.glow}, rgba(196,74,42,0.09) 34%, rgba(232,200,122,0.06) 58%, transparent 76%)`;
+      default:
+        return `radial-gradient(circle at 50% 50%, ${theme.selectedGlow}, rgba(0,0,0,0) 72%)`;
+    }
+  };
+
+  // Get icon tile shadow based on area
+  const getIconTileShadow = (areaId: string) => {
+    const areaColors = getAreaColors(areaId);
+    return `0 0 16px ${areaColors.glow}`;
+  };
+
+  // Get badge background based on theme
+  const getBadgeBackground = () => {
+    switch (theme.name) {
+      case "water":
+        return "#071A33";
+      case "earth":
+        return "rgba(37,75,58,0.28)";
+      case "air":
+        return "#2B2D3A";
+      case "fire":
+        return "#2E0F0F";
+      default:
+        return theme.selectedGlow;
+    }
+  };
+
+  // Get badge shadow based on theme
+  const getBadgeShadow = () => {
+    switch (theme.name) {
+      case "water":
+        return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(46,111,182,0.08)";
+      case "air":
+        return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(214,219,226,0.05)";
+      case "fire":
+        return "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(196,74,42,0.08)";
+      default:
+        return undefined;
+    }
+  };
+
+  // Get CTA background based on theme
+  const getCTABackground = () => {
+    switch (theme.name) {
+      case "water":
+        return "linear-gradient(180deg, #123C66 0%, #0B2D4B 100%)";
+      case "earth":
+        return "linear-gradient(180deg, #254B3A 0%, #1E352A 100%)";
+      case "air":
+        return "linear-gradient(180deg, #2B2D3A 0%, #1F222D 100%)";
+      case "fire":
+        return "linear-gradient(180deg, #4A1A1A 0%, #2E0F0F 100%)";
+      default:
+        return "rgba(0,0,0,0.40)";
+    }
+  };
+
+  // Get CTA shadow based on theme
+  const getCTAShadow = () => {
+    switch (theme.name) {
+      case "water":
+        return "0 10px 30px rgba(46,111,182,0.24), inset 0 1px 0 rgba(255,255,255,0.08)";
+      case "earth":
+        return "0 10px 30px rgba(37,75,58,0.28), inset 0 1px 0 rgba(255,255,255,0.06)";
+      case "air":
+        return "0 10px 28px rgba(214,219,226,0.10), inset 0 1px 0 rgba(255,255,255,0.08)";
+      case "fire":
+        return "0 10px 28px rgba(196,74,42,0.14), inset 0 1px 0 rgba(255,255,255,0.06)";
+      default:
+        return `0 4px 24px ${theme.selectedGlow}`;
+    }
+  };
+
+  // Get textarea focus styles based on theme
+  const getTextareaFocusStyles = (isFocused: boolean, areaId: string) => {
+    const areaColors = getAreaColors(areaId);
+    
+    if (!isFocused) {
+      return {
+        borderColor: "rgba(255,255,255,0.10)",
+        boxShadow: "none",
+      };
+    }
+
+    switch (theme.name) {
+      case "water":
+        return {
+          borderColor: "#2E6FB6",
+          boxShadow: `0 0 22px ${areaColors.glow}`,
+        };
+      case "earth":
+        return {
+          borderColor: "#254B3A",
+          boxShadow: `0 0 22px ${areaColors.glow}`,
+        };
+      case "air":
+        return {
+          borderColor: "#F2B705",
+          boxShadow: `0 0 20px ${areaColors.glow}`,
+        };
+      case "fire":
+        return {
+          borderColor: "rgba(232,200,122,0.42)",
+          boxShadow: `0 0 22px ${areaColors.glow}`,
+        };
+      default:
+        return {
+          borderColor: theme.accentLine,
+          boxShadow: `0 0 22px ${theme.selectedGlow}`,
+        };
+    }
+  };
+
   return (
     <div
       className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
@@ -1504,10 +1890,7 @@ export default function ReadingIntakeScreen() {
           position: absolute;
           inset: -1px;
           border-radius: 24px;
-          background:
-            radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.14), transparent 42%),
-            radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%),
-            linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03));
+          background: var(--selected-wash, radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.14), transparent 42%), radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%), linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03)));
           opacity: 0;
           z-index: 0;
           pointer-events: none;
@@ -1522,10 +1905,7 @@ export default function ReadingIntakeScreen() {
           opacity: 0;
           z-index: 0;
           pointer-events: none;
-          box-shadow:
-            0 0 0 1px rgba(45, 212, 191, 0.14),
-            0 10px 30px rgba(20, 184, 166, 0.14),
-            0 0 24px rgba(45, 212, 191, 0.08);
+          box-shadow: var(--selected-shadow, 0 0 0 1px rgba(45, 212, 191, 0.14), 0 10px 30px rgba(20, 184, 166, 0.14), 0 0 24px rgba(45, 212, 191, 0.08));
           transition: opacity 260ms ease;
         }
 
@@ -1749,8 +2129,8 @@ export default function ReadingIntakeScreen() {
               <div className="hero-halo opacity-70" aria-hidden="true" />
 
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.accentLine}`, backgroundColor: theme.tagBg }}>
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.tagText }}>
+                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.accentLine}`, backgroundColor: theme.areaColors.hero.bg }}>
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.areaColors.hero.text }}>
                     Your Year Ahead
                   </span>
                 </div>
@@ -1887,6 +2267,8 @@ export default function ReadingIntakeScreen() {
                 {AREAS.map((area) => {
                   const Icon = area.icon;
                   const isSelected = selectedArea === area.id;
+                  const areaColors = getAreaColors(area.id);
+                  const cardAnimation = getCardAnimation(isSelected, area.id);
 
                   return (
                     <motion.button
@@ -1905,42 +2287,21 @@ export default function ReadingIntakeScreen() {
                           scrollClusterIntoViewThenFocus();
                         }
                       }}
-                      animate={
-                        isSelected
-                          ? shouldReduceMotion
-                            ? {
-                                backgroundColor: "rgba(45, 212, 191, 0.08)",
-                                borderColor: "rgba(94, 234, 212, 0.45)",
-                              }
-                            : {
-                                backgroundColor: "rgba(45, 212, 191, 0.10)",
-                                borderColor: "rgba(94, 234, 212, 0.55)",
-                                y: -2,
-                              }
-                          : {
-                              backgroundColor: "rgba(255, 255, 255, 0.03)",
-                              borderColor: "rgba(255, 255, 255, 0.10)",
-                              y: 0,
-                            }
-                      }
+                      animate={cardAnimation}
                       data-selected={isSelected ? "true" : "false"}
                       className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm shadow-[0_18px_40px_rgba(0,0,0,0.5)]"
-                      style={{ willChange: "transform, opacity" }}
+                      style={{ 
+                        willChange: "transform, opacity",
+                        '--selected-wash': areaColors.gradient,
+                        '--selected-shadow': `0 0 0 1px ${areaColors.border}, 0 10px 30px ${areaColors.glow}, 0 0 24px ${areaColors.glow}`,
+                      } as React.CSSProperties}
                     >
-                      {isSelected && !shouldReduceMotion && (
-                        <motion.div
-                          aria-hidden="true"
+                      {isSelected && (
+                        <div
                           className="pointer-events-none absolute inset-0 rounded-[24px]"
                           style={{
-                            background:
-                              "radial-gradient(circle at 50% 50%, rgba(45,212,191,0.14), rgba(45,212,191,0.04) 42%, transparent 72%)",
+                            background: getGlowOverlay(area.id),
                             zIndex: 0,
-                          }}
-                          animate={{ opacity: [0.42, 0.68, 0.42] }}
-                          transition={{
-                            duration: 3.4,
-                            repeat: Infinity,
-                            ease: "easeInOut",
                           }}
                         />
                       )}
@@ -1951,14 +2312,14 @@ export default function ReadingIntakeScreen() {
                           className={cn(
                             "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
                             isSelected
-                              ? `bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]`
+                              ? ""
                               : "border-white/10 bg-black/20 text-slate-300"
                           )}
                           style={{
-                            borderColor: isSelected ? theme.selectedBorder : undefined,
-                            backgroundColor: isSelected ? theme.selectedGlow : undefined,
-                            color: isSelected ? theme.selectedIcon : undefined,
-                            boxShadow: isSelected ? `0 0 12px ${theme.selectedGlow}` : undefined,
+                            borderColor: isSelected ? areaColors.border : undefined,
+                            backgroundColor: isSelected ? areaColors.glow : undefined,
+                            color: isSelected ? areaColors.text : undefined,
+                            boxShadow: isSelected ? getIconTileShadow(area.id) : undefined,
                           }}
                         >
                           <Icon className="h-4 w-4" />
@@ -1977,11 +2338,14 @@ export default function ReadingIntakeScreen() {
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.92, y: 4 }}
                                   transition={{ duration: 0.18, ease: "easeOut" }}
-                                  className="relative overflow-hidden rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-200"
+                                  className="relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
                                   style={{
                                     color: theme.selectedTag,
                                     borderColor: theme.selectedBorder,
-                                    backgroundColor: theme.selectedGlow,
+                                    backgroundColor: getBadgeBackground(),
+                                    borderWidth: 1,
+                                    borderStyle: "solid",
+                                    boxShadow: getBadgeShadow(),
                                   }}
                                 >
                                   {!shouldReduceMotion && (
@@ -2044,10 +2408,22 @@ export default function ReadingIntakeScreen() {
                         AREAS.find((a) => a.id === selectedArea)?.placeholder ??
                         "Ask something specific so your reading can go deeper."
                       }
-                      className={cn(
-                        "min-h-[132px] rounded-[24px] border-white/10 bg-black/20 px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-teal-300",
-                        selectedArea && selectedArea !== "other" && "border-white/60 shadow-[0_0_25px_rgba(255,255,255,0.25)] animate-pulse"
-                      )}
+                      className="min-h-[132px] rounded-[24px] border px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 transition-all duration-300 focus:outline-none focus:ring-1"
+                      style={{
+                        borderColor: "rgba(255,255,255,0.10)",
+                        backgroundColor: "rgba(0,0,0,0.20)",
+                        outlineColor: theme.accentLine,
+                      }}
+                      onFocus={(e) => {
+                        const styles = getTextareaFocusStyles(true, selectedArea);
+                        e.currentTarget.style.borderColor = styles.borderColor;
+                        e.currentTarget.style.boxShadow = styles.boxShadow;
+                      }}
+                      onBlur={(e) => {
+                        const styles = getTextareaFocusStyles(false, selectedArea);
+                        e.currentTarget.style.borderColor = styles.borderColor;
+                        e.currentTarget.style.boxShadow = styles.boxShadow;
+                      }}
                     />
                     <p className="text-xs leading-5 text-slate-400">
                       Be specific. The clearer your question, the sharper the reading.
@@ -2069,11 +2445,12 @@ export default function ReadingIntakeScreen() {
                   type="button"
                   onClick={handleStartReading}
                   disabled={!canSubmit || isCreatingReading}
-                  className="h-14 w-full rounded-2xl border border-teal-300/30 bg-black/40 text-teal-200 shadow-lg shadow-teal-500/10 transition hover:bg-black/30 hover:border-teal-300/50 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+                  className="h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
                   style={{
-                    borderColor: theme.accentLine,
-                    color: theme.tagText,
-                    boxShadow: `0 4px 24px ${theme.selectedGlow}`,
+                    borderColor: theme.areaColors.cta.border,
+                    color: theme.areaColors.cta.text,
+                    background: getCTABackground(),
+                    boxShadow: getCTAShadow(),
                   }}
                 >
                   {buttonCopy}
