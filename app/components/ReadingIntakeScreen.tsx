@@ -1414,46 +1414,19 @@ export default function ReadingIntakeScreen() {
         }
 
         .carousel-content {
-  border-top: 1px solid rgba(251, 191, 36, 0.1);
-  padding: 0;
-}
-
-.carousel-card {
-  min-width: 100%;
-  padding: 0;
-}
-
-        .carousel-card {
-          min-width: 100%;
-          padding: 4px 0;
-        }
-
-        .carousel-dots {
-          display: flex;
-          justify-content: center;
-          gap: 8px;
-          margin-top: 12px;
-        }
-
-        .carousel-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.15);
-          transition: all 0.3s ease;
-          cursor: pointer;
-          border: none;
+          border-top: 1px solid rgba(251, 191, 36, 0.1);
           padding: 0;
         }
 
-        .carousel-dot.active {
-          background: rgba(251, 191, 36, 0.7);
-          width: 24px;
-          border-radius: 4px;
+        .carousel-track {
+          display: flex;
+          transition: transform 0.4s ease;
+          will-change: transform;
         }
 
-        .carousel-dot:hover {
-          background: rgba(251, 191, 36, 0.4);
+        .carousel-card {
+          min-width: 100%;
+          padding: 0;
         }
 
         .carousel-nav-button {
@@ -1528,6 +1501,9 @@ export default function ReadingIntakeScreen() {
           }
           .glitch-container.glitching::after {
             opacity: 0 !important;
+          }
+          .carousel-track {
+            transition: none !important;
           }
         }
       `}</style>
@@ -2057,15 +2033,19 @@ export default function ReadingIntakeScreen() {
                     transition={{ duration: 0.25, ease: "easeOut" }}
                     className="overflow-hidden"
                   >
-                    <div className="carousel-content" style={{ padding: 0 }}>
-                      {/* Carousel Track */}
-                      <div className="relative">
+                    {/* ── CAROUSEL - Fills entire space with no padding ── */}
+                    <div className="carousel-content">
+                      <div className="relative" style={{ padding: 0, overflow: "hidden" }}>
                         <div 
                           className="carousel-track"
-                          style={{ transform: `translateX(-${currentCardIndex * 100}%)` }}
+                          style={{ 
+                            display: "flex",
+                            transform: `translateX(-${currentCardIndex * 100}%)`,
+                            transition: "transform 0.4s ease"
+                          }}
                         >
                           {[0, 1, 2, 3].map((index) => (
-                            <div key={index} className="carousel-card">
+                            <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0 }}>
                               <div className="relative w-full min-h-[220px] bg-black/20 p-6">
                                 {/* Card Title */}
                                 <h3 className="text-sm font-semibold text-amber-200 mb-3">
@@ -2111,7 +2091,7 @@ export default function ReadingIntakeScreen() {
 
                       {/* Subscribe CTA (if not subscribed) */}
                       {!userStatus?.isSubscribed && (
-                        <div className="mt-4 pt-3 border-t border-amber-300/10">
+                        <div className="p-4 pt-3 border-t border-amber-300/10">
                           <motion.button
                             whileTap={{ scale: 0.985 }}
                             transition={{ duration: 0.12 }}
