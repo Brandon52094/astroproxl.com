@@ -11,7 +11,6 @@ import {
   Lock,
   Timer,
   Pencil,
-  ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -154,7 +153,6 @@ export default function ReadingIntakeScreen() {
   >("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
-  const [showSubscriptionDetails, setShowSubscriptionDetails] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
@@ -703,8 +701,9 @@ export default function ReadingIntakeScreen() {
   }, [isPaused, isScrubbing]);
 
   // ── Carousel navigation ─────────────────────────────────────────────
-  const totalCards = 4;
+  const totalCards = 5;
   const cardTitles = [
+    "Unlimited Access",
     "Your Natal Chart",
     "Today's Astrological Calendar",
     "Current Important Transits",
@@ -778,7 +777,88 @@ export default function ReadingIntakeScreen() {
   // ── Render individual card content ──────────────────────────────────
   const renderCardContent = (index: number) => {
     switch (index) {
-      case 0: // Your Natal Chart
+      case 0: // Unlimited Access
+        return (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-[15px] font-semibold leading-snug text-white">
+                {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Readings, No Waiting."}
+              </h3>
+              {!userStatus?.isSubscribed && (
+                <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
+                  Need more than one reading a week? This is the best route. Financially & mathematically. See what you get below!
+                </p>
+              )}
+            </div>
+
+            {!userStatus?.isSubscribed ? (
+              <>
+                <div className="space-y-2">
+                  {[
+                    "8 Readings, not 1",
+                    "Ask Follow Ups Free",
+                    "No 2-week wait, no $6 to skip it",
+                    "Downloads Always Free.",
+                    "Unlimited Access Features",
+                  ].map((perk) => (
+                    <div key={perk} className="flex items-center gap-2.5">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
+                        ✓
+                      </span>
+                      <span className="text-[12px] text-slate-300">{perk}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-amber-300/60">
+                  More, for less, still premium.
+                </p>
+
+                <motion.button
+                  whileTap={{ scale: 0.985 }}
+                  transition={{ duration: 0.12 }}
+                  type="button"
+                  disabled={isSubscribeLoading}
+                  onClick={async () => {
+                    setIsSubscribeLoading(true);
+                    trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
+                    try {
+                      const res = await fetch("/api/stripe/checkout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          returnUrl: `${window.location.origin}/reading/intake`,
+                          mode: "subscription",
+                          paywallIndex: 1,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (data.url) window.location.href = data.url;
+                    } finally {
+                      setIsSubscribeLoading(false);
+                    }
+                  }}
+                  className="h-11 w-full rounded-xl bg-amber-300 text-[13px] font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
+                >
+                  {isSubscribeLoading ? "Loading…" : "Subscribe — $12.99/mo"}
+                </motion.button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+                <p className="mt-3 text-center text-sm text-slate-300">
+                  You have full access to all features.
+                </p>
+                <p className="text-center text-xs text-slate-500 mt-1">
+                  Enjoy your premium experience.
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      case 1: // Your Natal Chart
         return (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
@@ -812,7 +892,7 @@ export default function ReadingIntakeScreen() {
             </div>
           </div>
         );
-      case 1: // Today's Astrological Calendar
+      case 2: // Today's Astrological Calendar
         return (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
@@ -847,7 +927,7 @@ export default function ReadingIntakeScreen() {
             </div>
           </div>
         );
-      case 2: // Current Important Transits
+      case 3: // Current Important Transits
         const majorPlanets = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
         const majorTransits = todayPlanets.filter(p => majorPlanets.includes(p.name));
         return (
@@ -870,7 +950,7 @@ export default function ReadingIntakeScreen() {
             )}
           </div>
         );
-      case 3: // Coming Soon
+      case 4: // Coming Soon
         return (
           <div className="flex flex-col items-center justify-center h-full py-8">
             <Sparkles className="h-12 w-12 text-amber-300/40 mb-4" />
@@ -1251,49 +1331,6 @@ export default function ReadingIntakeScreen() {
           animation: whiteGlowPulse 3.5s ease-in-out infinite;
         }
 
-        .subscription-shell {
-          position: relative;
-          overflow: hidden;
-          background: linear-gradient(180deg, rgba(251, 191, 36, 0.08), rgba(251, 191, 36, 0.03));
-          animation: jxlAmberPulse 2.8s ease-in-out infinite;
-        }
-
-        .subscription-shell::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
-            radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        .subscription-shell::after {
-          content: "";
-          position: absolute;
-          inset: -40%;
-          background-image: linear-gradient(
-            120deg,
-            rgba(253, 230, 138, 0) 0%,
-            rgba(253, 230, 138, 0.12) 40%,
-            rgba(250, 204, 21, 0.3) 50%,
-            rgba(253, 230, 138, 0.12) 60%,
-            rgba(253, 230, 138, 0) 100%
-          );
-          mix-blend-mode: screen;
-          pointer-events: none;
-          opacity: 0.55;
-          transform: translateX(-60%);
-          animation: jxlShimmer 5s linear infinite;
-          z-index: 0;
-        }
-
-        .subscription-shell > * {
-          position: relative;
-          z-index: 1;
-        }
-
         .selected-card-shell {
           position: relative;
           overflow: hidden;
@@ -1429,40 +1466,6 @@ export default function ReadingIntakeScreen() {
           padding: 0;
         }
 
-        .carousel-nav-button {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: 5;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 1px solid rgba(251, 191, 36, 0.2);
-          background: rgba(0, 0, 0, 0.6);
-          backdrop-filter: blur(8px);
-          color: rgba(251, 191, 36, 0.7);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          padding: 0;
-        }
-
-        .carousel-nav-button:hover {
-          background: rgba(0, 0, 0, 0.8);
-          border-color: rgba(251, 191, 36, 0.4);
-          color: rgba(251, 191, 36, 0.9);
-        }
-
-        .carousel-nav-button-left {
-          left: 8px;
-        }
-
-        .carousel-nav-button-right {
-          right: 8px;
-        }
-
         .locked-overlay {
           position: absolute;
           inset: 0;
@@ -1483,6 +1486,64 @@ export default function ReadingIntakeScreen() {
           user-select: none;
         }
 
+        /* ── DOT INDICATORS ── */
+        .carousel-dots {
+          display: flex;
+          justify-content: center;
+          gap: 8px;
+          padding: 12px 0 16px 0;
+        }
+
+        .carousel-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.15);
+          transition: all 0.3s ease;
+          cursor: pointer;
+          border: none;
+          padding: 0;
+        }
+
+        .carousel-dot.active {
+          background: rgba(251, 191, 36, 0.7);
+          width: 24px;
+          border-radius: 4px;
+        }
+
+        .carousel-dot:hover {
+          background: rgba(251, 191, 36, 0.4);
+        }
+
+        /* ── SWIPE HINT ── */
+        .swipe-hint {
+          display: flex;
+          justify-content: center;
+          gap: 6px;
+          padding: 4px 0 12px 0;
+          opacity: 0.4;
+          animation: swipePulse 2.5s ease-in-out infinite;
+        }
+
+        .swipe-hint span {
+          display: block;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: rgba(251, 191, 36, 0.5);
+        }
+
+        .swipe-hint span:nth-child(1) { animation-delay: 0s; }
+        .swipe-hint span:nth-child(2) { animation-delay: 0.3s; }
+        .swipe-hint span:nth-child(3) { animation-delay: 0.6s; }
+        .swipe-hint span:nth-child(4) { animation-delay: 0.9s; }
+        .swipe-hint span:nth-child(5) { animation-delay: 1.2s; }
+
+        @keyframes swipePulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.3); }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -1493,9 +1554,9 @@ export default function ReadingIntakeScreen() {
           .glitch-border,
           .jxl-teaser,
           .jxl-teaser::before,
-          .subscription-shell::after,
           .glow-light-bar,
-          .carousel-container::after {
+          .carousel-container::after,
+          .swipe-hint {
             animation: none !important;
             opacity: 0.4 !important;
           }
@@ -1890,103 +1951,6 @@ export default function ReadingIntakeScreen() {
                 </Button>
               </motion.div>
             )}
-
-            {!userStatus?.isSubscribed && (
-              <div className="subscription-shell rounded-[24px] border border-amber-300/30 overflow-hidden">
-                <motion.button
-                  whileTap={{ scale: 0.995 }}
-                  transition={{ duration: 0.12 }}
-                  type="button"
-                  onClick={() => setShowSubscriptionDetails((s) => !s)}
-                  className="flex h-12 w-full items-center justify-between px-5 text-left transition hover:bg-white/[0.03]"
-                >
-                  <span className="text-[13px] font-semibold text-amber-200">Unlimited Access</span>
-                  <span className="flex items-center gap-2">
-                    <span className="text-[12px] text-slate-400">$12.99/mo</span>
-                    <motion.span
-                      animate={{ rotate: showSubscriptionDetails ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="text-amber-300/70"
-                    >
-                      ▾
-                    </motion.span>
-                  </span>
-                </motion.button>
-
-                <AnimatePresence>
-                  {showSubscriptionDetails && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25, ease: "easeOut" }}
-                      className="overflow-hidden"
-                    >
-                      <div className="border-t border-amber-300/15 px-5 py-4 space-y-4">
-                        <div>
-                          <h3 className="text-[15px] font-semibold leading-snug text-white">
-                            More Readings, No Waiting. 
-                          </h3>
-                          <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-                            Incase you need more than one reading a week, would like a good value. This is the best route. Financially & Mathematheically. See what you get below!
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          {[
-                            "8 Readings, not 1",
-                            "Ask Follow Ups Free",
-                            "No 2-week wait, no $6 to skip it",
-                            "Downloads Always Free.",
-                            "Unlimited Access Features",
-                          ].map((perk) => (
-                            <div key={perk} className="flex items-center gap-2.5">
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
-                                ✓
-                              </span>
-                              <span className="text-[12px] text-slate-300">{perk}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <p className="text-[11px] text-amber-300/60">
-                          More, for less, still premium. 
-                        </p>
-
-                        <motion.button
-                          whileTap={{ scale: 0.985 }}
-                          transition={{ duration: 0.12 }}
-                          type="button"
-                          disabled={isSubscribeLoading}
-                          onClick={async () => {
-                            setIsSubscribeLoading(true);
-                            trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
-                            try {
-                              const res = await fetch("/api/stripe/checkout", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  returnUrl: `${window.location.origin}/reading/intake`,
-                                  mode: "subscription",
-                                  paywallIndex: 1,
-                                }),
-                              });
-                              const data = await res.json();
-                              if (data.url) window.location.href = data.url;
-                            } finally {
-                              setIsSubscribeLoading(false);
-                            }
-                          }}
-                          className="h-11 w-full rounded-xl bg-amber-300 text-[13px] font-semibold text-slate-950 transition hover:bg-amber-200 disabled:opacity-60"
-                        >
-                          {isSubscribeLoading ? "Loading…" : "Subscribe — $12.99/mo"}
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
           </div>
 
           <div className="mt-8 flex items-center gap-3">
@@ -2044,62 +2008,92 @@ export default function ReadingIntakeScreen() {
                             transition: "transform 0.4s ease"
                           }}
                         >
-                          {[0, 1, 2, 3].map((index) => (
-                            <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0 }}>
-                              <div className="relative w-full min-h-[220px] bg-black/20 p-6">
-                                {/* Card Title */}
-                                <h3 className="text-sm font-semibold text-amber-200 mb-3">
-                                  {cardTitles[index]}
-                                </h3>
-                                
-                                {/* Blurred Content */}
-                                <div className="blur-content">
-                                  {renderCardContent(index)}
-                                </div>
-
-                                {/* Lock Overlay (for non-subscribers) */}
-                                {!userStatus?.isSubscribed && (
-                                  <div className="locked-overlay">
-                                    <Lock className="h-8 w-8 text-amber-300/60 mb-2" />
-                                    <p className="text-xs text-amber-200/60 font-medium">Premium Feature</p>
-                                    <p className="text-[10px] text-slate-400 mt-1">Subscribe to unlock</p>
+                          {[0, 1, 2, 3, 4].map((index) => {
+                            const shouldBlur = !userStatus?.isSubscribed && index !== 0;
+                            return (
+                              <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0 }}>
+                                <div className="relative w-full min-h-[220px] bg-black/20 p-6">
+                                  {/* Card Title */}
+                                  <h3 className="text-sm font-semibold text-amber-200 mb-3">
+                                    {cardTitles[index]}
+                                  </h3>
+                                  
+                                  {/* Content - blurred if not subscribed and not card 0 */}
+                                  <div className={shouldBlur ? "blur-content" : ""}>
+                                    {renderCardContent(index)}
                                   </div>
-                                )}
+
+                                  {/* Lock Overlay (only for non-subscribers, cards 1-4) */}
+                                  {shouldBlur && (
+                                    <div className="locked-overlay">
+                                      <Lock className="h-8 w-8 text-amber-300/60 mb-2" />
+                                      <p className="text-xs text-amber-200/60 font-medium">Premium Feature</p>
+                                      <p className="text-[10px] text-slate-400 mt-1">Subscribe to unlock</p>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* DOT INDICATORS - shows which card you're on */}
+                        <div className="carousel-dots">
+                          {[0, 1, 2, 3, 4].map((index) => (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={() => setCurrentCardIndex(index)}
+                              className={cn(
+                                "carousel-dot",
+                                currentCardIndex === index && "active"
+                              )}
+                              aria-label={`Go to card ${index + 1}`}
+                            />
                           ))}
                         </div>
 
-                        {/* Navigation Buttons */}
-                        <button
-                          type="button"
-                          onClick={goToPrevious}
-                          className="carousel-nav-button carousel-nav-button-left"
-                          aria-label="Previous card"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={goToNext}
-                          className="carousel-nav-button carousel-nav-button-right"
-                          aria-label="Next card"
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
+                        {/* SWIPE HINT - animated dots suggesting swipe */}
+                        <div className="swipe-hint">
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                        </div>
                       </div>
 
-                      {/* Subscribe CTA (if not subscribed) */}
+                      {/* Bottom CTA - only shows when NOT subscribed */}
                       {!userStatus?.isSubscribed && (
                         <div className="p-4 pt-3 border-t border-amber-300/10">
                           <motion.button
                             whileTap={{ scale: 0.985 }}
                             transition={{ duration: 0.12 }}
                             type="button"
-                            onClick={() => setShowSubscriptionDetails(true)}
+                            onClick={() => {
+                              setIsSubscribeLoading(true);
+                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
+                              (async () => {
+                                try {
+                                  const res = await fetch("/api/stripe/checkout", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      returnUrl: `${window.location.origin}/reading/intake`,
+                                      mode: "subscription",
+                                      paywallIndex: 1,
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.url) window.location.href = data.url;
+                                } finally {
+                                  setIsSubscribeLoading(false);
+                                }
+                              })();
+                            }}
                             className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
                           >
-                            Unlock All Features — $12.99/mo
+                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — $12.99/mo"}
                           </motion.button>
                         </div>
                       )}
