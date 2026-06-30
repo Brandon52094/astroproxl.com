@@ -12,6 +12,8 @@ import {
   Timer,
   Pencil,
   ChevronRight,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -487,6 +489,15 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${hours}h`;
 }
 
+// ── SLIDE DATA ──────────────────────────────────────────────────────
+interface SlideData {
+  id: number;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  detail: string;
+}
+
 export default function ReadingIntakeScreen() {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
@@ -504,6 +515,11 @@ export default function ReadingIntakeScreen() {
   const [touchStartX, setTouchStartX] = useState(0);
   const [touchEndX, setTouchEndX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+
+  // ── Mini carousel state ─────────────────────────────────────────────
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
@@ -749,16 +765,16 @@ export default function ReadingIntakeScreen() {
     }
 
     // ── Set theme based on Sun sign ──────────────────────────────────
-     const isUserSubscribed = userStatus?.isSubscribed || false;
-  setIsSubscribed(isUserSubscribed);
+    const isUserSubscribed = userStatus?.isSubscribed || false;
+    setIsSubscribed(isUserSubscribed);
 
-  if (sun) {
-    const element = getElementFromSign(sun.sign);
-    setTheme(THEMES[element]);
-  } else {
-    setTheme(THEMES.teal);
-  }
-}, [chartStatus, userStatus]);
+    if (sun) {
+      const element = getElementFromSign(sun.sign);
+      setTheme(THEMES[element]);
+    } else {
+      setTheme(THEMES.teal);
+    }
+  }, [chartStatus, userStatus]);
 
   // ── Load nickname ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1063,7 +1079,81 @@ export default function ReadingIntakeScreen() {
     setIsPaused(!isPaused);
   }, [isPaused, isScrubbing]);
 
-  // ── Carousel navigation ─────────────────────────────────────────────
+  // ── Mini carousel navigation ────────────────────────────────────────
+  const totalSlides = 4;
+  const slideData = useMemo(() => {
+    const mercuryRetrograde = todayPlanets.find(p => p.name === "Mercury" && p.isRetrograde);
+    
+    return [
+      {
+        id: 0,
+        icon: "🌙",
+        title: moonPhase?.phaseName || "Loading...",
+        subtitle: moonPhase ? `☾ ${moonPhase.moonSign} ${moonPhase.moonDegree}` : "",
+        detail: moonPhase ? `${moonPhase.nextEventName} in ${moonPhase.daysUntilNextEvent} days` : "",
+      },
+      {
+        id: 1,
+        icon: "✨",
+        title: `Reading Cycle ${onCooldown ? 4 : readingsCompleted}/4`,
+        subtitle: onCooldown ? "Cooldown active" : (userStatus?.freeReadingResetAt ? `Resets in ${formatTimeRemaining(userStatus.freeReadingResetAt)}` : "Ready for reading"),
+        detail: onCooldown ? "Resumes in ${formatTimeRemaining(userStatus?.cooldownExpiresAt || '')}" : "",
+      },
+      {
+        id: 2,
+        icon: "⚡",
+        title: mercuryRetrograde ? `Mercury Retrograde in ${mercuryRetrograde.sign}` : "No Mercury Retrograde",
+        subtitle: mercuryRetrograde ? `${mercuryRetrograde.degree}` : "Clear skies ahead",
+        detail: mercuryRetrograde ? "May 14 - June 7, 2026" : "",
+      },
+      {
+        id: 3,
+        icon: "☀️",
+        title: natalSun ? `Sun in ${natalSun.sign}` : "Loading...",
+        subtitle: natalSun ? `${natalSun.degree}` : "",
+        detail: natalSun ? `in the ${Math.floor(Math.random() * 12) + 1}th House` : "",
+      },
+    ];
+  }, [moonPhase, readingsCompleted, onCooldown, userStatus, todayPlanets, natalSun]);
+
+  const goToPreviousSlide = useCallback(() => {
+    setCurrentSlideIndex((prev) => (prev === 0 ? totalSlides - 1 : prev - 1));
+    setIsAutoPlaying(false);
+    if (autoPlayTimerRef.current) {
+      clearTimeout(autoPlayTimerRef.current);
+      autoPlayTimerRef.current = null;
+    }
+    setTimeout(() => setIsAutoPlaying(true), 5000);
+  }, []);
+
+  const goToNextSlide = useCallback(() => {
+    setCurrentSlideIndex((prev) => (prev === totalSlides - 1 ? 0 : prev + 1));
+    setIsAutoPlaying(false);
+    if (autoPlayTimerRef.current) {
+      clearTimeout(autoPlayTimerRef.current);
+      autoPlayTimerRef.current = null;
+    }
+    setTimeout(() => setIsAutoPlaying(true), 5000);
+  }, []);
+
+  // ── Auto-play logic ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isAutoPlaying || shouldReduceMotion) return;
+    if (autoPlayTimerRef.current) {
+      clearTimeout(autoPlayTimerRef.current);
+    }
+    autoPlayTimerRef.current = setTimeout(() => {
+      goToNextSlide();
+    }, 4000);
+    return () => {
+      if (autoPlayTimerRef.current) {
+        clearTimeout(autoPlayTimerRef.current);
+        autoPlayTimerRef.current = null;
+      }
+    };
+  }, [isAutoPlaying, currentSlideIndex, goToNextSlide, shouldReduceMotion]);
+
+  // ── Carousel navigation (existing) ──────────────────────────────────
   const totalCards = 5;
   const cardTitles = [
     "Unlimited Access",
@@ -1145,6 +1235,10 @@ export default function ReadingIntakeScreen() {
       if (autoResumeTimer.current) {
         clearTimeout(autoResumeTimer.current);
         autoResumeTimer.current = null;
+      }
+      if (autoPlayTimerRef.current) {
+        clearTimeout(autoPlayTimerRef.current);
+        autoPlayTimerRef.current = null;
       }
     };
   }, []);
@@ -1926,6 +2020,133 @@ export default function ReadingIntakeScreen() {
           opacity: 0.82;
         }
 
+        /* ── MINI CAROUSEL STYLES ── */
+        .mini-carousel-container {
+          position: relative;
+          overflow: hidden;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.02);
+          transition: border-color 0.3s ease;
+        }
+
+        .mini-carousel-container:hover {
+          border-color: rgba(255,255,255,0.10);
+        }
+
+        .mini-carousel-track {
+          display: flex;
+          transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+          will-change: transform;
+        }
+
+        .mini-carousel-slide {
+          min-width: 100%;
+          padding: 12px 16px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        /* ── FIXED SQUARE ── */
+        .fixed-square {
+          flex-shrink: 0;
+          width: 80px;
+          height: 80px;
+          border-radius: 16px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.06);
+          transition: all 0.3s ease;
+          text-align: center;
+          line-height: 1.2;
+        }
+
+        .fixed-square .icon {
+          font-size: 28px;
+          margin-bottom: 2px;
+        }
+
+        .fixed-square .title {
+          font-size: 9px;
+          font-weight: 500;
+          color: rgba(255,255,255,0.6);
+          letter-spacing: 0.02em;
+          max-width: 70px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .fixed-square .subtitle {
+          font-size: 8px;
+          color: rgba(255,255,255,0.35);
+          letter-spacing: 0.01em;
+        }
+
+        /* ── SLIDE CONTENT ── */
+        .slide-content {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .slide-content .heading {
+          font-size: 13px;
+          font-weight: 600;
+          color: white;
+          letter-spacing: -0.01em;
+          line-height: 1.3;
+        }
+
+        .slide-content .sub {
+          font-size: 11px;
+          color: rgba(255,255,255,0.5);
+          margin-top: 1px;
+          letter-spacing: 0.01em;
+        }
+
+        .slide-content .detail {
+          font-size: 10px;
+          color: rgba(255,255,255,0.3);
+          margin-top: 1px;
+        }
+
+        /* ── DOTS ── */
+        .dot-indicators {
+          display: flex;
+          gap: 6px;
+          padding: 0 16px 12px 16px;
+          justify-content: center;
+          align-items: center;
+        }
+
+        .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.15);
+          transition: all 0.3s ease;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        .dot.active {
+          background: rgba(255,255,255,0.6);
+          width: 18px;
+          border-radius: 3px;
+        }
+
+        .dot:hover {
+          background: rgba(255,255,255,0.3);
+        }
+
+        .dot.active:hover {
+          background: rgba(255,255,255,0.6);
+        }
+
         /* ── CAROUSEL STYLES ── */
         .carousel-container {
           position: relative;
@@ -2037,6 +2258,40 @@ export default function ReadingIntakeScreen() {
           user-select: none;
         }
 
+        /* ── NAV ARROWS ── */
+        .nav-arrow {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 20;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,255,255,0.08);
+          color: rgba(255,255,255,0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          backdrop-filter: blur(8px);
+        }
+
+        .nav-arrow:hover {
+          background: rgba(255,255,255,0.1);
+          color: rgba(255,255,255,0.8);
+          border-color: rgba(255,255,255,0.15);
+        }
+
+        .nav-arrow-left {
+          left: 6px;
+        }
+
+        .nav-arrow-right {
+          right: 6px;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
@@ -2048,8 +2303,10 @@ export default function ReadingIntakeScreen() {
           .jxl-teaser,
           .jxl-teaser::before,
           .glow-light-bar,
-          .carousel-container::after {
+          .carousel-container::after,
+          .mini-carousel-track {
             animation: none !important;
+            transition: none !important;
             opacity: 0.4 !important;
           }
           .glitch-container.glitching::after {
@@ -2151,47 +2408,73 @@ export default function ReadingIntakeScreen() {
             </div>
           </section>
 
-          {/* ── Reading cycle — centered ─────────────────────────────── */}
-          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-1 mx-auto w-full max-w-[280px] space-y-2">
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                  Reading cycle
-                </span>
-                <span className="text-[10px] text-slate-600">
-                  {onCooldown ? 4 : readingsCompleted} / 4
-                </span>
-              </div>
-              <div className="flex gap-1.5">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]"
-                  >
-                    {(onCooldown || i < readingsCompleted) && (
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: "100%" }}
-                        transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
-                        className="absolute inset-y-0 left-0 rounded-full"
-                        style={{
-                          backgroundColor: theme.progressBar,
-                          boxShadow: `0 0 8px ${theme.progressBar}`,
-                        }}
-                      />
-                    )}
+          {/* ── MINI CAROUSEL: Fixed Square + Rotating Content ──────── */}
+          <div className="mb-4 mini-carousel-container">
+            <div className="relative">
+              {/* Track */}
+              <div 
+                className="mini-carousel-track"
+                style={{ transform: `translateX(-${currentSlideIndex * 100}%)` }}
+              >
+                {slideData.map((slide) => (
+                  <div key={slide.id} className="mini-carousel-slide">
+                    {/* Fixed Square */}
+                    <div className="fixed-square">
+                      <span className="icon">{slide.icon}</span>
+                      <span className="title">{slide.title.split(' ').slice(0, 2).join(' ')}</span>
+                      <span className="subtitle">{slide.subtitle?.split(' ').slice(0, 2).join(' ')}</span>
+                    </div>
+
+                    {/* Content */}
+                    <div className="slide-content">
+                      <div className="heading">{slide.title}</div>
+                      {slide.subtitle && <div className="sub">{slide.subtitle}</div>}
+                      {slide.detail && <div className="detail">{slide.detail}</div>}
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
 
-          {freeReadingCooldownLine && (
-            <div className="mb-8 flex items-center justify-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
-              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
+              {/* Navigation Arrows */}
+              <button
+                onClick={goToPreviousSlide}
+                className="nav-arrow nav-arrow-left"
+                aria-label="Previous slide"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={goToNextSlide}
+                className="nav-arrow nav-arrow-right"
+                aria-label="Next slide"
+              >
+                <ChevronRightIcon className="h-3.5 w-3.5" />
+              </button>
             </div>
-          )}
+
+            {/* Dot Indicators */}
+            <div className="dot-indicators">
+              {slideData.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setCurrentSlideIndex(index);
+                    setIsAutoPlaying(false);
+                    if (autoPlayTimerRef.current) {
+                      clearTimeout(autoPlayTimerRef.current);
+                      autoPlayTimerRef.current = null;
+                    }
+                    setTimeout(() => setIsAutoPlaying(true), 5000);
+                  }}
+                  className={cn(
+                    "dot",
+                    currentSlideIndex === index && "active"
+                  )}
+                  aria-label={`Go to slide ${index + 1}`}
+                />
+              ))}
+            </div>
+          </div>
 
           {onCooldown ? (
             <motion.div
