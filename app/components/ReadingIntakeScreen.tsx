@@ -840,7 +840,7 @@ export default function ReadingIntakeScreen() {
     switch (index) {
       case 0: // Unlimited Access
         return (
-          <div className="space-y-4">
+          <div className="space-y-4 flex-1">
             <div>
               <h3 className="text-[15px] font-semibold leading-snug text-white">
                 {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Readings, No Waiting."}
@@ -856,10 +856,11 @@ export default function ReadingIntakeScreen() {
               <>
                 <div className="space-y-2">
                   {[
-                    "8 Readings, more replies",
-                    "No Reading Cool Downs",
-                    "Downloads.",
-                    "Access Dashboard",
+                    "8 Readings, not 1",
+                    "Ask Follow Ups Free",
+                    "No 2-week wait, no $6 to skip it",
+                    "Downloads Always Free.",
+                    "Unlimited Access Features",
                   ].map((perk) => (
                     <div key={perk} className="flex items-center gap-2.5">
                       <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
@@ -875,7 +876,7 @@ export default function ReadingIntakeScreen() {
                 </p>
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center py-4">
+              <div className="flex flex-col items-center justify-center py-4 flex-1">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
                   <Sparkles className="h-6 w-6" />
                 </div>
@@ -891,7 +892,7 @@ export default function ReadingIntakeScreen() {
         );
       case 1: // Your Natal Chart
         return (
-          <div className="space-y-3">
+          <div className="space-y-3 flex-1">
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-white/[0.03] px-3 py-2">
                 <span className="text-xs text-slate-400">Sun</span>
@@ -925,7 +926,7 @@ export default function ReadingIntakeScreen() {
         );
       case 2: // Today's Astrological Calendar
         return (
-          <div className="space-y-3">
+          <div className="space-y-3 flex-1">
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-white/[0.03] px-3 py-2">
                 <span className="text-xs text-slate-400">Moon Phase</span>
@@ -962,7 +963,7 @@ export default function ReadingIntakeScreen() {
         const majorPlanets = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
         const majorTransits = todayPlanets.filter(p => majorPlanets.includes(p.name));
         return (
-          <div className="space-y-3">
+          <div className="space-y-3 flex-1">
             <div className="text-xs text-slate-400 mb-2">Major planetary transits</div>
             {majorTransits.length > 0 ? (
               <div className="space-y-2">
@@ -983,7 +984,7 @@ export default function ReadingIntakeScreen() {
         );
       case 4: // Coming Soon
         return (
-          <div className="flex flex-col items-center justify-center h-full py-8">
+          <div className="flex flex-col items-center justify-center h-full py-8 flex-1">
             <Sparkles className="h-12 w-12 text-amber-300/40 mb-4" />
             <p className="text-center text-sm text-slate-400">More features coming soon</p>
             <p className="text-center text-xs text-slate-500 mt-2">Stay tuned for updates</p>
@@ -1484,10 +1485,13 @@ export default function ReadingIntakeScreen() {
         .carousel-content {
           border-top: 1px solid rgba(251, 191, 36, 0.1);
           padding: 0;
+          display: flex;
+          flex-direction: column;
         }
 
         .carousel-track {
           display: flex;
+          height: 100%;
           transition: transform 0.4s ease;
           will-change: transform;
           cursor: grab;
@@ -1501,6 +1505,7 @@ export default function ReadingIntakeScreen() {
         .carousel-card {
           min-width: 100%;
           padding: 0;
+          height: 100%;
         }
 
         .locked-overlay {
@@ -1597,7 +1602,7 @@ export default function ReadingIntakeScreen() {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-3"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-6"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1976,11 +1981,11 @@ export default function ReadingIntakeScreen() {
                     className="overflow-hidden"
                   >
                     {/* ── CAROUSEL - Fills entire space with no padding ── */}
-                    <div className="carousel-content" style={{ display: "flex", flexDirection: "column" }}>
+                    <div className="carousel-content">
                       <div 
-  className="relative" 
-  style={{ padding: 0, overflow: "hidden", flex: 1 }}
-  onTouchStart={handleTouchStart}
+                        className="relative" 
+                        style={{ padding: 0, overflow: "hidden", flex: 1 }}
+                        onTouchStart={handleTouchStart}
                         onTouchMove={handleTouchMove}
                         onTouchEnd={handleTouchEnd}
                         onMouseDown={handleMouseDown}
@@ -1989,14 +1994,14 @@ export default function ReadingIntakeScreen() {
                         onMouseLeave={handleMouseUp}
                       >
                         <div 
-  className="carousel-track"
-  style={{ 
-    display: "flex",
-    height: "100%",
-    transform: `translateX(-${currentCardIndex * 100}%)`,
-    transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
-  }}
->
+                          className="carousel-track"
+                          style={{ 
+                            display: "flex",
+                            height: "100%",
+                            transform: `translateX(-${currentCardIndex * 100}%)`,
+                            transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
+                          }}
+                        >
                           {[0, 1, 2, 3, 4].map((index) => {
                             const shouldBlur = !userStatus?.isSubscribed && index !== 0;
                             return (
@@ -2008,7 +2013,7 @@ export default function ReadingIntakeScreen() {
                                   </h3>
                                   
                                   {/* Content - blurred if not subscribed and not card 0 */}
-                                  <div className={shouldBlur ? "blur-content" : ""}>
+                                  <div className={shouldBlur ? "blur-content flex-1" : "flex-1"}>
                                     {renderCardContent(index)}
                                   </div>
 
