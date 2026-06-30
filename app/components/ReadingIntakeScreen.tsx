@@ -1977,11 +1977,11 @@ export default function ReadingIntakeScreen() {
                     className="overflow-hidden"
                   >
                     {/* ── CAROUSEL - Fills entire space with no padding ── */}
-                    <div className="carousel-content">
+                    <div className="carousel-content" style={{ display: "flex", flexDirection: "column" }}>
                       <div 
-                        className="relative" 
-                        style={{ padding: 0, overflow: "hidden" }}
-                        onTouchStart={handleTouchStart}
+  className="relative" 
+  style={{ padding: 0, overflow: "hidden", flex: 1 }}
+  onTouchStart={handleTouchStart}
                         onTouchMove={handleTouchMove}
                         onTouchEnd={handleTouchEnd}
                         onMouseDown={handleMouseDown}
@@ -1990,18 +1990,19 @@ export default function ReadingIntakeScreen() {
                         onMouseLeave={handleMouseUp}
                       >
                         <div 
-                          className="carousel-track"
-                          style={{ 
-                            display: "flex",
-                            transform: `translateX(-${currentCardIndex * 100}%)`,
-                            transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
-                          }}
-                        >
+  className="carousel-track"
+  style={{ 
+    display: "flex",
+    height: "100%",
+    transform: `translateX(-${currentCardIndex * 100}%)`,
+    transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
+  }}
+>
                           {[0, 1, 2, 3, 4].map((index) => {
                             const shouldBlur = !userStatus?.isSubscribed && index !== 0;
                             return (
-                              <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0 }}>
-                                <div className="relative w-full min-h-[220px] bg-black/20 p-6">
+                              <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0, height: "100%" }}>
+                                <div className="relative w-full h-full min-h-[220px] bg-black/20 p-6 flex flex-col">
                                   {/* Card Title */}
                                   <h3 className="text-sm font-semibold text-amber-200 mb-3">
                                     {cardTitles[index]}
