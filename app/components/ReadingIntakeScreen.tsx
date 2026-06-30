@@ -119,6 +119,96 @@ interface TodayTransitPlanet {
   isRetrograde: boolean;
 }
 
+// ── THEME SYSTEM ──────────────────────────────────────────────────────
+type ThemeName = "earth" | "water" | "fire" | "air";
+
+interface ThemeColors {
+  name: ThemeName;
+  primary: string; // Main accent color
+  secondary: string; // Lighter accent
+  glow: string; // Glow color for hero and highlights
+  accent: string; // Warm accent (brown for earth, navy for water, etc.)
+  light: string; // Lightest accent
+  tagBg: string; // Background for tags
+  tagBorder: string; // Border for tags
+  tickerText: string; // Ticker data text
+  tickerLabel: string; // Ticker label text
+  dot: string; // Dot indicator color
+  ring: string; // Ring/border color
+}
+
+const THEMES: Record<ThemeName, ThemeColors> = {
+  earth: {
+    name: "earth",
+    primary: "#93C572", // Pistachio
+    secondary: "#8A9A5B", // Moss
+    glow: "#50C878", // Emerald
+    accent: "#A0522D", // Sienna/Brown
+    light: "#ACE1AF", // Celadon
+    tagBg: "rgba(147, 197, 114, 0.10)",
+    tagBorder: "rgba(147, 197, 114, 0.15)",
+    tickerText: "rgba(226, 232, 240, 0.88)",
+    tickerLabel: "rgba(147, 197, 114, 0.45)",
+    dot: "rgba(147, 197, 114, 0.70)",
+    ring: "rgba(147, 197, 114, 0.30)",
+  },
+  water: {
+    name: "water",
+    primary: "#3B82F6", // Blue
+    secondary: "#60A5FA", // Sky
+    glow: "#93C5FD", // Light Blue
+    accent: "#1E3A5F", // Deep Navy
+    light: "#DBEAFE", // Very Light Blue
+    tagBg: "rgba(59, 130, 246, 0.10)",
+    tagBorder: "rgba(59, 130, 246, 0.15)",
+    tickerText: "rgba(226, 232, 240, 0.88)",
+    tickerLabel: "rgba(59, 130, 246, 0.45)",
+    dot: "rgba(59, 130, 246, 0.70)",
+    ring: "rgba(59, 130, 246, 0.30)",
+  },
+  fire: {
+    name: "fire",
+    primary: "#F97316", // Orange
+    secondary: "#FB923C", // Light Orange
+    glow: "#FCD34D", // Gold/Yellow
+    accent: "#DC2626", // Red
+    light: "#FED7AA", // Peach
+    tagBg: "rgba(249, 115, 22, 0.10)",
+    tagBorder: "rgba(249, 115, 22, 0.15)",
+    tickerText: "rgba(226, 232, 240, 0.88)",
+    tickerLabel: "rgba(249, 115, 22, 0.45)",
+    dot: "rgba(249, 115, 22, 0.70)",
+    ring: "rgba(249, 115, 22, 0.30)",
+  },
+  air: {
+    name: "air",
+    primary: "#9CA3AF", // Gray
+    secondary: "#D1D5DB", // Light Gray
+    glow: "#E5E7EB", // Very Light Gray
+    accent: "#4B5563", // Dark Gray
+    light: "#F3F4F6", // Off-White
+    tagBg: "rgba(156, 163, 175, 0.10)",
+    tagBorder: "rgba(156, 163, 175, 0.15)",
+    tickerText: "rgba(226, 232, 240, 0.88)",
+    tickerLabel: "rgba(156, 163, 175, 0.45)",
+    dot: "rgba(156, 163, 175, 0.70)",
+    ring: "rgba(156, 163, 175, 0.30)",
+  },
+};
+
+function getElementFromSign(sign: string): ThemeName {
+  const earthSigns = ["Taurus", "Virgo", "Capricorn"];
+  const waterSigns = ["Cancer", "Scorpio", "Pisces"];
+  const fireSigns = ["Aries", "Leo", "Sagittarius"];
+  const airSigns = ["Gemini", "Libra", "Aquarius"];
+
+  if (earthSigns.includes(sign)) return "earth";
+  if (waterSigns.includes(sign)) return "water";
+  if (fireSigns.includes(sign)) return "fire";
+  if (airSigns.includes(sign)) return "air";
+  return "earth"; // default fallback
+}
+
 function getMoonGlyph(phaseName: string): string {
   const glyphs: Record<string, string> = {
     "New Moon": "🌑",
@@ -177,6 +267,9 @@ export default function ReadingIntakeScreen() {
   const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
   const [chartData, setChartDataState] = useState<any>(null);
+
+  // ── Theme state ──────────────────────────────────────────────────────
+  const [theme, setTheme] = useState<ThemeColors>(THEMES.earth);
 
   // ── Scrub state ──────────────────────────────────────────────────────
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -397,6 +490,12 @@ export default function ReadingIntakeScreen() {
         }
       });
       setTodayPlanets(allTransits);
+    }
+
+    // ── Set theme based on Sun sign ──────────────────────────────────
+    if (sun) {
+      const element = getElementFromSign(sun.sign);
+      setTheme(THEMES[element]);
     }
   }, [chartStatus]);
 
@@ -792,18 +891,23 @@ export default function ReadingIntakeScreen() {
   // ── Get the ticker content ──────────────────────────────────────────
   const getDailyTickerContent = useCallback(() => {
     return (
-      <span className="flex items-center gap-3 text-[11px] text-cyan-100/78">
-        <span className="rounded-full border border-cyan-300/15 bg-cyan-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-200/80">
+      <span className="flex items-center gap-3 text-[11px]" style={{ color: `${theme.tickerText}` }}>
+        <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ 
+          color: theme.primary, 
+          backgroundColor: theme.tagBg, 
+          borderColor: theme.tagBorder,
+          borderWidth: 1
+        }}>
           Daily
         </span>
         {todayPlanets.map((planet, idx) => (
           <React.Fragment key={idx}>
-            <span className="text-cyan-200/45">{planet.name}</span>
-            <span className="text-cyan-100/88">
+            <span style={{ color: theme.tickerLabel }}>{planet.name}</span>
+            <span style={{ color: theme.tickerText }}>
               {planet.sign} {planet.degree}
             </span>
             {planet.isRetrograde && (
-              <span className="text-cyan-200/55">℞</span>
+              <span style={{ color: theme.primary }}>℞</span>
             )}
             {idx < todayPlanets.length - 1 && (
               <span className="text-white/16">•</span>
@@ -812,18 +916,23 @@ export default function ReadingIntakeScreen() {
         ))}
       </span>
     );
-  }, [todayPlanets]);
+  }, [todayPlanets, theme]);
 
   const getNatalTickerContent = useCallback(() => {
     return (
-      <span className="flex items-center gap-3 text-[11px] text-purple-100/78">
-        <span className="rounded-full border border-purple-300/15 bg-purple-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-purple-200/80">
+      <span className="flex items-center gap-3 text-[11px]" style={{ color: `${theme.tickerText}` }}>
+        <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ 
+          color: theme.primary, 
+          backgroundColor: theme.tagBg, 
+          borderColor: theme.tagBorder,
+          borderWidth: 1
+        }}>
           Natal
         </span>
         {allPlanets.map((planet, idx) => (
           <React.Fragment key={idx}>
-            <span className="text-purple-200/45">{planet.name}</span>
-            <span className="text-purple-100/88">
+            <span style={{ color: theme.tickerLabel }}>{planet.name}</span>
+            <span style={{ color: theme.tickerText }}>
               {planet.sign} {planet.degree}
             </span>
             {idx < allPlanets.length - 1 && (
@@ -833,7 +942,7 @@ export default function ReadingIntakeScreen() {
         ))}
       </span>
     );
-  }, [allPlanets]);
+  }, [allPlanets, theme]);
 
   // ── Render individual card content ──────────────────────────────────
   const renderCardContent = (index: number) => {
@@ -1333,20 +1442,6 @@ export default function ReadingIntakeScreen() {
           will-change: transform, opacity;
         }
 
-        .hero-halo {
-          position: absolute;
-          left: 50%;
-          top: -30%;
-          width: 18rem;
-          height: 18rem;
-          transform: translateX(-50%);
-          border-radius: 9999px;
-          background: radial-gradient(circle, rgba(94, 234, 212, 0.12) 0%, rgba(94, 234, 212, 0.05) 34%, transparent 70%);
-          filter: blur(28px);
-          pointer-events: none;
-          z-index: 0;
-        }
-
         .glow-light-bar {
           position: relative;
           height: 2.5px;
@@ -1376,7 +1471,7 @@ export default function ReadingIntakeScreen() {
           inset: -1px;
           border-radius: 24px;
           background:
-            radial-gradient(circle at 20% 20%, rgba(94, 234, 212, 0.14), transparent 42%),
+            radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.14), transparent 42%),
             radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%),
             linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03));
           opacity: 0;
@@ -1394,9 +1489,9 @@ export default function ReadingIntakeScreen() {
           z-index: 0;
           pointer-events: none;
           box-shadow:
-            0 0 0 1px rgba(94, 234, 212, 0.14),
+            0 0 0 1px rgba(45, 212, 191, 0.14),
             0 10px 30px rgba(20, 184, 166, 0.14),
-            0 0 24px rgba(94, 234, 212, 0.08);
+            0 0 24px rgba(45, 212, 191, 0.08);
           transition: opacity 260ms ease;
         }
 
@@ -1620,13 +1715,18 @@ export default function ReadingIntakeScreen() {
               <div className="hero-halo opacity-70" aria-hidden="true" />
 
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full border border-teal-300/15 bg-teal-300/[0.05] px-3 py-1">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-teal-200/70">
+                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.ring}`, backgroundColor: theme.tagBg }}>
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.primary }}>
                     Your Year Ahead
                   </span>
                 </div>
 
-                <h1 className="bg-gradient-to-b from-white via-white to-teal-200/72 bg-clip-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.45)] sm:text-[48px]">
+                <h1 
+                  className="bg-gradient-to-b from-white via-white bg-clip-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.45)] sm:text-[48px]"
+                  style={{ 
+                    backgroundImage: `linear-gradient(to bottom, #ffffff, #ffffff, ${theme.primary})` 
+                  }}
+                >
                   Future Direct Insights
                 </h1>
 
@@ -1666,7 +1766,7 @@ export default function ReadingIntakeScreen() {
                         style={{
                           boxShadow: onCooldown
                             ? "0 0 8px rgba(99,102,241,0.6)"
-                            : "0 0 8px rgba(94,234,212,0.6)",
+                            : `0 0 8px ${theme.glow}`,
                         }}
                       />
                     )}
@@ -1779,12 +1879,12 @@ export default function ReadingIntakeScreen() {
                         isSelected
                           ? shouldReduceMotion
                             ? {
-                                backgroundColor: "rgba(45, 212, 191, 0.08)",
-                                borderColor: "rgba(94, 234, 212, 0.45)",
+                                backgroundColor: `rgba(45, 212, 191, 0.08)`,
+                                borderColor: `rgba(94, 234, 212, 0.45)`,
                               }
                             : {
-                                backgroundColor: "rgba(45, 212, 191, 0.10)",
-                                borderColor: "rgba(94, 234, 212, 0.55)",
+                                backgroundColor: `rgba(45, 212, 191, 0.10)`,
+                                borderColor: `rgba(94, 234, 212, 0.55)`,
                                 y: -2,
                               }
                           : {
@@ -1821,7 +1921,7 @@ export default function ReadingIntakeScreen() {
                           className={cn(
                             "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
                             isSelected
-                              ? "border-teal-300/40 bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]"
+                              ? `border-teal-300/40 bg-teal-300/10 text-teal-200 shadow-[0_0_12px_rgba(94,234,212,0.2)]`
                               : "border-white/10 bg-black/20 text-slate-300"
                           )}
                         >
