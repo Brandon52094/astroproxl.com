@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -120,7 +120,7 @@ interface TodayTransitPlanet {
 }
 
 // ── THEME SYSTEM ──────────────────────────────────────────────────────
-type ThemeName = "teal" | "earth" | "water" | "fire" | "air";
+type ThemeName = "teal" | "earth";
 
 interface ThemeColors {
   name: ThemeName;
@@ -133,11 +133,7 @@ interface ThemeColors {
   selectedGlow: string;
   selectedIcon: string;
   selectedTag: string;
-  tickerTagBg: string;
-  tickerTagText: string;
-  tickerDataText: string;
   accentLine: string;
-  // Per-area color gradients
   areaColors: {
     love: { bg: string; border: string; glow: string; text: string; gradient: string };
     money: { bg: string; border: string; glow: string; text: string; gradient: string };
@@ -160,9 +156,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     selectedGlow: "rgba(45,212,191,0.15)",
     selectedIcon: "#5EEAD4",
     selectedTag: "#5EEAD4",
-    tickerTagBg: "rgba(45,212,191,0.10)",
-    tickerTagText: "#5EEAD4",
-    tickerDataText: "rgba(226,232,240,0.88)",
     accentLine: "#2DD4BF",
     areaColors: {
       love: {
@@ -220,9 +213,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     selectedGlow: "rgba(37,75,58,0.15)",
     selectedIcon: "#D1C2A6",
     selectedTag: "#D1C2A6",
-    tickerTagBg: "#3A2B24",
-    tickerTagText: "#D1C2A6",
-    tickerDataText: "rgba(226,232,240,0.88)",
     accentLine: "#254B3A",
     areaColors: {
       love: {
@@ -268,201 +258,8 @@ const THEMES: Record<ThemeName, ThemeColors> = {
         gradient: "linear-gradient(135deg, rgba(209,194,166,0.08), rgba(37,75,58,0.04))"
       }
     }
-  },
-  water: {
-    name: "water",
-    tagBg: "#123C66",
-    tagText: "#FFF3E6",
-    gradientEnd: "#123C66",
-    progressBar: "#2E6FB6",
-    unselectedBorder: "#123C66",
-    selectedBorder: "#FFF3E6",
-    selectedGlow: "rgba(46,111,182,0.15)",
-    selectedIcon: "#FFF3E6",
-    selectedTag: "#FFF3E6",
-    tickerTagBg: "#071A33",
-    tickerTagText: "#FFF3E6",
-    tickerDataText: "rgba(226,232,240,0.88)",
-    accentLine: "#2E6FB6",
-    areaColors: {
-      love: {
-        bg: "rgba(255,243,230,0.08)",
-        border: "rgba(255,243,230,0.30)",
-        glow: "rgba(255,243,230,0.10)",
-        text: "#FFF3E6",
-        gradient: "linear-gradient(135deg, rgba(255,243,230,0.12), rgba(46,111,182,0.08))"
-      },
-      money: {
-        bg: "rgba(46,111,182,0.10)",
-        border: "rgba(46,111,182,0.35)",
-        glow: "rgba(46,111,182,0.12)",
-        text: "#FFF3E6",
-        gradient: "linear-gradient(135deg, rgba(46,111,182,0.14), rgba(18,60,102,0.08))"
-      },
-      career: {
-        bg: "rgba(7,26,51,0.12)",
-        border: "rgba(255,243,230,0.25)",
-        glow: "rgba(7,26,51,0.12)",
-        text: "#FFF3E6",
-        gradient: "linear-gradient(135deg, rgba(7,26,51,0.14), rgba(18,60,102,0.08))"
-      },
-      other: {
-        bg: "rgba(46,111,182,0.08)",
-        border: "rgba(46,111,182,0.30)",
-        glow: "rgba(46,111,182,0.10)",
-        text: "#FFF3E6",
-        gradient: "linear-gradient(135deg, rgba(46,111,182,0.12), rgba(7,26,51,0.08))"
-      },
-      cta: {
-        bg: "rgba(18,60,102,0.30)",
-        border: "rgba(255,243,230,0.45)",
-        glow: "rgba(46,111,182,0.25)",
-        text: "#FFF3E6",
-        gradient: "linear-gradient(180deg, #123C66 0%, #0B2D4B 100%)"
-      },
-      hero: {
-        bg: "rgba(255,243,230,0.04)",
-        border: "rgba(255,243,230,0.15)",
-        glow: "rgba(255,243,230,0.06)",
-        text: "#FFF3E6",
-        gradient: "linear-gradient(135deg, rgba(255,243,230,0.08), rgba(46,111,182,0.04))"
-      }
-    }
-  },
-  fire: {
-    name: "fire",
-    tagBg: "#4A1A1A",
-    tagText: "#F5E6D3",
-    gradientEnd: "#E8C87A",
-    progressBar: "#C44A2A",
-    unselectedBorder: "#C44A2A",
-    selectedBorder: "#E8C87A",
-    selectedGlow: "rgba(196,74,42,0.15)",
-    selectedIcon: "#E8C87A",
-    selectedTag: "#E8C87A",
-    tickerTagBg: "#2E0F0F",
-    tickerTagText: "#F5E6D3",
-    tickerDataText: "rgba(226,232,240,0.88)",
-    accentLine: "#C44A2A",
-    areaColors: {
-      love: {
-        bg: "rgba(232,200,122,0.08)",
-        border: "rgba(232,200,122,0.30)",
-        glow: "rgba(232,200,122,0.10)",
-        text: "#E8C87A",
-        gradient: "linear-gradient(135deg, rgba(232,200,122,0.12), rgba(196,74,42,0.08))"
-      },
-      money: {
-        bg: "rgba(196,74,42,0.10)",
-        border: "rgba(196,74,42,0.35)",
-        glow: "rgba(196,74,42,0.12)",
-        text: "#F5E6D3",
-        gradient: "linear-gradient(135deg, rgba(196,74,42,0.14), rgba(74,26,26,0.08))"
-      },
-      career: {
-        bg: "rgba(74,26,26,0.12)",
-        border: "rgba(232,200,122,0.25)",
-        glow: "rgba(74,26,26,0.12)",
-        text: "#F5E6D3",
-        gradient: "linear-gradient(135deg, rgba(74,26,26,0.14), rgba(46,15,15,0.08))"
-      },
-      other: {
-        bg: "rgba(196,74,42,0.08)",
-        border: "rgba(196,74,42,0.30)",
-        glow: "rgba(196,74,42,0.10)",
-        text: "#F5E6D3",
-        gradient: "linear-gradient(135deg, rgba(196,74,42,0.12), rgba(232,200,122,0.06))"
-      },
-      cta: {
-        bg: "rgba(74,26,26,0.30)",
-        border: "rgba(232,200,122,0.45)",
-        glow: "rgba(196,74,42,0.25)",
-        text: "#F5E6D3",
-        gradient: "linear-gradient(180deg, #4A1A1A 0%, #2E0F0F 100%)"
-      },
-      hero: {
-        bg: "rgba(232,200,122,0.04)",
-        border: "rgba(232,200,122,0.15)",
-        glow: "rgba(232,200,122,0.06)",
-        text: "#F5E6D3",
-        gradient: "linear-gradient(135deg, rgba(232,200,122,0.08), rgba(196,74,42,0.04))"
-      }
-    }
-  },
-  air: {
-    name: "air",
-    tagBg: "#A2A9B3",
-    tagText: "#F7F8FA",
-    gradientEnd: "#D6DBE2",
-    progressBar: "#F2B705",
-    unselectedBorder: "#A2A9B3",
-    selectedBorder: "#F2B705",
-    selectedGlow: "rgba(214,219,226,0.15)",
-    selectedIcon: "#F2B705",
-    selectedTag: "#F2B705",
-    tickerTagBg: "#2B2D3A",
-    tickerTagText: "#F7F8FA",
-    tickerDataText: "rgba(226,232,240,0.88)",
-    accentLine: "#F2B705",
-    areaColors: {
-      love: {
-        bg: "rgba(242,183,5,0.08)",
-        border: "rgba(242,183,5,0.30)",
-        glow: "rgba(242,183,5,0.10)",
-        text: "#F2B705",
-        gradient: "linear-gradient(135deg, rgba(242,183,5,0.12), rgba(214,219,226,0.08))"
-      },
-      money: {
-        bg: "rgba(214,219,226,0.10)",
-        border: "rgba(214,219,226,0.35)",
-        glow: "rgba(214,219,226,0.12)",
-        text: "#F7F8FA",
-        gradient: "linear-gradient(135deg, rgba(214,219,226,0.14), rgba(162,169,179,0.08))"
-      },
-      career: {
-        bg: "rgba(43,45,58,0.12)",
-        border: "rgba(242,183,5,0.25)",
-        glow: "rgba(43,45,58,0.12)",
-        text: "#F7F8FA",
-        gradient: "linear-gradient(135deg, rgba(43,45,58,0.14), rgba(162,169,179,0.08))"
-      },
-      other: {
-        bg: "rgba(162,169,179,0.08)",
-        border: "rgba(162,169,179,0.30)",
-        glow: "rgba(162,169,179,0.10)",
-        text: "#F7F8FA",
-        gradient: "linear-gradient(135deg, rgba(162,169,179,0.12), rgba(242,183,5,0.06))"
-      },
-      cta: {
-        bg: "rgba(43,45,58,0.30)",
-        border: "rgba(242,183,5,0.45)",
-        glow: "rgba(214,219,226,0.20)",
-        text: "#F7F8FA",
-        gradient: "linear-gradient(180deg, #2B2D3A 0%, #1F222D 100%)"
-      },
-      hero: {
-        bg: "rgba(214,219,226,0.04)",
-        border: "rgba(214,219,226,0.15)",
-        glow: "rgba(214,219,226,0.06)",
-        text: "#F7F8FA",
-        gradient: "linear-gradient(135deg, rgba(214,219,226,0.08), rgba(162,169,179,0.04))"
-      }
-    }
   }
 };
-
-function getElementFromSign(sign: string): ThemeName {
-  const earthSigns = ["Taurus", "Virgo", "Capricorn"];
-  const waterSigns = ["Cancer", "Scorpio", "Pisces"];
-  const fireSigns = ["Aries", "Leo", "Sagittarius"];
-  const airSigns = ["Gemini", "Libra", "Aquarius"];
-
-  if (earthSigns.includes(sign)) return "earth";
-  if (waterSigns.includes(sign)) return "water";
-  if (fireSigns.includes(sign)) return "fire";
-  if (airSigns.includes(sign)) return "air";
-  return "teal";
-}
 
 function getMoonGlyph(phaseName: string): string {
   const glyphs: Record<string, string> = {
@@ -519,29 +316,14 @@ export default function ReadingIntakeScreen() {
   // ── Transit & Moon state ────────────────────────────────────────────
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
-  const [todayMoon, setTodayMoon] = useState<TodayTransitPlanet | null>(null);
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
-  const [chartData, setChartDataState] = useState<any>(null);
 
   // ── Theme state ──────────────────────────────────────────────────────
   const [theme, setTheme] = useState<ThemeColors>(THEMES.teal);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
-  // ── Scrub state ──────────────────────────────────────────────────────
-  const [isScrubbing, setIsScrubbing] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [scrubOffset, setScrubOffset] = useState(0);
-  const statusBarRef = useRef<HTMLDivElement | null>(null);
-  const dragStartX = useRef<number | null>(null);
-  const dragStartOffset = useRef<number>(0);
-  const autoResumeTimer = useRef<NodeJS.Timeout | null>(null);
-  const carouselRef = useRef<HTMLDivElement | null>(null);
-
   // ── Glitch state ─────────────────────────────────────────────────────
-  const [glitchActive, setGlitchActive] = useState(false);
-  const [glitchOffset, setGlitchOffset] = useState(0);
-  const [glitchColor, setGlitchColor] = useState<"cyan" | "magenta" | "yellow" | null>(null);
-  const glitchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // REMOVED — Coming Soon section is now static
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -560,45 +342,11 @@ export default function ReadingIntakeScreen() {
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // ── Glitch effect handler ───────────────────────────────────────────
-  const triggerGlitch = useCallback(() => {
-    if (shouldReduceMotion) return;
-    const offset = (Math.random() - 0.5) * 6;
-    const colors: ("cyan" | "magenta" | "yellow")[] = ["cyan", "magenta", "yellow"];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    setGlitchOffset(offset);
-    setGlitchColor(color);
-    setGlitchActive(true);
-    if (glitchTimeoutRef.current) {
-      clearTimeout(glitchTimeoutRef.current);
-    }
-    glitchTimeoutRef.current = setTimeout(() => {
-      setGlitchActive(false);
-      setGlitchOffset(0);
-      setGlitchColor(null);
-    }, 80 + Math.random() * 70);
-  }, [shouldReduceMotion]);
+  // REMOVED — no longer needed
 
   useEffect(() => {
-    if (shouldReduceMotion) return;
-    const intervals: NodeJS.Timeout[] = [];
-    const randomGlitch = setInterval(() => {
-      if (Math.random() > 0.4) {
-        triggerGlitch();
-      }
-    }, 3000 + Math.random() * 5000);
-    intervals.push(randomGlitch);
-    const doubleGlitch = setInterval(() => {
-      if (Math.random() > 0.7) {
-        triggerGlitch();
-        setTimeout(() => triggerGlitch(), 150 + Math.random() * 200);
-      }
-    }, 8000 + Math.random() * 4000);
-    intervals.push(doubleGlitch);
-    return () => {
-      intervals.forEach(clearInterval);
-      if (glitchTimeoutRef.current) clearTimeout(glitchTimeoutRef.current);
-    };
-  }, [triggerGlitch, shouldReduceMotion]);
+    // REMOVED — glitch intervals no longer needed
+  }, []); // Empty dependency array
 
   const stars = useMemo(
     () =>
@@ -703,8 +451,6 @@ export default function ReadingIntakeScreen() {
       transits?: TodayTransitPlanet[];
     };
 
-    setChartDataState(data);
-
     const planets = data.tropical?.planets ?? [];
 
     const planetOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
@@ -734,9 +480,7 @@ export default function ReadingIntakeScreen() {
 
     if (data.transits) {
       const todaySunPlanet = data.transits.find((p) => p.name === "Sun") ?? null;
-      const todayMoonPlanet = data.transits.find((p) => p.name === "Moon") ?? null;
       setTodaySun(todaySunPlanet);
-      setTodayMoon(todayMoonPlanet);
       const transitOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
       const allTransits: TodayTransitPlanet[] = [];
       transitOrder.forEach(name => {
@@ -748,17 +492,11 @@ export default function ReadingIntakeScreen() {
       setTodayPlanets(allTransits);
     }
 
-    // ── Set theme based on Sun sign ──────────────────────────────────
-     const isUserSubscribed = userStatus?.isSubscribed || false;
-  setIsSubscribed(isUserSubscribed);
-
-  if (sun) {
-    const element = getElementFromSign(sun.sign);
-    setTheme(THEMES[element]);
-  } else {
-    setTheme(THEMES.teal);
-  }
-}, [chartStatus, userStatus]);
+    // ── Set theme ──────────────────────────────────────────────────────
+    const isUserSubscribed = userStatus?.isSubscribed || false;
+    setIsSubscribed(isUserSubscribed);
+    setTheme(isUserSubscribed ? THEMES.earth : THEMES.teal);
+  }, [chartStatus, userStatus]);
 
   // ── Load nickname ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1023,46 +761,6 @@ export default function ReadingIntakeScreen() {
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
-  // ── Scrub handlers ───────────────────────────────────────────────────
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    const target = e.currentTarget;
-    target.setPointerCapture(e.pointerId);
-    dragStartX.current = e.clientX;
-    dragStartOffset.current = scrubOffset;
-    setIsScrubbing(true);
-    setIsPaused(true);
-    if (autoResumeTimer.current) {
-      clearTimeout(autoResumeTimer.current);
-      autoResumeTimer.current = null;
-    }
-  }, [scrubOffset]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isScrubbing || dragStartX.current === null) return;
-    const delta = e.clientX - dragStartX.current;
-    const newOffset = dragStartOffset.current + delta * 0.3;
-    setScrubOffset(newOffset);
-  }, [isScrubbing]);
-
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
-    target.releasePointerCapture(e.pointerId);
-    setIsScrubbing(false);
-    if (autoResumeTimer.current) {
-      clearTimeout(autoResumeTimer.current);
-    }
-    autoResumeTimer.current = setTimeout(() => {
-      setIsPaused(false);
-      autoResumeTimer.current = null;
-    }, 1500);
-  }, []);
-
-  const handleTap = useCallback(() => {
-    if (isScrubbing) return;
-    setIsPaused(!isPaused);
-  }, [isPaused, isScrubbing]);
-
   // ── Carousel navigation ─────────────────────────────────────────────
   const totalCards = 5;
   const cardTitles = [
@@ -1142,68 +840,9 @@ export default function ReadingIntakeScreen() {
   // ── Cleanup ──────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (autoResumeTimer.current) {
-        clearTimeout(autoResumeTimer.current);
-        autoResumeTimer.current = null;
-      }
+      // no timers to clean up anymore
     };
   }, []);
-
-  // ── Get the ticker content ──────────────────────────────────────────
-  const getDailyTickerContent = useCallback(() => {
-    return (
-      <span className="flex items-center gap-3 text-[11px]" style={{ color: theme.tickerDataText }}>
-        <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ 
-          color: theme.tickerTagText, 
-          backgroundColor: theme.tickerTagBg,
-          borderColor: theme.accentLine,
-          borderWidth: 1
-        }}>
-          Daily
-        </span>
-        {todayPlanets.map((planet, idx) => (
-          <React.Fragment key={idx}>
-            <span style={{ color: theme.tickerTagText, opacity: 0.45 }}>{planet.name}</span>
-            <span style={{ color: theme.tickerDataText }}>
-              {planet.sign} {planet.degree}
-            </span>
-            {planet.isRetrograde && (
-              <span style={{ color: theme.accentLine }}>℞</span>
-            )}
-            {idx < todayPlanets.length - 1 && (
-              <span className="text-white/16">•</span>
-            )}
-          </React.Fragment>
-        ))}
-      </span>
-    );
-  }, [todayPlanets, theme]);
-
-  const getNatalTickerContent = useCallback(() => {
-    return (
-      <span className="flex items-center gap-3 text-[11px]" style={{ color: theme.tickerDataText }}>
-        <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em]" style={{ 
-          color: theme.tickerTagText, 
-          backgroundColor: theme.tickerTagBg,
-          borderColor: theme.accentLine,
-          borderWidth: 1
-        }}>
-          Natal
-        </span>
-        {allPlanets.map((planet, idx) => (
-          <React.Fragment key={idx}>
-            <span style={{ color: theme.tickerTagText, opacity: 0.45 }}>{planet.name}</span>
-            <span style={{ color: theme.tickerDataText }}>
-              {planet.sign} {planet.degree}
-            </span>
-            {idx < allPlanets.length - 1 && (
-              <span className="text-white/16">•</span>
-            )}
-          </React.Fragment>
-        ))}
-      </span>
-    );
-  }, [allPlanets, theme]);
 
   // ── Render individual card content ──────────────────────────────────
   const renderCardContent = (index: number) => {
@@ -1386,7 +1025,7 @@ export default function ReadingIntakeScreen() {
     if (!isSelected) {
       return {
         backgroundColor: "rgba(255, 255, 255, 0.03)",
-        borderColor: theme.name === "fire" ? "rgba(196, 74, 42, 0.35)" : theme.unselectedBorder,
+        borderColor: theme.unselectedBorder,
         y: 0,
       };
     }
@@ -1402,18 +1041,10 @@ export default function ReadingIntakeScreen() {
   const getGlowOverlay = (areaId: string) => {
     const areaColors = getAreaColors(areaId);
     
-    switch (theme.name) {
-      case "water":
-        return `radial-gradient(circle at 50% 45%, rgba(255,243,230,0.10), ${areaColors.glow} 34%, rgba(18,60,102,0.06) 54%, transparent 74%)`;
-      case "earth":
-        return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(37,75,58,0.08) 38%, transparent 72%)`;
-      case "air":
-        return `radial-gradient(circle at 50% 45%, ${areaColors.glow}, rgba(214,219,226,0.08) 34%, rgba(242,183,5,0.05) 56%, transparent 74%)`;
-      case "fire":
-        return `radial-gradient(circle at 50% 45%, ${areaColors.glow}, rgba(196,74,42,0.09) 34%, rgba(232,200,122,0.06) 58%, transparent 76%)`;
-      default:
-        return `radial-gradient(circle at 50% 50%, ${theme.selectedGlow}, rgba(0,0,0,0) 72%)`;
+    if (theme.name === "earth") {
+      return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(37,75,58,0.08) 38%, transparent 72%)`;
     }
+    return `radial-gradient(circle at 50% 50%, ${theme.selectedGlow}, rgba(0,0,0,0) 72%)`;
   };
 
   // Get icon tile shadow based on area
@@ -1424,70 +1055,38 @@ export default function ReadingIntakeScreen() {
 
   // Get badge background based on theme
   const getBadgeBackground = () => {
-    switch (theme.name) {
-      case "water":
-        return "#071A33";
-      case "earth":
-        return "rgba(37,75,58,0.28)";
-      case "air":
-        return "#2B2D3A";
-      case "fire":
-        return "#2E0F0F";
-      default:
-        return theme.selectedGlow;
+    if (theme.name === "earth") {
+      return "rgba(37,75,58,0.28)";
     }
+    return theme.selectedGlow;
   };
 
   // Get badge shadow based on theme
   const getBadgeShadow = () => {
-    switch (theme.name) {
-      case "water":
-        return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(46,111,182,0.08)";
-      case "air":
-        return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(214,219,226,0.05)";
-      case "fire":
-        return "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(196,74,42,0.08)";
-      default:
-        return undefined;
+    if (theme.name === "earth") {
+      return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(37,75,58,0.08)";
     }
+    return undefined;
   };
 
   // Get CTA background based on theme
   const getCTABackground = () => {
-    switch (theme.name) {
-      case "water":
-        return "linear-gradient(180deg, #123C66 0%, #0B2D4B 100%)";
-      case "earth":
-        return "linear-gradient(180deg, #254B3A 0%, #1E352A 100%)";
-      case "air":
-        return "linear-gradient(180deg, #2B2D3A 0%, #1F222D 100%)";
-      case "fire":
-        return "linear-gradient(180deg, #4A1A1A 0%, #2E0F0F 100%)";
-      default:
-        return "rgba(0,0,0,0.40)";
+    if (theme.name === "earth") {
+      return "linear-gradient(180deg, #254B3A 0%, #1E352A 100%)";
     }
+    return "rgba(0,0,0,0.40)";
   };
 
   // Get CTA shadow based on theme
   const getCTAShadow = () => {
-    switch (theme.name) {
-      case "water":
-        return "0 10px 30px rgba(46,111,182,0.24), inset 0 1px 0 rgba(255,255,255,0.08)";
-      case "earth":
-        return "0 10px 30px rgba(37,75,58,0.28), inset 0 1px 0 rgba(255,255,255,0.06)";
-      case "air":
-        return "0 10px 28px rgba(214,219,226,0.10), inset 0 1px 0 rgba(255,255,255,0.08)";
-      case "fire":
-        return "0 10px 28px rgba(196,74,42,0.14), inset 0 1px 0 rgba(255,255,255,0.06)";
-      default:
-        return `0 4px 24px ${theme.selectedGlow}`;
+    if (theme.name === "earth") {
+      return "0 10px 30px rgba(37,75,58,0.28), inset 0 1px 0 rgba(255,255,255,0.06)";
     }
+    return `0 4px 24px ${theme.selectedGlow}`;
   };
 
   // Get textarea focus styles based on theme
-  const getTextareaFocusStyles = (isFocused: boolean, areaId: string) => {
-    const areaColors = getAreaColors(areaId);
-    
+  const getTextareaFocusStyles = (isFocused: boolean) => {
     if (!isFocused) {
       return {
         borderColor: "rgba(255,255,255,0.10)",
@@ -1495,33 +1094,16 @@ export default function ReadingIntakeScreen() {
       };
     }
 
-    switch (theme.name) {
-      case "water":
-        return {
-          borderColor: "#2E6FB6",
-          boxShadow: `0 0 22px ${areaColors.glow}`,
-        };
-      case "earth":
-        return {
-          borderColor: "#254B3A",
-          boxShadow: `0 0 22px ${areaColors.glow}`,
-        };
-      case "air":
-        return {
-          borderColor: "#F2B705",
-          boxShadow: `0 0 20px ${areaColors.glow}`,
-        };
-      case "fire":
-        return {
-          borderColor: "rgba(232,200,122,0.42)",
-          boxShadow: `0 0 22px ${areaColors.glow}`,
-        };
-      default:
-        return {
-          borderColor: theme.accentLine,
-          boxShadow: `0 0 22px ${theme.selectedGlow}`,
-        };
+    if (theme.name === "earth") {
+      return {
+        borderColor: "#254B3A",
+        boxShadow: "0 0 22px rgba(37,75,58,0.25)",
+      };
     }
+    return {
+      borderColor: theme.accentLine,
+      boxShadow: `0 0 22px ${theme.selectedGlow}`,
+    };
   };
 
   return (
@@ -1670,143 +1252,11 @@ export default function ReadingIntakeScreen() {
             0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
-        @keyframes glitchFlicker {
-          0%, 100% { opacity: 0; }
-          10% { opacity: 1; }
-          20% { opacity: 0; }
-          30% { opacity: 1; }
-          32% { opacity: 0; }
-          35% { opacity: 1; }
-          40% { opacity: 0; }
-          100% { opacity: 0; }
-        }
+        // ── GLITCH STYLES REMOVED ──
 
-        @keyframes glitchScanline {
-          0% { transform: translateY(-100%); }
-          100% { transform: translateY(100%); }
-        }
+        // ── GLITCH STYLES REMOVED ──
 
-        .glitch-container {
-          position: relative;
-          overflow: hidden;
-          transition: all 0.05s ease;
-        }
-
-        .glitch-container::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          z-index: 10;
-          background: repeating-linear-gradient(
-            0deg,
-            rgba(0, 0, 0, 0) 0px,
-            rgba(0, 0, 0, 0) 3px,
-            rgba(255, 255, 255, 0.03) 3px,
-            rgba(255, 255, 255, 0.03) 4px,
-            rgba(0, 0, 0, 0) 4px,
-            rgba(0, 0, 0, 0) 6px
-          );
-          opacity: 0;
-          animation: none;
-        }
-
-        .glitch-container.glitching::after {
-          opacity: 0.4;
-          animation: glitchScanline 0.4s linear infinite;
-        }
-
-        .glitch-layer {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          z-index: 5;
-          mix-blend-mode: screen;
-          opacity: 0;
-          transition: opacity 0.05s ease;
-        }
-
-        .glitch-layer.active {
-          opacity: 0.35;
-        }
-
-        .glitch-layer-cyan {
-          background: rgba(0, 255, 255, 0.15);
-          transform: translateX(var(--glitch-offset, 0px));
-          clip-path: inset(20% 0 60% 0);
-        }
-
-        .glitch-layer-magenta {
-          background: rgba(255, 0, 255, 0.12);
-          transform: translateX(calc(var(--glitch-offset, 0px) * -0.7));
-          clip-path: inset(50% 0 10% 0);
-        }
-
-        .glitch-layer-yellow {
-          background: rgba(255, 255, 0, 0.1);
-          transform: translateX(calc(var(--glitch-offset, 0px) * 0.5));
-          clip-path: inset(70% 0 5% 0);
-        }
-
-        .glitch-text {
-          position: relative;
-          z-index: 2;
-          transition: all 0.05s ease;
-        }
-
-        .glitch-text.glitching {
-          text-shadow:
-            2px 0 rgba(0, 255, 255, 0.6),
-            -2px 0 rgba(255, 0, 255, 0.6),
-            0 0 20px rgba(129, 140, 248, 0.3);
-          letter-spacing: 0.5px;
-        }
-
-        @keyframes glitchPulse {
-          0%, 100% {
-            box-shadow:
-              0 0 0 1px rgba(129, 140, 248, 0.2),
-              0 0 30px rgba(129, 140, 248, 0.06),
-              0 0 60px rgba(129, 140, 248, 0.03);
-          }
-          25% {
-            box-shadow:
-              0 0 0 1px rgba(0, 255, 255, 0.4),
-              0 0 40px rgba(0, 255, 255, 0.15),
-              0 0 80px rgba(0, 255, 255, 0.06);
-          }
-          50% {
-            box-shadow:
-              0 0 0 1px rgba(255, 0, 255, 0.4),
-              0 0 40px rgba(255, 0, 255, 0.15),
-              0 0 80px rgba(255, 0, 255, 0.06);
-          }
-          75% {
-            box-shadow:
-              0 0 0 1px rgba(255, 255, 0, 0.4),
-              0 0 40px rgba(255, 255, 0, 0.15),
-              0 0 80px rgba(255, 255, 0, 0.06);
-          }
-        }
-
-        .glitch-border {
-          animation: glitchPulse 3.2s ease-in-out infinite;
-          position: relative;
-        }
-
-        @keyframes sparkleBurst {
-          0% { opacity: 0; transform: scale(0) rotate(0deg); }
-          50% { opacity: 1; transform: scale(1.8) rotate(180deg); }
-          100% { opacity: 0; transform: scale(0.5) rotate(360deg); }
-        }
-
-        .sparkle-burst {
-          position: absolute;
-          border-radius: 50%;
-          pointer-events: none;
-          z-index: 8;
-          animation: sparkleBurst 0.8s ease-out forwards;
-        }
+        // ── GLITCH STYLES REMOVED ──
 
         @keyframes driftGradient {
           0% { background-position: 0% 50%; }
@@ -2051,9 +1501,6 @@ export default function ReadingIntakeScreen() {
           .carousel-container::after {
             animation: none !important;
             opacity: 0.4 !important;
-          }
-          .glitch-container.glitching::after {
-            opacity: 0 !important;
           }
           .carousel-track {
             transition: none !important;
@@ -2415,12 +1862,12 @@ export default function ReadingIntakeScreen() {
                         outlineColor: theme.accentLine,
                       }}
                       onFocus={(e) => {
-                        const styles = getTextareaFocusStyles(true, selectedArea);
+                        const styles = getTextareaFocusStyles(true);
                         e.currentTarget.style.borderColor = styles.borderColor;
                         e.currentTarget.style.boxShadow = styles.boxShadow;
                       }}
                       onBlur={(e) => {
-                        const styles = getTextareaFocusStyles(false, selectedArea);
+                        const styles = getTextareaFocusStyles(false);
                         e.currentTarget.style.borderColor = styles.borderColor;
                         e.currentTarget.style.boxShadow = styles.boxShadow;
                       }}
@@ -2596,7 +2043,7 @@ export default function ReadingIntakeScreen() {
             </div>
           </div>
 
-          {/* ── ENHANCED COMING SOON WITH GLITCH ────────────────────── */}
+          {/* ── COMING SOON — Static (glitch removed, rotating border kept) ── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -2610,35 +2057,9 @@ export default function ReadingIntakeScreen() {
               </span>
             </div>
             <div
-              className={cn(
-                "glitch-border glitch-container relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none",
-                glitchActive && "glitching"
-              )}
-              style={{
-                "--glitch-offset": `${glitchOffset}px`,
-              } as React.CSSProperties}
+              className="relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
               aria-hidden="true"
             >
-              {/* ── Glitch layers ── */}
-              <div
-                className={cn(
-                  "glitch-layer glitch-layer-cyan",
-                  glitchActive && glitchColor === "cyan" && "active"
-                )}
-              />
-              <div
-                className={cn(
-                  "glitch-layer glitch-layer-magenta",
-                  glitchActive && glitchColor === "magenta" && "active"
-                )}
-              />
-              <div
-                className={cn(
-                  "glitch-layer glitch-layer-yellow",
-                  glitchActive && glitchColor === "yellow" && "active"
-                )}
-              />
-
               {/* ── Sparkles ── */}
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
@@ -2674,28 +2095,16 @@ export default function ReadingIntakeScreen() {
 
               {/* ── Gradient overlay ── */}
               <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
-              {/* ── Lock overlay with glitch text ── */}
+              
+              {/* ── Lock overlay ── */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
                   <div
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10 transition-all duration-100",
-                      glitchActive && "border-cyan-400/60 bg-cyan-400/20"
-                    )}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10"
                   >
-                    <Lock
-                      className={cn(
-                        "h-4 w-4 text-indigo-300/70 transition-all duration-100",
-                        glitchActive && "text-cyan-300"
-                      )}
-                    />
+                    <Lock className="h-4 w-4 text-indigo-300/70" />
                   </div>
-                  <span
-                    className={cn(
-                      "glitch-text text-[11px] tracking-wide text-indigo-300/60 transition-all duration-100",
-                      glitchActive && "glitching"
-                    )}
-                  >
+                  <span className="text-[11px] tracking-wide text-indigo-300/60">
                     Something Great is in Development — Coming Soon
                   </span>
                 </div>
