@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -282,28 +282,6 @@ function formatTimeRemaining(expiresAt: string): string {
   const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   if (days > 0) return `${days}d ${hours}h`;
   return `${hours}h`;
-}
-
-// Converts a hex color (e.g. "#5EEAD4") to an rgba() string at the given alpha.
-// Falls back gracefully if it's already an rgba()/rgb() string.
-function hexToRgba(color: string, alpha: number): string {
-  if (color.startsWith("rgba(") || color.startsWith("rgb(")) {
-    const nums = color.match(/[\d.]+/g);
-    if (!nums) return color;
-    const [r, g, b] = nums;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  const hex = color.replace("#", "");
-  const bigint = parseInt(
-    hex.length === 3
-      ? hex.split("").map((c) => c + c).join("")
-      : hex,
-    16
-  );
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export default function ReadingIntakeScreen() {
@@ -1107,6 +1085,27 @@ export default function ReadingIntakeScreen() {
     return `0 4px 24px ${theme.selectedGlow}`;
   };
 
+  // Get textarea focus styles based on theme
+  const getTextareaFocusStyles = (isFocused: boolean) => {
+    if (!isFocused) {
+      return {
+        borderColor: "rgba(255,255,255,0.10)",
+        boxShadow: "none",
+      };
+    }
+
+    if (theme.name === "earth") {
+      return {
+        borderColor: "#254B3A",
+        boxShadow: "0 0 22px rgba(37,75,58,0.25)",
+      };
+    }
+    return {
+      borderColor: theme.accentLine,
+      boxShadow: `0 0 22px ${theme.selectedGlow}`,
+    };
+  };
+
   return (
     <div
       className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
@@ -1313,27 +1312,6 @@ export default function ReadingIntakeScreen() {
           will-change: transform, opacity;
         }
 
-        .hero-color-border {
-          position: relative;
-          border-radius: 28px;
-          padding: 1.5px;
-          background: linear-gradient(
-            115deg,
-            #2dd4bf 0%,
-            #818cf8 33%,
-            #fbbf24 66%,
-            #2dd4bf 100%
-          );
-          background-size: 300% 300%;
-          animation: heroBorderShift 14s ease-in-out infinite;
-        }
-
-        @keyframes heroBorderShift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-
         .glow-light-bar {
           position: relative;
           height: 2.5px;
@@ -1381,67 +1359,9 @@ export default function ReadingIntakeScreen() {
           transition: opacity 260ms ease;
         }
 
-        .selected-card-shell[data-selected="true"]::before {
-          opacity: 1;
-        }
-
+        .selected-card-shell[data-selected="true"]::before,
         .selected-card-shell[data-selected="true"]::after {
           opacity: 1;
-          animation: selectedOutlinePulse 2.6s ease-in-out infinite;
-        }
-
-        @keyframes selectedOutlinePulse {
-          0%, 100% {
-            box-shadow:
-              0 0 0 1px var(--pulse-soft, rgba(255, 255, 255, 0.2)),
-              0 0 18px var(--pulse-soft, rgba(255, 255, 255, 0.14));
-          }
-          50% {
-            box-shadow:
-              0 0 0 1.5px var(--pulse-strong, rgba(255, 255, 255, 0.5)),
-              0 0 32px var(--pulse-strong, rgba(255, 255, 255, 0.3)),
-              0 0 52px var(--pulse-soft, rgba(255, 255, 255, 0.14));
-          }
-        }
-
-        /* Shine sweep across the selected card, tinted to its area color */
-        .card-shine-sweep {
-          position: absolute;
-          inset: 0;
-          overflow: hidden;
-          border-radius: 24px;
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        .card-shine-sweep::before {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 55%;
-          height: 100%;
-          background: linear-gradient(
-            100deg,
-            transparent 0%,
-            transparent 15%,
-            var(--shine-color, rgba(255, 255, 255, 0.4)) 50%,
-            transparent 85%,
-            transparent 100%
-          );
-          mix-blend-mode: screen;
-          opacity: 0.95;
-          transform: translateX(-140%) skewX(-12deg);
-          animation: cardShineSweep 3s ease-in-out infinite;
-        }
-
-        @keyframes cardShineSweep {
-          0%, 12% {
-            transform: translateX(-140%) skewX(-12deg);
-          }
-          55%, 100% {
-            transform: translateX(140%) skewX(-12deg);
-          }
         }
 
         .profile-name-button {
@@ -1578,10 +1498,7 @@ export default function ReadingIntakeScreen() {
           .jxl-teaser,
           .jxl-teaser::before,
           .glow-light-bar,
-          .carousel-container::after,
-          .hero-color-border,
-          .selected-card-shell[data-selected="true"]::after,
-          .card-shine-sweep::before {
+          .carousel-container::after {
             animation: none !important;
             opacity: 0.4 !important;
           }
@@ -1655,31 +1572,28 @@ export default function ReadingIntakeScreen() {
 
           {/* ── HERO: Future Direct Insights ─────────────────────────── */}
           <section className="mb-5 pt-1">
-            <div className="hero-color-border shadow-[0_8px_32px_rgba(0,0,0,0.5),0_20px_60px_rgba(0,0,0,0.3)]">
-              <div className="relative overflow-hidden rounded-[26.5px] bg-[#050816] px-5 py-7 text-center">
-                <div className="absolute inset-0 bg-white/[0.02]" aria-hidden="true" />
-                <div className="hero-halo opacity-70" aria-hidden="true" />
+            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.02] px-5 py-7 text-center shadow-[0_8px_32px_rgba(0,0,0,0.5),0_20px_60px_rgba(0,0,0,0.3)]">
+              <div className="hero-halo opacity-70" aria-hidden="true" />
 
-                <div className="relative z-10 mx-auto max-w-[560px]">
-                  <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.accentLine}`, backgroundColor: theme.areaColors.hero.bg }}>
-                    <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.areaColors.hero.text }}>
-                      Your Year Ahead
-                    </span>
-                  </div>
-
-                  <h1 
-                    className="bg-gradient-to-b from-white via-white bg-clip-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.45)] sm:text-[48px]"
-                    style={{ 
-                      backgroundImage: `linear-gradient(to bottom, #ffffff, #ffffff, ${theme.gradientEnd})` 
-                    }}
-                  >
-                    Future Direct Insights
-                  </h1>
-
-                  <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/78 sm:text-[15px]">
-                    A focused look at the patterns, timing, and momentum shaping your next chapter.
-                  </p>
+              <div className="relative z-10 mx-auto max-w-[560px]">
+                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.accentLine}`, backgroundColor: theme.areaColors.hero.bg }}>
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.areaColors.hero.text }}>
+                    Your Year Ahead
+                  </span>
                 </div>
+
+                <h1 
+                  className="bg-gradient-to-b from-white via-white bg-clip-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.45)] sm:text-[48px]"
+                  style={{ 
+                    backgroundImage: `linear-gradient(to bottom, #ffffff, #ffffff, ${theme.gradientEnd})` 
+                  }}
+                >
+                  Future Direct Insights
+                </h1>
+
+                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/78 sm:text-[15px]">
+                  A focused look at the patterns, timing, and momentum shaping your next chapter.
+                </p>
               </div>
             </div>
           </section>
@@ -1827,15 +1741,8 @@ export default function ReadingIntakeScreen() {
                         willChange: "transform, opacity",
                         '--selected-wash': areaColors.gradient,
                         '--selected-shadow': `0 0 0 1px ${areaColors.border}, 0 10px 30px ${areaColors.glow}, 0 0 24px ${areaColors.glow}`,
-                        '--pulse-soft': hexToRgba(areaColors.text, 0.35),
-                        '--pulse-strong': hexToRgba(areaColors.text, 0.8),
-                        '--shine-color': hexToRgba(areaColors.text, 0.6),
                       } as React.CSSProperties}
                     >
-                      {isSelected && !shouldReduceMotion && (
-                        <div className="card-shine-sweep" aria-hidden="true" />
-                      )}
-
                       {isSelected && (
                         <div
                           className="pointer-events-none absolute inset-0 rounded-[24px]"
@@ -1950,20 +1857,19 @@ export default function ReadingIntakeScreen() {
                       }
                       className="min-h-[132px] rounded-[24px] border px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 transition-all duration-300 focus:outline-none focus:ring-1"
                       style={{
-                        borderColor: getAreaColors(selectedArea).border,
+                        borderColor: "rgba(255,255,255,0.10)",
                         backgroundColor: "rgba(0,0,0,0.20)",
-                        boxShadow: `0 0 14px ${hexToRgba(getAreaColors(selectedArea).text, 0.10)}`,
                         outlineColor: theme.accentLine,
                       }}
                       onFocus={(e) => {
-                        const areaColors = getAreaColors(selectedArea);
-                        e.currentTarget.style.borderColor = areaColors.border;
-                        e.currentTarget.style.boxShadow = `0 0 20px ${hexToRgba(areaColors.text, 0.22)}`;
+                        const styles = getTextareaFocusStyles(true);
+                        e.currentTarget.style.borderColor = styles.borderColor;
+                        e.currentTarget.style.boxShadow = styles.boxShadow;
                       }}
                       onBlur={(e) => {
-                        const areaColors = getAreaColors(selectedArea);
-                        e.currentTarget.style.borderColor = areaColors.border;
-                        e.currentTarget.style.boxShadow = `0 0 14px ${hexToRgba(areaColors.text, 0.10)}`;
+                        const styles = getTextareaFocusStyles(false);
+                        e.currentTarget.style.borderColor = styles.borderColor;
+                        e.currentTarget.style.boxShadow = styles.boxShadow;
                       }}
                     />
                     <p className="text-xs leading-5 text-slate-400">
