@@ -11,6 +11,7 @@ import {
   Lock,
   Timer,
   Pencil,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -98,6 +99,7 @@ interface UserStatus {
 
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
+  onSwipeLeft?: () => void; // Callback to trigger swipe to next panel
 }
 
 interface NatalPlacement {
@@ -287,7 +289,10 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${hours}h`;
 }
 
-export default function ReadingIntakeScreen({ userStatus: propUserStatus }: ReadingIntakeScreenProps) {
+export default function ReadingIntakeScreen({ 
+  userStatus: propUserStatus,
+  onSwipeLeft 
+}: ReadingIntakeScreenProps) {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
@@ -1116,11 +1121,66 @@ export default function ReadingIntakeScreen({ userStatus: propUserStatus }: Read
 
         @keyframes swipePulse {
           0%, 100% { transform: translateX(0); opacity: 0.4; }
-          50% { transform: translateX(6px); opacity: 0.8; }
+          50% { transform: translateX(10px); opacity: 1; }
         }
 
         .swipe-arrow {
           animation: swipePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes swipeButtonPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
+          50% { box-shadow: 0 0 0 12px rgba(251, 191, 36, 0); }
+        }
+
+        .swipe-button-glow {
+          animation: swipeButtonPulse 2s ease-in-out infinite;
+        }
+
+        .swipe-hint-container {
+          position: relative;
+          overflow: hidden;
+          border-radius: 24px;
+          border: 1px solid rgba(251, 191, 36, 0.2);
+          background: linear-gradient(180deg, rgba(251, 191, 36, 0.06), rgba(251, 191, 36, 0.02));
+          animation: jxlAmberPulse 2.8s ease-in-out infinite;
+          cursor: pointer;
+        }
+
+        .swipe-hint-container::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
+            radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .swipe-hint-container::after {
+          content: "";
+          position: absolute;
+          inset: -40%;
+          background-image: linear-gradient(
+            120deg,
+            rgba(253, 230, 138, 0) 0%,
+            rgba(253, 230, 138, 0.12) 40%,
+            rgba(250, 204, 21, 0.3) 50%,
+            rgba(253, 230, 138, 0.12) 60%,
+            rgba(253, 230, 138, 0) 100%
+          );
+          mix-blend-mode: screen;
+          pointer-events: none;
+          opacity: 0.55;
+          transform: translateX(-60%);
+          animation: jxlShimmer 5s linear infinite;
+          z-index: 0;
+        }
+
+        .swipe-hint-container > * {
+          position: relative;
+          z-index: 1;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1130,7 +1190,10 @@ export default function ReadingIntakeScreen({ userStatus: propUserStatus }: Read
           .jxl-teaser,
           .jxl-teaser::before,
           .glow-light-bar,
-          .swipe-arrow {
+          .swipe-arrow,
+          .swipe-button-glow,
+          .swipe-hint-container,
+          .swipe-hint-container::after {
             animation: none !important;
             opacity: 0.4 !important;
           }
@@ -1535,32 +1598,86 @@ export default function ReadingIntakeScreen({ userStatus: propUserStatus }: Read
             )}
           </div>
 
-          {/* ── SWIPE HINT: Access Unlimited ── */}
+          {/* ── SWIPE HINT: Access Unlimited (replaces carousel) ── */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="mt-6 flex flex-col items-center gap-2"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+            className="mt-4"
           >
-            <div className="flex items-center gap-2 text-xs text-slate-500/60">
-              <span>Swipe left to explore</span>
-              <svg className="w-3 h-3 swipe-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              <span className="text-amber-300/40">Unlimited Access</span>
+            <div 
+              className="swipe-hint-container"
+              onClick={onSwipeLeft}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSwipeLeft?.();
+                }
+              }}
+            >
+              <div className="p-5">
+                {/* Header with icon */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-200">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <h2 className="text-[16px] font-semibold text-amber-200">
+                      Unlimited Access
+                    </h2>
+                    <p className="text-[12px] text-slate-400">
+                      Birth Chart · Transits · Moon & Cycles
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature preview pills */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {["8 Readings", "Follow Ups Free", "No Wait", "Downloads", "Full Chart"].map((feature) => (
+                    <span 
+                      key={feature}
+                      className="text-[10px] px-2.5 py-1 rounded-full border border-amber-300/10 bg-amber-300/5 text-amber-300/50"
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Gold CTA Button with swipe animation */}
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: 0.12 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSwipeLeft?.();
+                  }}
+                  className="swipe-button-glow w-full h-12 rounded-xl bg-gradient-to-r from-amber-400/20 to-amber-500/10 border border-amber-300/30 text-amber-200 text-[14px] font-semibold transition hover:bg-amber-300/30 flex items-center justify-center gap-3"
+                >
+                  <span>Swipe to Explore →</span>
+                  <svg className="w-4 h-4 swipe-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </motion.button>
+
+                {/* Dot indicators */}
+                <div className="flex justify-center gap-1.5 mt-4">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div 
+                      key={i} 
+                      className={cn(
+                        "h-1 rounded-full transition-all",
+                        i === 0 ? "w-4 bg-amber-300/40" : "w-1.5 bg-white/10"
+                      )}
+                    />
+                  ))}
+                </div>
+                <p className="text-center text-[10px] text-slate-500/40 mt-2">
+                  5 screens · swipe to navigate
+                </p>
+              </div>
             </div>
-            <div className="flex gap-1">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <div 
-                  key={i} 
-                  className={cn(
-                    "h-1 rounded-full transition-all",
-                    i === 0 ? "w-4 bg-amber-300/40" : "w-1 bg-white/10"
-                  )}
-                />
-              ))}
-            </div>
-            <p className="text-[10px] text-slate-600/50">5 screens · swipe to navigate</p>
           </motion.div>
 
           {/* ── COMING SOON — Static ── */}
