@@ -37,6 +37,15 @@ interface TransitPlanet {
   isRetrograde: boolean;
 }
 
+// Extended data type for our component
+interface MoonDisplayData extends MoonPhaseData {
+  nextSign: string;
+  ingressTime: string;
+  voidOfCourse: boolean;
+  voidEndsAt: string;
+  monthlyReturnDays: number;
+}
+
 const GLYPHS: Record<string, string> = {
   Moon: "☽",
   Mercury: "☿",
@@ -80,10 +89,10 @@ const MOON_PHASE_ORDER = [
 ];
 
 // Placeholder data - will be replaced with real calculations
-const PLACEHOLDER_MOON_DATA = {
+const PLACEHOLDER_MOON_DATA: MoonDisplayData = {
   phaseName: "Waxing Gibbous",
   illuminationPercent: 78,
-  nextEventName: "Full Moon" as const,
+  nextEventName: "Full Moon", // TypeScript infers this as "Full Moon" only
   daysUntilNextEvent: 3,
   moonSign: "Pisces",
   moonDegree: "22°",
@@ -95,7 +104,7 @@ const PLACEHOLDER_MOON_DATA = {
 };
 
 export default function MoonCyclesPanel({ userStatus }: MoonCyclesPanelProps) {
-  const [moonData, setMoonData] = useState(PLACEHOLDER_MOON_DATA);
+  const [moonData, setMoonData] = useState<MoonDisplayData>(PLACEHOLDER_MOON_DATA);
   const [retrogrades, setRetrogrades] = useState<TransitPlanet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
