@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -322,9 +322,6 @@ export default function ReadingIntakeScreen() {
   const [theme, setTheme] = useState<ThemeColors>(THEMES.teal);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
-  // ── Glitch state ─────────────────────────────────────────────────────
-  // REMOVED — Coming Soon section is now static
-
   const shouldReduceMotion = useReducedMotion();
 
   // ── Live ticking clock ──────────────────────────────────────────────
@@ -340,13 +337,6 @@ export default function ReadingIntakeScreen() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ── Glitch effect handler ───────────────────────────────────────────
-  // REMOVED — no longer needed
-
-  useEffect(() => {
-    // REMOVED — glitch intervals no longer needed
-  }, []); // Empty dependency array
 
   const stars = useMemo(
     () =>
@@ -837,13 +827,6 @@ export default function ReadingIntakeScreen() {
     setMouseEndX(0);
   };
 
-  // ── Cleanup ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      // no timers to clean up anymore
-    };
-  }, []);
-
   // ── Render individual card content ──────────────────────────────────
   const renderCardContent = (index: number) => {
     switch (index) {
@@ -1251,12 +1234,6 @@ export default function ReadingIntakeScreen() {
             0 0 8px 2px rgba(250, 204, 21, 0.9),
             0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
-
-        // ── GLITCH STYLES REMOVED ──
-
-        // ── GLITCH STYLES REMOVED ──
-
-        // ── GLITCH STYLES REMOVED ──
 
         @keyframes driftGradient {
           0% { background-position: 0% 50%; }
