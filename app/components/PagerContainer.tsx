@@ -32,13 +32,6 @@ export default function PagerContainer() {
   const shouldReduceMotion = useReducedMotion();
 
   const totalPanels = 5;
-  const panelNames = [
-    "Reading",
-    "Unlimited",
-    "Birth Chart",
-    "Transits",
-    "Moon & Cycles"
-  ];
 
   // Fetch user status
   useEffect(() => {
@@ -64,13 +57,15 @@ export default function PagerContainer() {
     fetchStatus();
   }, []);
 
+  // Infinite loop: go to next, wrap around
   const goToNext = useCallback(() => {
-    setCurrentIndex((prev) => Math.min(prev + 1, totalPanels - 1));
-  }, []);
+    setCurrentIndex((prev) => (prev + 1) % totalPanels);
+  }, [totalPanels]);
 
+  // Infinite loop: go to previous, wrap around
   const goToPrevious = useCallback(() => {
-    setCurrentIndex((prev) => Math.max(prev - 1, 0));
-  }, []);
+    setCurrentIndex((prev) => (prev - 1 + totalPanels) % totalPanels);
+  }, [totalPanels]);
 
   // Touch swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -89,9 +84,9 @@ export default function PagerContainer() {
     const swipeDistance = touchStartX - touchEndX;
     const minSwipeDistance = 50;
 
-    if (swipeDistance > minSwipeDistance && currentIndex < totalPanels - 1) {
+    if (swipeDistance > minSwipeDistance) {
       goToNext();
-    } else if (swipeDistance < -minSwipeDistance && currentIndex > 0) {
+    } else if (swipeDistance < -minSwipeDistance) {
       goToPrevious();
     }
 
@@ -120,9 +115,9 @@ export default function PagerContainer() {
     const swipeDistance = mouseStartX - mouseEndX;
     const minSwipeDistance = 50;
 
-    if (swipeDistance > minSwipeDistance && currentIndex < totalPanels - 1) {
+    if (swipeDistance > minSwipeDistance) {
       goToNext();
-    } else if (swipeDistance < -minSwipeDistance && currentIndex > 0) {
+    } else if (swipeDistance < -minSwipeDistance) {
       goToPrevious();
     }
 
@@ -130,48 +125,24 @@ export default function PagerContainer() {
     setMouseEndX(0);
   };
 
-  // Keyboard support
+  // Keyboard support (infinite loop)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" && currentIndex < totalPanels - 1) {
+      if (e.key === "ArrowRight") {
         goToNext();
-      } else if (e.key === "ArrowLeft" && currentIndex > 0) {
+      } else if (e.key === "ArrowLeft") {
         goToPrevious();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentIndex, goToNext, goToPrevious]);
+  }, [goToNext, goToPrevious]);
 
   return (
     <div 
       className="relative h-screen overflow-hidden bg-[#050816]"
       ref={containerRef}
     >
-      {/* Panel indicator dots */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex gap-2">
-        {Array.from({ length: totalPanels }).map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setCurrentIndex(i)}
-            className={cn(
-              "h-1 rounded-full transition-all duration-300",
-              i === currentIndex 
-                ? "w-6 bg-amber-300/50" 
-                : "w-1.5 bg-white/10 hover:bg-white/20"
-            )}
-            aria-label={`Go to panel ${i + 1}: ${panelNames[i]}`}
-          />
-        ))}
-      </div>
-
-      {/* Panel name indicator */}
-      <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-        <span className="text-[8px] uppercase tracking-[0.25em] text-slate-500/30 font-medium">
-          {panelNames[currentIndex]}
-        </span>
-      </div>
-
       {/* Swipeable container */}
       <div
         className="h-full w-full"
@@ -222,18 +193,6 @@ export default function PagerContainer() {
           </div>
         </div>
       </div>
-
-      {/* Edge gradient hints */}
-      <div className={cn(
-        "absolute right-0 top-0 bottom-0 w-20 pointer-events-none z-40",
-        "bg-gradient-to-l from-[#050816] via-[#050816]/80 to-transparent",
-        currentIndex === totalPanels - 1 && "opacity-0"
-      )} />
-      <div className={cn(
-        "absolute left-0 top-0 bottom-0 w-20 pointer-events-none z-40",
-        "bg-gradient-to-r from-[#050816] via-[#050816]/80 to-transparent",
-        currentIndex === 0 && "opacity-0"
-      )} />
     </div>
   );
 }
