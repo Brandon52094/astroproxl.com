@@ -150,57 +150,58 @@ interface ThemeColors {
   areaColors: Record<AreaId | "cta" | "hero", AreaTheme>;
 }
 
+// UPDATED: Premium color themes with stronger colors for selected state
 const THEMES: Record<ThemeName, ThemeColors> = {
   cosmic: {
     name: "cosmic",
     tagBg: "rgba(255,255,255,0.06)",
-    tagText: "#F8FAFC",
+    tagText: "#FFFFFF",
     gradientEnd: "#FFFFFF",
     progressBar: "#F8FAFC",
-    unselectedBorder: "rgba(255,255,255,0.10)",
-    selectedBorder: "rgba(255,255,255,0.22)",
-    selectedGlow: "rgba(255,255,255,0.16)",
+    unselectedBorder: "rgba(255,255,255,0.08)",
+    selectedBorder: "rgba(255,255,255,0.35)",
+    selectedGlow: "rgba(255,255,255,0.20)",
     selectedIcon: "#FFFFFF",
-    selectedTag: "#D1FAE5",
+    selectedTag: "#FFFFFF",
     accentLine: "rgba(255,255,255,0.72)",
     nextStepBorder: "rgba(255,255,255,0.65)",
-    nextStepGlow: "rgba(255,255,255,0.24)",
+    nextStepGlow: "rgba(255,255,255,0.30)",
     areaColors: {
       love: {
-        bg: "rgba(127, 29, 29, 0.22)",
-        border: "rgba(248, 113, 113, 0.42)",
-        glow: "rgba(239, 68, 68, 0.20)",
-        text: "#FCA5A5",
-        iconBg: "rgba(127, 29, 29, 0.55)",
+        bg: "rgba(127, 29, 29, 0.30)",
+        border: "rgba(248, 113, 113, 0.50)",
+        glow: "rgba(239, 68, 68, 0.35)",
+        text: "#FFFFFF",
+        iconBg: "rgba(127, 29, 29, 0.60)",
         gradient:
-          "linear-gradient(135deg, rgba(127,29,29,0.88) 0%, rgba(153,27,27,0.74) 32%, rgba(239,68,68,0.18) 100%)",
+          "linear-gradient(135deg, rgba(127,29,29,0.95) 0%, rgba(153,27,27,0.85) 32%, rgba(239,68,68,0.30) 100%)",
       },
       money: {
-        bg: "rgba(70, 52, 25, 0.22)",
-        border: "rgba(217, 119, 6, 0.34)",
-        glow: "rgba(180, 120, 42, 0.18)",
-        text: "#F5D7A1",
-        iconBg: "rgba(92, 63, 24, 0.55)",
+        bg: "rgba(20, 83, 45, 0.30)",
+        border: "rgba(74, 222, 128, 0.45)",
+        glow: "rgba(34, 197, 94, 0.35)",
+        text: "#FFFFFF",
+        iconBg: "rgba(20, 83, 45, 0.60)",
         gradient:
-          "linear-gradient(135deg, rgba(54,38,19,0.88) 0%, rgba(94,78,48,0.78) 38%, rgba(180,120,42,0.18) 100%)",
+          "linear-gradient(135deg, rgba(20,83,45,0.95) 0%, rgba(22,101,52,0.85) 38%, rgba(34,197,94,0.30) 100%)",
       },
       career: {
-        bg: "rgba(113, 63, 18, 0.18)",
-        border: "rgba(250, 204, 21, 0.34)",
-        glow: "rgba(234, 179, 8, 0.18)",
-        text: "#FDE68A",
-        iconBg: "rgba(120, 74, 18, 0.5)",
+        bg: "rgba(30, 58, 138, 0.28)",
+        border: "rgba(96, 165, 250, 0.45)",
+        glow: "rgba(59, 130, 246, 0.35)",
+        text: "#FFFFFF",
+        iconBg: "rgba(30, 58, 138, 0.55)",
         gradient:
-          "linear-gradient(135deg, rgba(92,53,15,0.88) 0%, rgba(146,104,21,0.72) 38%, rgba(250,204,21,0.14) 100%)",
+          "linear-gradient(135deg, rgba(30,58,138,0.95) 0%, rgba(37,99,235,0.85) 38%, rgba(59,130,246,0.30) 100%)",
       },
       other: {
-        bg: "rgba(49, 46, 129, 0.22)",
-        border: "rgba(129, 140, 248, 0.34)",
-        glow: "rgba(99, 102, 241, 0.20)",
-        text: "#C7D2FE",
-        iconBg: "rgba(49, 46, 129, 0.55)",
+        bg: "rgba(76, 29, 149, 0.28)",
+        border: "rgba(167, 139, 250, 0.45)",
+        glow: "rgba(139, 92, 246, 0.35)",
+        text: "#FFFFFF",
+        iconBg: "rgba(76, 29, 149, 0.55)",
         gradient:
-          "linear-gradient(135deg, rgba(29,24,79,0.9) 0%, rgba(49,46,129,0.8) 40%, rgba(30,58,138,0.18) 100%)",
+          "linear-gradient(135deg, rgba(76,29,149,0.95) 0%, rgba(109,40,217,0.85) 40%, rgba(139,92,246,0.30) 100%)",
       },
       cta: {
         bg: "rgba(255,255,255,0.08)",
@@ -297,8 +298,8 @@ export default function ReadingIntakeScreen({
     if (shouldReduceMotion) return {};
     if (!isSelected) return { scale: 1, transition: { duration: 0.2 } };
     return {
-      scale: [1, 1.12, 1],
-      transition: { duration: 2.1, repeat: Infinity, ease: "easeInOut" as const },
+      scale: [1, 1.15, 1],
+      transition: { duration: 2.0, repeat: Infinity, ease: "easeInOut" as const },
     };
   };
 
@@ -621,7 +622,7 @@ export default function ReadingIntakeScreen({
     const areaColors = getAreaColors(areaId);
     if (!isSelected) {
       return {
-        backgroundColor: "rgba(255,255,255,0.035)",
+        backgroundColor: "rgba(255,255,255,0.04)",
         borderColor: theme.unselectedBorder,
         y: 0,
       };
@@ -635,17 +636,17 @@ export default function ReadingIntakeScreen({
 
   const getGlowOverlay = (areaId: AreaId) => {
     const areaColors = getAreaColors(areaId);
-    return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(255,255,255,0.018) 38%, transparent 72%)`;
+    return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(255,255,255,0.02) 38%, transparent 72%)`;
   };
 
   const getIconTileShadow = (areaId: AreaId) => {
     const areaColors = getAreaColors(areaId);
-    return `0 14px 28px rgba(0,0,0,0.58), 0 0 24px ${areaColors.glow}`;
+    return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${areaColors.glow}`;
   };
 
-  const getBadgeBackground = () => "rgba(22, 163, 74, 0.18)";
+  const getBadgeBackground = () => "rgba(255,255,255,0.10)";
   const getBadgeShadow = () =>
-    `inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(74,222,128,0.28), 0 10px 22px rgba(0,0,0,0.32)`;
+    `inset 0 1px 0 rgba(255,255,255,0.15), 0 0 0 1px rgba(255,255,255,0.20), 0 10px 22px rgba(0,0,0,0.32)`;
   const getCTABackground = () => theme.areaColors.cta.gradient;
   const getCTAShadow = () =>
     `0 18px 34px rgba(0,0,0,0.62), 0 8px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`;
@@ -658,8 +659,8 @@ export default function ReadingIntakeScreen({
       };
     }
     return {
-      borderColor: theme.nextStepBorder,
-      boxShadow: `0 0 0 1px ${theme.nextStepBorder}, 0 0 28px ${theme.nextStepGlow}, 0 18px 34px rgba(0,0,0,0.62)`,
+      borderColor: "#FFFFFF",
+      boxShadow: `0 0 0 1px rgba(255,255,255,0.60), 0 0 40px rgba(255,255,255,0.15), 0 18px 34px rgba(0,0,0,0.62)`,
     };
   };
 
@@ -669,13 +670,17 @@ export default function ReadingIntakeScreen({
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
-        @keyframes jxlAmberPulse {
-          0%, 100% {
-            box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.26), 0 14px 28px rgba(0,0,0,0.64), 0 0 22px rgba(245, 158, 11, 0.10);
-          }
-          50% {
-            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251, 191, 36, 0.18);
-          }
+        @keyframes goldShimmer {
+          0% { background-position: -200% center; opacity: 0.6; }
+          25% { opacity: 1; }
+          50% { background-position: 200% center; opacity: 1; }
+          75% { opacity: 0.8; }
+          100% { background-position: -200% center; opacity: 0.6; }
+        }
+
+        @keyframes goldBorderPulse {
+          0%, 100% { border-color: rgba(251, 191, 36, 0.3); box-shadow: 0 0 20px rgba(251, 191, 36, 0.1), 0 0 60px rgba(251, 191, 36, 0.05); }
+          50% { border-color: rgba(251, 191, 36, 0.7); box-shadow: 0 0 40px rgba(251, 191, 36, 0.25), 0 0 80px rgba(251, 191, 36, 0.12); }
         }
 
         @keyframes cooldownPulse {
@@ -684,8 +689,8 @@ export default function ReadingIntakeScreen({
         }
 
         @keyframes whiteGlowPulse {
-          0%, 100% { opacity: 0.68; box-shadow: 0 0 24px rgba(255,255,255,0.08); }
-          50% { opacity: 1; box-shadow: 0 0 34px rgba(255,255,255,0.18); }
+          0%, 100% { opacity: 0.7; box-shadow: 0 0 20px rgba(255,255,255,0.08); }
+          50% { opacity: 1; box-shadow: 0 0 35px rgba(255,255,255,0.20); }
         }
 
         @keyframes stepPulse {
@@ -829,21 +834,30 @@ export default function ReadingIntakeScreen({
           animation: stepPulse 2.2s ease-in-out infinite;
         }
 
+        /* ── PREMIUM UNLIMITED ACCESS BUTTON ── */
         .swipe-hint-container {
           position: relative;
           overflow: hidden;
           border-radius: 18px;
-          border: 1px solid rgba(251,191,36,0.34);
-          background: linear-gradient(180deg, rgba(120,84,18,0.28), rgba(50,34,10,0.16));
-          animation: jxlAmberPulse 2.8s ease-in-out infinite;
+          border: 2px solid rgba(251, 191, 36, 0.4);
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.04));
+          animation: goldBorderPulse 2.4s ease-in-out infinite;
           cursor: pointer;
+          transition: all 0.3s ease;
+        }
+
+        .swipe-hint-container:hover {
+          border-color: rgba(251, 191, 36, 0.7);
+          box-shadow: 0 0 50px rgba(251, 191, 36, 0.2), 0 0 100px rgba(251, 191, 36, 0.08);
         }
 
         .swipe-hint-container::before {
           content: "";
           position: absolute;
           inset: 0;
-          background: radial-gradient(circle at 16% 18%, rgba(255,255,255,0.08), transparent 26%), radial-gradient(circle at 80% 12%, rgba(251,191,36,0.18), transparent 24%);
+          background: 
+            radial-gradient(circle at 20% 50%, rgba(251, 191, 36, 0.15), transparent 60%),
+            radial-gradient(circle at 80% 50%, rgba(251, 191, 36, 0.08), transparent 50%);
           pointer-events: none;
           z-index: 0;
         }
@@ -851,21 +865,62 @@ export default function ReadingIntakeScreen({
         .swipe-hint-container::after {
           content: "";
           position: absolute;
-          inset: -40%;
-          background-image: linear-gradient(120deg, rgba(253,230,138,0) 0%, rgba(253,230,138,0.12) 40%, rgba(250,204,21,0.36) 50%, rgba(253,230,138,0.12) 60%, rgba(253,230,138,0) 100%);
+          inset: -50%;
+          background: linear-gradient(
+            120deg,
+            rgba(251, 191, 36, 0) 0%,
+            rgba(251, 191, 36, 0.2) 30%,
+            rgba(251, 191, 36, 0.6) 50%,
+            rgba(251, 191, 36, 0.2) 70%,
+            rgba(251, 191, 36, 0) 100%
+          );
+          background-size: 200% 100%;
           mix-blend-mode: screen;
           pointer-events: none;
-          opacity: 0.66;
-          transform: translateX(-60%);
-          animation: jxlShimmer 4.2s linear infinite;
+          opacity: 0.8;
+          animation: goldShimmer 3.5s ease-in-out infinite;
           z-index: 0;
         }
 
-        .swipe-hint-container > * { position: relative; z-index: 1; }
+        .swipe-hint-container .swipe-text {
+          position: relative;
+          z-index: 1;
+          text-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
+          background: linear-gradient(135deg, #FCD34D, #F59E0B, #FCD34D);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: goldShimmer 3.5s ease-in-out infinite;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+        }
+
+        .swipe-hint-container .swipe-arrow {
+          position: relative;
+          z-index: 1;
+          color: #F59E0B;
+          stroke: #F59E0B;
+          filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.3));
+        }
+
+        .swipe-hint-container .swipe-glow-ring {
+          position: absolute;
+          inset: -4px;
+          border-radius: 20px;
+          border: 1px solid rgba(251, 191, 36, 0.1);
+          pointer-events: none;
+          z-index: 0;
+          animation: goldBorderPulse 2.4s ease-in-out infinite;
+        }
 
         @media (prefers-reduced-motion: reduce) {
-          .drift-bg, .drift-bg::after, .jxl-sparkle, .swipe-hint-container, .swipe-hint-container::after, .next-step-card, .selected-card-shell[data-selected="true"] .selected-icon-wrap, .selected-card-shell[data-selected="true"] .selected-pill::before {
+          .drift-bg, .drift-bg::after, .jxl-sparkle, .swipe-hint-container, .swipe-hint-container::after, .swipe-hint-container::before, .next-step-card, .selected-card-shell[data-selected="true"] .selected-icon-wrap, .selected-card-shell[data-selected="true"] .selected-pill::before {
             animation: none !important;
+          }
+          .swipe-hint-container .swipe-text {
+            -webkit-text-fill-color: #FCD34D;
+            background: none;
           }
         }
       `}</style>
@@ -922,7 +977,7 @@ export default function ReadingIntakeScreen({
                         animate={{ width: "100%" }}
                         transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
                         className="absolute inset-y-0 left-0 rounded-full"
-                        style={{ backgroundColor: theme.progressBar, boxShadow: `0 0 10px ${theme.progressBar}` }}
+                        style={{ backgroundColor: theme.progressBar, boxShadow: `0 0 12px ${theme.progressBar}` }}
                       />
                     )}
                   </div>
@@ -1018,7 +1073,7 @@ export default function ReadingIntakeScreen({
                       style={{
                         willChange: "transform, opacity",
                         ["--selected-wash" as string]: areaColors.gradient,
-                        ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 36px rgba(0,0,0,0.68), 0 0 26px ${areaColors.glow}`,
+                        ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 36px rgba(0,0,0,0.68), 0 0 35px ${areaColors.glow}`,
                       } as React.CSSProperties}
                     >
                       {isSelected && (
@@ -1035,7 +1090,7 @@ export default function ReadingIntakeScreen({
                           style={{
                             borderColor: isSelected ? areaColors.border : undefined,
                             background: isSelected ? areaColors.gradient : undefined,
-                            color: isSelected ? areaColors.text : undefined,
+                            color: isSelected ? "#FFFFFF" : undefined,
                             boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
                           }}
                         >
@@ -1052,11 +1107,10 @@ export default function ReadingIntakeScreen({
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.92, y: 4 }}
                                   transition={{ duration: 0.18, ease: "easeOut" }}
-                                  className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
+                                  className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
                                   style={{
-                                    color: theme.selectedTag,
-                                    borderColor: "rgba(74,222,128,0.32)",
-                                    backgroundColor: getBadgeBackground(),
+                                    borderColor: "rgba(255,255,255,0.25)",
+                                    backgroundColor: "rgba(255,255,255,0.08)",
                                     borderWidth: 1,
                                     borderStyle: "solid",
                                     boxShadow: getBadgeShadow(),
@@ -1078,7 +1132,7 @@ export default function ReadingIntakeScreen({
 
                           <motion.p
                             className="mt-1 text-sm leading-5"
-                            animate={{ color: isSelected ? "rgba(241, 245, 249, 0.96)" : "rgba(148, 163, 184, 1)" }}
+                            animate={{ color: isSelected ? "#FFFFFF" : "rgba(148, 163, 184, 1)" }}
                             transition={{ duration: 0.24, ease: "easeOut" }}
                           >
                             {area.description}
@@ -1101,7 +1155,7 @@ export default function ReadingIntakeScreen({
                   >
                     <div className="next-step-card rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px]">
                       <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
-                        <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-white/90">Ask Something</div>
+                        {/* REMOVED: "Ask Something" label */}
                         <Textarea
                           id="question"
                           ref={textareaRef}
@@ -1153,42 +1207,41 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-         {/* ── UNLIMITED ACCESS SWIPE BUTTON ── */}
-<div className="mt-4 border-t border-white/10 pt-4">
-  <motion.button
-    drag="x"
-    dragConstraints={{ left: -120, right: 0 }}
-    dragElastic={0.08}
-    dragMomentum={false}
-    onDragEnd={(_, info) => {
-      // Only trigger if swiped left far enough
-      if (info.offset.x < -90 || info.velocity.x < -700) {
-        onSwipeLeft?.();
-      }
-    }}
-    whileTap={{ scale: 0.97 }}
-    onClick={(e) => {
-      e.stopPropagation();
-      onSwipeLeft?.();
-    }}
-    className="swipe-hint-container flex h-12 w-full cursor-grab items-center justify-center gap-3 text-[14px] font-medium text-amber-100/90 active:cursor-grabbing"
-    style={{
-      touchAction: "none",
-    }}
-  >
-    <span>Unlimited Access, Swipe Left to Explore</span>
-    <motion.svg 
-      className="h-4 w-4"
-      animate={{ x: [0, -6, 0] }}
-      transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-      fill="none" 
-      stroke="currentColor" 
-      viewBox="0 0 24 24"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </motion.svg>
-  </motion.button>
-</div>
+          {/* ── PREMIUM UNLIMITED ACCESS SWIPE BUTTON ── */}
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <motion.button
+              drag="x"
+              dragConstraints={{ left: -120, right: 0 }}
+              dragElastic={0.08}
+              dragMomentum={false}
+              onDragEnd={(_, info) => {
+                if (info.offset.x < -90 || info.velocity.x < -700) {
+                  onSwipeLeft?.();
+                }
+              }}
+              whileTap={{ scale: 0.97 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSwipeLeft?.();
+              }}
+              className="swipe-hint-container flex h-12 w-full cursor-grab items-center justify-center gap-3 active:cursor-grabbing"
+              style={{ touchAction: "none" }}
+            >
+              <span className="swipe-text text-[14px] font-semibold tracking-wide">
+                Unlimited Access, Swipe Left to Explore
+              </span>
+              <motion.svg
+                className="swipe-arrow h-4 w-4"
+                animate={{ x: [0, -8, 0] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+              </motion.svg>
+            </motion.button>
+          </div>
 
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }} className="mt-4 border-t border-white/10 pt-4">
             <div className="mb-2 flex items-center justify-center">
