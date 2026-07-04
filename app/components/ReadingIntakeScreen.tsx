@@ -99,7 +99,7 @@ interface UserStatus {
 
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
-  onSwipeLeft?: () => void; // Callback to trigger swipe to next panel
+  onSwipeLeft?: () => void;
 }
 
 interface NatalPlacement {
@@ -125,7 +125,7 @@ interface TodayTransitPlanet {
 }
 
 // ── THEME SYSTEM ──────────────────────────────────────────────────────
-type ThemeName = "teal" | "earth";
+type ThemeName = "cosmic";
 
 interface ThemeColors {
   name: ThemeName;
@@ -139,146 +139,91 @@ interface ThemeColors {
   selectedIcon: string;
   selectedTag: string;
   accentLine: string;
+  nextStepBorder: string;
+  nextStepGlow: string;
   areaColors: {
-    love: { bg: string; border: string; glow: string; text: string; gradient: string };
-    money: { bg: string; border: string; glow: string; text: string; gradient: string };
-    career: { bg: string; border: string; glow: string; text: string; gradient: string };
-    other: { bg: string; border: string; glow: string; text: string; gradient: string };
-    cta: { bg: string; border: string; glow: string; text: string; gradient: string };
-    hero: { bg: string; border: string; glow: string; text: string; gradient: string };
+    love: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    money: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    career: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    other: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    cta: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    hero: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
   };
 }
 
 const THEMES: Record<ThemeName, ThemeColors> = {
-  teal: {
-    name: "teal",
-    tagBg: "rgba(143,168,255,0.10)",
-    tagText: "#C9D4FF",
-    gradientEnd: "#B7C4FF",
-    progressBar: "#7DD3E0",
-    unselectedBorder: "rgba(200,210,224,0.14)",
-    selectedBorder: "rgba(125,211,224,0.42)",
-    selectedGlow: "rgba(125,211,224,0.16)",
-    selectedIcon: "#A5E4EC",
-    selectedTag: "#DCE4FF",
-    accentLine: "#7DD3E0",
+  cosmic: {
+    name: "cosmic",
+    tagBg: "rgba(255,255,255,0.06)",
+    tagText: "#F8FAFC",
+    gradientEnd: "#FFFFFF",
+    progressBar: "#F8FAFC",
+    unselectedBorder: "rgba(255,255,255,0.10)",
+    selectedBorder: "rgba(255,255,255,0.22)",
+    selectedGlow: "rgba(255,255,255,0.16)",
+    selectedIcon: "#FFFFFF",
+    selectedTag: "#FFFFFF",
+    accentLine: "rgba(255,255,255,0.72)",
+    nextStepBorder: "rgba(255,255,255,0.65)",
+    nextStepGlow: "rgba(255,255,255,0.24)",
     areaColors: {
+      // 🔥 FIRE — Love
       love: {
-        bg: "rgba(244,114,182,0.08)",
-        border: "rgba(244,114,182,0.24)",
-        glow: "rgba(244,114,182,0.12)",
-        text: "#F9A8D4",
-        gradient: "linear-gradient(135deg, rgba(244,114,182,0.10), rgba(255,255,255,0.02))"
+        bg: "rgba(127, 29, 29, 0.30)",
+        border: "rgba(248, 113, 113, 0.50)",
+        glow: "rgba(239, 68, 68, 0.30)",
+        text: "#FCA5A5",
+        iconBg: "rgba(127, 29, 29, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(127,29,29,0.85) 0%, rgba(153,27,27,0.70) 32%, rgba(239,68,68,0.20) 100%)",
       },
+      // 🌍 EARTH/GREEN — Money
       money: {
-        bg: "rgba(96,165,250,0.08)",
-        border: "rgba(96,165,250,0.24)",
-        glow: "rgba(96,165,250,0.12)",
-        text: "#93C5FD",
-        gradient: "linear-gradient(135deg, rgba(96,165,250,0.10), rgba(255,255,255,0.02))"
+        bg: "rgba(20, 83, 45, 0.30)",
+        border: "rgba(74, 222, 128, 0.45)",
+        glow: "rgba(34, 197, 94, 0.30)",
+        text: "#86EFAC",
+        iconBg: "rgba(20, 83, 45, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
       },
+      // 💨 AIR — Career
       career: {
-        bg: "rgba(167,139,250,0.08)",
-        border: "rgba(167,139,250,0.24)",
-        glow: "rgba(167,139,250,0.12)",
-        text: "#C4B5FD",
-        gradient: "linear-gradient(135deg, rgba(167,139,250,0.10), rgba(255,255,255,0.02))"
+        bg: "rgba(30, 58, 138, 0.30)",
+        border: "rgba(96, 165, 250, 0.45)",
+        glow: "rgba(59, 130, 246, 0.30)",
+        text: "#93C5FD",
+        iconBg: "rgba(30, 58, 138, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
       },
+      // 💜 PURPLE — What's Coming
       other: {
-        bg: "rgba(226,232,240,0.06)",
-        border: "rgba(226,232,240,0.18)",
-        glow: "rgba(226,232,240,0.10)",
-        text: "#E2E8F0",
-        gradient: "linear-gradient(135deg, rgba(226,232,240,0.08), rgba(125,211,224,0.04))"
+        bg: "rgba(49, 46, 129, 0.30)",
+        border: "rgba(167, 139, 250, 0.45)",
+        glow: "rgba(139, 92, 246, 0.30)",
+        text: "#C4B5FD",
+        iconBg: "rgba(49, 46, 129, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
       },
+      // CTA button
       cta: {
-        bg: "rgba(125,211,224,0.14)",
-        border: "rgba(201,212,255,0.30)",
-        glow: "rgba(125,211,224,0.20)",
-        text: "#EAF0FF",
-        gradient: "linear-gradient(180deg, #131B2C 0%, #0D1420 100%)"
+        bg: "rgba(255,255,255,0.08)",
+        border: "rgba(255,255,255,0.22)",
+        glow: "rgba(0,0,0,0.4)",
+        text: "#F8FAFC",
+        iconBg: "rgba(255,255,255,0.06)",
+        gradient: "linear-gradient(180deg, #161A26 0%, #0A0D16 100%)",
       },
+      // Hero section
       hero: {
-        bg: "rgba(125,211,224,0.06)",
-        border: "rgba(201,212,255,0.18)",
-        glow: "rgba(125,211,224,0.10)",
-        text: "#C9D4FF",
-        gradient: "linear-gradient(135deg, rgba(125,211,224,0.08), rgba(255,255,255,0.02))"
-      }
-    }
+        bg: "rgba(255,255,255,0.04)",
+        border: "rgba(255,255,255,0.14)",
+        glow: "rgba(255,255,255,0.08)",
+        text: "#FFFFFF",
+        iconBg: "rgba(255,255,255,0.05)",
+        gradient: "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+      },
+    },
   },
-  earth: {
-    name: "earth",
-    tagBg: "rgba(155,140,255,0.10)",
-    tagText: "#DCD6FF",
-    gradientEnd: "#C9BFFF",
-    progressBar: "#9B8CFF",
-    unselectedBorder: "rgba(200,210,224,0.14)",
-    selectedBorder: "rgba(155,140,255,0.42)",
-    selectedGlow: "rgba(155,140,255,0.16)",
-    selectedIcon: "#C9D4FF",
-    selectedTag: "#E4DEFF",
-    accentLine: "#9B8CFF",
-    areaColors: {
-      love: {
-        bg: "rgba(244,114,182,0.08)",
-        border: "rgba(244,114,182,0.24)",
-        glow: "rgba(244,114,182,0.12)",
-        text: "#F9A8D4",
-        gradient: "linear-gradient(135deg, rgba(244,114,182,0.10), rgba(255,255,255,0.02))"
-      },
-      money: {
-        bg: "rgba(96,165,250,0.08)",
-        border: "rgba(96,165,250,0.24)",
-        glow: "rgba(96,165,250,0.12)",
-        text: "#93C5FD",
-        gradient: "linear-gradient(135deg, rgba(96,165,250,0.10), rgba(255,255,255,0.02))"
-      },
-      career: {
-        bg: "rgba(167,139,250,0.08)",
-        border: "rgba(167,139,250,0.24)",
-        glow: "rgba(167,139,250,0.12)",
-        text: "#C4B5FD",
-        gradient: "linear-gradient(135deg, rgba(167,139,250,0.10), rgba(255,255,255,0.02))"
-      },
-      other: {
-        bg: "rgba(226,232,240,0.06)",
-        border: "rgba(226,232,240,0.18)",
-        glow: "rgba(226,232,240,0.10)",
-        text: "#E2E8F0",
-        gradient: "linear-gradient(135deg, rgba(226,232,240,0.08), rgba(155,140,255,0.04))"
-      },
-      cta: {
-        bg: "rgba(155,140,255,0.14)",
-        border: "rgba(201,212,255,0.30)",
-        glow: "rgba(155,140,255,0.20)",
-        text: "#EAF0FF",
-        gradient: "linear-gradient(180deg, #182235 0%, #101827 100%)"
-      },
-      hero: {
-        bg: "rgba(155,140,255,0.06)",
-        border: "rgba(201,212,255,0.18)",
-        glow: "rgba(155,140,255,0.10)",
-        text: "#C9D4FF",
-        gradient: "linear-gradient(135deg, rgba(155,140,255,0.08), rgba(255,255,255,0.02))"
-      }
-    }
-  }
 };
-
-function getMoonGlyph(phaseName: string): string {
-  const glyphs: Record<string, string> = {
-    "New Moon": "🌑",
-    "Waxing Crescent": "🌒",
-    "First Quarter": "🌓",
-    "Waxing Gibbous": "🌔",
-    "Full Moon": "🌕",
-    "Waning Gibbous": "🌖",
-    "Last Quarter": "🌗",
-    "Waning Crescent": "🌘",
-  };
-  return glyphs[phaseName] ?? "🌙";
-}
 
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
@@ -289,9 +234,9 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${hours}h`;
 }
 
-export default function ReadingIntakeScreen({ 
+export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
-  onSwipeLeft 
+  onSwipeLeft,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
@@ -303,6 +248,7 @@ export default function ReadingIntakeScreen({
   >("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
+  const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
 
   // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
@@ -321,8 +267,7 @@ export default function ReadingIntakeScreen({
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
 
   // ── Theme state ──────────────────────────────────────────────────────
-  const [theme, setTheme] = useState<ThemeColors>(THEMES.teal);
-  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [theme, setTheme] = useState<ThemeColors>(THEMES.cosmic);
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -340,14 +285,15 @@ export default function ReadingIntakeScreen({
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── STARS (from sign-in page) ──
   const stars = useMemo(
     () =>
       Array.from({ length: 28 }).map((_, i) => {
-        const left = `${(i * 41) % 100}%`;
-        const top = `${(i * 23 + 7) % 100}%`;
-        const size = i % 7 === 0 ? 3 : 1.6;
-        const opacity = i % 5 === 0 ? 0.85 : 0.4;
-        const delay = (i * 0.41) % 4;
+        const left = `${((i * 37) % 100)}%`;
+        const top = `${((i * 19 + 13) % 100)}%`;
+        const size = i % 7 === 0 ? 2 : 1;
+        const opacity = i % 5 === 0 ? 0.72 : 0.34;
+        const delay = (i * 0.37) % 4;
         return { left, top, size, opacity, delay, id: i };
       }),
     []
@@ -374,9 +320,9 @@ export default function ReadingIntakeScreen({
       };
     }
     return {
-      scale: [1, 1.08, 1],
+      scale: [1, 1.12, 1],
       transition: {
-        duration: 2.8,
+        duration: 2.1,
         repeat: Infinity,
         ease: "easeInOut" as const,
       },
@@ -484,10 +430,7 @@ export default function ReadingIntakeScreen({
       setTodayPlanets(allTransits);
     }
 
-    // ── Set theme ──────────────────────────────────────────────────────
-    const isUserSubscribed = userStatus?.isSubscribed || false;
-    setIsSubscribed(isUserSubscribed);
-    setTheme(isUserSubscribed ? THEMES.earth : THEMES.teal);
+    setTheme(THEMES.cosmic);
   }, [chartStatus, userStatus]);
 
   // ── Load nickname ────────────────────────────────────────────────────
@@ -538,8 +481,6 @@ export default function ReadingIntakeScreen({
       setIsEditingNickname(false);
     }
   }, [nicknameInput]);
-
-  const displayName = nickname ?? natalSun?.sign ?? "there";
 
   const fetchInFlight = useRef(false);
 
@@ -755,7 +696,6 @@ export default function ReadingIntakeScreen({
 
   // ── Theme-specific helper functions ────────────────────────────────
 
-  // Get area-specific colors
   const getAreaColors = (areaId: string) => {
     const areaMap: Record<string, keyof ThemeColors['areaColors']> = {
       love: 'love',
@@ -767,7 +707,6 @@ export default function ReadingIntakeScreen({
     return theme.areaColors[key];
   };
 
-  // Get card animation based on theme and area
   const getCardAnimation = (isSelected: boolean, areaId: string) => {
     const areaColors = getAreaColors(areaId);
     
@@ -786,51 +725,44 @@ export default function ReadingIntakeScreen({
     };
   };
 
-  // Get glow overlay based on area — now theme-token-driven, no name branching
   const getGlowOverlay = (areaId: string) => {
     const areaColors = getAreaColors(areaId);
-    return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(255,255,255,0.02) 38%, transparent 72%)`;
+    return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(255,255,255,0.018) 38%, transparent 72%)`;
   };
 
-  // Get icon tile shadow based on area
   const getIconTileShadow = (areaId: string) => {
     const areaColors = getAreaColors(areaId);
-    return `0 0 16px ${areaColors.glow}`;
+    return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${areaColors.glow}`;
   };
 
-  // Get badge background — theme-token-driven
-  const getBadgeBackground = () => theme.selectedGlow;
-
-  // Get badge shadow — theme-token-driven, consistent across both tiers
+  const getBadgeBackground = () => "rgba(255, 255, 255, 0.12)";
   const getBadgeShadow = () =>
-    `inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px ${theme.selectedGlow}`;
-
-  // Get CTA background — reads directly from theme.areaColors.cta.gradient,
-  // single source of truth instead of a hardcoded earth/teal branch
+    `inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(255,255,255,0.3), 0 10px 22px rgba(0,0,0,0.32)`;
   const getCTABackground = () => theme.areaColors.cta.gradient;
-
-  // Get CTA shadow — theme-token-driven
   const getCTAShadow = () =>
-    `0 10px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 20px ${theme.areaColors.cta.glow}`;
+    `0 18px 34px rgba(0,0,0,0.62), 0 8px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`;
 
-  // Get textarea focus styles — theme-token-driven, no name branching
   const getTextareaFocusStyles = (isFocused: boolean) => {
     if (!isFocused) {
       return {
-        borderColor: "rgba(255,255,255,0.10)",
-        boxShadow: "none",
+        borderColor: "rgba(255,255,255,0.12)",
+        boxShadow: "0 18px 34px rgba(0,0,0,0.55)",
       };
     }
     return {
-      borderColor: theme.accentLine,
-      boxShadow: `0 0 22px ${theme.selectedGlow}`,
+      borderColor: "rgba(255,255,255,0.5)",
+      boxShadow: `0 0 40px rgba(255,255,255,0.15), 0 18px 34px rgba(0,0,0,0.55)`,
     };
   };
 
   return (
     <div
-      className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
-      style={{ WebkitOverflowScrolling: "touch" }}
+      className="no-scrollbar h-screen overflow-y-auto overscroll-none text-slate-100"
+      style={{
+        WebkitOverflowScrolling: "touch",
+        background:
+          "radial-gradient(circle at 50% 18%, rgba(94,234,212,0.10), transparent 34%), radial-gradient(circle at 85% 82%, rgba(251,191,36,0.07), transparent 28%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+      }}
     >
       <style jsx>{`
         .no-scrollbar {
@@ -846,15 +778,15 @@ export default function ReadingIntakeScreen({
         @keyframes jxlAmberPulse {
           0%, 100% {
             box-shadow:
-              0 0 0 1px rgba(245, 158, 11, 0.18),
-              0 0 20px rgba(245, 158, 11, 0.08),
-              0 0 40px rgba(245, 158, 11, 0.04);
+              0 0 0 1px rgba(245, 158, 11, 0.26),
+              0 14px 28px rgba(0,0,0,0.64),
+              0 0 22px rgba(245, 158, 11, 0.10);
           }
           50% {
             box-shadow:
-              0 0 0 1px rgba(251, 191, 36, 0.38),
-              0 0 28px rgba(251, 191, 36, 0.18),
-              0 0 56px rgba(251, 191, 36, 0.08);
+              0 0 0 1px rgba(251, 191, 36, 0.46),
+              0 16px 32px rgba(0,0,0,0.72),
+              0 0 32px rgba(251, 191, 36, 0.18);
           }
         }
 
@@ -873,45 +805,30 @@ export default function ReadingIntakeScreen({
 
         @keyframes whiteGlowPulse {
           0%, 100% {
-            opacity: 0.4;
+            box-shadow:
+              0 0 30px rgba(255, 255, 255, 0.08),
+              0 18px 34px rgba(0, 0, 0, 0.55);
           }
           50% {
-            opacity: 0.9;
+            box-shadow:
+              0 0 50px rgba(255, 255, 255, 0.20),
+              0 22px 40px rgba(0, 0, 0, 0.65);
           }
         }
 
-        @keyframes shimmerFlow {
-          0% {
-            background-position: -200% center;
+        @keyframes selectedWhiteGlow {
+          0%, 100% {
+            box-shadow:
+              0 0 30px rgba(255, 255, 255, 0.12),
+              0 0 60px rgba(255, 255, 255, 0.06),
+              0 18px 36px rgba(0, 0, 0, 0.65);
           }
-          100% {
-            background-position: 200% center;
+          50% {
+            box-shadow:
+              0 0 50px rgba(255, 255, 255, 0.25),
+              0 0 80px rgba(255, 255, 255, 0.10),
+              0 22px 40px rgba(0, 0, 0, 0.70);
           }
-        }
-
-        .jxl-teaser {
-          animation: jxlAmberPulse 2.8s ease-in-out infinite;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .jxl-teaser::before {
-          content: "";
-          position: absolute;
-          inset: -40%;
-          background-image: linear-gradient(
-            120deg,
-            rgba(253, 230, 138, 0) 0%,
-            rgba(253, 230, 138, 0.12) 40%,
-            rgba(250, 204, 21, 0.3) 50%,
-            rgba(253, 230, 138, 0.12) 60%,
-            rgba(253, 230, 138, 0) 100%
-          );
-          mix-blend-mode: screen;
-          pointer-events: none;
-          opacity: 0.85;
-          transform: translateX(-60%);
-          animation: jxlShimmer 3.5s linear infinite;
         }
 
         @keyframes jxlShimmer {
@@ -920,34 +837,16 @@ export default function ReadingIntakeScreen({
           100% { transform: translateX(120%); }
         }
 
-        .cooldown-glow {
-          animation: cooldownPulse 3s ease-in-out infinite;
-        }
-
-        .jxl-teaser--subtle::before {
-          opacity: 0.55;
-          animation-duration: 5s;
-        }
-
-        .jxl-teaser--indigo {
-          animation: cooldownPulse 2.8s ease-in-out infinite;
-        }
-
-        .jxl-teaser--indigo::before {
-          background-image: linear-gradient(
-            120deg,
-            rgba(165, 180, 252, 0) 0%,
-            rgba(165, 180, 252, 0.12) 40%,
-            rgba(129, 140, 248, 0.3) 50%,
-            rgba(165, 180, 252, 0.12) 60%,
-            rgba(165, 180, 252, 0) 100%
-          );
-        }
-
         @keyframes jxlGlint {
-          0%, 78%, 100% { opacity: 0; transform: scale(0.3); }
-          88% { opacity: 1; transform: scale(1.4); }
-          94% { opacity: 0.7; transform: scale(1); }
+          0%, 76%, 100% { opacity: 0; transform: scale(0.35); }
+          86% { opacity: 1; transform: scale(1.5); }
+          94% { opacity: 0.78; transform: scale(1); }
+        }
+
+        @keyframes driftGradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
         }
 
         .jxl-sparkle {
@@ -973,79 +872,58 @@ export default function ReadingIntakeScreen({
             0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
-        @keyframes driftGradient {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
+        .cooldown-glow {
+          animation: cooldownPulse 3s ease-in-out infinite;
         }
 
-        .drift-bg {
-          position: absolute;
-          inset: -10%;
-          background: linear-gradient(
-            120deg,
-            #040611 0%,
-            #061120 25%,
-            #050816 50%,
-            #061120 75%,
-            #040611 100%
-          );
-          background-size: 200% 200%;
-          animation: driftGradient 26s ease-in-out infinite;
+        /* ── CARD SHADOW (separates buttons from background) ── */
+        .card-shadow {
+          box-shadow: 0 18px 36px rgba(0, 0, 0, 0.65), 0 8px 18px rgba(0, 0, 0, 0.45);
         }
 
-        .drift-bg::after {
+        .hero-card-shadow {
+          box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
+        }
+
+        /* ── WHITE GLOW ON SELECTED CARD ── */
+        .selected-card-glow {
+          animation: selectedWhiteGlow 2.8s ease-in-out infinite;
+        }
+
+        /* ── UNLIMITED ACCESS GOLD SHIMMER (BOLD) ── */
+        .gold-shimmer {
+          position: relative;
+          overflow: hidden;
+          border-radius: 18px;
+          border: 1px solid rgba(251, 191, 36, 0.5);
+          background: linear-gradient(180deg, rgba(120, 84, 18, 0.35), rgba(50, 34, 10, 0.2));
+          box-shadow: 0 0 40px rgba(251, 191, 36, 0.15), 0 18px 36px rgba(0, 0, 0, 0.65);
+          cursor: pointer;
+        }
+
+        .gold-shimmer::before {
           content: "";
           position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(circle at 30% 20%, rgba(201, 212, 255, 0.035), transparent 42%),
-            radial-gradient(circle at 75% 70%, rgba(226, 232, 240, 0.025), transparent 46%);
-          animation: driftGradient 26s ease-in-out infinite reverse;
-        }
-
-        .cosmic-grid {
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-          background-size: 36px 36px;
-          mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
-          opacity: 0.18;
-        }
-
-        .aurora-orb--violet {
-          position: absolute;
-          top: 8rem;
-          right: -4rem;
-          width: 14rem;
-          height: 14rem;
-          border-radius: 9999px;
-          filter: blur(72px);
-          background: radial-gradient(
-            circle,
-            rgba(201, 212, 255, 0.10) 0%,
-            rgba(201, 212, 255, 0.035) 46%,
-            transparent 74%
+          inset: -40%;
+          background-image: linear-gradient(
+            120deg,
+            rgba(253, 230, 138, 0) 0%,
+            rgba(253, 230, 138, 0.2) 40%,
+            rgba(250, 204, 21, 0.5) 50%,
+            rgba(253, 230, 138, 0.2) 60%,
+            rgba(253, 230, 138, 0) 100%
           );
-          will-change: transform, opacity;
+          mix-blend-mode: screen;
+          pointer-events: none;
+          opacity: 0.85;
+          transform: translateX(-60%);
+          animation: jxlShimmer 3.5s linear infinite;
+          z-index: 0;
         }
 
-        .glow-light-bar {
+        .gold-shimmer > * {
           position: relative;
-          height: 2.5px;
-          width: 100%;
-          background: linear-gradient(
-            90deg,
-            rgba(255, 255, 255, 0.4) 0%,
-            rgba(255, 255, 255, 0.8) 30%,
-            rgba(255, 255, 255, 0.9) 50%,
-            rgba(255, 255, 255, 0.8) 70%,
-            rgba(255, 255, 255, 0.4) 100%
-          );
-          box-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
-          animation: whiteGlowPulse 3.5s ease-in-out infinite;
+          z-index: 1;
         }
 
         .selected-card-shell {
@@ -1053,6 +931,7 @@ export default function ReadingIntakeScreen({
           overflow: hidden;
           isolation: isolate;
           will-change: transform, opacity;
+          box-shadow: 0 18px 36px rgba(0,0,0,0.62), 0 8px 18px rgba(0,0,0,0.46);
         }
 
         .selected-card-shell::before {
@@ -1060,7 +939,7 @@ export default function ReadingIntakeScreen({
           position: absolute;
           inset: -1px;
           border-radius: 24px;
-          background: var(--selected-wash, radial-gradient(circle at 20% 20%, rgba(201, 212, 255, 0.08), transparent 42%), radial-gradient(circle at 80% 30%, rgba(226, 232, 240, 0.04), transparent 46%), linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01)));
+          background: var(--selected-wash);
           opacity: 0;
           z-index: 0;
           pointer-events: none;
@@ -1075,7 +954,7 @@ export default function ReadingIntakeScreen({
           opacity: 0;
           z-index: 0;
           pointer-events: none;
-          box-shadow: var(--selected-shadow, 0 0 0 1px rgba(201, 212, 255, 0.10), 0 10px 30px rgba(0, 0, 0, 0.26), 0 0 20px rgba(201, 212, 255, 0.05));
+          box-shadow: var(--selected-shadow);
           transition: opacity 260ms ease;
         }
 
@@ -1084,140 +963,92 @@ export default function ReadingIntakeScreen({
           opacity: 1;
         }
 
-        .profile-name-button {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          cursor: pointer;
-          transition: opacity 180ms ease;
+        .selected-card-shell[data-selected="true"] {
+          animation: selectedWhiteGlow 2.8s ease-in-out infinite;
         }
 
-        .profile-name-button:hover {
-          opacity: 0.82;
+        .selected-card-shell[data-selected="true"] .selected-pill::before {
+          animation: selectedSweep 1.6s ease-in-out infinite;
         }
 
-        @keyframes swipePulse {
-          0%, 100% { transform: translateX(0); opacity: 0.4; }
-          50% { transform: translateX(10px); opacity: 1; }
+        .selected-card-shell[data-selected="true"] .selected-icon-wrap {
+          animation: whiteGlowPulse 2.2s ease-in-out infinite;
         }
 
-        .swipe-arrow {
-          animation: swipePulse 2s ease-in-out infinite;
-        }
-
-        .swipe-hint-container {
-          position: relative;
-          overflow: hidden;
-          border-radius: 24px;
-          border: 1px solid rgba(251, 191, 36, 0.2);
-          background: linear-gradient(180deg, rgba(251, 191, 36, 0.06), rgba(251, 191, 36, 0.02));
-          animation: jxlAmberPulse 2.8s ease-in-out infinite;
-          cursor: pointer;
-        }
-
-        .swipe-hint-container::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
-            radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        .swipe-hint-container::after {
-          content: "";
-          position: absolute;
-          inset: -40%;
-          background-image: linear-gradient(
-            120deg,
-            rgba(253, 230, 138, 0) 0%,
-            rgba(253, 230, 138, 0.12) 40%,
-            rgba(250, 204, 21, 0.3) 50%,
-            rgba(253, 230, 138, 0.12) 60%,
-            rgba(253, 230, 138, 0) 100%
-          );
-          mix-blend-mode: screen;
-          pointer-events: none;
-          opacity: 0.55;
-          transform: translateX(-60%);
-          animation: jxlShimmer 5s linear infinite;
-          z-index: 0;
-        }
-
-        .swipe-hint-container > * {
-          position: relative;
-          z-index: 1;
+        @keyframes selectedSweep {
+          0% { transform: translateX(-155%); }
+          100% { transform: translateX(155%); }
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .drift-bg,
-          .drift-bg::after,
           .jxl-sparkle,
-          .jxl-teaser,
-          .jxl-teaser::before,
-          .glow-light-bar,
-          .swipe-arrow,
-          .swipe-hint-container,
-          .swipe-hint-container::after {
+          .gold-shimmer::before,
+          .selected-card-shell[data-selected="true"],
+          .selected-card-shell[data-selected="true"] .selected-icon-wrap,
+          .selected-card-shell[data-selected="true"] .selected-pill::before {
             animation: none !important;
-            opacity: 0.4 !important;
           }
         }
       `}</style>
 
+      {/* ── BACKGROUND (from sign-in page) ── */}
       <div className="pointer-events-none fixed inset-0">
-        <div className="drift-bg" />
-        <div className="cosmic-grid" />
+        {/* Pulsing teal orb */}
         <motion.div
-          className="aurora-orb--violet"
+          className="absolute left-1/2 top-[16%] h-[24rem] w-[24rem] -translate-x-1/2 rounded-full blur-3xl"
           animate={
             shouldReduceMotion
               ? undefined
-              : { y: [0, -8, 0], x: [0, -6, 0], opacity: [0.12, 0.2, 0.12] }
+              : { opacity: [0.14, 0.24, 0.14], scale: [1, 1.05, 1] }
           }
           transition={
             shouldReduceMotion
               ? undefined
-              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
+              : { duration: 8, repeat: Infinity, ease: "easeInOut" }
           }
+          style={{
+            background: "radial-gradient(circle, rgba(45,212,191,0.28), transparent 70%)",
+          }}
         />
-        {stars.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{
-              left: star.left,
-              top: star.top,
-              width: star.size,
-              height: star.size,
-              opacity: star.opacity,
-            }}
-            animate={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
-                    scale: [1, 1.6, 1],
-                  }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    duration: 1.6 + (star.id % 5) * 0.35,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: star.delay,
-                  }
-            }
-          />
-        ))}
+
+        {/* Stars */}
+        <div className="absolute inset-0">
+          {stars.map((star) => (
+            <motion.span
+              key={star.id}
+              className="absolute rounded-full bg-white"
+              style={{
+                left: star.left,
+                top: star.top,
+                width: star.size,
+                height: star.size,
+                opacity: star.opacity,
+              }}
+              animate={
+                shouldReduceMotion
+                  ? undefined
+                  : {
+                      opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
+                      scale: [1, 1.6, 1],
+                    }
+              }
+              transition={
+                shouldReduceMotion
+                  ? undefined
+                  : {
+                      duration: 2.6 + (star.id % 5) * 0.6,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: star.delay,
+                    }
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-1"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -1226,45 +1057,33 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── GLOWING LIGHT BAR ── */}
-          <div className="glow-light-bar mb-6 opacity-80" />
-
           {/* ── HERO: Future Direct Insights ─────────────────────────── */}
           <section className="mb-5 pt-1">
-            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.02] px-5 py-7 text-center shadow-[0_8px_32px_rgba(0,0,0,0.5),0_20px_60px_rgba(0,0,0,0.3)]">
-              <div className="hero-halo opacity-70" aria-hidden="true" />
-
+            <div className="hero-card-shadow relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 py-7 text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.accentLine}`, backgroundColor: theme.areaColors.hero.bg }}>
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.areaColors.hero.text }}>
+                <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white">
                     Your Year Ahead
                   </span>
                 </div>
-
-                <h1 
-                  className="bg-gradient-to-b from-white via-white bg-clip-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.45)] sm:text-[48px]"
-                  style={{ 
-                    backgroundImage: `linear-gradient(to bottom, #ffffff, #ffffff, ${theme.gradientEnd})` 
-                  }}
-                >
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
                   Future Direct Insights
                 </h1>
-
-                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/78 sm:text-[15px]">
+                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
                   A focused look at the patterns, timing, and momentum shaping your next chapter.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* ── Reading cycle — centered ─────────────────────────────── */}
+          {/* ── Reading cycle ── */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-1 mx-auto w-full max-w-[280px] space-y-2">
+            <div className="mx-auto mb-1 w-full max-w-[280px] space-y-2">
               <div className="flex items-center justify-center gap-2">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-white/90">
                   Reading cycle
                 </span>
-                <span className="text-[10px] text-slate-600">
+                <span className="text-[10px] text-white/90">
                   {onCooldown ? 4 : readingsCompleted} / 4
                 </span>
               </div>
@@ -1272,7 +1091,7 @@ export default function ReadingIntakeScreen({
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div
                     key={i}
-                    className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]"
+                    className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]"
                   >
                     {(onCooldown || i < readingsCompleted) && (
                       <motion.div
@@ -1280,10 +1099,7 @@ export default function ReadingIntakeScreen({
                         animate={{ width: "100%" }}
                         transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
                         className="absolute inset-y-0 left-0 rounded-full"
-                        style={{
-                          backgroundColor: theme.progressBar,
-                          boxShadow: `0 0 8px ${theme.progressBar}`,
-                        }}
+                        style={{ backgroundColor: theme.progressBar }}
                       />
                     )}
                   </div>
@@ -1293,9 +1109,9 @@ export default function ReadingIntakeScreen({
           )}
 
           {freeReadingCooldownLine && (
-            <div className="mb-8 flex items-center justify-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
-              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
+            <div className="mb-8 mt-2 flex items-center justify-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-white/85" />
+              <span className="text-[11px] text-white/74">{freeReadingCooldownLine}</span>
             </div>
           )}
 
@@ -1306,18 +1122,18 @@ export default function ReadingIntakeScreen({
               transition={{ duration: 0.4 }}
               className="relative"
             >
-              <div className="space-y-3 blur-[5px] pointer-events-none select-none opacity-30">
+              <div className="pointer-events-none select-none space-y-3 blur-[5px] opacity-30">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
                   return (
                     <div
                       key={area.id}
-                      className="w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4"
+                      className="card-shadow w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4"
                     >
                       <div className="flex items-start gap-3">
                         <motion.div
                           animate={getIconPulseAnimation(false)}
-                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-slate-300"
+                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-slate-300"
                         >
                           <Icon className="h-4 w-4" />
                         </motion.div>
@@ -1369,6 +1185,7 @@ export default function ReadingIntakeScreen({
             </motion.div>
           ) : (
             <>
+              {/* ── AREA BUTTONS ── */}
               <section className="space-y-3">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
@@ -1395,11 +1212,16 @@ export default function ReadingIntakeScreen({
                       }}
                       animate={cardAnimation}
                       data-selected={isSelected ? "true" : "false"}
-                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm shadow-[0_18px_40px_rgba(0,0,0,0.5)]"
-                      style={{ 
+                      className={cn(
+                        "selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm",
+                        isSelected && "selected-card-glow"
+                      )}
+                      style={{
                         willChange: "transform, opacity",
-                        '--selected-wash': areaColors.gradient,
-                        '--selected-shadow': `0 0 0 1px ${areaColors.border}, 0 10px 30px ${areaColors.glow}, 0 0 24px ${areaColors.glow}`,
+                        ["--selected-wash" as string]: areaColors.gradient,
+                        ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 36px rgba(0,0,0,0.68), 0 0 40px ${areaColors.glow}`,
+                        backgroundColor: isSelected ? areaColors.bg : "rgba(255,255,255,0.03)",
+                        borderColor: isSelected ? areaColors.border : theme.unselectedBorder,
                       } as React.CSSProperties}
                     >
                       {isSelected && (
@@ -1416,16 +1238,14 @@ export default function ReadingIntakeScreen({
                         <motion.div
                           animate={getIconPulseAnimation(isSelected)}
                           className={cn(
-                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
-                            isSelected
-                              ? ""
-                              : "border-white/10 bg-black/20 text-slate-300"
+                            "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
+                            isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
                           )}
                           style={{
                             borderColor: isSelected ? areaColors.border : undefined,
-                            backgroundColor: isSelected ? areaColors.glow : undefined,
+                            background: isSelected ? areaColors.gradient : undefined,
                             color: isSelected ? areaColors.text : undefined,
-                            boxShadow: isSelected ? getIconTileShadow(area.id) : undefined,
+                            boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
                           }}
                         >
                           <Icon className="h-4 w-4" />
@@ -1433,7 +1253,12 @@ export default function ReadingIntakeScreen({
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-[15px] font-semibold text-white">
+                            <h2
+                              className={cn(
+                                "text-[15px] font-semibold transition-colors duration-300",
+                                isSelected ? "text-white" : "text-white"
+                              )}
+                            >
                               {area.title}
                             </h2>
 
@@ -1444,33 +1269,23 @@ export default function ReadingIntakeScreen({
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.92, y: 4 }}
                                   transition={{ duration: 0.18, ease: "easeOut" }}
-                                  className="relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
+                                  className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
                                   style={{
-                                    color: theme.selectedTag,
-                                    borderColor: theme.selectedBorder,
-                                    backgroundColor: getBadgeBackground(),
+                                    borderColor: "rgba(255,255,255,0.3)",
+                                    backgroundColor: "rgba(255,255,255,0.12)",
                                     borderWidth: 1,
                                     borderStyle: "solid",
                                     boxShadow: getBadgeShadow(),
                                   }}
                                 >
-                                  {!shouldReduceMotion && (
-                                    <motion.span
-                                      aria-hidden="true"
-                                      className="pointer-events-none absolute inset-0"
-                                      style={{
-                                        background:
-                                          "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.18) 50%, transparent 65%, transparent 100%)",
-                                      }}
-                                      initial={{ x: "-140%" }}
-                                      animate={{ x: ["-140%", "140%"] }}
-                                      transition={{
-                                        duration: 1.1,
-                                        ease: "easeOut",
-                                        delay: 0.2,
-                                      }}
-                                    />
-                                  )}
+                                  <span
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute inset-0"
+                                    style={{
+                                      background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)",
+                                      transform: "translateX(-155%)",
+                                    }}
+                                  />
                                   <span className="relative z-[1]">Selected</span>
                                 </motion.span>
                               )}
@@ -1481,7 +1296,7 @@ export default function ReadingIntakeScreen({
                             className="mt-1 text-sm leading-5"
                             animate={{
                               color: isSelected
-                                ? "rgba(226, 232, 240, 0.92)"
+                                ? "rgba(241, 245, 249, 0.92)"
                                 : "rgba(148, 163, 184, 1)",
                             }}
                             transition={{ duration: 0.24, ease: "easeOut" }}
@@ -1495,6 +1310,7 @@ export default function ReadingIntakeScreen({
                 })}
               </section>
 
+              {/* ── "ASK SOMETHING" TEXTAREA ── */}
               <AnimatePresence>
                 {selectedArea && selectedArea !== "other" && (
                   <motion.section
@@ -1504,34 +1320,41 @@ export default function ReadingIntakeScreen({
                     transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                     className="mt-6 space-y-2"
                   >
-                    <Textarea
-                      id="question"
-                      ref={textareaRef}
-                      rows={5}
-                      value={question}
-                      onChange={(e) => setQuestion(e.target.value)}
-                      placeholder={
-                        AREAS.find((a) => a.id === selectedArea)?.placeholder ??
-                        "Ask something specific so your reading can go deeper."
-                      }
-                      className="min-h-[132px] rounded-[24px] border px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 transition-all duration-300 focus:outline-none focus:ring-1"
+                    <div
+                      className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px]"
                       style={{
-                        borderColor: "rgba(255,255,255,0.10)",
-                        backgroundColor: "rgba(0,0,0,0.20)",
-                        outlineColor: theme.accentLine,
+                        boxShadow: "0 18px 34px rgba(0,0,0,0.55)",
+                        transition: "box-shadow 0.3s ease, border-color 0.3s ease",
                       }}
                       onFocus={(e) => {
-                        const styles = getTextareaFocusStyles(true);
-                        e.currentTarget.style.borderColor = styles.borderColor;
-                        e.currentTarget.style.boxShadow = styles.boxShadow;
+                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)";
+                        e.currentTarget.style.boxShadow =
+                          "0 0 50px rgba(255,255,255,0.15), 0 18px 34px rgba(0,0,0,0.55)";
                       }}
                       onBlur={(e) => {
-                        const styles = getTextareaFocusStyles(false);
-                        e.currentTarget.style.borderColor = styles.borderColor;
-                        e.currentTarget.style.boxShadow = styles.boxShadow;
+                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+                        e.currentTarget.style.boxShadow = "0 18px 34px rgba(0,0,0,0.55)";
                       }}
-                    />
-                    <p className="text-xs leading-5 text-slate-400">
+                    >
+                      <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
+                        <Textarea
+                          id="question"
+                          ref={textareaRef}
+                          rows={5}
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          placeholder={
+                            AREAS.find((a) => a.id === selectedArea)?.placeholder ??
+                            "Ask something specific so your reading can go deeper."
+                          }
+                          className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
+                          style={{
+                            backgroundColor: "transparent",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs leading-5 text-slate-300/80">
                       Be specific. The clearer your question, the sharper the reading.
                     </p>
                   </motion.section>
@@ -1540,6 +1363,7 @@ export default function ReadingIntakeScreen({
             </>
           )}
 
+          {/* ── SUBMIT BUTTON ── */}
           <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
@@ -1551,7 +1375,7 @@ export default function ReadingIntakeScreen({
                   type="button"
                   onClick={handleStartReading}
                   disabled={!canSubmit || isCreatingReading}
-                  className="h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+                  className="card-shadow h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
                   style={{
                     borderColor: theme.areaColors.cta.border,
                     color: theme.areaColors.cta.text,
@@ -1565,44 +1389,33 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-          {/* ── SWIPE HINT: Explore Unlimited Access — trimmed to just this block ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
-            className="mt-4"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <Sparkles className="h-3.5 w-3.5 text-amber-300/60" />
-              <span className="text-[13px] font-medium text-amber-200/80 tracking-wide">
-                Explore Unlimited Access
-              </span>
-            </div>
-
-            {/* Swipe Button — kept gold/amber as requested, not part of the neutral theme */}
-            <motion.button
+          {/* ── UNLIMITED ACCESS (BOLD GOLD SHIMMER) ── */}
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
               whileTap={{ scale: 0.97 }}
-              transition={{ duration: 0.12 }}
               onClick={(e) => {
                 e.stopPropagation();
                 onSwipeLeft?.();
               }}
-              className="w-full h-12 rounded-xl bg-gradient-to-r from-amber-400/15 to-amber-500/5 border border-amber-300/20 text-amber-200/80 text-[14px] font-medium transition hover:bg-amber-300/10 flex items-center justify-center gap-3"
+              className="gold-shimmer flex h-12 w-full cursor-pointer items-center justify-center gap-3 text-[14px] font-medium text-amber-100/90"
+              style={{ touchAction: "none" }}
             >
-              <svg className="w-4 h-4 swipe-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span>✨ Unlimited Access, Swipe Left to Explore</span>
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
-              <span>Swipe left to explore</span>
-            </motion.button>
-          </motion.div>
+            </motion.div>
+          </div>
 
-          {/* ── COMING SOON — Static ── */}
+          {/* ── COMING SOON ── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-            className="mt-4"
+            className="mt-4 border-t border-white/10 pt-4"
           >
             <div className="mb-2 flex items-center justify-center">
               <span className="flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
@@ -1611,10 +1424,9 @@ export default function ReadingIntakeScreen({
               </span>
             </div>
             <div
-              className="relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
+              className="pointer-events-none relative select-none overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30"
               aria-hidden="true"
             >
-              {/* ── Sparkles ── */}
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
                   key={i}
@@ -1631,9 +1443,7 @@ export default function ReadingIntakeScreen({
                   }}
                 />
               ))}
-
-              {/* ── Blurred preview content ── */}
-              <div className="blur-[6px] px-5 py-5 opacity-60">
+              <div className="px-5 py-5 opacity-60 blur-[6px]">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-indigo-300" />
                   <span className="text-[14px] font-semibold text-indigo-200">
@@ -1646,16 +1456,10 @@ export default function ReadingIntakeScreen({
                   <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
                 </div>
               </div>
-
-              {/* ── Gradient overlay ── */}
-              <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
-              
-              {/* ── Lock overlay ── */}
+              <div className="absolute inset-0 rounded-[28px] bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20" />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10"
-                  >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
                     <Lock className="h-4 w-4 text-indigo-300/70" />
                   </div>
                   <span className="text-[11px] tracking-wide text-indigo-300/60">
@@ -1670,4 +1474,3 @@ export default function ReadingIntakeScreen({
     </div>
   );
 }
- 
