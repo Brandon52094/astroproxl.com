@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Lock,
   Timer,
-  Pencil,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -99,7 +98,6 @@ interface UserStatus {
 
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
-  onSwipeLeft?: () => void;
 }
 
 interface NatalPlacement {
@@ -167,43 +165,38 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     nextStepBorder: "rgba(255,255,255,0.65)",
     nextStepGlow: "rgba(255,255,255,0.24)",
     areaColors: {
-      // 🔥 LOVE — Orange outline, Red icon
       love: {
         bg: "rgba(127, 29, 29, 0.30)",
-        border: "#F97316", // ORANGE outline
+        border: "#F97316",
         glow: "rgba(239, 68, 68, 0.30)",
         text: "#FCA5A5",
         iconBg: "rgba(127, 29, 29, 0.55)",
         gradient: "linear-gradient(135deg, rgba(127,29,29,0.85) 0%, rgba(153,27,27,0.70) 32%, rgba(239,68,68,0.20) 100%)",
       },
-      // 🌍 MONEY — Sand outline, Green icon
       money: {
         bg: "rgba(20, 83, 45, 0.30)",
-        border: "#D4A574", // SAND outline
+        border: "#D4A574",
         glow: "rgba(34, 197, 94, 0.30)",
         text: "#86EFAC",
         iconBg: "rgba(20, 83, 45, 0.55)",
         gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
       },
-      // 💨 CAREER — White outline, Blue icon
       career: {
         bg: "rgba(30, 58, 138, 0.30)",
-        border: "#FFFFFF", // WHITE outline
+        border: "#FFFFFF",
         glow: "rgba(59, 130, 246, 0.30)",
         text: "#93C5FD",
         iconBg: "rgba(30, 58, 138, 0.55)",
         gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
       },
-      // 💜 WHAT'S COMING — Indigo outline, Purple icon
       other: {
         bg: "rgba(49, 46, 129, 0.30)",
-        border: "#4F46E5", // INDIGO outline
+        border: "#4F46E5",
         glow: "rgba(139, 92, 246, 0.30)",
         text: "#C4B5FD",
         iconBg: "rgba(49, 46, 129, 0.55)",
         gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
       },
-      // CTA button (Begin My Reading - previous UI style)
       cta: {
         bg: "rgba(255,255,255,0.08)",
         border: "rgba(255,255,255,0.22)",
@@ -212,7 +205,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
         iconBg: "rgba(255,255,255,0.06)",
         gradient: "linear-gradient(180deg, #161A26 0%, #0A0D16 100%)",
       },
-      // Hero section
       hero: {
         bg: "rgba(255,255,255,0.04)",
         border: "rgba(255,255,255,0.14)",
@@ -234,18 +226,27 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${hours}h`;
 }
 
+// ── CONSTANTS ──────────────────────────────────────────────────────────
+const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+const MAJOR_PLANETS = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+const TOTAL_CARDS = 5;
+const CARD_TITLES = [
+  "Unlimited Access",
+  "Your Natal Chart",
+  "Today's Astrological Calendar",
+  "Current Important Transits",
+  "Coming Soon"
+];
+
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
-  onSwipeLeft,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [isCreatingReading, setIsCreatingReading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [chartStatus, setChartStatus] = useState<
-    "checking" | "ready" | "recalculating" | "error"
-  >("checking");
+  const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
@@ -272,7 +273,7 @@ export default function ReadingIntakeScreen({
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
 
   // ── Theme state ──────────────────────────────────────────────────────
-  const [theme, setTheme] = useState<ThemeColors>(THEMES.cosmic);
+  const theme = THEMES.cosmic; // Only one theme, no need for state
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -290,7 +291,7 @@ export default function ReadingIntakeScreen({
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ── STARS (from sign-in page) ──
+  // ── STARS ──
   const stars = useMemo(
     () =>
       Array.from({ length: 28 }).map((_, i) => {
@@ -316,7 +317,7 @@ export default function ReadingIntakeScreen({
     []
   );
 
-  const getIconPulseAnimation = (isSelected = false) => {
+  const getIconPulseAnimation = useCallback((isSelected = false) => {
     if (shouldReduceMotion) return {};
     if (!isSelected) {
       return {
@@ -332,8 +333,9 @@ export default function ReadingIntakeScreen({
         ease: "easeInOut" as const,
       },
     };
-  };
+  }, [shouldReduceMotion]);
 
+  // ── Chart loading ────────────────────────────────────────────────────
   useEffect(() => {
     async function ensureChart() {
       if (isChartFresh()) {
@@ -396,47 +398,33 @@ export default function ReadingIntakeScreen({
 
     const planets = data.tropical?.planets ?? [];
 
-    const planetOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+    // Process natal planets
     const allPlanetsData: NatalPlacement[] = [];
-    planetOrder.forEach(name => {
+    PLANET_ORDER.forEach(name => {
       const found = planets.find(p => p.name === name);
-      if (found) {
-        allPlanetsData.push(found);
-      }
+      if (found) allPlanetsData.push(found);
     });
     const rising = planets.find(p => p.name === "Ascendant");
     if (rising) {
       allPlanetsData.push({ ...rising, name: "Rising" });
     }
     setAllPlanets(allPlanetsData);
+    setNatalSun(planets.find((p) => p.name === "Sun") ?? null);
+    setNatalMoon(planets.find((p) => p.name === "Moon") ?? null);
+    setNatalRising(planets.find((p) => p.name === "Ascendant") ?? null);
 
-    const sun = planets.find((p) => p.name === "Sun") ?? null;
-    const moon = planets.find((p) => p.name === "Moon") ?? null;
-    const risingData = planets.find((p) => p.name === "Ascendant") ?? null;
-    setNatalSun(sun);
-    setNatalMoon(moon);
-    setNatalRising(risingData);
-
-    if (data.moonPhase) {
-      setMoonPhase(data.moonPhase);
-    }
+    if (data.moonPhase) setMoonPhase(data.moonPhase);
 
     if (data.transits) {
-      const todaySunPlanet = data.transits.find((p) => p.name === "Sun") ?? null;
-      setTodaySun(todaySunPlanet);
-      const transitOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+      setTodaySun(data.transits.find((p) => p.name === "Sun") ?? null);
       const allTransits: TodayTransitPlanet[] = [];
-      transitOrder.forEach(name => {
+      PLANET_ORDER.forEach(name => {
         const found = data.transits?.find(p => p.name === name);
-        if (found) {
-          allTransits.push(found);
-        }
+        if (found) allTransits.push(found);
       });
       setTodayPlanets(allTransits);
     }
-
-    setTheme(THEMES.cosmic);
-  }, [chartStatus, userStatus]);
+  }, [chartStatus]);
 
   // ── Load nickname ────────────────────────────────────────────────────
   useEffect(() => {
@@ -444,9 +432,7 @@ export default function ReadingIntakeScreen({
       try {
         const response = await fetch("/api/user/nickname");
         const data = await response.json();
-        if (data.nickname) {
-          setNickname(data.nickname);
-        }
+        if (data.nickname) setNickname(data.nickname);
       } catch {
         // silent
       }
@@ -476,9 +462,7 @@ export default function ReadingIntakeScreen({
         body: JSON.stringify({ nickname: trimmed }),
       });
       const data = await response.json();
-      if (response.ok && data.nickname) {
-        setNickname(data.nickname);
-      }
+      if (response.ok && data.nickname) setNickname(data.nickname);
     } catch {
       // silent
     } finally {
@@ -672,10 +656,9 @@ export default function ReadingIntakeScreen({
         }),
       });
       const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
+      if (data.url) window.location.href = data.url;
     } catch {
+      // silent
     } finally {
       setIsBypassLoading(false);
     }
@@ -700,21 +683,12 @@ export default function ReadingIntakeScreen({
   }, [userStatus, onCooldown, now]);
 
   // ── Carousel navigation ─────────────────────────────────────────────
-  const totalCards = 5;
-  const cardTitles = [
-    "Unlimited Access",
-    "Your Natal Chart",
-    "Today's Astrological Calendar",
-    "Current Important Transits",
-    "Coming Soon"
-  ];
-
   const goToPrevious = useCallback(() => {
-    setCurrentCardIndex((prev) => (prev === 0 ? totalCards - 1 : prev - 1));
+    setCurrentCardIndex((prev) => (prev === 0 ? TOTAL_CARDS - 1 : prev - 1));
   }, []);
 
   const goToNext = useCallback(() => {
-    setCurrentCardIndex((prev) => (prev === totalCards - 1 ? 0 : prev + 1));
+    setCurrentCardIndex((prev) => (prev === TOTAL_CARDS - 1 ? 0 : prev + 1));
   }, []);
 
   // ── Swipe handlers ──────────────────────────────────────────────────
@@ -777,7 +751,7 @@ export default function ReadingIntakeScreen({
 
   // ── Theme-specific helper functions ────────────────────────────────
 
-  const getAreaColors = (areaId: string) => {
+  const getAreaColors = useCallback((areaId: string) => {
     const areaMap: Record<string, keyof ThemeColors['areaColors']> = {
       love: 'love',
       money: 'money',
@@ -786,9 +760,9 @@ export default function ReadingIntakeScreen({
     };
     const key = areaMap[areaId] || 'other';
     return theme.areaColors[key];
-  };
+  }, [theme]);
 
-  const getCardAnimation = (isSelected: boolean, areaId: string) => {
+  const getCardAnimation = useCallback((isSelected: boolean, areaId: string) => {
     const areaColors = getAreaColors(areaId);
     
     if (!isSelected) {
@@ -804,40 +778,20 @@ export default function ReadingIntakeScreen({
       borderColor: areaColors.border,
       y: shouldReduceMotion ? 0 : -2,
     };
-  };
+  }, [getAreaColors, theme.unselectedBorder, shouldReduceMotion]);
 
-  const getGlowOverlay = (areaId: string) => {
+  const getGlowOverlay = useCallback((areaId: string) => {
     const areaColors = getAreaColors(areaId);
     return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(255,255,255,0.018) 38%, transparent 72%)`;
-  };
+  }, [getAreaColors]);
 
-  const getIconTileShadow = (areaId: string) => {
+  const getIconTileShadow = useCallback((areaId: string) => {
     const areaColors = getAreaColors(areaId);
     return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${areaColors.glow}`;
-  };
-
-  const getBadgeBackground = () => "rgba(255, 255, 255, 0.12)";
-  const getBadgeShadow = () =>
-    `inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(255,255,255,0.3), 0 10px 22px rgba(0,0,0,0.32)`;
-  const getCTABackground = () => theme.areaColors.cta.gradient;
-  const getCTAShadow = () =>
-    `0 18px 34px rgba(0,0,0,0.62), 0 8px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`;
-
-  const getTextareaFocusStyles = (isFocused: boolean) => {
-    if (!isFocused) {
-      return {
-        borderColor: "rgba(255,255,255,0.12)",
-        boxShadow: "0 18px 34px rgba(0,0,0,0.55)",
-      };
-    }
-    return {
-      borderColor: "rgba(255,255,255,0.5)",
-      boxShadow: `0 0 40px rgba(255,255,255,0.15), 0 18px 34px rgba(0,0,0,0.55)`,
-    };
-  };
+  }, [getAreaColors]);
 
   // ── Render individual card content ──────────────────────────────────
-  const renderCardContent = (index: number) => {
+  const renderCardContent = useCallback((index: number) => {
     switch (index) {
       case 0: // Unlimited Access
         return (
@@ -961,8 +915,7 @@ export default function ReadingIntakeScreen({
           </div>
         );
       case 3: // Current Important Transits
-        const majorPlanets = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
-        const majorTransits = todayPlanets.filter(p => majorPlanets.includes(p.name));
+        const majorTransits = todayPlanets.filter(p => MAJOR_PLANETS.includes(p.name));
         return (
           <div className="space-y-3 flex-1">
             <div className="text-xs text-slate-400 mb-2">Major planetary transits</div>
@@ -994,7 +947,7 @@ export default function ReadingIntakeScreen({
       default:
         return null;
     }
-  };
+  }, [userStatus, natalSun, natalMoon, natalRising, allPlanets, moonPhase, todayPlanets]);
 
   return (
     <div
@@ -1111,7 +1064,6 @@ export default function ReadingIntakeScreen({
           animation: cooldownPulse 3s ease-in-out infinite;
         }
 
-        /* ── STANDARD SHADOW (matches Hero) ── */
         .standard-shadow {
           box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
         }
@@ -1120,12 +1072,10 @@ export default function ReadingIntakeScreen({
           box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
         }
 
-        /* ── SELECTED CARD WHITE GLOW ── */
         .selected-card-glow {
           animation: selectedWhiteGlow 2.8s ease-in-out infinite;
         }
 
-        /* ── UNLIMITED ACCESS GOLD SHIMMER (BOLD) ── */
         .gold-shimmer {
           position: relative;
           overflow: hidden;
@@ -1214,7 +1164,6 @@ export default function ReadingIntakeScreen({
           100% { transform: translateX(155%); }
         }
 
-        /* ── CAROUSEL STYLES ── */
         .carousel-container {
           position: relative;
           overflow: hidden;
@@ -1337,9 +1286,8 @@ export default function ReadingIntakeScreen({
         }
       `}</style>
 
-      {/* ── BACKGROUND (space theme, no yellow glow) ── */}
+      {/* ── BACKGROUND ── */}
       <div className="pointer-events-none fixed inset-0">
-        {/* Pulsing teal orb */}
         <motion.div
           className="absolute left-1/2 top-[16%] h-[24rem] w-[24rem] -translate-x-1/2 rounded-full blur-3xl"
           animate={
@@ -1357,7 +1305,6 @@ export default function ReadingIntakeScreen({
           }}
         />
 
-        {/* Stars */}
         <div className="absolute inset-0">
           {stars.map((star) => (
             <motion.span
@@ -1403,7 +1350,7 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── HERO: Future Direct Insights ─────────────────────────── */}
+          {/* ── HERO ─────────────────────────────────────────────────────── */}
           <section className="mb-5 pt-1">
             <div className="hero-card-shadow relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 py-7 text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
@@ -1657,7 +1604,7 @@ export default function ReadingIntakeScreen({
                 })}
               </section>
 
-              {/* ── "ASK SOMETHING" TEXTAREA ── */}
+              {/* ── TEXTAREA ── */}
               <AnimatePresence>
                 {selectedArea && selectedArea !== "other" && (
                   <motion.section
@@ -1710,7 +1657,7 @@ export default function ReadingIntakeScreen({
             </>
           )}
 
-          {/* ── SUBMIT BUTTON (Begin My Reading - previous UI style) ── */}
+          {/* ── SUBMIT BUTTON ── */}
           <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
@@ -1743,10 +1690,9 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── CAROUSEL: Unlimited Access Dashboard ── */}
+          {/* ── CAROUSEL ── */}
           <div className="mt-4">
             <div className="carousel-container">
-              {/* Header */}
               <button
                 type="button"
                 onClick={() => setIsCarouselOpen(!isCarouselOpen)}
@@ -1800,13 +1746,13 @@ export default function ReadingIntakeScreen({
                             transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
                           }}
                         >
-                          {[0, 1, 2, 3, 4].map((index) => {
+                          {Array.from({ length: TOTAL_CARDS }).map((_, index) => {
                             const shouldBlur = !userStatus?.isSubscribed && index !== 0;
                             return (
                               <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0, height: "100%" }}>
                                 <div className="relative w-full h-full min-h-[220px] bg-black/20 p-6 flex flex-col">
                                   <h3 className="text-sm font-semibold text-amber-200 mb-3">
-                                    {cardTitles[index]}
+                                    {CARD_TITLES[index]}
                                   </h3>
                                   
                                   <div className={shouldBlur ? "blur-content flex-1" : "flex-1"}>
@@ -1867,7 +1813,7 @@ export default function ReadingIntakeScreen({
             </div>
           </div>
 
-          {/* ── COMING SOON (reverted to previous UI style) ── */}
+          {/* ── COMING SOON ── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
