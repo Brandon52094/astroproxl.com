@@ -1605,60 +1605,45 @@ export default function ReadingIntakeScreen({
   transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
   className="mt-4"
 >
-  <div 
-    className="swipe-hint-container"
-    onClick={onSwipeLeft}
-    role="button"
-    tabIndex={0}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        onSwipeLeft?.();
-      }
-    }}
-  >
-    <div className="p-4">
-      {/* Header with icon */}
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-200">
-          <Sparkles className="h-4 w-4" />
-        </div>
-        <div className="text-left">
-          <h2 className="text-[15px] font-semibold text-amber-200">
-            Explore Unlimited Access
-          </h2>
-        </div>
-      </div>
-
-      {/* Feature preview pills */}
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {["8 Readings", "Follow Ups Free", "No Wait", "Downloads", "Full Chart"].map((feature) => (
-          <span 
-            key={feature}
-            className="text-[9px] px-2 py-0.5 rounded-full border border-amber-300/10 bg-amber-300/5 text-amber-300/50"
-          >
-            {feature}
-          </span>
-        ))}
-      </div>
-
-      {/* Gold CTA Button with swipe animation */}
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        transition={{ duration: 0.12 }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSwipeLeft?.();
-        }}
-        className="swipe-button-glow w-full h-11 rounded-xl bg-gradient-to-r from-amber-400/20 to-amber-500/10 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30 flex items-center justify-center gap-3"
-      >
-        <span>Swipe left to explore →</span>
-        <svg className="w-4 h-4 swipe-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </motion.button>
-    </div>
+  {/* Header */}
+  <div className="flex items-center justify-center gap-2 mb-3">
+    <Sparkles className="h-3.5 w-3.5 text-amber-300/60" />
+    <span className="text-[13px] font-medium text-amber-200/80 tracking-wide">
+      Explore Unlimited Access
+    </span>
   </div>
+
+  {/* Swipe Button - only this is clickable/swipeable */}
+  <motion.button
+    whileTap={{ scale: 0.97 }}
+    transition={{ duration: 0.12 }}
+    onClick={(e) => {
+      e.stopPropagation();
+      onSwipeLeft?.();
+    }}
+    className="w-full h-12 rounded-xl bg-gradient-to-r from-amber-400/15 to-amber-500/5 border border-amber-300/20 text-amber-200/80 text-[14px] font-medium transition hover:bg-amber-300/10 flex items-center justify-center gap-3"
+  >
+    <svg className="w-4 h-4 swipe-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    </svg>
+    <span>Swipe left to explore</span>
+  </motion.button>
+
+  {/* Dot indicators */}
+  <div className="flex justify-center gap-1.5 mt-3">
+    {[0, 1, 2, 3, 4].map((i) => (
+      <div 
+        key={i} 
+        className={cn(
+          "h-1 rounded-full transition-all",
+          i === 0 ? "w-4 bg-amber-300/40" : "w-1.5 bg-white/10"
+        )}
+      />
+    ))}
+  </div>
+  <p className="text-center text-[10px] text-slate-500/40 mt-1.5">
+    5 screens · swipe to navigate
+  </p>
 </motion.div>
 
           {/* ── COMING SOON — Static ── */}
