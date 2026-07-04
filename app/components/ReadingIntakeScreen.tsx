@@ -167,43 +167,43 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     nextStepBorder: "rgba(255,255,255,0.65)",
     nextStepGlow: "rgba(255,255,255,0.24)",
     areaColors: {
-      // 🔥 FIRE — Love
+      // 🔥 LOVE — Orange outline, Red icon
       love: {
         bg: "rgba(127, 29, 29, 0.30)",
-        border: "rgba(248, 113, 113, 0.50)",
+        border: "#F97316", // ORANGE outline
         glow: "rgba(239, 68, 68, 0.30)",
         text: "#FCA5A5",
         iconBg: "rgba(127, 29, 29, 0.55)",
         gradient: "linear-gradient(135deg, rgba(127,29,29,0.85) 0%, rgba(153,27,27,0.70) 32%, rgba(239,68,68,0.20) 100%)",
       },
-      // 🌍 EARTH/GREEN — Money
+      // 🌍 MONEY — Sand outline, Green icon
       money: {
         bg: "rgba(20, 83, 45, 0.30)",
-        border: "rgba(74, 222, 128, 0.45)",
+        border: "#D4A574", // SAND outline
         glow: "rgba(34, 197, 94, 0.30)",
         text: "#86EFAC",
         iconBg: "rgba(20, 83, 45, 0.55)",
         gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
       },
-      // 💨 AIR — Career
+      // 💨 CAREER — White outline, Blue icon
       career: {
         bg: "rgba(30, 58, 138, 0.30)",
-        border: "rgba(96, 165, 250, 0.45)",
+        border: "#FFFFFF", // WHITE outline
         glow: "rgba(59, 130, 246, 0.30)",
         text: "#93C5FD",
         iconBg: "rgba(30, 58, 138, 0.55)",
         gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
       },
-      // 💜 PURPLE — What's Coming
+      // 💜 WHAT'S COMING — Indigo outline, Purple icon
       other: {
         bg: "rgba(49, 46, 129, 0.30)",
-        border: "rgba(167, 139, 250, 0.45)",
+        border: "#4F46E5", // INDIGO outline
         glow: "rgba(139, 92, 246, 0.30)",
         text: "#C4B5FD",
         iconBg: "rgba(49, 46, 129, 0.55)",
         gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
       },
-      // CTA button
+      // CTA button (Begin My Reading - previous UI style)
       cta: {
         bg: "rgba(255,255,255,0.08)",
         border: "rgba(255,255,255,0.22)",
@@ -249,6 +249,11 @@ export default function ReadingIntakeScreen({
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [isCarouselOpen, setIsCarouselOpen] = useState(false);
+  const [touchStartX, setTouchStartX] = useState(0);
+  const [touchEndX, setTouchEndX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
@@ -694,6 +699,82 @@ export default function ReadingIntakeScreen({
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
+  // ── Carousel navigation ─────────────────────────────────────────────
+  const totalCards = 5;
+  const cardTitles = [
+    "Unlimited Access",
+    "Your Natal Chart",
+    "Today's Astrological Calendar",
+    "Current Important Transits",
+    "Coming Soon"
+  ];
+
+  const goToPrevious = useCallback(() => {
+    setCurrentCardIndex((prev) => (prev === 0 ? totalCards - 1 : prev - 1));
+  }, []);
+
+  const goToNext = useCallback(() => {
+    setCurrentCardIndex((prev) => (prev === totalCards - 1 ? 0 : prev + 1));
+  }, []);
+
+  // ── Swipe handlers ──────────────────────────────────────────────────
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+    setTouchEndX(e.touches[0].clientX);
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    setTouchEndX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    const swipeDistance = touchStartX - touchEndX;
+    const minSwipeDistance = 50;
+    
+    if (swipeDistance > minSwipeDistance) {
+      goToNext();
+    } else if (swipeDistance < -minSwipeDistance) {
+      goToPrevious();
+    }
+    
+    setTouchStartX(0);
+    setTouchEndX(0);
+  };
+
+  // ── Mouse drag for desktop swipe ────────────────────────────────────
+  const [mouseStartX, setMouseStartX] = useState(0);
+  const [mouseEndX, setMouseEndX] = useState(0);
+  const [isMouseDragging, setIsMouseDragging] = useState(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setMouseStartX(e.clientX);
+    setMouseEndX(e.clientX);
+    setIsMouseDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isMouseDragging) return;
+    setMouseEndX(e.clientX);
+  };
+
+  const handleMouseUp = () => {
+    setIsMouseDragging(false);
+    const swipeDistance = mouseStartX - mouseEndX;
+    const minSwipeDistance = 50;
+    
+    if (swipeDistance > minSwipeDistance) {
+      goToNext();
+    } else if (swipeDistance < -minSwipeDistance) {
+      goToPrevious();
+    }
+    
+    setMouseStartX(0);
+    setMouseEndX(0);
+  };
+
   // ── Theme-specific helper functions ────────────────────────────────
 
   const getAreaColors = (areaId: string) => {
@@ -755,13 +836,173 @@ export default function ReadingIntakeScreen({
     };
   };
 
+  // ── Render individual card content ──────────────────────────────────
+  const renderCardContent = (index: number) => {
+    switch (index) {
+      case 0: // Unlimited Access
+        return (
+          <div className="space-y-4 flex-1">
+            <div>
+              <h3 className="text-[15px] font-semibold leading-snug text-white">
+                {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Readings, No Waiting."}
+              </h3>
+              {!userStatus?.isSubscribed && (
+                <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
+                  Need more than one reading a week? This is the best route. Financially & mathematically. See what you get below!
+                </p>
+              )}
+            </div>
+
+            {!userStatus?.isSubscribed ? (
+              <>
+                <div className="space-y-2">
+                  {[
+                    "8 Readings, not 1",
+                    "Ask Follow Ups Free",
+                    "No 2-week wait, no $6 to skip it",
+                    "Downloads Always Free.",
+                    "Unlimited Access Features",
+                  ].map((perk) => (
+                    <div key={perk} className="flex items-center gap-2.5">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
+                        ✓
+                      </span>
+                      <span className="text-[12px] text-slate-300">{perk}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-amber-300/60">
+                  More, for less, still premium.
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-4 flex-1">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+                <p className="mt-3 text-center text-sm text-slate-300">
+                  You have full access to all features.
+                </p>
+                <p className="text-center text-xs text-slate-500 mt-1">
+                  Enjoy your premium experience.
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      case 1: // Your Natal Chart
+        return (
+          <div className="space-y-3 flex-1">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Sun</span>
+                <p className="text-sm text-white font-medium">{natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon</span>
+                <p className="text-sm text-white font-medium">{natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Rising</span>
+                <p className="text-sm text-white font-medium">{natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Planets</span>
+                <p className="text-sm text-white font-medium">{allPlanets.length}</p>
+              </div>
+            </div>
+            <div className="max-h-[100px] overflow-y-auto space-y-1">
+              {allPlanets.slice(0, 5).map((planet) => (
+                <div key={planet.name} className="flex justify-between text-xs">
+                  <span className="text-slate-400">{planet.name}</span>
+                  <span className="text-white">{planet.sign} {planet.degree}</span>
+                </div>
+              ))}
+              {allPlanets.length > 5 && (
+                <div className="text-xs text-slate-500">+{allPlanets.length - 5} more</div>
+              )}
+            </div>
+          </div>
+        );
+      case 2: // Today's Astrological Calendar
+        return (
+          <div className="space-y-3 flex-1">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon Phase</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.phaseName || "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Illumination</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.illuminationPercent || "—"}%</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon Sign</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.moonSign || "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Retrogrades</span>
+                <p className="text-sm text-white font-medium">
+                  {todayPlanets.filter(p => p.isRetrograde).length || 0}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1 max-h-[80px] overflow-y-auto">
+              {todayPlanets.slice(0, 4).map((planet) => (
+                <div key={planet.name} className="flex justify-between text-xs">
+                  <span className="text-slate-400">{planet.name}</span>
+                  <span className="text-white">{planet.sign} {planet.degree}{planet.isRetrograde ? " ℞" : ""}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 3: // Current Important Transits
+        const majorPlanets = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+        const majorTransits = todayPlanets.filter(p => majorPlanets.includes(p.name));
+        return (
+          <div className="space-y-3 flex-1">
+            <div className="text-xs text-slate-400 mb-2">Major planetary transits</div>
+            {majorTransits.length > 0 ? (
+              <div className="space-y-2">
+                {majorTransits.map((planet) => (
+                  <div key={planet.name} className="flex justify-between items-center rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-sm text-slate-300">{planet.name}</span>
+                    <span className="text-sm text-white">
+                      {planet.sign} {planet.degree}
+                      {planet.isRetrograde && " ℞"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-sm text-slate-500 py-4">Loading transits...</div>
+            )}
+          </div>
+        );
+      case 4: // Coming Soon
+        return (
+          <div className="flex flex-col items-center justify-center h-full py-8 flex-1">
+            <Sparkles className="h-12 w-12 text-amber-300/40 mb-4" />
+            <p className="text-center text-sm text-slate-400">More features coming soon</p>
+            <p className="text-center text-xs text-slate-500 mt-2">Stay tuned for updates</p>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div
       className="no-scrollbar h-screen overflow-y-auto overscroll-none text-slate-100"
       style={{
         WebkitOverflowScrolling: "touch",
         background:
-          "radial-gradient(circle at 50% 18%, rgba(94,234,212,0.10), transparent 34%), radial-gradient(circle at 85% 82%, rgba(251,191,36,0.07), transparent 28%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+          "radial-gradient(circle at 50% 18%, rgba(45,212,191,0.08), transparent 40%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
       <style jsx>{`
@@ -831,21 +1072,6 @@ export default function ReadingIntakeScreen({
           }
         }
 
-        @keyframes textareaWhiteGlow {
-          0%, 100% {
-            box-shadow:
-              0 0 20px rgba(255, 255, 255, 0.06),
-              0 18px 34px rgba(0, 0, 0, 0.55);
-            border-color: rgba(255, 255, 255, 0.12);
-          }
-          50% {
-            box-shadow:
-              0 0 40px rgba(255, 255, 255, 0.18),
-              0 22px 40px rgba(0, 0, 0, 0.65);
-            border-color: rgba(255, 255, 255, 0.35);
-          }
-        }
-
         @keyframes jxlShimmer {
           0% { transform: translateX(-60%); }
           50% { transform: translateX(40%); }
@@ -885,18 +1111,13 @@ export default function ReadingIntakeScreen({
           animation: cooldownPulse 3s ease-in-out infinite;
         }
 
-        /* ── CARD SHADOW (separates buttons from background) ── */
-        .card-shadow {
-          box-shadow: 0 18px 36px rgba(0, 0, 0, 0.65), 0 8px 18px rgba(0, 0, 0, 0.45);
+        /* ── STANDARD SHADOW (matches Hero) ── */
+        .standard-shadow {
+          box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
         }
 
         .hero-card-shadow {
           box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
-        }
-
-        /* ── TEXTAREA WHITE GLOW ── */
-        .textarea-glow {
-          animation: textareaWhiteGlow 3s ease-in-out infinite;
         }
 
         /* ── SELECTED CARD WHITE GLOW ── */
@@ -945,7 +1166,6 @@ export default function ReadingIntakeScreen({
           overflow: hidden;
           isolation: isolate;
           will-change: transform, opacity;
-          box-shadow: 0 18px 36px rgba(0,0,0,0.62), 0 8px 18px rgba(0,0,0,0.46);
         }
 
         .selected-card-shell::before {
@@ -994,19 +1214,130 @@ export default function ReadingIntakeScreen({
           100% { transform: translateX(155%); }
         }
 
+        /* ── CAROUSEL STYLES ── */
+        .carousel-container {
+          position: relative;
+          overflow: hidden;
+          border-radius: 24px;
+          border: 1px solid rgba(251, 191, 36, 0.2);
+          background: linear-gradient(180deg, rgba(251, 191, 36, 0.06), rgba(251, 191, 36, 0.02));
+          animation: jxlAmberPulse 2.8s ease-in-out infinite;
+        }
+
+        .carousel-container::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
+            radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .carousel-container::after {
+          content: "";
+          position: absolute;
+          inset: -40%;
+          background-image: linear-gradient(
+            120deg,
+            rgba(253, 230, 138, 0) 0%,
+            rgba(253, 230, 138, 0.12) 40%,
+            rgba(250, 204, 21, 0.3) 50%,
+            rgba(253, 230, 138, 0.12) 60%,
+            rgba(253, 230, 138, 0) 100%
+          );
+          mix-blend-mode: screen;
+          pointer-events: none;
+          opacity: 0.55;
+          transform: translateX(-60%);
+          animation: jxlShimmer 5s linear infinite;
+          z-index: 0;
+        }
+
+        .carousel-container > * {
+          position: relative;
+          z-index: 1;
+        }
+
+        .carousel-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 20px;
+          cursor: pointer;
+          transition: background 0.15s ease;
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: none;
+          color: inherit;
+          font: inherit;
+        }
+
+        .carousel-header:hover {
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .carousel-content {
+          border-top: 1px solid rgba(251, 191, 36, 0.1);
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .carousel-track {
+          display: flex;
+          height: 100%;
+          transition: transform 0.4s ease;
+          will-change: transform;
+          cursor: grab;
+          user-select: none;
+        }
+
+        .carousel-track:active {
+          cursor: grabbing;
+        }
+
+        .carousel-card {
+          min-width: 100%;
+          padding: 0;
+          height: 100%;
+        }
+
+        .locked-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          background: rgba(5, 8, 22, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 16px;
+          z-index: 10;
+        }
+
+        .blur-content {
+          filter: blur(6px);
+          opacity: 0.4;
+          pointer-events: none;
+          user-select: none;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .jxl-sparkle,
           .gold-shimmer::before,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
-          .textarea-glow {
+          .carousel-container::after {
             animation: none !important;
           }
         }
       `}</style>
 
-      {/* ── BACKGROUND (from sign-in page) ── */}
+      {/* ── BACKGROUND (space theme, no yellow glow) ── */}
       <div className="pointer-events-none fixed inset-0">
         {/* Pulsing teal orb */}
         <motion.div
@@ -1143,7 +1474,7 @@ export default function ReadingIntakeScreen({
                   return (
                     <div
                       key={area.id}
-                      className="card-shadow w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4"
+                      className="standard-shadow w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4"
                     >
                       <div className="flex items-start gap-3">
                         <motion.div
@@ -1228,19 +1559,16 @@ export default function ReadingIntakeScreen({
                       animate={cardAnimation}
                       data-selected={isSelected ? "true" : "false"}
                       className={cn(
-                        "selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
+                        "selected-card-shell standard-shadow w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
                         isSelected && "selected-card-glow",
                         !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
                       )}
                       style={{
                         willChange: "transform, opacity",
                         ["--selected-wash" as string]: areaColors.gradient,
-                        ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 36px rgba(0,0,0,0.68), 0 0 40px ${areaColors.glow}`,
+                        ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 40px ${areaColors.glow}`,
                         backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
                         borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
-                        boxShadow: isSelected
-                          ? `0 0 40px ${areaColors.glow}, 0 18px 36px rgba(0,0,0,0.65)`
-                          : "0 18px 36px rgba(0,0,0,0.55), 0 8px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)",
                       } as React.CSSProperties}
                     >
                       {isSelected && (
@@ -1294,7 +1622,7 @@ export default function ReadingIntakeScreen({
                                     backgroundColor: "rgba(255,255,255,0.12)",
                                     borderWidth: 1,
                                     borderStyle: "solid",
-                                    boxShadow: getBadgeShadow(),
+                                    boxShadow: "0 0 20px rgba(255,255,255,0.08)",
                                   }}
                                 >
                                   <span
@@ -1340,35 +1668,38 @@ export default function ReadingIntakeScreen({
                     className="mt-6 space-y-2"
                   >
                     <div
-                      className="textarea-glow rounded-[26px] border border-white/18 bg-white/[0.035] p-4 transition-all duration-300"
+                      className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px] standard-shadow"
                       style={{
-                        boxShadow: "0 18px 34px rgba(0,0,0,0.55)",
+                        transition: "box-shadow 0.3s ease, border-color 0.3s ease",
                       }}
                       onFocus={(e) => {
                         e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)";
                         e.currentTarget.style.boxShadow =
-                          "0 0 50px rgba(255,255,255,0.15), 0 18px 34px rgba(0,0,0,0.55)";
+                          "0 0 50px rgba(255,255,255,0.15), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)";
                       }}
                       onBlur={(e) => {
                         e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
-                        e.currentTarget.style.boxShadow = "0 18px 34px rgba(0,0,0,0.55)";
+                        e.currentTarget.style.boxShadow =
+                          "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)";
                       }}
                     >
-                      <Textarea
-                        id="question"
-                        ref={textareaRef}
-                        rows={5}
-                        value={question}
-                        onChange={(e) => setQuestion(e.target.value)}
-                        placeholder={
-                          AREAS.find((a) => a.id === selectedArea)?.placeholder ??
-                          "Ask something specific so your reading can go deeper."
-                        }
-                        className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
-                        style={{
-                          backgroundColor: "transparent",
-                        }}
-                      />
+                      <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
+                        <Textarea
+                          id="question"
+                          ref={textareaRef}
+                          rows={5}
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          placeholder={
+                            AREAS.find((a) => a.id === selectedArea)?.placeholder ??
+                            "Ask something specific so your reading can go deeper."
+                          }
+                          className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
+                          style={{
+                            backgroundColor: "transparent",
+                          }}
+                        />
+                      </div>
                     </div>
                     <p className="text-xs leading-5 text-slate-300/80">
                       Be specific. The clearer your question, the sharper the reading.
@@ -1379,7 +1710,7 @@ export default function ReadingIntakeScreen({
             </>
           )}
 
-          {/* ── SUBMIT BUTTON ── */}
+          {/* ── SUBMIT BUTTON (Begin My Reading - previous UI style) ── */}
           <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && (
               <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
@@ -1391,12 +1722,11 @@ export default function ReadingIntakeScreen({
                   type="button"
                   onClick={handleStartReading}
                   disabled={!canSubmit || isCreatingReading}
-                  className="card-shadow h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+                  className="standard-shadow h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
                   style={{
-                    borderColor: theme.areaColors.cta.border,
-                    color: theme.areaColors.cta.text,
-                    background: getCTABackground(),
-                    boxShadow: getCTAShadow(),
+                    borderColor: "rgba(255,255,255,0.22)",
+                    color: "#F8FAFC",
+                    background: "linear-gradient(180deg, #161A26 0%, #0A0D16 100%)",
                   }}
                 >
                   {buttonCopy}
@@ -1405,33 +1735,144 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-          {/* ── UNLIMITED ACCESS (BOLD GOLD SHIMMER) ── */}
-          <div className="mt-4 border-t border-white/10 pt-4">
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
-              whileTap={{ scale: 0.97 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSwipeLeft?.();
-              }}
-              className="gold-shimmer flex h-12 w-full cursor-pointer items-center justify-center gap-3 text-[14px] font-medium text-amber-100/90"
-              style={{ touchAction: "none" }}
-            >
-              <span>✨ Unlimited Access, Swipe Left to Explore</span>
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </motion.div>
+          <div className="mt-8 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.06]" />
+            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
+              Unlimited Access
+            </span>
+            <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── COMING SOON ── */}
+          {/* ── CAROUSEL: Unlimited Access Dashboard ── */}
+          <div className="mt-4">
+            <div className="carousel-container">
+              {/* Header */}
+              <button
+                type="button"
+                onClick={() => setIsCarouselOpen(!isCarouselOpen)}
+                className="carousel-header"
+                aria-expanded={isCarouselOpen}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-200">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="text-left">
+                    <h2 className="text-[15px] font-semibold text-amber-200">Unlimited Access Dashboard</h2>
+                    <p className="text-[11px] text-slate-400">Your astrological data at a glance</p>
+                  </div>
+                </div>
+                <div className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-black/20 text-amber-300/70 transition-transform duration-200",
+                  isCarouselOpen && "rotate-180"
+                )}>
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              </button>
+
+              <AnimatePresence>
+                {isCarouselOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="carousel-content">
+                      <div 
+                        className="relative" 
+                        style={{ padding: 0, overflow: "hidden", flex: 1 }}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                      >
+                        <div 
+                          className="carousel-track"
+                          style={{ 
+                            display: "flex",
+                            height: "100%",
+                            transform: `translateX(-${currentCardIndex * 100}%)`,
+                            transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
+                          }}
+                        >
+                          {[0, 1, 2, 3, 4].map((index) => {
+                            const shouldBlur = !userStatus?.isSubscribed && index !== 0;
+                            return (
+                              <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0, height: "100%" }}>
+                                <div className="relative w-full h-full min-h-[220px] bg-black/20 p-6 flex flex-col">
+                                  <h3 className="text-sm font-semibold text-amber-200 mb-3">
+                                    {cardTitles[index]}
+                                  </h3>
+                                  
+                                  <div className={shouldBlur ? "blur-content flex-1" : "flex-1"}>
+                                    {renderCardContent(index)}
+                                  </div>
+
+                                  {shouldBlur && (
+                                    <div className="locked-overlay">
+                                      <Lock className="h-8 w-8 text-amber-300/60 mb-2" />
+                                      <p className="text-xs text-amber-200/60 font-medium">Premium Feature</p>
+                                      <p className="text-[10px] text-slate-400 mt-1">Subscribe to unlock</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {!userStatus?.isSubscribed && (
+                        <div className="p-4 pt-3 border-t border-amber-300/10">
+                          <motion.button
+                            whileTap={{ scale: 0.985 }}
+                            transition={{ duration: 0.12 }}
+                            type="button"
+                            onClick={() => {
+                              setIsSubscribeLoading(true);
+                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
+                              (async () => {
+                                try {
+                                  const res = await fetch("/api/stripe/checkout", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      returnUrl: `${window.location.origin}/reading/intake`,
+                                      mode: "subscription",
+                                      paywallIndex: 1,
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.url) window.location.href = data.url;
+                                } finally {
+                                  setIsSubscribeLoading(false);
+                                }
+                              })();
+                            }}
+                            className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
+                          >
+                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — $12.99/mo"}
+                          </motion.button>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* ── COMING SOON (reverted to previous UI style) ── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-            className="mt-4 border-t border-white/10 pt-4"
+            className="mt-4"
           >
             <div className="mb-2 flex items-center justify-center">
               <span className="flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
@@ -1440,7 +1881,7 @@ export default function ReadingIntakeScreen({
               </span>
             </div>
             <div
-              className="pointer-events-none relative select-none overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30"
+              className="relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
               aria-hidden="true"
             >
               {comingSoonSparkles.map((sparkle, i) => (
@@ -1459,7 +1900,8 @@ export default function ReadingIntakeScreen({
                   }}
                 />
               ))}
-              <div className="px-5 py-5 opacity-60 blur-[6px]">
+
+              <div className="blur-[6px] px-5 py-5 opacity-60">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-indigo-300" />
                   <span className="text-[14px] font-semibold text-indigo-200">
@@ -1472,10 +1914,14 @@ export default function ReadingIntakeScreen({
                   <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
                 </div>
               </div>
-              <div className="absolute inset-0 rounded-[28px] bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20" />
+
+              <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
+              
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10"
+                  >
                     <Lock className="h-4 w-4 text-indigo-300/70" />
                   </div>
                   <span className="text-[11px] tracking-wide text-indigo-300/60">
