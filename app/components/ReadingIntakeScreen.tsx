@@ -98,7 +98,7 @@ interface UserStatus {
 
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
-  onSwipeLeft?: () => void; // Add this back - optional since it might not always be passed
+  onSwipeLeft?: () => void;
 }
 
 interface NatalPlacement {
@@ -241,7 +241,7 @@ const CARD_TITLES = [
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
-  onSwipeLeft, // Add this
+  onSwipeLeft,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
@@ -275,7 +275,7 @@ export default function ReadingIntakeScreen({
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
 
   // ── Theme state ──────────────────────────────────────────────────────
-  const theme = THEMES.cosmic; // Only one theme, no need for state
+  const theme = THEMES.cosmic;
 
   const shouldReduceMotion = useReducedMotion();
 
@@ -400,7 +400,6 @@ export default function ReadingIntakeScreen({
 
     const planets = data.tropical?.planets ?? [];
 
-    // Process natal planets
     const allPlanetsData: NatalPlacement[] = [];
     PLANET_ORDER.forEach(name => {
       const found = planets.find(p => p.name === name);
@@ -956,8 +955,8 @@ export default function ReadingIntakeScreen({
       className="no-scrollbar h-screen overflow-y-auto overscroll-none text-slate-100"
       style={{
         WebkitOverflowScrolling: "touch",
-        background:
-          "radial-gradient(circle at 50% 18%, rgba(45,212,191,0.08), transparent 40%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+        // Removed the teal radial gradient; now only a dark linear gradient
+        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
       <style jsx>{`
@@ -1288,25 +1287,8 @@ export default function ReadingIntakeScreen({
         }
       `}</style>
 
-      {/* ── BACKGROUND ── */}
+      {/* ── BACKGROUND (removed the teal pulsing orb) ── */}
       <div className="pointer-events-none fixed inset-0">
-        <motion.div
-          className="absolute left-1/2 top-[16%] h-[24rem] w-[24rem] -translate-x-1/2 rounded-full blur-3xl"
-          animate={
-            shouldReduceMotion
-              ? undefined
-              : { opacity: [0.14, 0.24, 0.14], scale: [1, 1.05, 1] }
-          }
-          transition={
-            shouldReduceMotion
-              ? undefined
-              : { duration: 8, repeat: Infinity, ease: "easeInOut" }
-          }
-          style={{
-            background: "radial-gradient(circle, rgba(45,212,191,0.28), transparent 70%)",
-          }}
-        />
-
         <div className="absolute inset-0">
           {stars.map((star) => (
             <motion.span
@@ -1358,47 +1340,49 @@ export default function ReadingIntakeScreen({
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white">
-                    Your Year Ahead
+                    Personalized to You
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  Future Direct Insights
+                  Your Astrological Predictions
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  A focused look at the patterns, timing, and momentum shaping your next chapter.
+                  Many things being calculated to give you the perfect, unbiased results.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* ── Reading cycle ── */}
+          {/* ── Reading cycle (right‑aligned) ── */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mx-auto mb-1 w-full max-w-[280px] space-y-2">
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-white/90">
-                  Reading cycle
-                </span>
-                <span className="text-[10px] text-white/90">
-                  {onCooldown ? 4 : readingsCompleted} / 4
-                </span>
-              </div>
-              <div className="flex gap-1.5">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]"
-                  >
-                    {(onCooldown || i < readingsCompleted) && (
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: "100%" }}
-                        transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
-                        className="absolute inset-y-0 left-0 rounded-full"
-                        style={{ backgroundColor: theme.progressBar }}
-                      />
-                    )}
-                  </div>
-                ))}
+            <div className="mb-1 flex w-full justify-end">
+              <div className="w-full max-w-[280px] space-y-2">
+                <div className="flex items-center justify-end gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-white/90">
+                    Reading cycle
+                  </span>
+                  <span className="text-[10px] text-white/90">
+                    {onCooldown ? 4 : readingsCompleted} / 4
+                  </span>
+                </div>
+                <div className="flex gap-1.5">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]"
+                    >
+                      {(onCooldown || i < readingsCompleted) && (
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: "100%" }}
+                          transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
+                          className="absolute inset-y-0 left-0 rounded-full"
+                          style={{ backgroundColor: theme.progressBar }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -1453,7 +1437,7 @@ export default function ReadingIntakeScreen({
                     Cooldown period active
                   </h2>
                   <p className="mb-1 text-[13px] leading-5 text-slate-400">
-                    Due to safety concerns and us caring about your wellbeing, we've implemented a cooldown period between reading cycles.
+                    We care about your wellbeing, we've implemented a cooldown period between reading cycles.
                   </p>
                   {userStatus?.cooldownExpiresAt && (
                     <p className="mt-2 text-[12px] text-indigo-300/80">
@@ -1462,7 +1446,7 @@ export default function ReadingIntakeScreen({
                   )}
                   <div className="mt-5 border-t border-white/10 pt-8">
                     <p className="mb-3 text-[12px] leading-5 text-slate-400">
-                      You can do this one time per cycle.
+                      Once per cycle.
                     </p>
                     <motion.button
                       whileTap={{ scale: 0.97 }}
@@ -1480,7 +1464,7 @@ export default function ReadingIntakeScreen({
             </motion.div>
           ) : (
             <>
-              {/* ── AREA BUTTONS ── */}
+              {/* ── AREA BUTTONS (shadow already applied, removed whileTap) ── */}
               <section className="space-y-3">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
@@ -1492,7 +1476,7 @@ export default function ReadingIntakeScreen({
                     <motion.button
                       key={area.id}
                       ref={isSelected ? clusterTopRef : undefined}
-                      whileTap={{ scale: 0.985 }}
+                      // whileTap removed ✅
                       transition={{ duration: 0.12 }}
                       type="button"
                       onClick={() => {
@@ -1692,7 +1676,7 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── CAROUSEL ── */}
+          {/* ── CAROUSEL (unchanged per your request) ── */}
           <div className="mt-4">
             <div className="carousel-container">
               <button
@@ -1707,7 +1691,7 @@ export default function ReadingIntakeScreen({
                   </div>
                   <div className="text-left">
                     <h2 className="text-[15px] font-semibold text-amber-200">Unlimited Access Dashboard</h2>
-                    <p className="text-[11px] text-slate-400">Your astrological data at a glance</p>
+                    <p className="text-[11px] text-slate-400">The Astrological Data, in your hands</p>
                   </div>
                 </div>
                 <div className={cn(
@@ -1873,7 +1857,7 @@ export default function ReadingIntakeScreen({
                     <Lock className="h-4 w-4 text-indigo-300/70" />
                   </div>
                   <span className="text-[11px] tracking-wide text-indigo-300/60">
-                    Something Great is in Development — Coming Soon
+                    Something Great is in Development for you
                   </span>
                 </div>
               </div>
