@@ -57,14 +57,26 @@ export default function PagerContainer() {
     fetchStatus();
   }, []);
 
-  // Infinite loop: go to next, wrap around
+  // Go to next panel (swipe left)
   const goToNext = useCallback(() => {
-    setCurrentIndex((prev) => (prev + 1) % totalPanels);
+    setCurrentIndex((prev) => {
+      // If on last panel, go back to first (wrap around)
+      if (prev === totalPanels - 1) {
+        return 0;
+      }
+      return prev + 1;
+    });
   }, [totalPanels]);
 
-  // Infinite loop: go to previous, wrap around
+  // Go to previous panel (swipe right)
   const goToPrevious = useCallback(() => {
-    setCurrentIndex((prev) => (prev - 1 + totalPanels) % totalPanels);
+    setCurrentIndex((prev) => {
+      // If on first panel, go to last (wrap around)
+      if (prev === 0) {
+        return totalPanels - 1;
+      }
+      return prev - 1;
+    });
   }, [totalPanels]);
 
   // Touch swipe handlers
@@ -82,11 +94,13 @@ export default function PagerContainer() {
   const handleTouchEnd = () => {
     setIsDragging(false);
     const swipeDistance = touchStartX - touchEndX;
-    const minSwipeDistance = 50;
+    const minSwipeDistance = 40;
 
     if (swipeDistance > minSwipeDistance) {
+      // Swipe left → go to next panel
       goToNext();
     } else if (swipeDistance < -minSwipeDistance) {
+      // Swipe right → go to previous panel
       goToPrevious();
     }
 
@@ -113,7 +127,7 @@ export default function PagerContainer() {
   const handleMouseUp = () => {
     setIsMouseDragging(false);
     const swipeDistance = mouseStartX - mouseEndX;
-    const minSwipeDistance = 50;
+    const minSwipeDistance = 40;
 
     if (swipeDistance > minSwipeDistance) {
       goToNext();
@@ -125,12 +139,12 @@ export default function PagerContainer() {
     setMouseEndX(0);
   };
 
-  // Keyboard support (infinite loop)
+  // Keyboard support
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight") {
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
         goToNext();
-      } else if (e.key === "ArrowLeft") {
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
         goToPrevious();
       }
     };
