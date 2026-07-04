@@ -98,6 +98,7 @@ interface UserStatus {
 
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
+  onSwipeLeft?: () => void; // Add this back - optional since it might not always be passed
 }
 
 interface NatalPlacement {
@@ -240,6 +241,7 @@ const CARD_TITLES = [
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
+  onSwipeLeft, // Add this
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
