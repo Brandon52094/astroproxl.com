@@ -97,11 +97,6 @@ interface UserStatus {
   freeReadingAvailable: boolean;
 }
 
-interface ReadingIntakeScreenProps {
-  userStatus: UserStatus | null;
-  onSwipeLeft?: () => void; // Callback to trigger swipe to next panel
-}
-
 interface NatalPlacement {
   name: string;
   sign: string;
@@ -289,10 +284,7 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${hours}h`;
 }
 
-export default function ReadingIntakeScreen({ 
-  userStatus: propUserStatus,
-  onSwipeLeft 
-}: ReadingIntakeScreenProps) {
+export default function ReadingIntakeScreen() {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
@@ -301,8 +293,14 @@ export default function ReadingIntakeScreen({
   const [chartStatus, setChartStatus] = useState<
     "checking" | "ready" | "recalculating" | "error"
   >("checking");
-  const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
+  const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
+  const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [isCarouselOpen, setIsCarouselOpen] = useState(false);
+  const [touchStartX, setTouchStartX] = useState(0);
+  const [touchEndX, setTouchEndX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
@@ -753,6 +751,242 @@ export default function ReadingIntakeScreen({
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
+  // ── Carousel navigation ─────────────────────────────────────────────
+  const totalCards = 5;
+  const cardTitles = [
+    "Unlimited Access",
+    "Your Natal Chart",
+    "Today's Astrological Calendar",
+    "Current Important Transits",
+    "Coming Soon"
+  ];
+
+  const goToPrevious = useCallback(() => {
+    setCurrentCardIndex((prev) => (prev === 0 ? totalCards - 1 : prev - 1));
+  }, []);
+
+  const goToNext = useCallback(() => {
+    setCurrentCardIndex((prev) => (prev === totalCards - 1 ? 0 : prev + 1));
+  }, []);
+
+  // ── Swipe handlers ──────────────────────────────────────────────────
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+    setTouchEndX(e.touches[0].clientX);
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    setTouchEndX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    const swipeDistance = touchStartX - touchEndX;
+    const minSwipeDistance = 50;
+    
+    if (swipeDistance > minSwipeDistance) {
+      goToNext();
+    } else if (swipeDistance < -minSwipeDistance) {
+      goToPrevious();
+    }
+    
+    setTouchStartX(0);
+    setTouchEndX(0);
+  };
+
+  // ── Mouse drag for desktop swipe ────────────────────────────────────
+  const [mouseStartX, setMouseStartX] = useState(0);
+  const [mouseEndX, setMouseEndX] = useState(0);
+  const [isMouseDragging, setIsMouseDragging] = useState(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setMouseStartX(e.clientX);
+    setMouseEndX(e.clientX);
+    setIsMouseDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isMouseDragging) return;
+    setMouseEndX(e.clientX);
+  };
+
+  const handleMouseUp = () => {
+    setIsMouseDragging(false);
+    const swipeDistance = mouseStartX - mouseEndX;
+    const minSwipeDistance = 50;
+    
+    if (swipeDistance > minSwipeDistance) {
+      goToNext();
+    } else if (swipeDistance < -minSwipeDistance) {
+      goToPrevious();
+    }
+    
+    setMouseStartX(0);
+    setMouseEndX(0);
+  };
+
+  // ── Render individual card content ──────────────────────────────────
+  const renderCardContent = (index: number) => {
+    switch (index) {
+      case 0: // Unlimited Access
+        return (
+          <div className="space-y-4 flex-1">
+            <div>
+              <h3 className="text-[15px] font-semibold leading-snug text-white">
+                {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Readings, No Waiting."}
+              </h3>
+              {!userStatus?.isSubscribed && (
+                <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
+                  Need more than one reading a week? This is the best route. Financially & mathematically. See what you get below!
+                </p>
+              )}
+            </div>
+
+            {!userStatus?.isSubscribed ? (
+              <>
+                <div className="space-y-2">
+                  {[
+                    "8 Readings, not 1",
+                    "Ask Follow Ups Free",
+                    "No 2-week wait, no $6 to skip it",
+                    "Downloads Always Free.",
+                    "Unlimited Access Features",
+                  ].map((perk) => (
+                    <div key={perk} className="flex items-center gap-2.5">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
+                        ✓
+                      </span>
+                      <span className="text-[12px] text-slate-300">{perk}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-amber-300/60">
+                  More, for less, still premium.
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-4 flex-1">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+                <p className="mt-3 text-center text-sm text-slate-300">
+                  You have full access to all features.
+                </p>
+                <p className="text-center text-xs text-slate-500 mt-1">
+                  Enjoy your premium experience.
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      case 1: // Your Natal Chart
+        return (
+          <div className="space-y-3 flex-1">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Sun</span>
+                <p className="text-sm text-white font-medium">{natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon</span>
+                <p className="text-sm text-white font-medium">{natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Rising</span>
+                <p className="text-sm text-white font-medium">{natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Planets</span>
+                <p className="text-sm text-white font-medium">{allPlanets.length}</p>
+              </div>
+            </div>
+            <div className="max-h-[100px] overflow-y-auto space-y-1">
+              {allPlanets.slice(0, 5).map((planet) => (
+                <div key={planet.name} className="flex justify-between text-xs">
+                  <span className="text-slate-400">{planet.name}</span>
+                  <span className="text-white">{planet.sign} {planet.degree}</span>
+                </div>
+              ))}
+              {allPlanets.length > 5 && (
+                <div className="text-xs text-slate-500">+{allPlanets.length - 5} more</div>
+              )}
+            </div>
+          </div>
+        );
+      case 2: // Today's Astrological Calendar
+        return (
+          <div className="space-y-3 flex-1">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon Phase</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.phaseName || "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Illumination</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.illuminationPercent || "—"}%</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Moon Sign</span>
+                <p className="text-sm text-white font-medium">{moonPhase?.moonSign || "—"}</p>
+              </div>
+              <div className="rounded-xl bg-white/[0.03] px-3 py-2">
+                <span className="text-xs text-slate-400">Retrogrades</span>
+                <p className="text-sm text-white font-medium">
+                  {todayPlanets.filter(p => p.isRetrograde).length || 0}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1 max-h-[80px] overflow-y-auto">
+              {todayPlanets.slice(0, 4).map((planet) => (
+                <div key={planet.name} className="flex justify-between text-xs">
+                  <span className="text-slate-400">{planet.name}</span>
+                  <span className="text-white">{planet.sign} {planet.degree}{planet.isRetrograde ? " ℞" : ""}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case 3: // Current Important Transits
+        const majorPlanets = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+        const majorTransits = todayPlanets.filter(p => majorPlanets.includes(p.name));
+        return (
+          <div className="space-y-3 flex-1">
+            <div className="text-xs text-slate-400 mb-2">Major planetary transits</div>
+            {majorTransits.length > 0 ? (
+              <div className="space-y-2">
+                {majorTransits.map((planet) => (
+                  <div key={planet.name} className="flex justify-between items-center rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="text-sm text-slate-300">{planet.name}</span>
+                    <span className="text-sm text-white">
+                      {planet.sign} {planet.degree}
+                      {planet.isRetrograde && " ℞"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-sm text-slate-500 py-4">Loading transits...</div>
+            )}
+          </div>
+        );
+      case 4: // Coming Soon
+        return (
+          <div className="flex flex-col items-center justify-center h-full py-8 flex-1">
+            <Sparkles className="h-12 w-12 text-amber-300/40 mb-4" />
+            <p className="text-center text-sm text-slate-400">More features coming soon</p>
+            <p className="text-center text-xs text-slate-500 mt-2">Stay tuned for updates</p>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   // ── Theme-specific helper functions ────────────────────────────────
 
   // Get area-specific colors
@@ -1119,35 +1353,17 @@ export default function ReadingIntakeScreen({
           opacity: 0.82;
         }
 
-        @keyframes swipePulse {
-          0%, 100% { transform: translateX(0); opacity: 0.4; }
-          50% { transform: translateX(10px); opacity: 1; }
-        }
-
-        .swipe-arrow {
-          animation: swipePulse 2s ease-in-out infinite;
-        }
-
-        @keyframes swipeButtonPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
-          50% { box-shadow: 0 0 0 12px rgba(251, 191, 36, 0); }
-        }
-
-        .swipe-button-glow {
-          animation: swipeButtonPulse 2s ease-in-out infinite;
-        }
-
-        .swipe-hint-container {
+        /* ── CAROUSEL STYLES ── */
+        .carousel-container {
           position: relative;
           overflow: hidden;
           border-radius: 24px;
           border: 1px solid rgba(251, 191, 36, 0.2);
           background: linear-gradient(180deg, rgba(251, 191, 36, 0.06), rgba(251, 191, 36, 0.02));
           animation: jxlAmberPulse 2.8s ease-in-out infinite;
-          cursor: pointer;
         }
 
-        .swipe-hint-container::before {
+        .carousel-container::before {
           content: "";
           position: absolute;
           inset: 0;
@@ -1158,7 +1374,7 @@ export default function ReadingIntakeScreen({
           z-index: 0;
         }
 
-        .swipe-hint-container::after {
+        .carousel-container::after {
           content: "";
           position: absolute;
           inset: -40%;
@@ -1178,24 +1394,93 @@ export default function ReadingIntakeScreen({
           z-index: 0;
         }
 
-        .swipe-hint-container > * {
+        .carousel-container > * {
           position: relative;
           z-index: 1;
+        }
+
+        .carousel-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 20px;
+          cursor: pointer;
+          transition: background 0.15s ease;
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: none;
+          color: inherit;
+          font: inherit;
+        }
+
+        .carousel-header:hover {
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .carousel-content {
+          border-top: 1px solid rgba(251, 191, 36, 0.1);
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .carousel-track {
+          display: flex;
+          height: 100%;
+          transition: transform 0.4s ease;
+          will-change: transform;
+          cursor: grab;
+          user-select: none;
+        }
+
+        .carousel-track:active {
+          cursor: grabbing;
+        }
+
+        .carousel-card {
+          min-width: 100%;
+          padding: 0;
+          height: 100%;
+        }
+
+        .locked-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          background: rgba(5, 8, 22, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 16px;
+          z-index: 10;
+        }
+
+        .blur-content {
+          filter: blur(6px);
+          opacity: 0.4;
+          pointer-events: none;
+          user-select: none;
         }
 
         @media (prefers-reduced-motion: reduce) {
           .drift-bg,
           .drift-bg::after,
           .jxl-sparkle,
+          .glitch-container::after,
+          .glitch-layer,
+          .glitch-text,
+          .glitch-border,
           .jxl-teaser,
           .jxl-teaser::before,
           .glow-light-bar,
-          .swipe-arrow,
-          .swipe-button-glow,
-          .swipe-hint-container,
-          .swipe-hint-container::after {
+          .carousel-container::after {
             animation: none !important;
             opacity: 0.4 !important;
+          }
+          .carousel-track {
+            transition: none !important;
           }
         }
       `}</style>
@@ -1598,55 +1883,144 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-          {/* ── SWIPE HINT: Explore Unlimited Access ── */}
-<motion.div
-  initial={{ opacity: 0, y: 12 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
-  className="mt-4"
->
-  {/* Header */}
-  <div className="flex items-center justify-center gap-2 mb-3">
-    <Sparkles className="h-3.5 w-3.5 text-amber-300/60" />
-    <span className="text-[13px] font-medium text-amber-200/80 tracking-wide">
-      Explore Unlimited Access
-    </span>
-  </div>
+          <div className="mt-8 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.06]" />
+            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
+              Unlimited Access
+            </span>
+            <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
 
-  {/* Swipe Button - only this is clickable/swipeable */}
-  <motion.button
-    whileTap={{ scale: 0.97 }}
-    transition={{ duration: 0.12 }}
-    onClick={(e) => {
-      e.stopPropagation();
-      onSwipeLeft?.();
-    }}
-    className="w-full h-12 rounded-xl bg-gradient-to-r from-amber-400/15 to-amber-500/5 border border-amber-300/20 text-amber-200/80 text-[14px] font-medium transition hover:bg-amber-300/10 flex items-center justify-center gap-3"
-  >
-    <svg className="w-4 h-4 swipe-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-    <span>Swipe left to explore</span>
-  </motion.button>
+          {/* ── CAROUSEL: Unlimited Access Dashboard ── */}
+          <div className="mt-4">
+            <div className="carousel-container">
+              {/* Header */}
+              <button
+                type="button"
+                onClick={() => setIsCarouselOpen(!isCarouselOpen)}
+                className="carousel-header"
+                aria-expanded={isCarouselOpen}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-200">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="text-left">
+                    <h2 className="text-[15px] font-semibold text-amber-200">Unlimited Access Dashboard</h2>
+                    <p className="text-[11px] text-slate-400">Your astrological data at a glance</p>
+                  </div>
+                </div>
+                <div className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-black/20 text-amber-300/70 transition-transform duration-200",
+                  isCarouselOpen && "rotate-180"
+                )}>
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              </button>
 
-  {/* Dot indicators */}
-  <div className="flex justify-center gap-1.5 mt-3">
-    {[0, 1, 2, 3, 4].map((i) => (
-      <div 
-        key={i} 
-        className={cn(
-          "h-1 rounded-full transition-all",
-          i === 0 ? "w-4 bg-amber-300/40" : "w-1.5 bg-white/10"
-        )}
-      />
-    ))}
-  </div>
-  <p className="text-center text-[10px] text-slate-500/40 mt-1.5">
-    5 screens · swipe to navigate
-  </p>
-</motion.div>
+              <AnimatePresence>
+                {isCarouselOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    {/* ── CAROUSEL - Fills entire space with no padding ── */}
+                    <div className="carousel-content">
+                      <div 
+                        className="relative" 
+                        style={{ padding: 0, overflow: "hidden", flex: 1 }}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                      >
+                        <div 
+                          className="carousel-track"
+                          style={{ 
+                            display: "flex",
+                            height: "100%",
+                            transform: `translateX(-${currentCardIndex * 100}%)`,
+                            transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease"
+                          }}
+                        >
+                          {[0, 1, 2, 3, 4].map((index) => {
+                            const shouldBlur = !userStatus?.isSubscribed && index !== 0;
+                            return (
+                              <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0, height: "100%" }}>
+                                <div className="relative w-full h-full min-h-[220px] bg-black/20 p-6 flex flex-col">
+                                  {/* Card Title */}
+                                  <h3 className="text-sm font-semibold text-amber-200 mb-3">
+                                    {cardTitles[index]}
+                                  </h3>
+                                  
+                                  {/* Content - blurred if not subscribed and not card 0 */}
+                                  <div className={shouldBlur ? "blur-content flex-1" : "flex-1"}>
+                                    {renderCardContent(index)}
+                                  </div>
 
-          {/* ── COMING SOON — Static ── */}
+                                  {/* Lock Overlay (only for non-subscribers, cards 1-4) */}
+                                  {shouldBlur && (
+                                    <div className="locked-overlay">
+                                      <Lock className="h-8 w-8 text-amber-300/60 mb-2" />
+                                      <p className="text-xs text-amber-200/60 font-medium">Premium Feature</p>
+                                      <p className="text-[10px] text-slate-400 mt-1">Subscribe to unlock</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Bottom CTA - only shows when NOT subscribed */}
+                      {!userStatus?.isSubscribed && (
+                        <div className="p-4 pt-3 border-t border-amber-300/10">
+                          <motion.button
+                            whileTap={{ scale: 0.985 }}
+                            transition={{ duration: 0.12 }}
+                            type="button"
+                            onClick={() => {
+                              setIsSubscribeLoading(true);
+                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
+                              (async () => {
+                                try {
+                                  const res = await fetch("/api/stripe/checkout", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      returnUrl: `${window.location.origin}/reading/intake`,
+                                      mode: "subscription",
+                                      paywallIndex: 1,
+                                    }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.url) window.location.href = data.url;
+                                } finally {
+                                  setIsSubscribeLoading(false);
+                                }
+                              })();
+                            }}
+                            className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
+                          >
+                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — $12.99/mo"}
+                          </motion.button>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* ── COMING SOON — Static (glitch removed, rotating border kept) ── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
