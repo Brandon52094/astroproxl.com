@@ -26,7 +26,6 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 
-// TikTok pixel global
 declare global {
   interface Window {
     ttq?: {
@@ -40,9 +39,7 @@ function trackTtq(event: string, params?: Record<string, unknown>) {
     if (typeof window !== "undefined" && window.ttq) {
       window.ttq.track(event, params);
     }
-  } catch {
-    // silent — never let pixel tracking break the actual flow
-  }
+  } catch {}
 }
 
 const AREAS = [
@@ -83,7 +80,7 @@ const AREAS = [
       "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     cta: "Begin My Reading",
   },
-];
+] as const;
 
 interface UserStatus {
   firstReadingUsed: boolean;
@@ -99,7 +96,7 @@ interface UserStatus {
 
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
-  onSwipeLeft?: () => void; // Callback to trigger swipe to next panel
+  onSwipeLeft?: () => void;
 }
 
 interface NatalPlacement {
@@ -124,8 +121,17 @@ interface TodayTransitPlanet {
   isRetrograde: boolean;
 }
 
-// ── THEME SYSTEM ──────────────────────────────────────────────────────
-type ThemeName = "teal" | "earth";
+type AreaId = (typeof AREAS)[number]["id"];
+type ThemeName = "cosmic";
+
+interface AreaTheme {
+  bg: string;
+  border: string;
+  glow: string;
+  text: string;
+  gradient: string;
+  iconBg: string;
+}
 
 interface ThemeColors {
   name: ThemeName;
@@ -139,146 +145,82 @@ interface ThemeColors {
   selectedIcon: string;
   selectedTag: string;
   accentLine: string;
-  areaColors: {
-    love: { bg: string; border: string; glow: string; text: string; gradient: string };
-    money: { bg: string; border: string; glow: string; text: string; gradient: string };
-    career: { bg: string; border: string; glow: string; text: string; gradient: string };
-    other: { bg: string; border: string; glow: string; text: string; gradient: string };
-    cta: { bg: string; border: string; glow: string; text: string; gradient: string };
-    hero: { bg: string; border: string; glow: string; text: string; gradient: string };
-  };
+  nextStepBorder: string;
+  nextStepGlow: string;
+  areaColors: Record<AreaId | "cta" | "hero", AreaTheme>;
 }
 
 const THEMES: Record<ThemeName, ThemeColors> = {
-  teal: {
-    name: "teal",
-    tagBg: "rgba(45, 212, 191, 0.05)",
-    tagText: "#5EEAD4",
-    gradientEnd: "#2DD4BF",
-    progressBar: "#5EEAD4",
+  cosmic: {
+    name: "cosmic",
+    tagBg: "rgba(255,255,255,0.06)",
+    tagText: "#F8FAFC",
+    gradientEnd: "#FFFFFF",
+    progressBar: "#F8FAFC",
     unselectedBorder: "rgba(255,255,255,0.10)",
-    selectedBorder: "#2DD4BF",
-    selectedGlow: "rgba(45,212,191,0.15)",
-    selectedIcon: "#5EEAD4",
-    selectedTag: "#5EEAD4",
-    accentLine: "#2DD4BF",
+    selectedBorder: "rgba(255,255,255,0.22)",
+    selectedGlow: "rgba(255,255,255,0.16)",
+    selectedIcon: "#FFFFFF",
+    selectedTag: "#D1FAE5",
+    accentLine: "rgba(255,255,255,0.72)",
+    nextStepBorder: "rgba(255,255,255,0.65)",
+    nextStepGlow: "rgba(255,255,255,0.24)",
     areaColors: {
       love: {
-        bg: "rgba(45,212,191,0.08)",
-        border: "rgba(45,212,191,0.35)",
-        glow: "rgba(45,212,191,0.12)",
-        text: "#5EEAD4",
-        gradient: "linear-gradient(135deg, rgba(45,212,191,0.12), rgba(20,184,166,0.06))"
+        bg: "rgba(127, 29, 29, 0.22)",
+        border: "rgba(248, 113, 113, 0.42)",
+        glow: "rgba(239, 68, 68, 0.20)",
+        text: "#FCA5A5",
+        iconBg: "rgba(127, 29, 29, 0.55)",
+        gradient:
+          "linear-gradient(135deg, rgba(127,29,29,0.88) 0%, rgba(153,27,27,0.74) 32%, rgba(239,68,68,0.18) 100%)",
       },
       money: {
-        bg: "rgba(251,191,36,0.08)",
-        border: "rgba(251,191,36,0.35)",
-        glow: "rgba(251,191,36,0.12)",
-        text: "#FCD34D",
-        gradient: "linear-gradient(135deg, rgba(251,191,36,0.12), rgba(245,158,11,0.06))"
+        bg: "rgba(70, 52, 25, 0.22)",
+        border: "rgba(217, 119, 6, 0.34)",
+        glow: "rgba(180, 120, 42, 0.18)",
+        text: "#F5D7A1",
+        iconBg: "rgba(92, 63, 24, 0.55)",
+        gradient:
+          "linear-gradient(135deg, rgba(54,38,19,0.88) 0%, rgba(94,78,48,0.78) 38%, rgba(180,120,42,0.18) 100%)",
       },
       career: {
-        bg: "rgba(129,140,248,0.08)",
-        border: "rgba(129,140,248,0.35)",
-        glow: "rgba(129,140,248,0.12)",
-        text: "#A5B4FC",
-        gradient: "linear-gradient(135deg, rgba(129,140,248,0.12), rgba(99,102,241,0.06))"
+        bg: "rgba(113, 63, 18, 0.18)",
+        border: "rgba(250, 204, 21, 0.34)",
+        glow: "rgba(234, 179, 8, 0.18)",
+        text: "#FDE68A",
+        iconBg: "rgba(120, 74, 18, 0.5)",
+        gradient:
+          "linear-gradient(135deg, rgba(92,53,15,0.88) 0%, rgba(146,104,21,0.72) 38%, rgba(250,204,21,0.14) 100%)",
       },
       other: {
-        bg: "rgba(232,200,122,0.08)",
-        border: "rgba(232,200,122,0.35)",
-        glow: "rgba(232,200,122,0.12)",
-        text: "#E8C87A",
-        gradient: "linear-gradient(135deg, rgba(232,200,122,0.12), rgba(200,160,80,0.06))"
+        bg: "rgba(49, 46, 129, 0.22)",
+        border: "rgba(129, 140, 248, 0.34)",
+        glow: "rgba(99, 102, 241, 0.20)",
+        text: "#C7D2FE",
+        iconBg: "rgba(49, 46, 129, 0.55)",
+        gradient:
+          "linear-gradient(135deg, rgba(29,24,79,0.9) 0%, rgba(49,46,129,0.8) 40%, rgba(30,58,138,0.18) 100%)",
       },
       cta: {
-        bg: "rgba(45,212,191,0.15)",
-        border: "rgba(94,234,212,0.45)",
-        glow: "rgba(45,212,191,0.20)",
-        text: "#5EEAD4",
-        gradient: "linear-gradient(180deg, rgba(45,212,191,0.25), rgba(20,184,166,0.10))"
+        bg: "rgba(255,255,255,0.08)",
+        border: "rgba(255,255,255,0.22)",
+        glow: "rgba(0,0,0,0.4)",
+        text: "#F8FAFC",
+        iconBg: "rgba(255,255,255,0.06)",
+        gradient: "linear-gradient(180deg, #161A26 0%, #0A0D16 100%)",
       },
       hero: {
-        bg: "rgba(45,212,191,0.05)",
-        border: "rgba(45,212,191,0.20)",
-        glow: "rgba(45,212,191,0.08)",
-        text: "#5EEAD4",
-        gradient: "linear-gradient(135deg, rgba(45,212,191,0.08), rgba(20,184,166,0.04))"
-      }
-    }
+        bg: "rgba(255,255,255,0.04)",
+        border: "rgba(255,255,255,0.14)",
+        glow: "rgba(255,255,255,0.08)",
+        text: "#FFFFFF",
+        iconBg: "rgba(255,255,255,0.05)",
+        gradient: "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+      },
+    },
   },
-  earth: {
-    name: "earth",
-    tagBg: "#254B3A",
-    tagText: "#D1C2A6",
-    gradientEnd: "#D1C2A6",
-    progressBar: "#6A5A43",
-    unselectedBorder: "#6A5A43",
-    selectedBorder: "#D1C2A6",
-    selectedGlow: "rgba(37,75,58,0.15)",
-    selectedIcon: "#D1C2A6",
-    selectedTag: "#D1C2A6",
-    accentLine: "#254B3A",
-    areaColors: {
-      love: {
-        bg: "rgba(209,194,166,0.10)",
-        border: "rgba(209,194,166,0.35)",
-        glow: "rgba(209,194,166,0.12)",
-        text: "#D1C2A6",
-        gradient: "linear-gradient(135deg, rgba(209,194,166,0.14), rgba(37,75,58,0.08))"
-      },
-      money: {
-        bg: "rgba(106,90,67,0.12)",
-        border: "rgba(106,90,67,0.35)",
-        glow: "rgba(106,90,67,0.12)",
-        text: "#D1C2A6",
-        gradient: "linear-gradient(135deg, rgba(106,90,67,0.14), rgba(37,75,58,0.08))"
-      },
-      career: {
-        bg: "rgba(37,75,58,0.12)",
-        border: "rgba(37,75,58,0.35)",
-        glow: "rgba(37,75,58,0.12)",
-        text: "#D1C2A6",
-        gradient: "linear-gradient(135deg, rgba(37,75,58,0.14), rgba(20,50,35,0.08))"
-      },
-      other: {
-        bg: "rgba(209,194,166,0.08)",
-        border: "rgba(209,194,166,0.30)",
-        glow: "rgba(209,194,166,0.10)",
-        text: "#D1C2A6",
-        gradient: "linear-gradient(135deg, rgba(209,194,166,0.12), rgba(106,90,67,0.08))"
-      },
-      cta: {
-        bg: "rgba(37,75,58,0.25)",
-        border: "rgba(209,194,166,0.45)",
-        glow: "rgba(37,75,58,0.25)",
-        text: "#D1C2A6",
-        gradient: "linear-gradient(180deg, #254B3A 0%, #1E352A 100%)"
-      },
-      hero: {
-        bg: "rgba(209,194,166,0.05)",
-        border: "rgba(209,194,166,0.20)",
-        glow: "rgba(209,194,166,0.08)",
-        text: "#D1C2A6",
-        gradient: "linear-gradient(135deg, rgba(209,194,166,0.08), rgba(37,75,58,0.04))"
-      }
-    }
-  }
 };
-
-function getMoonGlyph(phaseName: string): string {
-  const glyphs: Record<string, string> = {
-    "New Moon": "🌑",
-    "Waxing Crescent": "🌒",
-    "First Quarter": "🌓",
-    "Waxing Gibbous": "🌔",
-    "Full Moon": "🌕",
-    "Waning Gibbous": "🌖",
-    "Last Quarter": "🌗",
-    "Waning Crescent": "🌘",
-  };
-  return glyphs[phaseName] ?? "🌙";
-}
 
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
@@ -289,22 +231,18 @@ function formatTimeRemaining(expiresAt: string): string {
   return `${hours}h`;
 }
 
-export default function ReadingIntakeScreen({ 
+export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
-  onSwipeLeft 
+  onSwipeLeft,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
-  const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const [selectedArea, setSelectedArea] = useState<AreaId | null>(null);
   const [question, setQuestion] = useState("");
   const [isCreatingReading, setIsCreatingReading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [chartStatus, setChartStatus] = useState<
-    "checking" | "ready" | "recalculating" | "error"
-  >("checking");
+  const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
-
-  // ── Profile module state ────────────────────────────────────────────
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
   const [natalRising, setNatalRising] = useState<NatalPlacement | null>(null);
@@ -314,40 +252,30 @@ export default function ReadingIntakeScreen({
   const [nicknameInput, setNicknameInput] = useState("");
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const nicknameInputRef = useRef<HTMLInputElement | null>(null);
-
-  // ── Transit & Moon state ────────────────────────────────────────────
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
   const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
-
-  // ── Theme state ──────────────────────────────────────────────────────
-  const [theme, setTheme] = useState<ThemeColors>(THEMES.teal);
-  const [isSubscribed, setIsSubscribed] = useState(false);
-
+  const [theme, setTheme] = useState<ThemeColors>(THEMES.cosmic);
   const shouldReduceMotion = useReducedMotion();
-
-  // ── Live ticking clock ──────────────────────────────────────────────
   const [now, setNow] = useState(() => Date.now());
+  const clusterTopRef = useRef<HTMLButtonElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const clusterBottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
 
-  // ── Refs for scroll-then-focus ──────────────────────────────────────
-  const clusterTopRef = useRef<HTMLButtonElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const clusterBottomRef = useRef<HTMLDivElement | null>(null);
-  const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const stars = useMemo(
     () =>
-      Array.from({ length: 28 }).map((_, i) => {
-        const left = `${(i * 41) % 100}%`;
-        const top = `${(i * 23 + 7) % 100}%`;
-        const size = i % 7 === 0 ? 3 : 1.6;
-        const opacity = i % 5 === 0 ? 0.85 : 0.4;
-        const delay = (i * 0.41) % 4;
+      Array.from({ length: 52 }).map((_, i) => {
+        const left = `${(i * 19) % 100}%`;
+        const top = `${(i * 13 + 11) % 100}%`;
+        const size = i % 8 === 0 ? 3.2 : i % 3 === 0 ? 2.2 : 1.4;
+        const opacity = i % 5 === 0 ? 0.92 : i % 2 === 0 ? 0.68 : 0.46;
+        const delay = (i * 0.27) % 5;
         return { left, top, size, opacity, delay, id: i };
       }),
     []
@@ -367,19 +295,10 @@ export default function ReadingIntakeScreen({
 
   const getIconPulseAnimation = (isSelected = false) => {
     if (shouldReduceMotion) return {};
-    if (!isSelected) {
-      return {
-        scale: 1,
-        transition: { duration: 0.2 },
-      };
-    }
+    if (!isSelected) return { scale: 1, transition: { duration: 0.2 } };
     return {
-      scale: [1, 1.08, 1],
-      transition: {
-        duration: 2.8,
-        repeat: Infinity,
-        ease: "easeInOut" as const,
-      },
+      scale: [1, 1.12, 1],
+      transition: { duration: 2.1, repeat: Infinity, ease: "easeInOut" as const },
     };
   };
 
@@ -431,7 +350,6 @@ export default function ReadingIntakeScreen({
     ensureChart();
   }, [router]);
 
-  // ── Load chart data ──────────────────────────────────────────────────
   useEffect(() => {
     if (chartStatus !== "ready") return;
     const chart = loadChart();
@@ -444,64 +362,42 @@ export default function ReadingIntakeScreen({
     };
 
     const planets = data.tropical?.planets ?? [];
-
     const planetOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
     const allPlanetsData: NatalPlacement[] = [];
-    planetOrder.forEach(name => {
-      const found = planets.find(p => p.name === name);
-      if (found) {
-        allPlanetsData.push(found);
-      }
+    planetOrder.forEach((name) => {
+      const found = planets.find((p) => p.name === name);
+      if (found) allPlanetsData.push(found);
     });
-    const rising = planets.find(p => p.name === "Ascendant");
-    if (rising) {
-      allPlanetsData.push({ ...rising, name: "Rising" });
-    }
+    const rising = planets.find((p) => p.name === "Ascendant");
+    if (rising) allPlanetsData.push({ ...rising, name: "Rising" });
     setAllPlanets(allPlanetsData);
 
-    const sun = planets.find((p) => p.name === "Sun") ?? null;
-    const moon = planets.find((p) => p.name === "Moon") ?? null;
-    const risingData = planets.find((p) => p.name === "Ascendant") ?? null;
-    setNatalSun(sun);
-    setNatalMoon(moon);
-    setNatalRising(risingData);
-
-    if (data.moonPhase) {
-      setMoonPhase(data.moonPhase);
-    }
+    setNatalSun(planets.find((p) => p.name === "Sun") ?? null);
+    setNatalMoon(planets.find((p) => p.name === "Moon") ?? null);
+    setNatalRising(planets.find((p) => p.name === "Ascendant") ?? null);
+    if (data.moonPhase) setMoonPhase(data.moonPhase);
 
     if (data.transits) {
-      const todaySunPlanet = data.transits.find((p) => p.name === "Sun") ?? null;
-      setTodaySun(todaySunPlanet);
+      setTodaySun(data.transits.find((p) => p.name === "Sun") ?? null);
       const transitOrder = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
       const allTransits: TodayTransitPlanet[] = [];
-      transitOrder.forEach(name => {
-        const found = data.transits?.find(p => p.name === name);
-        if (found) {
-          allTransits.push(found);
-        }
+      transitOrder.forEach((name) => {
+        const found = data.transits?.find((p) => p.name === name);
+        if (found) allTransits.push(found);
       });
       setTodayPlanets(allTransits);
     }
 
-    // ── Set theme ──────────────────────────────────────────────────────
-    const isUserSubscribed = userStatus?.isSubscribed || false;
-    setIsSubscribed(isUserSubscribed);
-    setTheme(isUserSubscribed ? THEMES.earth : THEMES.teal);
+    setTheme(THEMES.cosmic);
   }, [chartStatus, userStatus]);
 
-  // ── Load nickname ────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
         const response = await fetch("/api/user/nickname");
         const data = await response.json();
-        if (data.nickname) {
-          setNickname(data.nickname);
-        }
-      } catch {
-        // silent
-      }
+        if (data.nickname) setNickname(data.nickname);
+      } catch {}
     })();
   }, []);
 
@@ -528,21 +424,15 @@ export default function ReadingIntakeScreen({
         body: JSON.stringify({ nickname: trimmed }),
       });
       const data = await response.json();
-      if (response.ok && data.nickname) {
-        setNickname(data.nickname);
-      }
+      if (response.ok && data.nickname) setNickname(data.nickname);
     } catch {
-      // silent
     } finally {
       setIsSavingNickname(false);
       setIsEditingNickname(false);
     }
   }, [nicknameInput]);
 
-  const displayName = nickname ?? natalSun?.sign ?? "there";
-
   const fetchInFlight = useRef(false);
-
   const fetchStatus = useCallback(async (): Promise<number> => {
     if (fetchInFlight.current) return 0;
     fetchInFlight.current = true;
@@ -580,9 +470,7 @@ export default function ReadingIntakeScreen({
         const poll = async () => {
           const paywalls = await fetchStatus();
           attempts++;
-          if (paywalls === 0 && attempts < 4) {
-            setTimeout(poll, 3000);
-          }
+          if (paywalls === 0 && attempts < 4) setTimeout(poll, 3000);
         };
         setTimeout(poll, 3000);
       }
@@ -602,9 +490,7 @@ export default function ReadingIntakeScreen({
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [fetchStatus]);
 
-  const selectedAreaConfig = useMemo(() => {
-    return AREAS.find((area) => area.id === selectedArea) ?? null;
-  }, [selectedArea]);
+  const selectedAreaConfig = useMemo(() => AREAS.find((area) => area.id === selectedArea) ?? null, [selectedArea]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -625,20 +511,14 @@ export default function ReadingIntakeScreen({
   }, [question, selectedArea, chartStatus, userStatus]);
 
   const scrollClusterIntoViewThenFocus = useCallback(() => {
-    if (scrollFocusTimeoutRef.current) {
-      clearTimeout(scrollFocusTimeoutRef.current);
-    }
+    if (scrollFocusTimeoutRef.current) clearTimeout(scrollFocusTimeoutRef.current);
     requestAnimationFrame(() => {
       const topEl = clusterTopRef.current;
       if (!topEl) return;
       const topRect = topEl.getBoundingClientRect();
       const currentScrollY = window.scrollY || document.documentElement.scrollTop;
-      const topOffset = 12;
-      const targetScrollY = currentScrollY + topRect.top - topOffset;
-      window.scrollTo({
-        top: Math.max(0, targetScrollY),
-        behavior: "smooth",
-      });
+      const targetScrollY = currentScrollY + topRect.top - 12;
+      window.scrollTo({ top: Math.max(0, targetScrollY), behavior: "smooth" });
       scrollFocusTimeoutRef.current = setTimeout(() => {
         textareaRef.current?.focus();
       }, 420);
@@ -661,21 +541,11 @@ export default function ReadingIntakeScreen({
       clearReading();
       localStorage.removeItem("dfp_followup_return");
       localStorage.removeItem("dfp_followup_question");
-      const topic =
-        selectedArea === "love"
-          ? "love"
-          : selectedArea === "career"
-            ? "career"
-            : selectedArea === "money"
-              ? "money"
-              : "general";
+      const topic = selectedArea === "love" ? "love" : selectedArea === "career" ? "career" : selectedArea === "money" ? "money" : "general";
       saveIntake({
         topic: topic as "love" | "career" | "money" | "general",
         area: selectedArea,
-        question:
-          selectedArea === "other"
-            ? "What is coming for me in the next 30–45 days?"
-            : question.trim(),
+        question: selectedArea === "other" ? "What is coming for me in the next 30–45 days?" : question.trim(),
         timeframeType: "month",
         timeframeValue: "next-45-days",
       });
@@ -685,7 +555,7 @@ export default function ReadingIntakeScreen({
         if (Number(creditsData.credits ?? 0) <= 0) {
           const paywallsCompleted = Number(creditsData.paywallsCompleted ?? 0);
           const paywallIndex = Math.min(paywallsCompleted + 1, 4);
-          trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.00, currency: "USD" });
+          trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.0, currency: "USD" });
           const checkoutRes = await fetch("/api/stripe/checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -704,9 +574,7 @@ export default function ReadingIntakeScreen({
       }
       router.push("/reading/preparing");
     } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "Something went wrong"
-      );
+      setSubmitError(error instanceof Error ? error.message : "Something went wrong");
     } finally {
       setIsCreatingReading(false);
     }
@@ -714,21 +582,16 @@ export default function ReadingIntakeScreen({
 
   const handleBypass = async () => {
     setIsBypassLoading(true);
-    trackTtq("InitiateCheckout", { content_id: "bypass", value: 6.00, currency: "USD" });
+    trackTtq("InitiateCheckout", { content_id: "bypass", value: 6.0, currency: "USD" });
     try {
       await fetch("/api/user/bypass-reset", { method: "POST" });
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          returnUrl: `${window.location.origin}/reading/intake`,
-          mode: "bypass",
-        }),
+        body: JSON.stringify({ returnUrl: `${window.location.origin}/reading/intake`, mode: "bypass" }),
       });
       const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
+      if (data.url) window.location.href = data.url;
     } catch {
     } finally {
       setIsBypassLoading(false);
@@ -740,8 +603,7 @@ export default function ReadingIntakeScreen({
 
   const freeReadingCooldownLine = useMemo(() => {
     if (!userStatus?.freeReadingResetAt) return null;
-    if (onCooldown) return null;
-    if (userStatus?.isSubscribed) return null;
+    if (onCooldown || userStatus?.isSubscribed) return null;
     const ms = new Date(userStatus.freeReadingResetAt).getTime() - now;
     if (ms <= 0) return null;
     const days = Math.floor(ms / (1000 * 60 * 60 * 24));
@@ -753,193 +615,87 @@ export default function ReadingIntakeScreen({
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
-  // ── Theme-specific helper functions ────────────────────────────────
+  const getAreaColors = (areaId: AreaId) => theme.areaColors[areaId];
 
-  // Get area-specific colors
-  const getAreaColors = (areaId: string) => {
-    const areaMap: Record<string, keyof ThemeColors['areaColors']> = {
-      love: 'love',
-      money: 'money',
-      career: 'career',
-      other: 'other'
-    };
-    const key = areaMap[areaId] || 'other';
-    return theme.areaColors[key];
-  };
-
-  // Get card animation based on theme and area
-  const getCardAnimation = (isSelected: boolean, areaId: string) => {
+  const getCardAnimation = (isSelected: boolean, areaId: AreaId) => {
     const areaColors = getAreaColors(areaId);
-    
     if (!isSelected) {
       return {
-        backgroundColor: "rgba(255, 255, 255, 0.03)",
+        backgroundColor: "rgba(255,255,255,0.035)",
         borderColor: theme.unselectedBorder,
         y: 0,
       };
     }
-
     return {
       backgroundColor: areaColors.bg,
       borderColor: areaColors.border,
-      y: shouldReduceMotion ? 0 : -2,
+      y: shouldReduceMotion ? 0 : -3,
     };
   };
 
-  // Get glow overlay based on theme and area
-  const getGlowOverlay = (areaId: string) => {
+  const getGlowOverlay = (areaId: AreaId) => {
     const areaColors = getAreaColors(areaId);
-    
-    if (theme.name === "earth") {
-      return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(37,75,58,0.08) 38%, transparent 72%)`;
-    }
-    return `radial-gradient(circle at 50% 50%, ${theme.selectedGlow}, rgba(0,0,0,0) 72%)`;
+    return `radial-gradient(circle at 50% 50%, ${areaColors.glow}, rgba(255,255,255,0.018) 38%, transparent 72%)`;
   };
 
-  // Get icon tile shadow based on area
-  const getIconTileShadow = (areaId: string) => {
+  const getIconTileShadow = (areaId: AreaId) => {
     const areaColors = getAreaColors(areaId);
-    return `0 0 16px ${areaColors.glow}`;
+    return `0 14px 28px rgba(0,0,0,0.58), 0 0 24px ${areaColors.glow}`;
   };
 
-  // Get badge background based on theme
-  const getBadgeBackground = () => {
-    if (theme.name === "earth") {
-      return "rgba(37,75,58,0.28)";
-    }
-    return theme.selectedGlow;
-  };
+  const getBadgeBackground = () => "rgba(22, 163, 74, 0.18)";
+  const getBadgeShadow = () =>
+    `inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(74,222,128,0.28), 0 10px 22px rgba(0,0,0,0.32)`;
+  const getCTABackground = () => theme.areaColors.cta.gradient;
+  const getCTAShadow = () =>
+    `0 18px 34px rgba(0,0,0,0.62), 0 8px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`;
 
-  // Get badge shadow based on theme
-  const getBadgeShadow = () => {
-    if (theme.name === "earth") {
-      return "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(37,75,58,0.08)";
-    }
-    return undefined;
-  };
-
-  // Get CTA background based on theme
-  const getCTABackground = () => {
-    if (theme.name === "earth") {
-      return "linear-gradient(180deg, #254B3A 0%, #1E352A 100%)";
-    }
-    return "rgba(0,0,0,0.40)";
-  };
-
-  // Get CTA shadow based on theme
-  const getCTAShadow = () => {
-    if (theme.name === "earth") {
-      return "0 10px 30px rgba(37,75,58,0.28), inset 0 1px 0 rgba(255,255,255,0.06)";
-    }
-    return `0 4px 24px ${theme.selectedGlow}`;
-  };
-
-  // Get textarea focus styles based on theme
   const getTextareaFocusStyles = (isFocused: boolean) => {
     if (!isFocused) {
       return {
-        borderColor: "rgba(255,255,255,0.10)",
-        boxShadow: "none",
-      };
-    }
-
-    if (theme.name === "earth") {
-      return {
-        borderColor: "#254B3A",
-        boxShadow: "0 0 22px rgba(37,75,58,0.25)",
+        borderColor: "rgba(255,255,255,0.12)",
+        boxShadow: "0 18px 34px rgba(0,0,0,0.55)",
       };
     }
     return {
-      borderColor: theme.accentLine,
-      boxShadow: `0 0 22px ${theme.selectedGlow}`,
+      borderColor: theme.nextStepBorder,
+      boxShadow: `0 0 0 1px ${theme.nextStepBorder}, 0 0 28px ${theme.nextStepGlow}, 0 18px 34px rgba(0,0,0,0.62)`,
     };
   };
 
   return (
-    <div
-      className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
-      style={{ WebkitOverflowScrolling: "touch" }}
-    >
+    <div className="no-scrollbar h-screen overflow-y-auto overscroll-none bg-[#02030a] text-slate-100" style={{ WebkitOverflowScrolling: "touch" }}>
       <style jsx>{`
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-          width: 0;
-          height: 0;
-        }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
         @keyframes jxlAmberPulse {
           0%, 100% {
-            box-shadow:
-              0 0 0 1px rgba(245, 158, 11, 0.18),
-              0 0 20px rgba(245, 158, 11, 0.08),
-              0 0 40px rgba(245, 158, 11, 0.04);
+            box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.26), 0 14px 28px rgba(0,0,0,0.64), 0 0 22px rgba(245, 158, 11, 0.10);
           }
           50% {
-            box-shadow:
-              0 0 0 1px rgba(251, 191, 36, 0.38),
-              0 0 28px rgba(251, 191, 36, 0.18),
-              0 0 56px rgba(251, 191, 36, 0.08);
+            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251, 191, 36, 0.18);
           }
         }
 
         @keyframes cooldownPulse {
-          0%, 100% {
-            box-shadow:
-              0 0 0 1px rgba(99, 102, 241, 0.2),
-              0 0 20px rgba(99, 102, 241, 0.08);
-          }
-          50% {
-            box-shadow:
-              0 0 0 1px rgba(99, 102, 241, 0.4),
-              0 0 28px rgba(99, 102, 241, 0.16);
-          }
+          0%, 100% { box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2), 0 0 20px rgba(99, 102, 241, 0.08); }
+          50% { box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4), 0 0 28px rgba(99, 102, 241, 0.16); }
         }
 
         @keyframes whiteGlowPulse {
-          0%, 100% {
-            opacity: 0.4;
-          }
-          50% {
-            opacity: 0.9;
-          }
+          0%, 100% { opacity: 0.68; box-shadow: 0 0 24px rgba(255,255,255,0.08); }
+          50% { opacity: 1; box-shadow: 0 0 34px rgba(255,255,255,0.18); }
         }
 
-        @keyframes shimmerFlow {
-          0% {
-            background-position: -200% center;
-          }
-          100% {
-            background-position: 200% center;
-          }
+        @keyframes stepPulse {
+          0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.20), 0 16px 30px rgba(0,0,0,0.50), 0 0 18px rgba(255,255,255,0.08); }
+          50% { box-shadow: 0 0 0 1px rgba(255,255,255,0.55), 0 20px 38px rgba(0,0,0,0.65), 0 0 36px rgba(255,255,255,0.18); }
         }
 
-        .jxl-teaser {
-          animation: jxlAmberPulse 2.8s ease-in-out infinite;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .jxl-teaser::before {
-          content: "";
-          position: absolute;
-          inset: -40%;
-          background-image: linear-gradient(
-            120deg,
-            rgba(253, 230, 138, 0) 0%,
-            rgba(253, 230, 138, 0.12) 40%,
-            rgba(250, 204, 21, 0.3) 50%,
-            rgba(253, 230, 138, 0.12) 60%,
-            rgba(253, 230, 138, 0) 100%
-          );
-          mix-blend-mode: screen;
-          pointer-events: none;
-          opacity: 0.85;
-          transform: translateX(-60%);
-          animation: jxlShimmer 3.5s linear infinite;
+        @keyframes selectedSweep {
+          0% { transform: translateX(-155%); }
+          100% { transform: translateX(155%); }
         }
 
         @keyframes jxlShimmer {
@@ -948,34 +704,16 @@ export default function ReadingIntakeScreen({
           100% { transform: translateX(120%); }
         }
 
-        .cooldown-glow {
-          animation: cooldownPulse 3s ease-in-out infinite;
-        }
-
-        .jxl-teaser--subtle::before {
-          opacity: 0.55;
-          animation-duration: 5s;
-        }
-
-        .jxl-teaser--indigo {
-          animation: cooldownPulse 2.8s ease-in-out infinite;
-        }
-
-        .jxl-teaser--indigo::before {
-          background-image: linear-gradient(
-            120deg,
-            rgba(165, 180, 252, 0) 0%,
-            rgba(165, 180, 252, 0.12) 40%,
-            rgba(129, 140, 248, 0.3) 50%,
-            rgba(165, 180, 252, 0.12) 60%,
-            rgba(165, 180, 252, 0) 100%
-          );
-        }
-
         @keyframes jxlGlint {
-          0%, 78%, 100% { opacity: 0; transform: scale(0.3); }
-          88% { opacity: 1; transform: scale(1.4); }
-          94% { opacity: 0.7; transform: scale(1); }
+          0%, 76%, 100% { opacity: 0; transform: scale(0.35); }
+          86% { opacity: 1; transform: scale(1.5); }
+          94% { opacity: 0.78; transform: scale(1); }
+        }
+
+        @keyframes driftGradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
         }
 
         .jxl-sparkle {
@@ -989,37 +727,24 @@ export default function ReadingIntakeScreen({
 
         .jxl-sparkle--indigo {
           background: rgb(199, 210, 254);
-          box-shadow:
-            0 0 8px 2px rgba(129, 140, 248, 0.9),
-            0 0 16px 4px rgba(129, 140, 248, 0.5);
+          box-shadow: 0 0 8px 2px rgba(129, 140, 248, 0.9), 0 0 16px 4px rgba(129, 140, 248, 0.5);
         }
 
         .jxl-sparkle--gold {
           background: rgb(253, 230, 138);
-          box-shadow:
-            0 0 8px 2px rgba(250, 204, 21, 0.9),
-            0 0 16px 4px rgba(250, 204, 21, 0.5);
-        }
-
-        @keyframes driftGradient {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
+          box-shadow: 0 0 8px 2px rgba(250, 204, 21, 0.9), 0 0 16px 4px rgba(250, 204, 21, 0.5);
         }
 
         .drift-bg {
           position: absolute;
           inset: -10%;
-          background: linear-gradient(
-            120deg,
-            #040611 0%,
-            #061120 25%,
-            #050816 50%,
-            #061120 75%,
-            #040611 100%
-          );
-          background-size: 200% 200%;
-          animation: driftGradient 26s ease-in-out infinite;
+          background:
+            radial-gradient(circle at 18% 18%, rgba(255,255,255,0.06) 0%, transparent 20%),
+            radial-gradient(circle at 78% 24%, rgba(99,102,241,0.08) 0%, transparent 28%),
+            radial-gradient(circle at 72% 72%, rgba(147,51,234,0.08) 0%, transparent 26%),
+            linear-gradient(145deg, #010109 0%, #02040d 30%, #040713 55%, #010109 100%);
+          background-size: 180% 180%;
+          animation: driftGradient 32s ease-in-out infinite;
         }
 
         .drift-bg::after {
@@ -1027,48 +752,34 @@ export default function ReadingIntakeScreen({
           position: absolute;
           inset: 0;
           background:
-            radial-gradient(circle at 30% 20%, rgba(45, 212, 191, 0.05), transparent 45%),
-            radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.04), transparent 45%);
-          animation: driftGradient 26s ease-in-out infinite reverse;
+            radial-gradient(circle at 30% 20%, rgba(255,255,255,0.045), transparent 42%),
+            radial-gradient(circle at 75% 70%, rgba(148,163,184,0.03), transparent 46%);
+          animation: driftGradient 38s ease-in-out infinite reverse;
         }
 
         .cosmic-grid {
           position: absolute;
           inset: 0;
-          background-image:
-            linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-          background-size: 36px 36px;
-          mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
-          opacity: 0.18;
+          background-image: linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+          background-size: 42px 42px;
+          mask-image: linear-gradient(to bottom, rgba(255,255,255,0.16), rgba(255,255,255,0));
+          opacity: 0.14;
         }
 
         .aurora-orb--violet {
           position: absolute;
-          top: 8rem;
+          top: 5rem;
           right: -4rem;
-          width: 14rem;
-          height: 14rem;
+          width: 16rem;
+          height: 16rem;
           border-radius: 9999px;
-          filter: blur(60px);
-          background: radial-gradient(circle, rgba(129, 140, 248, 0.18) 0%, rgba(129, 140, 248, 0.06) 48%, transparent 74%);
+          filter: blur(82px);
+          background: radial-gradient(circle, rgba(167,139,250,0.12) 0%, rgba(99,102,241,0.06) 48%, transparent 74%);
           will-change: transform, opacity;
         }
 
-        .glow-light-bar {
-          position: relative;
-          height: 2.5px;
-          width: 100%;
-          background: linear-gradient(
-            90deg,
-            rgba(255, 255, 255, 0.4) 0%,
-            rgba(255, 255, 255, 0.8) 30%,
-            rgba(255, 255, 255, 0.9) 50%,
-            rgba(255, 255, 255, 0.8) 70%,
-            rgba(255, 255, 255, 0.4) 100%
-          );
-          box-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
-          animation: whiteGlowPulse 3.5s ease-in-out infinite;
+        .hero-card-shadow {
+          box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 0 1px rgba(255,255,255,0.04) inset;
         }
 
         .selected-card-shell {
@@ -1076,6 +787,7 @@ export default function ReadingIntakeScreen({
           overflow: hidden;
           isolation: isolate;
           will-change: transform, opacity;
+          box-shadow: 0 18px 36px rgba(0,0,0,0.62), 0 8px 18px rgba(0,0,0,0.46);
         }
 
         .selected-card-shell::before {
@@ -1083,7 +795,7 @@ export default function ReadingIntakeScreen({
           position: absolute;
           inset: -1px;
           border-radius: 24px;
-          background: var(--selected-wash, radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.14), transparent 42%), radial-gradient(circle at 80% 30%, rgba(45, 212, 191, 0.08), transparent 46%), linear-gradient(180deg, rgba(45, 212, 191, 0.08), rgba(20, 184, 166, 0.03)));
+          background: var(--selected-wash);
           opacity: 0;
           z-index: 0;
           pointer-events: none;
@@ -1098,51 +810,31 @@ export default function ReadingIntakeScreen({
           opacity: 0;
           z-index: 0;
           pointer-events: none;
-          box-shadow: var(--selected-shadow, 0 0 0 1px rgba(45, 212, 191, 0.14), 0 10px 30px rgba(20, 184, 166, 0.14), 0 0 24px rgba(45, 212, 191, 0.08));
+          box-shadow: var(--selected-shadow);
           transition: opacity 260ms ease;
         }
 
         .selected-card-shell[data-selected="true"]::before,
-        .selected-card-shell[data-selected="true"]::after {
-          opacity: 1;
+        .selected-card-shell[data-selected="true"]::after { opacity: 1; }
+
+        .selected-card-shell[data-selected="true"] .selected-pill::before {
+          animation: selectedSweep 1.6s ease-in-out infinite;
         }
 
-        .profile-name-button {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          cursor: pointer;
-          transition: opacity 180ms ease;
+        .selected-card-shell[data-selected="true"] .selected-icon-wrap {
+          animation: whiteGlowPulse 2.2s ease-in-out infinite;
         }
 
-        .profile-name-button:hover {
-          opacity: 0.82;
-        }
-
-        @keyframes swipePulse {
-          0%, 100% { transform: translateX(0); opacity: 0.4; }
-          50% { transform: translateX(10px); opacity: 1; }
-        }
-
-        .swipe-arrow {
-          animation: swipePulse 2s ease-in-out infinite;
-        }
-
-        @keyframes swipeButtonPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
-          50% { box-shadow: 0 0 0 12px rgba(251, 191, 36, 0); }
-        }
-
-        .swipe-button-glow {
-          animation: swipeButtonPulse 2s ease-in-out infinite;
+        .next-step-card {
+          animation: stepPulse 2.2s ease-in-out infinite;
         }
 
         .swipe-hint-container {
           position: relative;
           overflow: hidden;
-          border-radius: 24px;
-          border: 1px solid rgba(251, 191, 36, 0.2);
-          background: linear-gradient(180deg, rgba(251, 191, 36, 0.06), rgba(251, 191, 36, 0.02));
+          border-radius: 18px;
+          border: 1px solid rgba(251,191,36,0.34);
+          background: linear-gradient(180deg, rgba(120,84,18,0.28), rgba(50,34,10,0.16));
           animation: jxlAmberPulse 2.8s ease-in-out infinite;
           cursor: pointer;
         }
@@ -1151,9 +843,7 @@ export default function ReadingIntakeScreen({
           content: "";
           position: absolute;
           inset: 0;
-          background:
-            radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.06), transparent 26%),
-            radial-gradient(circle at 80% 12%, rgba(251, 191, 36, 0.12), transparent 24%);
+          background: radial-gradient(circle at 16% 18%, rgba(255,255,255,0.08), transparent 26%), radial-gradient(circle at 80% 12%, rgba(251,191,36,0.18), transparent 24%);
           pointer-events: none;
           z-index: 0;
         }
@@ -1162,40 +852,20 @@ export default function ReadingIntakeScreen({
           content: "";
           position: absolute;
           inset: -40%;
-          background-image: linear-gradient(
-            120deg,
-            rgba(253, 230, 138, 0) 0%,
-            rgba(253, 230, 138, 0.12) 40%,
-            rgba(250, 204, 21, 0.3) 50%,
-            rgba(253, 230, 138, 0.12) 60%,
-            rgba(253, 230, 138, 0) 100%
-          );
+          background-image: linear-gradient(120deg, rgba(253,230,138,0) 0%, rgba(253,230,138,0.12) 40%, rgba(250,204,21,0.36) 50%, rgba(253,230,138,0.12) 60%, rgba(253,230,138,0) 100%);
           mix-blend-mode: screen;
           pointer-events: none;
-          opacity: 0.55;
+          opacity: 0.66;
           transform: translateX(-60%);
-          animation: jxlShimmer 5s linear infinite;
+          animation: jxlShimmer 4.2s linear infinite;
           z-index: 0;
         }
 
-        .swipe-hint-container > * {
-          position: relative;
-          z-index: 1;
-        }
+        .swipe-hint-container > * { position: relative; z-index: 1; }
 
         @media (prefers-reduced-motion: reduce) {
-          .drift-bg,
-          .drift-bg::after,
-          .jxl-sparkle,
-          .jxl-teaser,
-          .jxl-teaser::before,
-          .glow-light-bar,
-          .swipe-arrow,
-          .swipe-button-glow,
-          .swipe-hint-container,
-          .swipe-hint-container::after {
+          .drift-bg, .drift-bg::after, .jxl-sparkle, .swipe-hint-container, .swipe-hint-container::after, .next-step-card, .selected-card-shell[data-selected="true"] .selected-icon-wrap, .selected-card-shell[data-selected="true"] .selected-pill::before {
             animation: none !important;
-            opacity: 0.4 !important;
           }
         }
       `}</style>
@@ -1205,118 +875,54 @@ export default function ReadingIntakeScreen({
         <div className="cosmic-grid" />
         <motion.div
           className="aurora-orb--violet"
-          animate={
-            shouldReduceMotion
-              ? undefined
-              : { y: [0, -8, 0], x: [0, -6, 0], opacity: [0.12, 0.2, 0.12] }
-          }
-          transition={
-            shouldReduceMotion
-              ? undefined
-              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
-          }
+          animate={shouldReduceMotion ? undefined : { y: [0, -10, 0], x: [0, -8, 0], opacity: [0.14, 0.28, 0.14] }}
+          transition={shouldReduceMotion ? undefined : { duration: 11, repeat: Infinity, ease: "easeInOut" }}
         />
         {stars.map((star) => (
           <motion.span
             key={star.id}
             className="absolute rounded-full bg-white"
-            style={{
-              left: star.left,
-              top: star.top,
-              width: star.size,
-              height: star.size,
-              opacity: star.opacity,
-            }}
-            animate={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
-                    scale: [1, 1.6, 1],
-                  }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    duration: 1.6 + (star.id % 5) * 0.35,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: star.delay,
-                  }
-            }
+            style={{ left: star.left, top: star.top, width: star.size, height: star.size, opacity: star.opacity }}
+            animate={shouldReduceMotion ? undefined : { opacity: [star.opacity * 0.35, Math.min(star.opacity * 1.9, 1), star.opacity * 0.35], scale: [1, 1.85, 1] }}
+            transition={shouldReduceMotion ? undefined : { duration: 1.2 + (star.id % 6) * 0.28, repeat: Infinity, ease: "easeInOut", delay: star.delay }}
           />
         ))}
       </div>
 
-      <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-1"
-        style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col top-section"
-        >
-          {/* ── GLOWING LIGHT BAR ── */}
-          <div className="glow-light-bar mb-6 opacity-80" />
-
-          {/* ── HERO: Future Direct Insights ─────────────────────────── */}
+      <div className="relative z-10 mx-auto flex w-full max-w-[430px] flex-col px-4 pt-4" style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}>
+        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: "easeOut" }} className="flex flex-col top-section">
           <section className="mb-5 pt-1">
-            <div className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.02] px-5 py-7 text-center shadow-[0_8px_32px_rgba(0,0,0,0.5),0_20px_60px_rgba(0,0,0,0.3)]">
-              <div className="hero-halo opacity-70" aria-hidden="true" />
-
+            <div className="hero-card-shadow relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 py-7 text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full px-3 py-1" style={{ border: `1px solid ${theme.accentLine}`, backgroundColor: theme.areaColors.hero.bg }}>
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em]" style={{ color: theme.areaColors.hero.text }}>
-                    Your Year Ahead
-                  </span>
+                <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white">Your Year Ahead</span>
                 </div>
-
-                <h1 
-                  className="bg-gradient-to-b from-white via-white bg-clip-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.45)] sm:text-[48px]"
-                  style={{ 
-                    backgroundImage: `linear-gradient(to bottom, #ffffff, #ffffff, ${theme.gradientEnd})` 
-                  }}
-                >
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
                   Future Direct Insights
                 </h1>
-
-                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/78 sm:text-[15px]">
+                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
                   A focused look at the patterns, timing, and momentum shaping your next chapter.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* ── Reading cycle — centered ─────────────────────────────── */}
           {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-1 mx-auto w-full max-w-[280px] space-y-2">
+            <div className="mx-auto mb-1 w-full max-w-[280px] space-y-2">
               <div className="flex items-center justify-center gap-2">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                  Reading cycle
-                </span>
-                <span className="text-[10px] text-slate-600">
-                  {onCooldown ? 4 : readingsCompleted} / 4
-                </span>
+                <span className="text-[10px] uppercase tracking-[0.18em] text-white/90">Reading cycle</span>
+                <span className="text-[10px] text-white/90">{onCooldown ? 4 : readingsCompleted} / 4</span>
               </div>
               <div className="flex gap-1.5">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]"
-                  >
+                  <div key={i} className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
                     {(onCooldown || i < readingsCompleted) && (
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: "100%" }}
                         transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
                         className="absolute inset-y-0 left-0 rounded-full"
-                        style={{
-                          backgroundColor: theme.progressBar,
-                          boxShadow: `0 0 8px ${theme.progressBar}`,
-                        }}
+                        style={{ backgroundColor: theme.progressBar, boxShadow: `0 0 10px ${theme.progressBar}` }}
                       />
                     )}
                   </div>
@@ -1326,32 +932,21 @@ export default function ReadingIntakeScreen({
           )}
 
           {freeReadingCooldownLine && (
-            <div className="mb-8 flex items-center justify-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/80" />
-              <span className="text-[11px] text-indigo-300/70">{freeReadingCooldownLine}</span>
+            <div className="mb-8 mt-2 flex items-center justify-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-white/85" />
+              <span className="text-[11px] text-white/74">{freeReadingCooldownLine}</span>
             </div>
           )}
 
           {onCooldown ? (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="relative"
-            >
-              <div className="space-y-3 blur-[5px] pointer-events-none select-none opacity-30">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative">
+              <div className="pointer-events-none select-none space-y-3 blur-[5px] opacity-30">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
                   return (
-                    <div
-                      key={area.id}
-                      className="w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4"
-                    >
+                    <div key={area.id} className="w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4 shadow-[0_18px_36px_rgba(0,0,0,0.62)]">
                       <div className="flex items-start gap-3">
-                        <motion.div
-                          animate={getIconPulseAnimation(false)}
-                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-slate-300"
-                        >
+                        <motion.div animate={getIconPulseAnimation(false)} className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-slate-300 shadow-[0_12px_28px_rgba(0,0,0,0.58)]">
                           <Icon className="h-4 w-4" />
                         </motion.div>
                         <div>
@@ -1371,21 +966,15 @@ export default function ReadingIntakeScreen({
                       <Timer className="h-5 w-5 text-indigo-300" />
                     </div>
                   </div>
-                  <h2 className="mb-2 text-[16px] font-semibold text-white">
-                    Cooldown period active
-                  </h2>
+                  <h2 className="mb-2 text-[16px] font-semibold text-white">Cooldown period active</h2>
                   <p className="mb-1 text-[13px] leading-5 text-slate-400">
                     Due to safety concerns and us caring about your wellbeing, we've implemented a cooldown period between reading cycles.
                   </p>
                   {userStatus?.cooldownExpiresAt && (
-                    <p className="mt-2 text-[12px] text-indigo-300/80">
-                      Resets in {formatTimeRemaining(userStatus.cooldownExpiresAt)}
-                    </p>
+                    <p className="mt-2 text-[12px] text-indigo-300/80">Resets in {formatTimeRemaining(userStatus.cooldownExpiresAt)}</p>
                   )}
                   <div className="mt-5 border-t border-white/10 pt-8">
-                    <p className="mb-3 text-[12px] leading-5 text-slate-400">
-                      You can do this one time per cycle.
-                    </p>
+                    <p className="mb-3 text-[12px] leading-5 text-slate-400">You can do this one time per cycle.</p>
                     <motion.button
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.12 }}
@@ -1421,44 +1010,33 @@ export default function ReadingIntakeScreen({
                         setSelectedArea(area.id);
                         setQuestion("");
                         trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
-
-                        if (isFirstSelection && area.id !== "other") {
-                          scrollClusterIntoViewThenFocus();
-                        }
+                        if (isFirstSelection && area.id !== "other") scrollClusterIntoViewThenFocus();
                       }}
                       animate={cardAnimation}
                       data-selected={isSelected ? "true" : "false"}
-                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm shadow-[0_18px_40px_rgba(0,0,0,0.5)]"
-                      style={{ 
+                      className="selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm"
+                      style={{
                         willChange: "transform, opacity",
-                        '--selected-wash': areaColors.gradient,
-                        '--selected-shadow': `0 0 0 1px ${areaColors.border}, 0 10px 30px ${areaColors.glow}, 0 0 24px ${areaColors.glow}`,
+                        ["--selected-wash" as string]: areaColors.gradient,
+                        ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 36px rgba(0,0,0,0.68), 0 0 26px ${areaColors.glow}`,
                       } as React.CSSProperties}
                     >
                       {isSelected && (
-                        <div
-                          className="pointer-events-none absolute inset-0 rounded-[24px]"
-                          style={{
-                            background: getGlowOverlay(area.id),
-                            zIndex: 0,
-                          }}
-                        />
+                        <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
                       )}
 
                       <div className="relative z-[1] flex items-start gap-3">
                         <motion.div
                           animate={getIconPulseAnimation(isSelected)}
                           className={cn(
-                            "mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
-                            isSelected
-                              ? ""
-                              : "border-white/10 bg-black/20 text-slate-300"
+                            "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
+                            isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
                           )}
                           style={{
                             borderColor: isSelected ? areaColors.border : undefined,
-                            backgroundColor: isSelected ? areaColors.glow : undefined,
+                            background: isSelected ? areaColors.gradient : undefined,
                             color: isSelected ? areaColors.text : undefined,
-                            boxShadow: isSelected ? getIconTileShadow(area.id) : undefined,
+                            boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
                           }}
                         >
                           <Icon className="h-4 w-4" />
@@ -1466,10 +1044,7 @@ export default function ReadingIntakeScreen({
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-[15px] font-semibold text-white">
-                              {area.title}
-                            </h2>
-
+                            <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
                             <AnimatePresence>
                               {isSelected && (
                                 <motion.span
@@ -1477,33 +1052,24 @@ export default function ReadingIntakeScreen({
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.92, y: 4 }}
                                   transition={{ duration: 0.18, ease: "easeOut" }}
-                                  className="relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
+                                  className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em]"
                                   style={{
                                     color: theme.selectedTag,
-                                    borderColor: theme.selectedBorder,
+                                    borderColor: "rgba(74,222,128,0.32)",
                                     backgroundColor: getBadgeBackground(),
                                     borderWidth: 1,
                                     borderStyle: "solid",
                                     boxShadow: getBadgeShadow(),
                                   }}
                                 >
-                                  {!shouldReduceMotion && (
-                                    <motion.span
-                                      aria-hidden="true"
-                                      className="pointer-events-none absolute inset-0"
-                                      style={{
-                                        background:
-                                          "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.18) 50%, transparent 65%, transparent 100%)",
-                                      }}
-                                      initial={{ x: "-140%" }}
-                                      animate={{ x: ["-140%", "140%"] }}
-                                      transition={{
-                                        duration: 1.1,
-                                        ease: "easeOut",
-                                        delay: 0.2,
-                                      }}
-                                    />
-                                  )}
+                                  <span
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute inset-0"
+                                    style={{
+                                      background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)",
+                                      transform: "translateX(-155%)",
+                                    }}
+                                  />
                                   <span className="relative z-[1]">Selected</span>
                                 </motion.span>
                               )}
@@ -1512,11 +1078,7 @@ export default function ReadingIntakeScreen({
 
                           <motion.p
                             className="mt-1 text-sm leading-5"
-                            animate={{
-                              color: isSelected
-                                ? "rgba(226, 232, 240, 0.92)"
-                                : "rgba(148, 163, 184, 1)",
-                            }}
+                            animate={{ color: isSelected ? "rgba(241, 245, 249, 0.96)" : "rgba(148, 163, 184, 1)" }}
                             transition={{ duration: 0.24, ease: "easeOut" }}
                           >
                             {area.description}
@@ -1537,36 +1099,37 @@ export default function ReadingIntakeScreen({
                     transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                     className="mt-6 space-y-2"
                   >
-                    <Textarea
-                      id="question"
-                      ref={textareaRef}
-                      rows={5}
-                      value={question}
-                      onChange={(e) => setQuestion(e.target.value)}
-                      placeholder={
-                        AREAS.find((a) => a.id === selectedArea)?.placeholder ??
-                        "Ask something specific so your reading can go deeper."
-                      }
-                      className="min-h-[132px] rounded-[24px] border px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 transition-all duration-300 focus:outline-none focus:ring-1"
-                      style={{
-                        borderColor: "rgba(255,255,255,0.10)",
-                        backgroundColor: "rgba(0,0,0,0.20)",
-                        outlineColor: theme.accentLine,
-                      }}
-                      onFocus={(e) => {
-                        const styles = getTextareaFocusStyles(true);
-                        e.currentTarget.style.borderColor = styles.borderColor;
-                        e.currentTarget.style.boxShadow = styles.boxShadow;
-                      }}
-                      onBlur={(e) => {
-                        const styles = getTextareaFocusStyles(false);
-                        e.currentTarget.style.borderColor = styles.borderColor;
-                        e.currentTarget.style.boxShadow = styles.boxShadow;
-                      }}
-                    />
-                    <p className="text-xs leading-5 text-slate-400">
-                      Be specific. The clearer your question, the sharper the reading.
-                    </p>
+                    <div className="next-step-card rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px]">
+                      <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
+                        <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-white/90">Ask Something</div>
+                        <Textarea
+                          id="question"
+                          ref={textareaRef}
+                          rows={5}
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          placeholder={AREAS.find((a) => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
+                          className="min-h-[132px] rounded-[24px] border px-4 py-4 text-[16px] leading-6 text-white placeholder:text-slate-400/80 transition-all duration-300 focus:outline-none focus:ring-1"
+                          style={{
+                            borderColor: "rgba(255,255,255,0.12)",
+                            backgroundColor: "rgba(0,0,0,0.30)",
+                            outlineColor: theme.accentLine,
+                            boxShadow: "0 18px 34px rgba(0,0,0,0.55)",
+                          }}
+                          onFocus={(e) => {
+                            const styles = getTextareaFocusStyles(true);
+                            e.currentTarget.style.borderColor = styles.borderColor;
+                            e.currentTarget.style.boxShadow = styles.boxShadow;
+                          }}
+                          onBlur={(e) => {
+                            const styles = getTextareaFocusStyles(false);
+                            e.currentTarget.style.borderColor = styles.borderColor;
+                            e.currentTarget.style.boxShadow = styles.boxShadow;
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs leading-5 text-slate-300/80">Be specific. The clearer your question, the sharper the reading.</p>
                   </motion.section>
                 )}
               </AnimatePresence>
@@ -1574,10 +1137,7 @@ export default function ReadingIntakeScreen({
           )}
 
           <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
-            {submitError && (
-              <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>
-            )}
-
+            {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             {!onCooldown && (
               <motion.div whileTap={{ scale: 0.985 }} transition={{ duration: 0.12 }}>
                 <Button
@@ -1585,12 +1145,7 @@ export default function ReadingIntakeScreen({
                   onClick={handleStartReading}
                   disabled={!canSubmit || isCreatingReading}
                   className="h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
-                  style={{
-                    borderColor: theme.areaColors.cta.border,
-                    color: theme.areaColors.cta.text,
-                    background: getCTABackground(),
-                    boxShadow: getCTAShadow(),
-                  }}
+                  style={{ borderColor: theme.areaColors.cta.border, color: theme.areaColors.cta.text, background: getCTABackground(), boxShadow: getCTAShadow() }}
                 >
                   {buttonCopy}
                 </Button>
@@ -1598,96 +1153,61 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-          {/* ── SWIPE HINT: Explore Unlimited Access ── */}
-<motion.div
-  initial={{ opacity: 0, y: 12 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
-  className="mt-4"
->
-  {/* Header */}
-  <div className="flex items-center justify-center gap-2 mb-3">
-    <Sparkles className="h-3.5 w-3.5 text-amber-300/60" />
-    <span className="text-[13px] font-medium text-amber-200/80 tracking-wide">
-      Explore Unlimited Access
-    </span>
-  </div>
-
-  {/* Swipe Button - only this is clickable/swipeable */}
+         {/* ── UNLIMITED ACCESS SWIPE BUTTON ── */}
+<div className="mt-4 border-t border-white/10 pt-4">
   <motion.button
+    drag="x"
+    dragConstraints={{ left: -120, right: 0 }}
+    dragElastic={0.08}
+    dragMomentum={false}
+    onDragEnd={(_, info) => {
+      // Only trigger if swiped left far enough
+      if (info.offset.x < -90 || info.velocity.x < -700) {
+        onSwipeLeft?.();
+      }
+    }}
     whileTap={{ scale: 0.97 }}
-    transition={{ duration: 0.12 }}
     onClick={(e) => {
       e.stopPropagation();
       onSwipeLeft?.();
     }}
-    className="w-full h-12 rounded-xl bg-gradient-to-r from-amber-400/15 to-amber-500/5 border border-amber-300/20 text-amber-200/80 text-[14px] font-medium transition hover:bg-amber-300/10 flex items-center justify-center gap-3"
+    className="swipe-hint-container flex h-12 w-full cursor-grab items-center justify-center gap-3 text-[14px] font-medium text-amber-100/90 active:cursor-grabbing"
+    style={{
+      touchAction: "none",
+    }}
   >
-    <svg className="w-4 h-4 swipe-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <span>Unlimited Access, Swipe Left to Explore</span>
+    <motion.svg 
+      className="h-4 w-4"
+      animate={{ x: [0, -6, 0] }}
+      transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24"
+    >
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-    <span>Swipe left to explore</span>
+    </motion.svg>
   </motion.button>
+</div>
 
-  {/* Dot indicators */}
-  <div className="flex justify-center gap-1.5 mt-3">
-    {[0, 1, 2, 3, 4].map((i) => (
-      <div 
-        key={i} 
-        className={cn(
-          "h-1 rounded-full transition-all",
-          i === 0 ? "w-4 bg-amber-300/40" : "w-1.5 bg-white/10"
-        )}
-      />
-    ))}
-  </div>
-  <p className="text-center text-[10px] text-slate-500/40 mt-1.5">
-    5 screens · swipe to navigate
-  </p>
-</motion.div>
-
-          {/* ── COMING SOON — Static ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-            className="mt-4"
-          >
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }} className="mt-4 border-t border-white/10 pt-4">
             <div className="mb-2 flex items-center justify-center">
-              <span className="flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
-                <Lock className="h-2.5 w-2.5" />
+              <span className="rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
                 In Development
               </span>
             </div>
-            <div
-              className="relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
-              aria-hidden="true"
-            >
-              {/* ── Sparkles ── */}
+            <div className="pointer-events-none relative select-none overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30" aria-hidden="true">
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
                   key={i}
-                  className={cn(
-                    "jxl-sparkle",
-                    sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold"
-                  )}
-                  style={{
-                    left: sparkle.left,
-                    top: sparkle.top,
-                    width: `${sparkle.size}px`,
-                    height: `${sparkle.size}px`,
-                    animationDelay: `${sparkle.delay}s`,
-                  }}
+                  className={cn("jxl-sparkle", sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold")}
+                  style={{ left: sparkle.left, top: sparkle.top, width: `${sparkle.size}px`, height: `${sparkle.size}px`, animationDelay: `${sparkle.delay}s` }}
                 />
               ))}
-
-              {/* ── Blurred preview content ── */}
-              <div className="blur-[6px] px-5 py-5 opacity-60">
+              <div className="px-5 py-5 opacity-60 blur-[6px]">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-indigo-300" />
-                  <span className="text-[14px] font-semibold text-indigo-200">
-                    Ask Jxl
-                  </span>
+                  <span className="text-[14px] font-semibold text-indigo-200">Ask Jxl</span>
                 </div>
                 <div className="space-y-2">
                   <div className="h-3 w-3/4 rounded-full bg-slate-400/30" />
@@ -1695,21 +1215,13 @@ export default function ReadingIntakeScreen({
                   <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
                 </div>
               </div>
-
-              {/* ── Gradient overlay ── */}
-              <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
-              
-              {/* ── Lock overlay ── */}
+              <div className="absolute inset-0 rounded-[28px] bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20" />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10"
-                  >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
                     <Lock className="h-4 w-4 text-indigo-300/70" />
                   </div>
-                  <span className="text-[11px] tracking-wide text-indigo-300/60">
-                    Something Great is in Development — Coming Soon
-                  </span>
+                  <span className="text-[11px] tracking-wide text-indigo-300/60">Something Great is in Development — Coming Soon</span>
                 </div>
               </div>
             </div>
