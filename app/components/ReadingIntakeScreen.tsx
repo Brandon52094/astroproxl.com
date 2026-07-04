@@ -819,15 +819,30 @@ export default function ReadingIntakeScreen({
         @keyframes selectedWhiteGlow {
           0%, 100% {
             box-shadow:
-              0 0 30px rgba(255, 255, 255, 0.12),
-              0 0 60px rgba(255, 255, 255, 0.06),
+              0 0 40px rgba(255, 255, 255, 0.15),
+              0 0 80px rgba(255, 255, 255, 0.08),
               0 18px 36px rgba(0, 0, 0, 0.65);
           }
           50% {
             box-shadow:
-              0 0 50px rgba(255, 255, 255, 0.25),
-              0 0 80px rgba(255, 255, 255, 0.10),
+              0 0 60px rgba(255, 255, 255, 0.30),
+              0 0 100px rgba(255, 255, 255, 0.12),
               0 22px 40px rgba(0, 0, 0, 0.70);
+          }
+        }
+
+        @keyframes textareaWhiteGlow {
+          0%, 100% {
+            box-shadow:
+              0 0 20px rgba(255, 255, 255, 0.06),
+              0 18px 34px rgba(0, 0, 0, 0.55);
+            border-color: rgba(255, 255, 255, 0.12);
+          }
+          50% {
+            box-shadow:
+              0 0 40px rgba(255, 255, 255, 0.18),
+              0 22px 40px rgba(0, 0, 0, 0.65);
+            border-color: rgba(255, 255, 255, 0.35);
           }
         }
 
@@ -841,12 +856,6 @@ export default function ReadingIntakeScreen({
           0%, 76%, 100% { opacity: 0; transform: scale(0.35); }
           86% { opacity: 1; transform: scale(1.5); }
           94% { opacity: 0.78; transform: scale(1); }
-        }
-
-        @keyframes driftGradient {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
         }
 
         .jxl-sparkle {
@@ -885,7 +894,12 @@ export default function ReadingIntakeScreen({
           box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
         }
 
-        /* ── WHITE GLOW ON SELECTED CARD ── */
+        /* ── TEXTAREA WHITE GLOW ── */
+        .textarea-glow {
+          animation: textareaWhiteGlow 3s ease-in-out infinite;
+        }
+
+        /* ── SELECTED CARD WHITE GLOW ── */
         .selected-card-glow {
           animation: selectedWhiteGlow 2.8s ease-in-out infinite;
         }
@@ -895,9 +909,9 @@ export default function ReadingIntakeScreen({
           position: relative;
           overflow: hidden;
           border-radius: 18px;
-          border: 1px solid rgba(251, 191, 36, 0.5);
-          background: linear-gradient(180deg, rgba(120, 84, 18, 0.35), rgba(50, 34, 10, 0.2));
-          box-shadow: 0 0 40px rgba(251, 191, 36, 0.15), 0 18px 36px rgba(0, 0, 0, 0.65);
+          border: 2px solid rgba(251, 191, 36, 0.6);
+          background: linear-gradient(180deg, rgba(120, 84, 18, 0.45), rgba(50, 34, 10, 0.25));
+          box-shadow: 0 0 60px rgba(251, 191, 36, 0.25), 0 18px 36px rgba(0, 0, 0, 0.65);
           cursor: pointer;
         }
 
@@ -908,16 +922,16 @@ export default function ReadingIntakeScreen({
           background-image: linear-gradient(
             120deg,
             rgba(253, 230, 138, 0) 0%,
-            rgba(253, 230, 138, 0.2) 40%,
-            rgba(250, 204, 21, 0.5) 50%,
-            rgba(253, 230, 138, 0.2) 60%,
+            rgba(253, 230, 138, 0.3) 35%,
+            rgba(250, 204, 21, 0.7) 50%,
+            rgba(253, 230, 138, 0.3) 65%,
             rgba(253, 230, 138, 0) 100%
           );
           mix-blend-mode: screen;
           pointer-events: none;
-          opacity: 0.85;
+          opacity: 1;
           transform: translateX(-60%);
-          animation: jxlShimmer 3.5s linear infinite;
+          animation: jxlShimmer 3s linear infinite;
           z-index: 0;
         }
 
@@ -985,7 +999,8 @@ export default function ReadingIntakeScreen({
           .gold-shimmer::before,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
-          .selected-card-shell[data-selected="true"] .selected-pill::before {
+          .selected-card-shell[data-selected="true"] .selected-pill::before,
+          .textarea-glow {
             animation: none !important;
           }
         }
@@ -1213,15 +1228,19 @@ export default function ReadingIntakeScreen({
                       animate={cardAnimation}
                       data-selected={isSelected ? "true" : "false"}
                       className={cn(
-                        "selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm",
-                        isSelected && "selected-card-glow"
+                        "selected-card-shell w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
+                        isSelected && "selected-card-glow",
+                        !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
                       )}
                       style={{
                         willChange: "transform, opacity",
                         ["--selected-wash" as string]: areaColors.gradient,
                         ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 36px rgba(0,0,0,0.68), 0 0 40px ${areaColors.glow}`,
-                        backgroundColor: isSelected ? areaColors.bg : "rgba(255,255,255,0.03)",
-                        borderColor: isSelected ? areaColors.border : theme.unselectedBorder,
+                        backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
+                        borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
+                        boxShadow: isSelected
+                          ? `0 0 40px ${areaColors.glow}, 0 18px 36px rgba(0,0,0,0.65)`
+                          : "0 18px 36px rgba(0,0,0,0.55), 0 8px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)",
                       } as React.CSSProperties}
                     >
                       {isSelected && (
@@ -1321,10 +1340,9 @@ export default function ReadingIntakeScreen({
                     className="mt-6 space-y-2"
                   >
                     <div
-                      className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px]"
+                      className="textarea-glow rounded-[26px] border border-white/18 bg-white/[0.035] p-4 transition-all duration-300"
                       style={{
                         boxShadow: "0 18px 34px rgba(0,0,0,0.55)",
-                        transition: "box-shadow 0.3s ease, border-color 0.3s ease",
                       }}
                       onFocus={(e) => {
                         e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)";
@@ -1336,23 +1354,21 @@ export default function ReadingIntakeScreen({
                         e.currentTarget.style.boxShadow = "0 18px 34px rgba(0,0,0,0.55)";
                       }}
                     >
-                      <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
-                        <Textarea
-                          id="question"
-                          ref={textareaRef}
-                          rows={5}
-                          value={question}
-                          onChange={(e) => setQuestion(e.target.value)}
-                          placeholder={
-                            AREAS.find((a) => a.id === selectedArea)?.placeholder ??
-                            "Ask something specific so your reading can go deeper."
-                          }
-                          className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
-                          style={{
-                            backgroundColor: "transparent",
-                          }}
-                        />
-                      </div>
+                      <Textarea
+                        id="question"
+                        ref={textareaRef}
+                        rows={5}
+                        value={question}
+                        onChange={(e) => setQuestion(e.target.value)}
+                        placeholder={
+                          AREAS.find((a) => a.id === selectedArea)?.placeholder ??
+                          "Ask something specific so your reading can go deeper."
+                        }
+                        className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
+                        style={{
+                          backgroundColor: "transparent",
+                        }}
+                      />
                     </div>
                     <p className="text-xs leading-5 text-slate-300/80">
                       Be specific. The clearer your question, the sharper the reading.
