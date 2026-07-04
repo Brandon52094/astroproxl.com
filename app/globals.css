@@ -136,3 +136,11 @@
     margin: 0;
   }
 }
+
+/* ── CUSTOM UTILITIES ──────────────────────────────────────────────── */
+
+@layer utilities {
+  .standard-shadow {
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
+  }
+}

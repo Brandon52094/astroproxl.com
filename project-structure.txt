@@ -1,0 +1,87 @@
+.
+├── AGENTS.md
+├── app
+│   ├── api
+│   │   ├── admin
+│   │   ├── chart-calculate
+│   │   ├── chart-extract
+│   │   ├── cron
+│   │   ├── email
+│   │   ├── jxl
+│   │   ├── places
+│   │   ├── readings
+│   │   ├── stripe
+│   │   └── user
+│   ├── chart-data
+│   │   └── page.tsx
+│   ├── components
+│   │   ├── AccessUnlimitedPanel.tsx
+│   │   ├── BirthchartPanel.tsx
+│   │   ├── ChartDataScreen.tsx
+│   │   ├── DailyTransitsPanel.tsx
+│   │   ├── JxlScreen.tsx
+│   │   ├── MoonCyclesPanel.tsx
+│   │   ├── PagerContainer.tsx
+│   │   ├── PayWallScreen.tsx
+│   │   ├── ReadingIntakeScreen.tsx
+│   │   └── ui
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── jxl
+│   │   └── page.tsx
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── reading
+│   │   ├── intake
+│   │   ├── preparing
+│   │   └── results
+│   ├── sign-in
+│   │   └── [[...sign-in]]
+│   ├── sign-up
+│   │   └── [[...sign-up]]
+│   └── terms
+│       └── page.tsx
+├── CLAUDE.md
+├── components.json
+├── eslint.config.mjs
+├── git
+├── hooks
+│   └── useChartExtract.ts
+├── lib
+│   ├── chartStore.ts
+│   ├── email
+│   │   └── templates.ts
+│   ├── geoapify.ts
+│   ├── jxlConfig.ts
+│   ├── paywallConfig.ts
+│   ├── schema
+│   │   ├── charts.ts
+│   │   └── readings.ts
+│   ├── signVoice.ts
+│   ├── tiktokEvents.ts
+│   └── utils.ts
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── project-structure.txt
+├── proxy.ts
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── icon-192x192.png
+│   ├── icon-512x512.png
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── skills-lock.json
+├── tsconfig.json
+├── types
+│   ├── charts.ts
+│   ├── geo.ts
+│   └── manifest.json
+└── varcel.json
+
+33 directories, 52 files
