@@ -131,10 +131,14 @@
     @apply font-sans;
   }
 
-  body {
-    @apply bg-background text-foreground;
-    margin: 0;
-  }
+  html,
+body {
+  background-color: #050816;
+}
+
+body {
+  @apply text-foreground;
+  margin: 0;
 }
 
 /* ── CUSTOM UTILITIES ──────────────────────────────────────────────── */
