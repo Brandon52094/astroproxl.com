@@ -1813,9 +1813,10 @@ export default function ReadingIntakeScreen({
               </span>
             </div>
             <div
-              className="relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
-              aria-hidden="true"
-            >
+  className="relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none"
+  style={{ overflow: 'hidden' }}
+  aria-hidden="true"
+>
               {comingSoonSparkles.map((sparkle, i) => (
                 <span
                   key={i}
