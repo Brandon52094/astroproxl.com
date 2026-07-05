@@ -234,10 +234,10 @@ export default function PagerContainer() {
   }, [goToNext, goToPrevious]);
 
   return (
-    <div
-      className="relative h-screen overflow-hidden bg-[#050816]"
-      ref={containerRef}
-    >
+  <div
+  className="relative h-screen overflow-hidden bg-[#040611]"
+  ref={containerRef}
+>
       <div
         className="h-full w-full"
         onTouchStart={handleTouchStart}
