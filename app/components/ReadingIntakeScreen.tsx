@@ -1354,39 +1354,39 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Reading cycle (right‑aligned) ── */}
-          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-1 flex w-full justify-end">
-              <div className="w-full max-w-[280px] space-y-2">
-                <div className="flex items-center justify-end gap-2">
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-white/90">
-                    Reading cycle
-                  </span>
-                  <span className="text-[10px] text-white/90">
-                    {onCooldown ? 4 : readingsCompleted} / 4
-                  </span>
-                </div>
-                <div className="flex gap-1.5">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]"
-                    >
-                      {(onCooldown || i < readingsCompleted) && (
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: "100%" }}
-                          transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
-                          className="absolute inset-y-0 left-0 rounded-full"
-                          style={{ backgroundColor: theme.progressBar }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* ── Reading cycle (centered, teal) ── */}
+{(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
+  <div className="mb-1 flex w-full justify-center">
+    <div className="w-full max-w-[280px] space-y-2">
+      <div className="flex items-center justify-center gap-2">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-white/90">
+          Reading cycle
+        </span>
+        <span className="text-[10px] text-white/90">
+          {onCooldown ? 4 : readingsCompleted} / 4
+        </span>
+      </div>
+      <div className="flex gap-1.5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]"
+          >
+            {(onCooldown || i < readingsCompleted) && (
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{ backgroundColor: "#2DD4BF" }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
 
           {freeReadingCooldownLine && (
             <div className="mb-8 mt-2 flex items-center justify-center gap-2">
