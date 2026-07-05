@@ -5,7 +5,6 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
-import AccessUnlimitedPanel from "./AccessUnlimitedPanel";
 import BirthchartPanel from "./BirthchartPanel";
 import DailyTransitsPanel from "./DailyTransitsPanel";
 import MoonCyclesPanel from "./MoonCyclesPanel";
@@ -23,47 +22,52 @@ interface UserStatus {
 }
 
 /**
- * SWIPE FIX — direction lock + higher commit threshold.
+ * SWIPE FIX — direction lock + higher commit threshold. (unchanged)
  *
- * The bug: the previous touch handlers only checked horizontal distance
- * (touchStartX - touchEndX), with no regard for vertical movement. Every
- * panel here scrolls vertically (planet tables, transit lists, etc.), and
- * a thumb moving diagonally while scrolling can rack up enough horizontal
- * delta to cross the old 40px threshold almost by accident — misread as
- * a deliberate swipe when the person was just scrolling content.
+ * INFINITE LOOP FIX (new) — the wraparound glitch:
  *
- * The fix, in two parts:
- *   1. DIRECTION LOCK — track both X and Y movement from touch start.
- *      Once movement exceeds a small threshold (12px), decide once
- *      whether this gesture is "horizontal" or "vertical" based on
- *      which axis moved more. If vertical, do nothing here — never
- *      call preventDefault, so native scroll proceeds untouched. Only
- *      a gesture that's CLEARLY horizontal (not just barely more X than
- *      Y) gets treated as a swipe candidate.
- *   2. HIGHER THRESHOLD — once locked horizontal, require 70px of
- *      actual horizontal travel (up from 40px) before committing to a
- *      panel change. This makes accidental short flicks harmless while
- *      still feeling responsive for an intentional swipe.
+ * The bug: with 4 real panels in a single row, going from the last panel
+ * (index 3, translateX(-300%)) back to the first (index 0, translateX(0%))
+ * forces the CSS transition to sweep backwards across every panel in
+ * between. A left-swipe past the end visually reads as a hard right-swipe
+ * because the transform has to travel the "long way around."
  *
- * Nothing else changes: same 5 panels, same props, same existing swipe
- * hints and dot indicators in each panel — this only fixes the gesture
- * detection feeding into goToNext/goToPrevious.
+ * The fix: render two extra CLONE panels — a clone of the last real panel
+ * before the first, and a clone of the first real panel after the last.
+ * The track becomes:
+ *
+ *   [clone: Moon&Cycles] [0: Reading Intake] [1: Birth Chart]
+ *   [2: Daily Transits] [3: Moon & Cycles] [clone: Reading Intake]
+ *
+ * "extendedIndex" starts at 1 (pointing at the real Reading Intake panel).
+ * Swiping left/right animates normally across this extended track. Only
+ * when the animation lands on a CLONE do we do anything special: the
+ * instant that transition finishes (onTransitionEnd), we disable the
+ * transition for one frame and snap extendedIndex to the matching real
+ * panel's position. Because the clone is visually identical to the real
+ * panel, that snap is imperceptible — the loop feels seamless in both
+ * directions.
  */
 
-const DIRECTION_LOCK_THRESHOLD = 12; // px of movement before deciding the gesture's axis
-const SWIPE_COMMIT_THRESHOLD = 70; // px of horizontal travel to actually change panels, once locked horizontal
-const HORIZONTAL_DOMINANCE_RATIO = 1.4; // horizontal movement must exceed vertical by this factor to lock horizontal
+const DIRECTION_LOCK_THRESHOLD = 12;
+const SWIPE_COMMIT_THRESHOLD = 70;
+const HORIZONTAL_DOMINANCE_RATIO = 1.4;
 
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 export default function PagerContainer() {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const totalPanels = 4; // real panels: Reading Intake, Birth Chart, Daily Transits, Moon & Cycles
+
+  // extendedIndex lives in [0, totalPanels + 1]:
+  //   0                -> clone of LAST real panel
+  //   1..totalPanels    -> real panels (1 = real index 0, 2 = real index 1, ...)
+  //   totalPanels + 1   -> clone of FIRST real panel
+  const [extendedIndex, setExtendedIndex] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const [suppressTransition, setSuppressTransition] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldReduceMotion = useReducedMotion();
-
-  const totalPanels = 4;
 
   // ── Fetch user status — unchanged from your original ────────────────
   useEffect(() => {
@@ -90,20 +94,37 @@ export default function PagerContainer() {
   }, []);
 
   const goToNext = useCallback(() => {
-    setCurrentIndex((prev) => {
-      if (prev === totalPanels - 1) return 0;
-      return prev + 1;
-    });
-  }, [totalPanels]);
+    setExtendedIndex((prev) => prev + 1);
+  }, []);
 
   const goToPrevious = useCallback(() => {
-    setCurrentIndex((prev) => {
-      if (prev === 0) return totalPanels - 1;
-      return prev - 1;
-    });
-  }, [totalPanels]);
+    setExtendedIndex((prev) => prev - 1);
+  }, []);
 
-  // ── Direction-locked touch handlers ──────────────────────────────────
+  // ── After every transition, check if we landed on a clone. If so,
+  // silently snap (no animation) to the matching real panel. ──────────
+  const handleTrackTransitionEnd = useCallback(() => {
+    if (extendedIndex === totalPanels + 1) {
+      // Landed on the clone of the first panel — snap to the real first panel.
+      setSuppressTransition(true);
+      setExtendedIndex(1);
+    } else if (extendedIndex === 0) {
+      // Landed on the clone of the last panel — snap to the real last panel.
+      setSuppressTransition(true);
+      setExtendedIndex(totalPanels);
+    }
+  }, [extendedIndex, totalPanels]);
+
+  // Re-enable the transition on the very next frame after a silent snap,
+  // so the NEXT user-initiated swipe animates normally again.
+  useEffect(() => {
+    if (suppressTransition) {
+      const raf = requestAnimationFrame(() => setSuppressTransition(false));
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [suppressTransition]);
+
+  // ── Direction-locked touch handlers (unchanged logic) ────────────────
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const touchDeltaX = useRef(0);
@@ -128,25 +149,17 @@ export default function PagerContainer() {
       const absY = Math.abs(deltaY);
 
       if (absX < DIRECTION_LOCK_THRESHOLD && absY < DIRECTION_LOCK_THRESHOLD) {
-        // Not enough movement yet — wait for more before deciding.
         return;
       }
 
-      // Require horizontal movement to clearly dominate, not just
-      // slightly exceed vertical — this is what stops a diagonal
-      // scroll-flick from being misread as a swipe.
       gestureAxis.current =
         absX > absY * HORIZONTAL_DOMINANCE_RATIO ? "horizontal" : "vertical";
     }
 
     if (gestureAxis.current === "vertical") {
-      // This is a scroll gesture. Do nothing — no preventDefault, no
-      // state update. Native vertical scroll inside the panel proceeds
-      // exactly as it would without this component existing.
       return;
     }
 
-    // Confirmed horizontal — safe to treat as a swipe candidate now.
     e.preventDefault();
     touchDeltaX.current = deltaX;
   };
@@ -233,11 +246,13 @@ export default function PagerContainer() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [goToNext, goToPrevious]);
 
+  const noAnimation = isDragging || suppressTransition;
+
   return (
-  <div
-  className="relative h-screen overflow-hidden bg-[#040611]"
-  ref={containerRef}
->
+    <div
+      className="relative h-screen overflow-hidden bg-[#040611]"
+      ref={containerRef}
+    >
       <div
         className="h-full w-full"
         onTouchStart={handleTouchStart}
@@ -250,14 +265,20 @@ export default function PagerContainer() {
       >
         <div
           className="flex h-full w-full"
+          onTransitionEnd={handleTrackTransitionEnd}
           style={{
-            transform: `translateX(-${currentIndex * 100}%)`,
-            transition: isDragging
+            transform: `translateX(-${extendedIndex * 100}%)`,
+            transition: noAnimation
               ? "none"
               : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
             cursor: isDragging ? "grabbing" : "grab",
           }}
         >
+          {/* ── CLONE: Moon & Cycles (sits before the real first panel) ── */}
+          <div className="min-w-full h-full overflow-y-auto" aria-hidden="true">
+            <MoonCyclesPanel userStatus={userStatus} />
+          </div>
+
           {/* ── PANEL 0: Reading Intake ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <ReadingIntakeScreen
@@ -265,19 +286,25 @@ export default function PagerContainer() {
               onSwipeLeft={goToNext}
             />
           </div>
-          {/* ── PANEL 2: Birth Chart ── */}
+
+          {/* ── PANEL 1: Birth Chart ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <BirthchartPanel userStatus={userStatus} />
           </div>
 
-          {/* ── PANEL 3: Daily Transits ── */}
+          {/* ── PANEL 2: Daily Transits ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <DailyTransitsPanel userStatus={userStatus} />
           </div>
 
-          {/* ── PANEL 4: Moon & Cycles ── */}
+          {/* ── PANEL 3: Moon & Cycles ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <MoonCyclesPanel userStatus={userStatus} />
+          </div>
+
+          {/* ── CLONE: Reading Intake (sits after the real last panel) ── */}
+          <div className="min-w-full h-full overflow-y-auto" aria-hidden="true">
+            <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
         </div>
       </div>
