@@ -63,7 +63,7 @@ export default function PagerContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldReduceMotion = useReducedMotion();
 
-  const totalPanels = 5;
+  const totalPanels = 4;
 
   // ── Fetch user status — unchanged from your original ────────────────
   useEffect(() => {
@@ -265,12 +265,6 @@ export default function PagerContainer() {
               onSwipeLeft={goToNext}
             />
           </div>
-
-          {/* ── PANEL 1: Access Unlimited ── */}
-          <div className="min-w-full h-full overflow-y-auto">
-            <AccessUnlimitedPanel userStatus={userStatus} />
-          </div>
-
           {/* ── PANEL 2: Birth Chart ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <BirthchartPanel userStatus={userStatus} />

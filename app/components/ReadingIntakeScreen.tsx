@@ -812,11 +812,12 @@ export default function ReadingIntakeScreen({
               <>
                 <div className="space-y-2">
                   {[
-                    "8 Readings, not 1",
-                    "Ask Follow Ups Free",
-                    "No 2-week wait, no $6 to skip it",
-                    "Downloads Always Free.",
-                    "Unlimited Access Features",
+                    "Unlimited Readings",
+                    "Unlimited Replies",
+                    "Daily Transits & Moon Cycles",
+                    "Free Reading Downloads.",
+                    "New Premium Feature in Development",
+                    "Lock in a Low Price Now",
                   ].map((perk) => (
                     <div key={perk} className="flex items-center gap-2.5">
                       <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">
@@ -828,7 +829,7 @@ export default function ReadingIntakeScreen({
                 </div>
 
                 <p className="text-[11px] text-amber-300/60">
-                  More, for less, still premium.
+                  More, still premium.
                 </p>
               </>
             ) : (
@@ -840,7 +841,7 @@ export default function ReadingIntakeScreen({
                   You have full access to all features.
                 </p>
                 <p className="text-center text-xs text-slate-500 mt-1">
-                  Enjoy your premium experience.
+                  Enjoy your Unlimited Access.
                 </p>
               </div>
             )}
