@@ -84,9 +84,6 @@ export default function AccessUnlimitedPanel({ userStatus }: AccessUnlimitedPane
   // Not subscribed - full page
   return (
     <div className="h-screen w-full overflow-y-auto bg-[#050816]">
-      {/* Ambient glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-amber-300/5 blur-[100px] pointer-events-none" />
-      
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 py-12 max-w-[430px] mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
