@@ -1650,21 +1650,14 @@ export default function ReadingIntakeScreen({
             )}
 
             {!onCooldown && (
-              <motion.div whileTap={{ scale: 0.985 }} transition={{ duration: 0.12 }}>
-                <Button
-                  type="button"
-                  onClick={handleStartReading}
-                  disabled={!canSubmit || isCreatingReading}
-                  className="standard-shadow h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
-                  style={{
-                    borderColor: "rgba(255,255,255,0.22)",
-                    color: "#F8FAFC",
-                    background: "linear-gradient(180deg, #161A26 0%, #0A0D16 100%)",
-                  }}
-                >
-                  {buttonCopy}
-                </Button>
-              </motion.div>
+              <Button
+  type="button"
+  onClick={handleStartReading}
+  disabled={!canSubmit || isCreatingReading}
+  className="standard-shadow h-14 w-full rounded-2xl border border-indigo-400/30 bg-gradient-to-b from-indigo-500 to-indigo-700 text-white text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+>
+  {buttonCopy}
+</Button>
             )}
           </div>
 
