@@ -8,15 +8,12 @@ export default async function Page() {
     redirect("/sign-in");
   }
 
-  // Check if user has already completed chart setup
   const user = await currentUser();
   const chartCompleted = user?.publicMetadata?.chartCompleted === true;
 
   if (chartCompleted) {
-    // Returning user — skip chart setup
     redirect("/reading/intake");
   }
 
-  // New user — needs to set up chart
   redirect("/chart-data");
 }
