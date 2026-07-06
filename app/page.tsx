@@ -5,7 +5,7 @@ export default async function Page() {
   const { userId } = await auth();
 
   if (!userId) {
-    redirect("/sign-up");
+    redirect("/sign-in");
   }
 
   // Check if user has already completed chart setup

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { SignIn } from "@clerk/nextjs";
 import { motion, useReducedMotion } from "framer-motion";
 
@@ -77,7 +78,7 @@ function BirthChartRing({
         xmlns="http://www.w3.org/2000/svg"
       >
         <circle cx="270" cy="270" r="220" stroke="rgba(148,163,184,0.12)" strokeWidth="1.2" />
-        <circle cx="270" cy="270" r="185" stroke="rgba(94,234,212,0.15)" strokeWidth="1" />
+        <circle cx="270" cy="270" r="185" stroke="rgba(251,191,36,0.15)" strokeWidth="1" />
 
         {Array.from({ length: 12 }).map((_, i) => {
           const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
@@ -88,7 +89,7 @@ function BirthChartRing({
             <g key={i} transform={`translate(${x}, ${y})`}>
               <circle
                 r="3.2"
-                fill={i % 3 === 0 ? "rgba(94,234,212,0.68)" : "rgba(226,232,240,0.38)"}
+                fill={i % 3 === 0 ? "rgba(251,191,36,0.68)" : "rgba(226,232,240,0.38)"}
               />
             </g>
           );
@@ -127,8 +128,8 @@ function BirthChartRing({
           })}
         </motion.g>
 
-        <circle cx="270" cy="270" r="10" fill="rgba(94,234,212,0.52)" />
-        <circle cx="270" cy="270" r="24" stroke="rgba(94,234,212,0.12)" strokeWidth="1" />
+        <circle cx="270" cy="270" r="10" fill="rgba(251,191,36,0.52)" />
+        <circle cx="270" cy="270" r="24" stroke="rgba(251,191,36,0.12)" strokeWidth="1" />
       </svg>
     </div>
   );
@@ -136,9 +137,14 @@ function BirthChartRing({
 
 export default function SignInPage() {
   const shouldReduceMotion = useReducedMotion();
+  const [hasMounted, setHasMounted] = useState(false);
   const now = new Date();
   const sunPosition = getSunPosition(now);
   const moon = getMoonPhase(now);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const stars = Array.from({ length: 28 }).map((_, i) => {
     const left = `${((i * 37) % 100)}%`;
@@ -151,12 +157,19 @@ export default function SignInPage() {
 
   return (
     <main className="relative min-h-[100dvh] overflow-hidden bg-[#040611] text-white">
+      <motion.div
+        className="pointer-events-none fixed inset-0 z-50 bg-black"
+        initial={{ opacity: 1 }}
+        animate={{ opacity: hasMounted ? 0 : 1 }}
+        transition={{ duration: shouldReduceMotion ? 0.01 : 0.6, ease: "easeOut" }}
+      />
+
       <div className="pointer-events-none fixed inset-0">
         <div
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(circle at 50% 18%, rgba(94,234,212,0.10), transparent 34%), radial-gradient(circle at 85% 82%, rgba(251,191,36,0.07), transparent 28%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+              "radial-gradient(circle at 50% 18%, rgba(251,191,36,0.11), transparent 34%), radial-gradient(circle at 85% 82%, rgba(94,234,212,0.05), transparent 28%), linear-gradient(180deg, #1a1206 0%, #050816 44%, #040611 100%)",
           }}
         />
 
@@ -173,7 +186,7 @@ export default function SignInPage() {
               : { duration: 8, repeat: Infinity, ease: "easeInOut" }
           }
           style={{
-            background: "radial-gradient(circle, rgba(45,212,191,0.28), transparent 70%)",
+            background: "radial-gradient(circle, rgba(251,191,36,0.24), transparent 70%)",
           }}
         />
 
@@ -233,16 +246,16 @@ export default function SignInPage() {
             className="mb-6 flex flex-col items-center text-center"
           >
             <motion.div
-              className="relative mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-teal-300/25 bg-teal-300/[0.08] backdrop-blur-md"
+              className="relative mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-amber-300/25 bg-amber-300/[0.08] backdrop-blur-md"
               animate={
                 shouldReduceMotion
                   ? undefined
                   : {
                       scale: [1, 1.08, 1],
                       boxShadow: [
-                        "0 0 30px rgba(45,212,191,0.22)",
-                        "0 0 42px rgba(45,212,191,0.34)",
-                        "0 0 30px rgba(45,212,191,0.22)",
+                        "0 0 30px rgba(251,191,36,0.22)",
+                        "0 0 42px rgba(251,191,36,0.34)",
+                        "0 0 30px rgba(251,191,36,0.22)",
                       ],
                     }
               }
@@ -253,23 +266,23 @@ export default function SignInPage() {
               }
               style={
                 shouldReduceMotion
-                  ? { boxShadow: "0 0 30px rgba(45,212,191,0.22)" }
+                  ? { boxShadow: "0 0 30px rgba(251,191,36,0.22)" }
                   : undefined
               }
             >
               <div className="absolute inset-[6px] rounded-full border border-white/10" />
-              <span className="relative text-xl text-teal-200">✦</span>
+              <span className="relative text-xl text-amber-200">✦</span>
             </motion.div>
 
             <div className="mb-3 flex items-center gap-2 text-[11px] text-slate-400">
-              <span className="text-teal-200/80">{moon.glyph}</span>
+              <span className="text-amber-200/80">{moon.glyph}</span>
               <span>
                 {moon.label} · Sun {sunPosition.degree}° {sunPosition.sign}
               </span>
             </div>
 
             <h1 className="text-[2rem] font-semibold leading-[1.02] tracking-tight text-white">
-              Personal. Accurate. Unbiased.
+              Your chart is waiting.
             </h1>
 
             <p className="mt-3 text-[10px] uppercase tracking-[0.34em] text-slate-500">
@@ -284,23 +297,23 @@ export default function SignInPage() {
             className="relative"
           >
             <style jsx>{`
-              @keyframes signInBreathe {
+              @keyframes signUpBreathe {
                 0%,
                 100% {
                   box-shadow:
                     0 0 0 1px rgba(148, 163, 184, 0.16),
-                    0 0 34px rgba(45, 212, 191, 0.14),
-                    0 0 90px rgba(45, 212, 191, 0.08);
+                    0 0 34px rgba(251, 191, 36, 0.14),
+                    0 0 90px rgba(251, 191, 36, 0.08);
                 }
                 50% {
                   box-shadow:
-                    0 0 0 1px rgba(94, 234, 212, 0.32),
-                    0 0 46px rgba(45, 212, 191, 0.24),
-                    0 0 110px rgba(45, 212, 191, 0.14);
+                    0 0 0 1px rgba(253, 224, 71, 0.32),
+                    0 0 46px rgba(251, 191, 36, 0.24),
+                    0 0 110px rgba(251, 191, 36, 0.14);
                 }
               }
-              .sign-in-glow {
-                animation: signInBreathe 3.4s ease-in-out infinite;
+              .sign-up-glow {
+                animation: signUpBreathe 3.4s ease-in-out infinite;
               }
 
               .cl-box :global(label),
@@ -364,7 +377,7 @@ export default function SignInPage() {
               }
 
               .cl-box :global(.cl-footerActionLink) {
-                color: #5eead4 !important;
+                color: #fbbf24 !important;
               }
 
               .cl-box :global(.cl-badge) {
@@ -372,13 +385,14 @@ export default function SignInPage() {
               }
             `}</style>
 
-            <div className="sign-in-glow absolute inset-0 rounded-[30px]" />
+            <div className="sign-up-glow absolute inset-0 rounded-[30px]" />
 
             <div className="cl-box relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
               <SignIn
+                withSignUp
                 appearance={{
                   variables: {
-                    colorPrimary: "#5eead4",
+                    colorPrimary: "#fbbf24",
                     colorBackground: "transparent",
                     colorText: "#f8fafc",
                     colorTextSecondary: "#cbd5e1",
@@ -395,7 +409,7 @@ export default function SignInPage() {
                     headerTitle: "hidden",
                     headerSubtitle: "hidden",
                     socialButtonsBlockButton:
-                      "h-12 rounded-[20px] border border-white/10 bg-white/[0.03] text-white shadow-none hover:border-teal-300/30 hover:bg-white/[0.05]",
+                      "h-12 rounded-[20px] border border-white/10 bg-white/[0.03] text-white shadow-none hover:border-amber-300/30 hover:bg-white/[0.05]",
                     socialButtonsBlockButtonText: "text-sm font-medium text-white",
                     dividerLine: "bg-white/10",
                     dividerText: "text-slate-400 text-[11px] uppercase tracking-[0.18em]",
@@ -407,16 +421,16 @@ export default function SignInPage() {
                     footer: "pb-6 px-6 bg-transparent",
                     footerAction: "pt-2",
                     footerActionText: "!text-slate-400",
-                    footerActionLink: "!text-teal-300 hover:!text-teal-200 font-medium",
+                    footerActionLink: "!text-amber-300 hover:!text-amber-200 font-medium",
                     identityPreviewText: "!text-slate-300",
-                    identityPreviewEditButton: "!text-teal-300 hover:!text-teal-200",
-                    formResendCodeLink: "!text-teal-300 hover:!text-teal-200",
+                    identityPreviewEditButton: "!text-amber-300 hover:!text-amber-200",
+                    formResendCodeLink: "!text-amber-300 hover:!text-amber-200",
                     otpCodeFieldInput:
                       "cl-otpCodeFieldInput h-12 w-10 rounded-[16px] border border-white/10 !bg-white/[0.04] !text-white",
                     alert:
                       "rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200",
                     formFieldWarningText: "text-rose-300",
-                    formFieldSuccessText: "text-teal-200",
+                    formFieldSuccessText: "text-amber-200",
                     formContainer: "pt-6 px-6",
                   },
                 }}
