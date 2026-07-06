@@ -274,7 +274,7 @@ export default function SignInPage() {
               <span className="relative text-xl text-amber-200">✦</span>
             </motion.div>
 
-            <div className="mb-3 flex items-center gap-2 text-[11px] text-slate-400">
+            <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
               <span className="text-amber-200/80">{moon.glyph}</span>
               <span>
                 {moon.label} · Sun {sunPosition.degree}° {sunPosition.sign}
@@ -285,7 +285,7 @@ export default function SignInPage() {
               Your chart is waiting.
             </h1>
 
-            <p className="mt-3 text-[10px] uppercase tracking-[0.34em] text-slate-500">
+            <p className="mt-3 text-xs uppercase tracking-[0.28em] text-slate-500">
               Direct Future Predictions
             </p>
           </motion.div>
@@ -297,7 +297,7 @@ export default function SignInPage() {
             className="relative"
           >
             <style jsx>{`
-              @keyframes signUpBreathe {
+              @keyframes signInBreathe {
                 0%,
                 100% {
                   box-shadow:
@@ -312,8 +312,9 @@ export default function SignInPage() {
                     0 0 110px rgba(251, 191, 36, 0.14);
                 }
               }
-              .sign-up-glow {
-                animation: signUpBreathe 3.4s ease-in-out infinite;
+
+              .sign-in-glow {
+                animation: signInBreathe 3.4s ease-in-out infinite;
               }
 
               .cl-box :global(label),
@@ -336,7 +337,6 @@ export default function SignInPage() {
                 }
               }
 
-              /* Regular text/email/password fields keep the pulse */
               .cl-box :global(input) {
                 color: #ffffff !important;
                 background-color: rgba(255, 255, 255, 0.04) !important;
@@ -344,10 +344,6 @@ export default function SignInPage() {
                 animation: cooldownPulse 3s ease-in-out infinite;
               }
 
-              /* OTP code boxes: no pulsing animation. Autofill rewrites these
-                 values in rapid succession, and an active box-shadow animation
-                 on each box was causing a visible flicker/glitch as iOS/Android
-                 distributed the pasted code across the six inputs. */
               .cl-box :global(.cl-otpCodeFieldInput) {
                 animation: none !important;
                 box-shadow:
@@ -376,8 +372,10 @@ export default function SignInPage() {
                 background: transparent !important;
               }
 
+              .cl-box :global(.cl-footerAction),
+              .cl-box :global(.cl-footerActionText),
               .cl-box :global(.cl-footerActionLink) {
-                color: #fbbf24 !important;
+                display: none !important;
               }
 
               .cl-box :global(.cl-badge) {
@@ -385,12 +383,11 @@ export default function SignInPage() {
               }
             `}</style>
 
-            <div className="sign-up-glow absolute inset-0 rounded-[30px]" />
+            <div className="sign-in-glow absolute inset-0 rounded-[30px]" />
 
             <div className="cl-box relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
               <SignIn
                 withSignUp={false}
-                signUpUrl="/sign-in"
                 routing="path"
                 path="/sign-in"
                 fallbackRedirectUrl="/reading/intake"
@@ -436,6 +433,11 @@ export default function SignInPage() {
                     formFieldWarningText: "text-rose-300",
                     formFieldSuccessText: "text-amber-200",
                     formContainer: "pt-6 px-6",
+                  },
+                  layout: {
+                    socialButtonsPlacement: "top",
+                    socialButtonsVariant: "blockButton",
+                    shimmer: false,
                   },
                 }}
               />
