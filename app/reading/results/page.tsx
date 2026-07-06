@@ -14,6 +14,7 @@ const PAYMENT_FLAG_KEY = "dfp_payment_return";
 const DOWNLOAD_FLAG_KEY = "dfp_download_return";
 const FOLLOWUP_FLAG_KEY = "dfp_followup_return";
 const FOLLOWUP_QUESTION_KEY = "dfp_followup_question";
+const FREE_REPLIES_PER_READING = 2;
 
 function setPaymentReturnFlag() {
   if (typeof window === "undefined") return;
@@ -249,8 +250,9 @@ function ResultsPageInner() {
     if (!question) return;
 
     const isSubscribed = credits?.isSubscribed ?? false;
+    const hasFreeRepliesRemaining = followupThread.length < FREE_REPLIES_PER_READING;
 
-    if (isSubscribed) {
+    if (isSubscribed && hasFreeRepliesRemaining) {
       generateFollowup(question, followupThread);
       return;
     }
@@ -390,7 +392,8 @@ function ResultsPageInner() {
   const isSubscribed = credits?.isSubscribed ?? false;
   const showPaywall = false;
   const hasThread = followupThread.length > 0;
-  const sendButtonLabel = isSubscribed ? "Send" : "Send — $2.00";
+  const freeRepliesRemaining = Math.max(0, FREE_REPLIES_PER_READING - followupThread.length);
+  const sendButtonLabel = isSubscribed && freeRepliesRemaining > 0 ? "Send" : "Send — $2.00";
   const downloadGlowing = !!(credits?.downloadUnlocked || credits?.isSubscribed);
 
   if (!loaded) {

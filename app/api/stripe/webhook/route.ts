@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         );
 
       // ── Subscription ────────────────────────────────────────────────────────
-      } else if (mode === "subscription") {
+       } else if (mode === "subscription") {
         const stripeSubscriptionId = session.subscription as string;
         const tier = session.metadata?.tier ?? "sub_base";
         const SUBSCRIPTION_READING_CREDITS = 96;
@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
             firstReadingUsed: true,
             isSubscribed: true,
             jxlUnlimited: true,
+            downloadUnlocked: true,
             subscriptionId: stripeSubscriptionId,
             subscriptionTier: tier,
             subscriptionStartedAt: new Date().toISOString(),
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
 
         console.log(
           `[webhook] subscription — activated ${tier} for ${userId}. ` +
-          `Granted ${SUBSCRIPTION_READING_CREDITS} reading credits + unlimited JXL.`
+          `Granted ${SUBSCRIPTION_READING_CREDITS} reading credits + unlimited JXL + free downloads.`
         );
 
       // ── Subscriber top-up ───────────────────────────────────────────────────
