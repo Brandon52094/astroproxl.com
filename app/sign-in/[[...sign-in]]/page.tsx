@@ -388,56 +388,58 @@ export default function SignInPage() {
             <div className="sign-up-glow absolute inset-0 rounded-[30px]" />
 
             <div className="cl-box relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
-  <SignIn
-    signUpFallbackRedirectUrl="/"
-    fallbackRedirectUrl="/"
-    withSignUp={false}
-    appearance={{
-      variables: {
-        colorPrimary: "#fbbf24",
-        colorBackground: "transparent",
-        colorText: "#f8fafc",
-        colorTextSecondary: "#cbd5e1",
-        colorInputBackground: "rgba(255,255,255,0.04)",
-        colorInputText: "#ffffff",
-        colorDanger: "#fb7185",
-        borderRadius: "24px",
-        fontFamily: "Inter, sans-serif",
-      },
-      elements: {
-        rootBox: "w-full",
-        card: "bg-transparent shadow-none border-0 rounded-none",
-        header: "hidden",
-        headerTitle: "hidden",
-        headerSubtitle: "hidden",
-        socialButtonsBlockButton:
-          "h-12 rounded-[20px] border border-white/10 bg-white/[0.03] text-white shadow-none hover:border-amber-300/30 hover:bg-white/[0.05]",
-        socialButtonsBlockButtonText: "text-sm font-medium text-white",
-        dividerLine: "bg-white/10",
-        dividerText: "text-slate-400 text-[11px] uppercase tracking-[0.18em]",
-        formFieldLabel: "!text-slate-300 text-[13px] font-medium",
-        formFieldInput:
-          "h-14 rounded-[20px] border border-indigo-400/20 !bg-white/[0.04] !text-white placeholder:text-slate-400 focus:border-indigo-300/50 focus:ring-0",
-        formButtonPrimary:
-          "h-14 rounded-[20px] border-0 !bg-indigo-400 text-[15px] font-semibold !text-indigo-950 shadow-[0_10px_30px_rgba(99,102,241,0.22)] hover:!bg-indigo-300",
-        footer: "hidden",
-        footerAction: "hidden",
-        footerActionText: "hidden",
-        footerActionLink: "hidden",
-        identityPreviewText: "!text-slate-300",
-        identityPreviewEditButton: "!text-amber-300 hover:!text-amber-200",
-        formResendCodeLink: "!text-amber-300 hover:!text-amber-200",
-        otpCodeFieldInput:
-          "cl-otpCodeFieldInput h-12 w-10 rounded-[16px] border border-white/10 !bg-white/[0.04] !text-white",
-        alert:
-          "rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200",
-        formFieldWarningText: "text-rose-300",
-        formFieldSuccessText: "text-amber-200",
-        formContainer: "pt-6 px-6",
-      },
-    }}
-  />
-</div>
+              <SignIn
+                withSignUp={false}
+                signUpUrl="/sign-in"
+                routing="path"
+                path="/sign-in"
+                fallbackRedirectUrl="/reading/intake"
+                appearance={{
+                  variables: {
+                    colorPrimary: "#fbbf24",
+                    colorBackground: "transparent",
+                    colorText: "#f8fafc",
+                    colorTextSecondary: "#cbd5e1",
+                    colorInputBackground: "rgba(255,255,255,0.04)",
+                    colorInputText: "#ffffff",
+                    colorDanger: "#fb7185",
+                    borderRadius: "24px",
+                    fontFamily: "Inter, sans-serif",
+                  },
+                  elements: {
+                    rootBox: "w-full",
+                    card: "bg-transparent shadow-none border-0 rounded-none",
+                    header: "hidden",
+                    headerTitle: "hidden",
+                    headerSubtitle: "hidden",
+                    socialButtonsBlockButton:
+                      "h-12 rounded-[20px] border border-white/10 bg-white/[0.03] text-white shadow-none hover:border-amber-300/30 hover:bg-white/[0.05]",
+                    socialButtonsBlockButtonText: "text-sm font-medium text-white",
+                    dividerLine: "bg-white/10",
+                    dividerText: "text-slate-400 text-[11px] uppercase tracking-[0.18em]",
+                    formFieldLabel: "!text-slate-300 text-[13px] font-medium",
+                    formFieldInput:
+                      "h-14 rounded-[20px] border border-indigo-400/20 !bg-white/[0.04] !text-white placeholder:text-slate-400 focus:border-indigo-300/50 focus:ring-0",
+                    formButtonPrimary:
+                      "h-14 rounded-[20px] border-0 !bg-indigo-400 text-[15px] font-semibold !text-indigo-950 shadow-[0_10px_30px_rgba(99,102,241,0.22)] hover:!bg-indigo-300",
+                    footer: "pb-6 px-6 bg-transparent",
+                    footerAction: "hidden",
+                    footerActionText: "hidden",
+                    footerActionLink: "hidden",
+                    identityPreviewText: "!text-slate-300",
+                    identityPreviewEditButton: "!text-amber-300 hover:!text-amber-200",
+                    formResendCodeLink: "!text-amber-300 hover:!text-amber-200",
+                    otpCodeFieldInput:
+                      "cl-otpCodeFieldInput h-12 w-10 rounded-[16px] border border-white/10 !bg-white/[0.04] !text-white",
+                    alert:
+                      "rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200",
+                    formFieldWarningText: "text-rose-300",
+                    formFieldSuccessText: "text-amber-200",
+                    formContainer: "pt-6 px-6",
+                  },
+                }}
+              />
+            </div>
           </motion.div>
         </div>
       </div>
