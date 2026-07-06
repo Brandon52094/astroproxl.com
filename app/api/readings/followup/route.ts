@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 
@@ -280,6 +280,24 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // ── Free-reply gating for subscribers ──────────────────────────────────
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const metadata = user.publicMetadata;
+    const isSubscribed = metadata?.isSubscribed === true;
+    const freeRepliesRemaining = Number(metadata?.freeRepliesRemaining ?? 0);
+    const usingFreeReply = isSubscribed && freeRepliesRemaining > 0;
+
+    if (usingFreeReply) {
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          ...metadata,
+          freeRepliesRemaining: freeRepliesRemaining - 1,
+        },
+      });
+    }
+    // ── End gating ──────────────────────────────────────────────────────────
 
     const body = (await request.json()) as FollowupRequestBody;
 

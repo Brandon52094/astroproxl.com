@@ -30,21 +30,22 @@ export async function POST() {
       : currentCredits;
 
     await client.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        ...metadata,
-        readingsCompleted: next,
-        firstReadingUsed: true,
-        credits: newCredits,
-        jxlCredits: isFirstReading
-          ? currentJxlCredits + jxlCreditsToGrant
-          : currentJxlCredits,
-        // Stamp when the free reading was used so we can reset it weekly
-        ...(isFirstReading ? { freeReadingUsedAt: new Date().toISOString() } : {}),
-        ...(hitCooldown && !metadata?.cooldownStartedAt
-          ? { cooldownStartedAt: new Date().toISOString() }
-          : {}),
-      },
-    });
+  publicMetadata: {
+    ...metadata,
+    readingsCompleted: next,
+    firstReadingUsed: true,
+    credits: newCredits,
+    freeRepliesRemaining: 2, // ← ADD THIS LINE
+    jxlCredits: isFirstReading
+      ? currentJxlCredits + jxlCreditsToGrant
+      : currentJxlCredits,
+    // Stamp when the free reading was used so we can reset it weekly
+    ...(isFirstReading ? { freeReadingUsedAt: new Date().toISOString() } : {}),
+    ...(hitCooldown && !metadata?.cooldownStartedAt
+      ? { cooldownStartedAt: new Date().toISOString() }
+      : {}),
+  },
+});
 
     console.log(
       `[reading-complete] ${userId} — readingsCompleted: ${current} → ${next}` +
