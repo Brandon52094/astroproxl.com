@@ -94,7 +94,7 @@ export async function GET() {
     const canUnlockPage4 = isSubscribed || credits > 0;
     const downloadUnlocked = metadata?.downloadUnlocked === true;
 
-    return NextResponse.json({
+     return NextResponse.json({
       credits,
       firstReadingUsed: firstReadingUsed && !freeReadingAvailable,
       paywallsCompleted,
@@ -106,8 +106,9 @@ export async function GET() {
       cooldownExpiresAt,
       canBypass: isSubscribed ? false : canBypass,
       downloadUnlocked,
-      freeReadingResetAt, // new — countdown for UI
-      freeReadingAvailable, // new — whether free reading is available
+      freeReadingResetAt,
+      freeReadingAvailable,
+      freeRepliesRemaining: Number(metadata?.freeRepliesRemaining ?? 0),
     });
   } catch (error) {
     console.error("[credits GET] Error:", error);
