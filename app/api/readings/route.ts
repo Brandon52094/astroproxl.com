@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
+
+const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks — must match credits/route.ts
+const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000; // 1 week — must match credits/route.ts
+const CREDITS_PER_READING = 12; // must match reading-complete/route.ts
 
 interface PlanetPlacement {
   name: string;
@@ -363,6 +368,44 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // ── Server-side eligibility check — mirrors credits/route.ts logic ────────
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const metadata = user.publicMetadata;
+
+    const isSubscribed = metadata?.isSubscribed === true;
+    const credits = Number(metadata?.credits ?? 0);
+    const firstReadingUsed = metadata?.firstReadingUsed === true;
+
+    const cooldownStartedAt = metadata?.cooldownStartedAt
+      ? new Date(metadata.cooldownStartedAt as string)
+      : null;
+    const onCooldown = !isSubscribed && !!cooldownStartedAt &&
+      Date.now() < cooldownStartedAt.getTime() + COOLDOWN_MS;
+
+    if (onCooldown) {
+      return NextResponse.json({ error: "You're on cooldown. Please wait before starting a new reading." }, { status: 403 });
+    }
+
+    const freeReadingUsedAt = metadata?.freeReadingUsedAt
+      ? new Date(metadata.freeReadingUsedAt as string)
+      : null;
+    let freeReadingAvailable = !firstReadingUsed;
+    if (freeReadingUsedAt && !isSubscribed) {
+      freeReadingAvailable = Date.now() >= freeReadingUsedAt.getTime() + FREE_READING_RESET_MS;
+    }
+
+    const eligible = isSubscribed || freeReadingAvailable || credits >= CREDITS_PER_READING;
+    if (!eligible) {
+      return NextResponse.json({ error: "You don't have enough credits for a reading. Please purchase more or subscribe." }, { status: 403 });
+    }
+    // ── End eligibility check ──────────────────────────────────────────────────
+
     const body = (await request.json()) as ReadingRequestBody;
 
     if (!body.topic || !body.question || !body.tropical || !body.transits || !body.profection) {
