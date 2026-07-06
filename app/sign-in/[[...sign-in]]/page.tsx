@@ -389,7 +389,7 @@ export default function SignInPage() {
 
             <div className="cl-box relative overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] backdrop-blur-2xl">
               <SignIn
-                withSignUp
+                withSignUp={false}
                 appearance={{
                   variables: {
                     colorPrimary: "#fbbf24",
