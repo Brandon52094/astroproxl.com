@@ -727,7 +727,7 @@ export default function ReadingIntakeScreen({
 
   return (
     <div
-      className="no-scrollbar h-screen overflow-y-auto overscroll-none text-slate-100"
+      className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
       style={{
         WebkitOverflowScrolling: "touch",
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
@@ -830,8 +830,8 @@ export default function ReadingIntakeScreen({
         }
       `}</style>
 
-      {/* ── BACKGROUND ── */}
-      <div className="pointer-events-none fixed inset-0" aria-hidden="true">
+      {/* ── BACKGROUND ── absolute inside scroll container, covers full page height */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         {/* Shooting star — one lightweight CSS-animated div, rerenders via key */}
         {!shouldReduceMotion && <ShootingStar />}
 
