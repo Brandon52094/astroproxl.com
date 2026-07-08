@@ -870,7 +870,7 @@ export default function ReadingIntakeScreen({
             <div
               className="hero-shine hero-card-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
               style={{
-                borderColor: "rgba(99, 102, 241, 0.70)",
+                borderColor: "rgba(255, 255, 255, 0.60)",
                 boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
               }}
             >
