@@ -2,31 +2,20 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  Sparkles,
-  RotateCcw,
-  Crown,
-  CalendarDays,
-  CloudSun,
-  ChevronRight,
-} from "lucide-react";
+import { Sparkles, RotateCcw, Crown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 
 /**
- * TODAY'S SKY — v2
+ * TODAY'S SKY — v3
  *
- * - HERO: Sun season + Moon (sign, degree, house when available) sit
- *   borderless on the starfield with the drawn moon disc — phase stats
- *   directly underneath. Dense, data-first, minimal top padding.
- * - Transits: one list, all planets, at the "What Matters" row size.
- *   No inner scroll — the page scrolls, the card grows. Personal
- *   planets + nodes are visually louder than the outer planets.
- * - Styling matches ReadingIntakeScreen: same background gradient,
- *   same 68-star field, same card surfaces (border-white/10,
- *   bg-white/[0.03], rounded-[24px], standard-shadow).
- * - No zodiac emoji. Planet glyphs carry U+FE0E so iOS renders them
- *   as text, never as emoji.
+ * - Weather card removed. "Next New/Full Moon" card removed — that info
+ *   now lives in the hero, directly under the moon disc.
+ * - Section order: HERO → Retrogrades | Time Lord → YOUR BIRTH CHART →
+ *   TRANSITS (last on the page).
+ * - Big 3 boxes are outlined in their sign's ELEMENT color (fire, earth,
+ *   air, water) with a soft glow and a slow shine sweep — outline only,
+ *   the box fill stays dark. Element name sits under the degree.
  *
  * This panel has NO overflow of its own — PagerContainer's wrapper
  * scrolls it. Keep it that way.
@@ -79,11 +68,6 @@ interface ProfectionData {
   timeLord: string;
 }
 
-interface WeatherNow {
-  temp: number;
-  label: string;
-}
-
 // U+FE0E forces text presentation so iOS never swaps these for emoji.
 const T = "\uFE0E";
 const GLYPHS: Record<string, string> = {
@@ -97,13 +81,28 @@ const IMPORTANT_PLANETS = ["Moon", "Mercury", "Venus", "Mars", "North Node", "So
 const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const TRANSIT_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node", "South Node"];
 
-const WEATHER_LABELS: Record<number, string> = {
-  0: "Clear", 1: "Mostly Clear", 2: "Partly Cloudy", 3: "Overcast",
-  45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle",
-  61: "Rain", 63: "Rain", 65: "Heavy Rain", 71: "Snow", 73: "Snow",
-  75: "Heavy Snow", 80: "Showers", 81: "Showers", 82: "Heavy Showers",
-  95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
+/* ── The four elements ─────────────────────────────────────────────── */
+
+type Element = "Fire" | "Earth" | "Air" | "Water";
+
+const SIGN_ELEMENTS: Record<string, Element> = {
+  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
+  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
+  Gemini: "Air", Libra: "Air", Aquarius: "Air",
+  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
 };
+
+const ELEMENT_COLORS: Record<Element, { border: string; glow: string; text: string }> = {
+  Fire:  { border: "rgba(249, 115, 22, 0.75)", glow: "rgba(239, 68, 68, 0.28)",  text: "#FDBA74" },
+  Earth: { border: "rgba(52, 211, 153, 0.65)", glow: "rgba(16, 185, 129, 0.24)", text: "#6EE7B7" },
+  Air:   { border: "rgba(186, 230, 253, 0.60)", glow: "rgba(125, 211, 252, 0.22)", text: "#BAE6FD" },
+  Water: { border: "rgba(96, 165, 250, 0.70)",  glow: "rgba(59, 130, 246, 0.26)",  text: "#93C5FD" },
+};
+
+function elementOf(sign?: string): Element | null {
+  if (!sign) return null;
+  return SIGN_ELEMENTS[sign] ?? null;
+}
 
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
@@ -188,7 +187,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
-  const [weather, setWeather] = useState<WeatherNow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -219,24 +217,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
         .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
     );
     setIsLoading(false);
-
-    const saved = chart as unknown as { currentLat?: number; currentLng?: number; lat?: number; lng?: number };
-    const lat = saved.currentLat ?? saved.lat;
-    const lng = saved.currentLng ?? saved.lng;
-    if (typeof lat === "number" && typeof lng === "number") {
-      fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
-      )
-        .then((r) => (r.ok ? r.json() : null))
-        .then((w) => {
-          const temp = w?.current?.temperature_2m;
-          const code = w?.current?.weather_code;
-          if (typeof temp === "number") {
-            setWeather({ temp: Math.round(temp), label: WEATHER_LABELS[code] ?? "—" });
-          }
-        })
-        .catch(() => {});
-    }
   }, []);
 
   // Same star recipe as ReadingIntakeScreen — 68 stars, same seeds.
@@ -302,6 +282,41 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
+      <style jsx>{`
+        /* Slow shine sweep across the Big 3 element boxes */
+        @keyframes elementShine {
+          0% { transform: translateX(-140%) skewX(-18deg); }
+          60% { transform: translateX(240%) skewX(-18deg); }
+          100% { transform: translateX(240%) skewX(-18deg); }
+        }
+        .element-box { position: relative; overflow: hidden; isolation: isolate; }
+        .element-box::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 45%;
+          background: linear-gradient(
+            105deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.09) 45%,
+            rgba(255, 255, 255, 0.16) 50%,
+            rgba(255, 255, 255, 0.09) 55%,
+            transparent 100%
+          );
+          transform: translateX(-140%) skewX(-18deg);
+          animation: elementShine 4.6s ease-in-out infinite;
+          pointer-events: none;
+          z-index: 1;
+        }
+        .element-box > * { position: relative; z-index: 2; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .element-box::after { animation: none !important; opacity: 0; }
+        }
+      `}</style>
+
       {/* ── Starfield ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         {stars.map((star) => (
@@ -361,11 +376,17 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             </div>
 
             {moonPhase && (
-              <div
-                className="shrink-0"
-                style={{ filter: "drop-shadow(0 0 26px rgba(226,223,240,0.16))" }}
-              >
-                <MoonDisc illumination={moonPhase.illuminationPercent} waxing={waxing} />
+              <div className="shrink-0 text-center">
+                <div style={{ filter: "drop-shadow(0 0 26px rgba(226,223,240,0.16))" }}>
+                  <MoonDisc illumination={moonPhase.illuminationPercent} waxing={waxing} />
+                </div>
+                {/* Next event — surplus info, right under the moon */}
+                <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                  {moonPhase.nextEventName}
+                </p>
+                <p className="text-[13px] font-medium text-slate-200 tabular-nums">
+                  in {moonPhase.daysUntilNextEvent} days
+                </p>
               </div>
             )}
           </div>
@@ -377,18 +398,10 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                 <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Phase</p>
                 <p className="mt-0.5 text-[13px] font-medium text-slate-200">{moonPhase.phaseName}</p>
               </div>
-              <div className="text-center">
+              <div className="text-right">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Illumination</p>
                 <p className="mt-0.5 text-[13px] font-medium text-slate-200 tabular-nums">
                   {moonPhase.illuminationPercent}%
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                  {moonPhase.nextEventName}
-                </p>
-                <p className="mt-0.5 text-[13px] font-medium text-slate-200 tabular-nums">
-                  {moonPhase.daysUntilNextEvent} days
                 </p>
               </div>
             </div>
@@ -434,7 +447,74 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             </SkyCard>
           </div>
 
-          {/* ── FULL: Transits — one list, all planets, no inner scroll ── */}
+          {/* ── FULL: Your birth chart — Big 3 outlined in their element ── */}
+          <SkyCard icon={Sparkles} label="Your Birth Chart">
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              {(
+                [
+                  { label: "Sun", p: bigThree.sun },
+                  { label: "Moon", p: bigThree.moon },
+                  { label: "Rising", p: bigThree.rising },
+                ] as const
+              ).map(({ label, p }) => {
+                const element = elementOf(p?.sign);
+                const colors = element ? ELEMENT_COLORS[element] : null;
+                return (
+                  <div
+                    key={label}
+                    className="element-box rounded-2xl border bg-black/20 px-3 py-3 text-center"
+                    style={
+                      colors
+                        ? {
+                            borderColor: colors.border,
+                            boxShadow: `0 0 22px ${colors.glow}, inset 0 0 14px ${colors.glow}`,
+                          }
+                        : { borderColor: "rgba(255,255,255,0.10)" }
+                    }
+                  >
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                    <p className="mt-1 text-[15px] font-medium text-white">{p?.sign ?? "—"}</p>
+                    <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
+                    {element && colors && (
+                      <p
+                        className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em]"
+                        style={{ color: colors.text }}
+                      >
+                        {element}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="divide-y divide-white/5">
+              {natal
+                .filter((p) => !["Sun", "Moon", "Ascendant"].includes(p.name))
+                .map((planet) => (
+                  <div key={planet.name} className="flex items-center justify-between py-2.5 text-[13px]">
+                    <span className="flex items-center gap-2 text-slate-300">
+                      <span className="w-6 text-center text-base text-slate-500">
+                        {GLYPHS[planet.name] ?? "•"}
+                      </span>
+                      {planet.name}
+                    </span>
+                    <span className="text-slate-200 tabular-nums">
+                      {planet.sign} {planet.degree}
+                      {planet.house ? (
+                        <span className="ml-1 text-[11px] text-slate-500">· {ordinal(planet.house)}</span>
+                      ) : null}
+                    </span>
+                  </div>
+                ))}
+              {natal.length === 0 && (
+                <p className="py-4 text-center text-[12px] text-slate-500">
+                  Enter your birth details to see your placements here.
+                </p>
+              )}
+            </div>
+          </SkyCard>
+
+          {/* ── FULL: Transits — last on the page ── */}
           <SkyCard icon={Sparkles} label="Transits">
             <div className="space-y-3">
               {transits.map((planet, index) => {
@@ -490,80 +570,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
               )}
             </div>
           </SkyCard>
-
-          {/* ── FULL: Your birth chart ── */}
-          <SkyCard icon={Sparkles} label="Your Birth Chart">
-            <div className="mb-4 grid grid-cols-3 gap-2">
-              {(
-                [
-                  { label: "Sun", p: bigThree.sun },
-                  { label: "Moon", p: bigThree.moon },
-                  { label: "Rising", p: bigThree.rising },
-                ] as const
-              ).map(({ label, p }) => (
-                <div
-                  key={label}
-                  className="rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-center"
-                >
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                  <p className="mt-1 text-[15px] font-medium text-white">{p?.sign ?? "—"}</p>
-                  <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
-                </div>
-              ))}
-            </div>
-            <div className="divide-y divide-white/5">
-              {natal
-                .filter((p) => !["Sun", "Moon", "Ascendant"].includes(p.name))
-                .map((planet) => (
-                  <div key={planet.name} className="flex items-center justify-between py-2.5 text-[13px]">
-                    <span className="flex items-center gap-2 text-slate-300">
-                      <span className="w-6 text-center text-base text-slate-500">
-                        {GLYPHS[planet.name] ?? "•"}
-                      </span>
-                      {planet.name}
-                    </span>
-                    <span className="text-slate-200 tabular-nums">
-                      {planet.sign} {planet.degree}
-                      {planet.house ? (
-                        <span className="ml-1 text-[11px] text-slate-500">· {ordinal(planet.house)}</span>
-                      ) : null}
-                    </span>
-                  </div>
-                ))}
-              {natal.length === 0 && (
-                <p className="py-4 text-center text-[12px] text-slate-500">
-                  Enter your birth details to see your placements here.
-                </p>
-              )}
-            </div>
-          </SkyCard>
-
-          {/* ── ROW: Next moon event | mini weather (hides itself if unavailable) ── */}
-          <div className={cn("grid gap-3", weather ? "grid-cols-2" : "grid-cols-1")}>
-            {moonPhase && (
-              <SkyCard icon={CalendarDays} label={`Next ${moonPhase.nextEventName}`}>
-                <p className="text-[38px] font-extralight leading-none text-white tabular-nums">
-                  {moonPhase.daysUntilNextEvent}
-                  <span className="ml-1 align-baseline text-[13px] font-normal uppercase tracking-wide text-slate-400">
-                    days
-                  </span>
-                </p>
-                <p className="mt-4 text-[12px] leading-5 text-slate-400">
-                  {waxing ? "The Moon is building toward fullness." : "The Moon is emptying toward a reset."}
-                </p>
-              </SkyCard>
-            )}
-            {weather && (
-              <SkyCard icon={CloudSun} label="Weather">
-                <p className="text-[38px] font-extralight leading-none text-white tabular-nums">
-                  {weather.temp}°
-                </p>
-                <p className="mt-4 text-[12px] leading-5 text-slate-400">
-                  {weather.label} where you are now.
-                </p>
-              </SkyCard>
-            )}
-          </div>
 
           <p className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
             Swipe right for readings <ChevronRight className="h-3 w-3" />
