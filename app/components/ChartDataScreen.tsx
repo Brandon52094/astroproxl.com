@@ -337,7 +337,7 @@ export default function ChartDataScreen() {
   }, [router]);
 
   return (
-    <div className="h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
+    <div className="relative h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
       style={{ WebkitOverflowScrolling: "touch" }}>
       <style jsx>{`
         @keyframes driftGradient {

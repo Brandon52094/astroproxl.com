@@ -231,45 +231,6 @@ const CARD_TITLES = [
   "Coming Soon",
 ];
 
-// ── STAR FIELD — 40 stars, deterministic so SSR/CSR match ─────────────
-interface StarData {
-  id: number;
-  left: number;
-  top: number;
-  size: number;
-  baseOpacity: number;
-  twinkleDuration: number;
-  twinkleDelay: number;
-  driftX: number;
-  driftY: number;
-  driftDuration: number;
-  driftDelay: number;
-  bright: boolean;
-}
-
-function generateStars(count: number): StarData[] {
-  const s = (n: number) => Math.abs(((n * 1664525 + 1013904223) & 0x7fffffff) / 0x7fffffff);
-  return Array.from({ length: count }, (_, i) => {
-    const bright = s(i * 7 + 7) > 0.82;
-    return {
-      id: i,
-      left: s(i * 7 + 1) * 100,
-      top: s(i * 7 + 2) * 100,
-      size: bright ? 2.2 + s(i * 7 + 3) * 1.2 : 0.9 + s(i * 7 + 3) * 1.1,
-      baseOpacity: bright ? 0.65 + s(i * 7 + 4) * 0.3 : 0.18 + s(i * 7 + 4) * 0.38,
-      twinkleDuration: 2.2 + s(i * 7 + 5) * 3.0,
-      twinkleDelay: s(i * 7 + 6) * 6,
-      driftX: (s(i * 7 + 1) - 0.5) * 14,
-      driftY: (s(i * 7 + 2) - 0.5) * 10,
-      driftDuration: 16 + s(i * 7 + 3) * 18,
-      driftDelay: s(i * 7 + 4) * -18,
-      bright,
-    };
-  });
-}
-
-const STARS = generateStars(40);
-
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -727,7 +688,7 @@ export default function ReadingIntakeScreen({
 
   return (
     <div
-      className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
+      className="no-scrollbar h-screen overflow-y-auto overscroll-none text-slate-100"
       style={{
         WebkitOverflowScrolling: "touch",
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
@@ -765,24 +726,6 @@ export default function ReadingIntakeScreen({
           0%, 76%, 100% { opacity: 0; transform: scale(0.35); }
           86% { opacity: 1; transform: scale(1.5); }
           94% { opacity: 0.78; transform: scale(1); }
-        }
-
-        /* ── SHOOTING STAR ── */
-        @keyframes shootStar {
-          0%   { transform: translateX(0px) translateY(0px) scaleX(0); opacity: 0; }
-          6%   { transform: translateX(0px) translateY(0px) scaleX(1); opacity: 0.9; }
-          100% { transform: translateX(260px) translateY(90px) scaleX(1); opacity: 0; }
-        }
-        .shooting-star {
-          position: absolute;
-          width: 70px;
-          height: 1.5px;
-          border-radius: 9999px;
-          background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.95) 55%, rgba(200,220,255,0.5) 100%);
-          transform-origin: left center;
-          pointer-events: none;
-          opacity: 0;
-          animation: shootStar 2.2s ease-out forwards;
         }
 
         .jxl-sparkle { position: absolute; border-radius: 9999px; pointer-events: none; z-index: 5; opacity: 0; animation: jxlGlint 5s ease-in-out infinite; }
@@ -826,46 +769,9 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
-          .carousel-container::after, .shooting-star { animation: none !important; }
+          .carousel-container::after { animation: none !important; }
         }
       `}</style>
-
-      {/* ── BACKGROUND ── absolute inside scroll container, covers full page height */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {/* Shooting star — one lightweight CSS-animated div, rerenders via key */}
-        {!shouldReduceMotion && <ShootingStar />}
-
-        {/* Stars — 40, drift + twinkle via Framer */}
-        {STARS.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{ left: `${star.left}%`, top: `${star.top}%`, width: star.size, height: star.size }}
-            animate={
-              shouldReduceMotion
-                ? { opacity: star.baseOpacity }
-                : {
-                    opacity: star.bright
-                      ? [star.baseOpacity * 0.35, star.baseOpacity, star.baseOpacity * 0.55, star.baseOpacity, star.baseOpacity * 0.35]
-                      : [star.baseOpacity * 0.4, star.baseOpacity * 1.5, star.baseOpacity * 0.4],
-                    scale: star.bright ? [1, 1.7, 1.1, 1.5, 1] : [1, 1.4, 1],
-                    x: [0, star.driftX * 0.4, star.driftX, star.driftX * 0.4, 0],
-                    y: [0, star.driftY * 0.3, star.driftY, star.driftY * 0.6, 0],
-                  }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    opacity: { duration: star.twinkleDuration, repeat: Infinity, ease: "easeInOut", delay: star.twinkleDelay },
-                    scale: { duration: star.twinkleDuration, repeat: Infinity, ease: "easeInOut", delay: star.twinkleDelay },
-                    x: { duration: star.driftDuration, repeat: Infinity, ease: "easeInOut", delay: star.driftDelay, repeatType: "mirror" },
-                    y: { duration: star.driftDuration * 1.1, repeat: Infinity, ease: "easeInOut", delay: star.driftDelay, repeatType: "mirror" },
-                  }
-            }
-          />
-        ))}
-      </div>
 
       <div
         className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
@@ -1251,33 +1157,4 @@ export default function ReadingIntakeScreen({
   );
 }
 
-// ── SHOOTING STAR — separate component so it can remount to retrigger CSS animation ──
-function ShootingStar() {
-  const [key, setKey] = useState(0);
 
-  useEffect(() => {
-    // First fire after 4s, then repeat every 22–30s
-    const fire = () => {
-      setKey(k => k + 1);
-      const next = 22000 + Math.random() * 8000;
-      setTimeout(fire, next);
-    };
-    const initial = setTimeout(fire, 4000);
-    return () => clearTimeout(initial);
-  }, []);
-
-  // Randomise position slightly each time
-  const left = useMemo(() => `${10 + (key % 5) * 12}%`, [key]);
-  const top = useMemo(() => `${8 + (key % 4) * 6}%`, [key]);
-
-  if (key === 0) return null;
-
-  return (
-    <div
-      key={key}
-      className="shooting-star"
-      style={{ left, top }}
-      aria-hidden="true"
-    />
-  );
-}
