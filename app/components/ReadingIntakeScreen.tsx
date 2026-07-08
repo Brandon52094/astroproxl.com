@@ -884,7 +884,7 @@ export default function ReadingIntakeScreen({
                   You Can Ask Anything 
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  Ask Anything for a Calculated Astrological Prediction. 
+                  Calculated Astrological Prediction. 
                 </p>
               </div>
             </div>
