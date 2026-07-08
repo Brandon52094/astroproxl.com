@@ -278,8 +278,8 @@ export default function ReadingIntakeScreen({
       Array.from({ length: 68 }).map((_, i) => {
         const left = `${((i * 37) % 100)}%`;
         const top = `${((i * 19 + 13) % 100)}%`;
-        const size = i % 7 === 0 ? 2 : 1;
-        const opacity = i % 5 === 0 ? 0.72 : 0.34;
+        const size = i % 11 === 0 ? 5 : i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5;
+        const opacity = i % 11 === 0 ? 0.9 : i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34;
         const delay = (i * 0.37) % 4;
         return { left, top, size, opacity, delay, id: i };
       }),
