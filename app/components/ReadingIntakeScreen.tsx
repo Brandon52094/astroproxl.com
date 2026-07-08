@@ -877,14 +877,14 @@ export default function ReadingIntakeScreen({
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    Real Astrological Predictions
+                    Astro Pro XL
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
                   Ask Anything
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  Many things being calculated to give you the perfect, unbiased results.
+                  Your Personalized & Calculated Astrological Predictions. 
                 </p>
               </div>
             </div>
