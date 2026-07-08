@@ -275,7 +275,7 @@ export default function ReadingIntakeScreen({
 
   const stars = useMemo(
     () =>
-      Array.from({ length: 28 }).map((_, i) => {
+      Array.from({ length: 68 }).map((_, i) => {
         const left = `${((i * 37) % 100)}%`;
         const top = `${((i * 19 + 13) % 100)}%`;
         const size = i % 7 === 0 ? 2 : 1;
