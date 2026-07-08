@@ -741,6 +741,39 @@ export default function ReadingIntakeScreen({
           94% { opacity: 0.78; transform: scale(1); }
         }
 
+        /* ── Hero shine sweep ── */
+        @keyframes heroShine {
+          0% { transform: translateX(-140%) skewX(-18deg); }
+          60% { transform: translateX(240%) skewX(-18deg); }
+          100% { transform: translateX(240%) skewX(-18deg); }
+        }
+        .hero-shine {
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+        }
+        .hero-shine::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 45%;
+          background: linear-gradient(
+            105deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.09) 45%,
+            rgba(255, 255, 255, 0.16) 50%,
+            rgba(255, 255, 255, 0.09) 55%,
+            transparent 100%
+          );
+          transform: translateX(-140%) skewX(-18deg);
+          animation: heroShine 4.6s ease-in-out infinite;
+          pointer-events: none;
+          z-index: 1;
+        }
+        .hero-shine > * { position: relative; z-index: 2; }
+
         .jxl-sparkle { position: absolute; border-radius: 9999px; pointer-events: none; z-index: 5; opacity: 0; animation: jxlGlint 5s ease-in-out infinite; }
         .jxl-sparkle--indigo { background: rgb(199,210,254); box-shadow: 0 0 8px 2px rgba(129,140,248,0.9), 0 0 16px 4px rgba(129,140,248,0.5); }
         .jxl-sparkle--gold { background: rgb(253,230,138); box-shadow: 0 0 8px 2px rgba(250,204,21,0.9), 0 0 16px 4px rgba(250,204,21,0.5); }
@@ -782,7 +815,8 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
-          .carousel-container::after { animation: none !important; }
+          .carousel-container::after,
+          .hero-shine::after { animation: none !important; opacity: 0; }
         }
       `}</style>
 
@@ -833,10 +867,16 @@ export default function ReadingIntakeScreen({
         >
           {/* ── HERO ── */}
           <section className="mb-5 pt-1">
-            <div className="hero-card-shadow relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 py-7 text-center">
+            <div
+              className="hero-shine hero-card-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
+              style={{
+                borderColor: "rgba(99, 102, 241, 0.70)",
+                boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
+              }}
+            >
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white">
+                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     Real Astrological Predictions
                   </span>
                 </div>
@@ -939,7 +979,7 @@ export default function ReadingIntakeScreen({
             </motion.div>
           ) : (
             <>
-              {/* ── AREA BUTTONS — animate prop removed, CSS transitions handle color/border ── */}
+              {/* ── AREA BUTTONS ── */}
               <section className="space-y-3">
                 {AREAS.map((area) => {
                   const Icon = area.icon;
@@ -1204,5 +1244,3 @@ export default function ReadingIntakeScreen({
     </div>
   );
 }
-
-
