@@ -3,10 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-  Moon,
-  Sun,
   Sparkles,
-  Orbit,
   RotateCcw,
   Crown,
   CalendarDays,
@@ -17,21 +14,22 @@ import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 
 /**
- * TODAY'S SKY — one scrollable, weather-app-style page.
+ * TODAY'S SKY — v2
  *
- * Merges Daily Transits + Moon Cycles + Birth Chart into a single
- * vertical scroll, modeled on the iOS Weather detail view:
+ * - HERO: Sun season + Moon (sign, degree, house when available) sit
+ *   borderless on the starfield with the drawn moon disc — phase stats
+ *   directly underneath. Dense, data-first, minimal top padding.
+ * - Transits: one list, all planets, at the "What Matters" row size.
+ *   No inner scroll — the page scrolls, the card grows. Personal
+ *   planets + nodes are visually louder than the outer planets.
+ * - Styling matches ReadingIntakeScreen: same background gradient,
+ *   same 68-star field, same card surfaces (border-white/10,
+ *   bg-white/[0.03], rounded-[24px], standard-shadow).
+ * - No zodiac emoji. Planet glyphs carry U+FE0E so iOS renders them
+ *   as text, never as emoji.
  *
- *   HERO      → date + live clock (the "temperature"), moon-in-sign
- *               as the "condition" line
- *   CARD GRID → 2-col small cards + full-width cards, each with the
- *               icon + small-caps label header, hairline dividers,
- *               big light numerals
- *
- * This panel intentionally has NO overflow of its own — it grows to
- * natural height and lets PagerContainer's panel wrapper
- * (overflow-y-auto) do the scrolling, so vertical swipes scroll and
- * horizontal swipes page. Keep it that way.
+ * This panel has NO overflow of its own — PagerContainer's wrapper
+ * scrolls it. Keep it that way.
  */
 
 interface UserStatus {
@@ -55,6 +53,7 @@ interface TransitPlanet {
   sign: string;
   degree: string;
   isRetrograde: boolean;
+  house?: number;
 }
 
 interface NatalPlacement {
@@ -85,22 +84,19 @@ interface WeatherNow {
   label: string;
 }
 
+// U+FE0E forces text presentation so iOS never swaps these for emoji.
+const T = "\uFE0E";
 const GLYPHS: Record<string, string> = {
-  Sun: "☉", Moon: "☽", Mercury: "☿", Venus: "♀", Mars: "♂",
-  Jupiter: "♃", Saturn: "♄", Uranus: "♅", Neptune: "♆", Pluto: "♇",
-  "North Node": "☊", "South Node": "☋", Ascendant: "↑", Midheaven: "⟂",
-};
-
-const SIGN_GLYPHS: Record<string, string> = {
-  Aries: "♈", Taurus: "♉", Gemini: "♊", Cancer: "♋", Leo: "♌", Virgo: "♍",
-  Libra: "♎", Scorpio: "♏", Sagittarius: "♐", Capricorn: "♑",
-  Aquarius: "♒", Pisces: "♓",
+  Sun: `☉${T}`, Moon: `☽${T}`, Mercury: `☿${T}`, Venus: `♀${T}`, Mars: `♂${T}`,
+  Jupiter: `♃${T}`, Saturn: `♄${T}`, Uranus: `♅${T}`, Neptune: `♆${T}`,
+  Pluto: `♇${T}`, "North Node": `☊${T}`, "South Node": `☋${T}`,
+  Ascendant: `↑${T}`,
 };
 
 const IMPORTANT_PLANETS = ["Moon", "Mercury", "Venus", "Mars", "North Node", "South Node"];
 const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+const TRANSIT_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node", "South Node"];
 
-// Open-Meteo WMO weather codes → short labels
 const WEATHER_LABELS: Record<number, string> = {
   0: "Clear", 1: "Mostly Clear", 2: "Partly Cloudy", 3: "Overcast",
   45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle",
@@ -109,7 +105,13 @@ const WEATHER_LABELS: Record<number, string> = {
   95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
 };
 
-/* ── Weather-style card chrome ─────────────────────────────────────── */
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+/* ── Card chrome — matches Reading Intake surfaces ─────────────────── */
 
 function SkyCard({
   icon: Icon,
@@ -125,18 +127,13 @@ function SkyCard({
   return (
     <div
       className={cn(
-        "rounded-[22px] border border-white/[0.07] p-4 backdrop-blur-md",
+        "standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm",
         className
       )}
-      style={{
-        background:
-          "linear-gradient(180deg, rgba(42,48,84,0.42) 0%, rgba(30,35,64,0.38) 100%)",
-        boxShadow: "0 14px 34px rgba(0,0,0,0.42)",
-      }}
     >
       <div className="mb-3 flex items-center gap-2">
         <Icon className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
+        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
           {label}
         </span>
       </div>
@@ -147,7 +144,7 @@ function SkyCard({
 
 /* ── SVG moon drawn from the real illumination percent ─────────────── */
 
-function MoonDisc({ illumination, waxing, size = 96 }: { illumination: number; waxing: boolean; size?: number }) {
+function MoonDisc({ illumination, waxing, size = 108 }: { illumination: number; waxing: boolean; size?: number }) {
   const f = Math.min(1, Math.max(0, illumination / 100));
   const r = 46;
   const c = 50;
@@ -155,7 +152,6 @@ function MoonDisc({ illumination, waxing, size = 96 }: { illumination: number; w
   const bottom = `${c} ${c + r}`;
   const rx = Math.abs(1 - 2 * f) * r;
 
-  // Outer limb arc goes around the lit side; terminator ellipse closes it.
   const outerSweep = waxing ? 1 : 0;
   const terminatorSweep = f >= 0.5 ? (waxing ? 1 : 0) : (waxing ? 0 : 1);
   const litPath = `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
@@ -169,15 +165,12 @@ function MoonDisc({ illumination, waxing, size = 96 }: { illumination: number; w
           <stop offset="100%" stopColor="#9A98AC" />
         </radialGradient>
       </defs>
-      {/* dark side */}
-      <circle cx={c} cy={c} r={r} fill="#1B2038" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
-      {/* lit side */}
+      <circle cx={c} cy={c} r={r} fill="#151A30" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
       {f > 0.995 ? (
         <circle cx={c} cy={c} r={r} fill="url(#moonlit)" />
       ) : f > 0.005 ? (
         <path d={litPath} fill="url(#moonlit)" />
       ) : null}
-      {/* craters, kept faint so they read on both lit + dark */}
       <circle cx="38" cy="40" r="7" fill="rgba(0,0,0,0.10)" />
       <circle cx="60" cy="58" r="5" fill="rgba(0,0,0,0.09)" />
       <circle cx="52" cy="30" r="3.5" fill="rgba(0,0,0,0.08)" />
@@ -198,13 +191,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const [weather, setWeather] = useState<WeatherNow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Live clock — ticks every second so the hero reads like a clock face.
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const tick = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(tick);
-  }, []);
-
   useEffect(() => {
     const chart = loadChart();
     if (!chart?.chartData) {
@@ -217,7 +203,13 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       profection?: ProfectionData;
       tropical?: { planets?: NatalPlacement[] };
     };
-    if (data.transits) setTransits(data.transits);
+    if (data.transits) {
+      setTransits(
+        [...data.transits].sort(
+          (a, b) => TRANSIT_ORDER.indexOf(a.name) - TRANSIT_ORDER.indexOf(b.name)
+        )
+      );
+    }
     if (data.moonPhase) setMoonPhase(data.moonPhase);
     if (data.profection) setProfection(data.profection);
     const planets = data.tropical?.planets ?? [];
@@ -228,7 +220,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
     );
     setIsLoading(false);
 
-    // Mini weather — best effort, silently hidden if it fails.
     const saved = chart as unknown as { currentLat?: number; currentLng?: number; lat?: number; lng?: number };
     const lat = saved.currentLat ?? saved.lat;
     const lng = saved.currentLng ?? saved.lng;
@@ -248,14 +239,15 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
     }
   }, []);
 
+  // Same star recipe as ReadingIntakeScreen — 68 stars, same seeds.
   const stars = useMemo(
     () =>
-      Array.from({ length: 44 }).map((_, i) => ({
+      Array.from({ length: 68 }).map((_, i) => ({
         id: i,
         left: `${(i * 37) % 100}%`,
         top: `${(i * 19 + 13) % 100}%`,
-        size: i % 7 === 0 ? 2.8 : 1.5,
-        opacity: i % 5 === 0 ? 0.7 : 0.35,
+        size: i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5,
+        opacity: i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34,
         delay: (i * 0.37) % 4,
       })),
     []
@@ -264,31 +256,36 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const sunNow = useMemo(() => transits.find((p) => p.name === "Sun"), [transits]);
   const moonNow = useMemo(() => transits.find((p) => p.name === "Moon"), [transits]);
   const retrogrades = useMemo(() => transits.filter((p) => p.isRetrograde), [transits]);
-  const importantTransits = useMemo(
-    () => transits.filter((p) => IMPORTANT_PLANETS.includes(p.name)),
-    [transits]
-  );
   const bigThree = useMemo(() => {
     const find = (n: string) => natal.find((p) => p.name === n);
     return { sun: find("Sun"), moon: find("Moon"), rising: find("Ascendant") };
   }, [natal]);
 
+  const hasProfection =
+    !!profection &&
+    typeof profection.profectionYear === "number" &&
+    !!profection.timeLord &&
+    !!profection.activatedSign;
+
   const waxing = moonPhase?.nextEventName === "Full Moon";
 
-  const dateLine = now.toLocaleDateString(undefined, {
-    weekday: "long", month: "long", day: "numeric",
+  const dateLine = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
   });
-  const timeLine = now.toLocaleTimeString(undefined, {
-    hour: "numeric", minute: "2-digit",
-  });
-  const seconds = now.toLocaleTimeString(undefined, { second: "2-digit" }).padStart(2, "0");
 
-  const conditionLine = [
-    moonPhase ? `Moon in ${moonPhase.moonSign}` : moonNow ? `Moon in ${moonNow.sign}` : null,
-    moonPhase?.phaseName ?? null,
-  ]
-    .filter(Boolean)
-    .join("  |  ");
+  const heroDetail = (p: TransitPlanet | undefined, fallbackDegree?: string) => {
+    const degree = p?.degree ?? fallbackDegree;
+    if (!degree) return null;
+    return (
+      <p className="mt-0.5 text-[13px] text-slate-400 tabular-nums">
+        {degree}
+        {p?.house ? <span className="text-slate-500"> · {ordinal(p.house)} house</span> : null}
+        {p?.isRetrograde ? <span className="ml-1 text-amber-300/80">℞</span> : null}
+      </p>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -300,18 +297,13 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
   return (
     <div
-      className="relative min-h-screen w-full text-slate-100"
+      className="relative min-h-screen w-full font-sans text-slate-100"
       style={{
-        background:
-          "linear-gradient(180deg, #0B0F26 0%, #0A0D20 30%, #050816 72%, #040611 100%)",
+        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
-      {/* ── Starfield + ambient glow ── */}
+      {/* ── Starfield ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div
-          className="absolute -top-24 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full blur-[110px]"
-          style={{ background: "radial-gradient(circle, rgba(129,140,248,0.14), transparent 70%)" }}
-        />
         {stars.map((star) => (
           <motion.span
             key={star.id}
@@ -320,198 +312,179 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             animate={
               shouldReduceMotion
                 ? undefined
-                : { opacity: [star.opacity * 0.4, star.opacity * 1.5, star.opacity * 0.4] }
+                : { opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4], scale: [1, 1.6, 1] }
             }
             transition={
               shouldReduceMotion
                 ? undefined
-                : { duration: 2.4 + (star.id % 5) * 0.5, repeat: Infinity, ease: "easeInOut", delay: star.delay }
+                : { duration: 2.34 + (star.id % 5) * 0.54, repeat: Infinity, ease: "easeInOut", delay: star.delay }
             }
           />
         ))}
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-14"
+        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-5"
         style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
       >
-        {/* ── HERO — date, live clock, sky condition ── */}
+        {/* ── HERO — Sun + Moon, borderless, data-first ── */}
         <motion.header
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          className="mb-7 text-center"
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="mb-6"
         >
-          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">{dateLine}</p>
-          <div className="mt-2 flex items-end justify-center gap-1.5">
-            <h1 className="text-[64px] font-extralight leading-none tracking-tight text-white tabular-nums">
-              {timeLine.replace(/\s?(AM|PM)/i, "")}
-            </h1>
-            <div className="mb-2 flex flex-col items-start leading-none">
-              <span className="text-[13px] font-medium text-slate-300">
-                {/AM/i.test(timeLine) ? "AM" : "PM"}
-              </span>
-              <span className="mt-0.5 text-[11px] text-slate-500 tabular-nums">:{seconds}</span>
-            </div>
-          </div>
-          {conditionLine && (
-            <p className="mt-2 text-[15px] text-slate-300">{conditionLine}</p>
-          )}
-          <p className="mt-4 inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.18em] text-slate-600">
-            Swipe right for readings <ChevronRight className="h-3 w-3" />
+          <p className="text-center text-[10px] uppercase tracking-[0.24em] text-slate-500">
+            {dateLine}
           </p>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  {GLYPHS.Sun} Sun Season
+                </p>
+                <p className="text-[34px] font-light leading-tight text-white">
+                  {sunNow?.sign ?? "—"}
+                </p>
+                {heroDetail(sunNow)}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  {GLYPHS.Moon} Moon
+                </p>
+                <p className="text-[34px] font-light leading-tight text-white">
+                  {moonPhase?.moonSign ?? moonNow?.sign ?? "—"}
+                </p>
+                {heroDetail(moonNow, moonPhase?.moonDegree)}
+              </div>
+            </div>
+
+            {moonPhase && (
+              <div
+                className="shrink-0"
+                style={{ filter: "drop-shadow(0 0 26px rgba(226,223,240,0.16))" }}
+              >
+                <MoonDisc illumination={moonPhase.illuminationPercent} waxing={waxing} />
+              </div>
+            )}
+          </div>
+
+          {/* Phase stats — borderless, right under the hero */}
+          {moonPhase && (
+            <div className="mt-5 flex items-center justify-between border-t border-white/[0.06] pt-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Phase</p>
+                <p className="mt-0.5 text-[13px] font-medium text-slate-200">{moonPhase.phaseName}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Illumination</p>
+                <p className="mt-0.5 text-[13px] font-medium text-slate-200 tabular-nums">
+                  {moonPhase.illuminationPercent}%
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                  {moonPhase.nextEventName}
+                </p>
+                <p className="mt-0.5 text-[13px] font-medium text-slate-200 tabular-nums">
+                  {moonPhase.daysUntilNextEvent} days
+                </p>
+              </div>
+            </div>
+          )}
         </motion.header>
 
         <motion.div
-          initial={{ opacity: 0, y: 18 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.08, ease: "easeOut" }}
+          transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
           className="space-y-3"
         >
-          {/* ── ROW: Sun season | Moon sign ── */}
-          <div className="grid grid-cols-2 gap-3">
-            <SkyCard icon={Sun} label="Sun Season">
-              <p className="text-[28px] font-light leading-tight text-white">
-                {sunNow ? sunNow.sign : "—"}
-              </p>
-              <p className="mt-6 text-[12px] leading-5 text-slate-400">
-                {sunNow ? `${SIGN_GLYPHS[sunNow.sign] ?? ""} ${sunNow.degree} — where the Sun sits today.` : "Calculate your chart to see today's sky."}
-              </p>
-            </SkyCard>
-            <SkyCard icon={Moon} label="Moon Sign">
-              <p className="text-[28px] font-light leading-tight text-white">
-                {moonPhase?.moonSign ?? moonNow?.sign ?? "—"}
-              </p>
-              <p className="mt-6 text-[12px] leading-5 text-slate-400">
-                {moonPhase
-                  ? `${SIGN_GLYPHS[moonPhase.moonSign] ?? ""} ${moonPhase.moonDegree} — the day's emotional weather.`
-                  : "The day's emotional weather."}
-              </p>
-            </SkyCard>
-          </div>
-
-          {/* ── FULL: Moon cycle (mirrors the iOS "Last Quarter" card) ── */}
-          {moonPhase && (
-            <SkyCard icon={Moon} label={moonPhase.phaseName}>
-              <div className="flex items-center gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-                    <span className="text-[13px] text-slate-300">Illumination</span>
-                    <span className="text-[13px] font-medium text-white tabular-nums">
-                      {moonPhase.illuminationPercent}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between border-b border-white/[0.06] py-3">
-                    <span className="text-[13px] text-slate-300">Moon Sign</span>
-                    <span className="text-[13px] font-medium text-white">
-                      {moonPhase.moonSign} {moonPhase.moonDegree}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between pt-3">
-                    <span className="text-[13px] text-slate-300">Next {moonPhase.nextEventName}</span>
-                    <span className="text-[13px] font-medium text-white">
-                      {moonPhase.daysUntilNextEvent} <span className="text-[11px] uppercase tracking-wide text-slate-400">days</span>
-                    </span>
-                  </div>
-                </div>
-                <div className="shrink-0" style={{ filter: "drop-shadow(0 0 22px rgba(226,223,240,0.18))" }}>
-                  <MoonDisc illumination={moonPhase.illuminationPercent} waxing={waxing} />
-                </div>
-              </div>
-            </SkyCard>
-          )}
-
-          {/* ── FULL: What matters today ── */}
-          <SkyCard icon={Sparkles} label="What Matters Today">
-            <div className="space-y-3">
-              {importantTransits.map((planet, index) => (
-                <div
-                  key={planet.name}
-                  className={cn(
-                    "flex items-center gap-3",
-                    index < importantTransits.length - 1 && "border-b border-white/[0.06] pb-3"
-                  )}
-                >
-                  <span className="w-7 text-center text-xl text-slate-300">
-                    {GLYPHS[planet.name] ?? "•"}
-                  </span>
-                  <span className="w-24 text-[12px] font-medium uppercase tracking-wide text-slate-400">
-                    {planet.name}
-                  </span>
-                  <span className="flex-1 text-[15px] font-medium text-white">
-                    {planet.sign}
-                  </span>
-                  <span className="text-[13px] text-slate-300 tabular-nums">
-                    {planet.degree}
-                    {planet.isRetrograde && <span className="ml-1 text-amber-300/80">℞</span>}
-                  </span>
-                </div>
-              ))}
-              {importantTransits.length === 0 && (
-                <p className="py-3 text-center text-[12px] text-slate-500">
-                  No major transits to show yet.
-                </p>
-              )}
-            </div>
-          </SkyCard>
-
           {/* ── ROW: Retrogrades | Time Lord ── */}
           <div className="grid grid-cols-2 gap-3">
             <SkyCard icon={RotateCcw} label="Retrogrades">
-              <p className="text-[40px] font-extralight leading-none text-white tabular-nums">
+              <p className="text-[38px] font-extralight leading-none text-white tabular-nums">
                 {retrogrades.length}
               </p>
-              <p className="mt-5 text-[12px] leading-5 text-slate-400">
+              <p className="mt-4 text-[12px] leading-5 text-slate-400">
                 {retrogrades.length > 0
                   ? retrogrades.map((p) => p.name).join(", ")
                   : "Every planet is moving direct."}
               </p>
             </SkyCard>
             <SkyCard icon={Crown} label="Time Lord">
-              <p className="text-[28px] font-light leading-tight text-white">
-                {profection?.timeLord ?? "—"}
-              </p>
-              <p className="mt-6 text-[12px] leading-5 text-slate-400">
-                {profection
-                  ? `${profection.profectionYear}th house year — ${profection.activatedSign} activated.`
-                  : "Calculate your chart to reveal this year's ruler."}
-              </p>
+              {hasProfection ? (
+                <>
+                  <p className="text-[26px] font-light leading-tight text-white">
+                    {profection!.timeLord}
+                  </p>
+                  <p className="mt-4 text-[12px] leading-5 text-slate-400">
+                    {ordinal(profection!.profectionYear)} house year — {profection!.activatedSign} activated.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[26px] font-light leading-tight text-slate-500">—</p>
+                  <p className="mt-4 text-[12px] leading-5 text-slate-500">
+                    Recalculate your chart to reveal this year's ruler.
+                  </p>
+                </>
+              )}
             </SkyCard>
           </div>
 
-          {/* ── FULL: All transits ── */}
-          <SkyCard icon={Orbit} label="All Transits">
-            <div className="grid grid-cols-3 gap-1 border-b border-white/[0.06] pb-2 text-[10px] uppercase tracking-[0.14em] text-slate-500">
-              <span>Planet</span>
-              <span>Sign</span>
-              <span className="text-right">Degree</span>
-            </div>
-            <div className="divide-y divide-white/[0.05]">
-              {transits.map((planet) => {
-                const highlighted = IMPORTANT_PLANETS.includes(planet.name);
+          {/* ── FULL: Transits — one list, all planets, no inner scroll ── */}
+          <SkyCard icon={Sparkles} label="Transits">
+            <div className="space-y-3">
+              {transits.map((planet, index) => {
+                const important = IMPORTANT_PLANETS.includes(planet.name);
                 return (
-                  <div key={planet.name} className="grid grid-cols-3 gap-1 py-2.5 text-[13px]">
-                    <span className="flex items-center gap-2">
-                      <span className={cn("text-base", highlighted ? "text-slate-200" : "text-slate-500")}>
-                        {GLYPHS[planet.name] ?? "•"}
-                      </span>
-                      <span className={highlighted ? "font-medium text-white" : "text-slate-300"}>
-                        {planet.name}
-                      </span>
+                  <div
+                    key={planet.name}
+                    className={cn(
+                      "flex items-center gap-3",
+                      index < transits.length - 1 && "border-b border-white/5 pb-3"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "w-8 text-center text-xl",
+                        important ? "text-amber-300/80" : "text-slate-500"
+                      )}
+                    >
+                      {GLYPHS[planet.name] ?? "•"}
                     </span>
-                    <span className="flex items-center gap-1.5 text-slate-300">
-                      <span>{SIGN_GLYPHS[planet.sign] ?? ""}</span>
-                      <span>{planet.sign}</span>
+                    <span
+                      className={cn(
+                        "w-24 text-[12px] font-medium uppercase tracking-wide",
+                        important ? "text-slate-300" : "text-slate-500"
+                      )}
+                    >
+                      {planet.name}
                     </span>
-                    <span className="text-right text-slate-300 tabular-nums">
+                    <span
+                      className={cn(
+                        "flex-1 text-[15px]",
+                        important ? "font-medium text-white" : "text-slate-300"
+                      )}
+                    >
+                      {planet.sign}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[13px] tabular-nums",
+                        important ? "text-amber-300/70" : "text-slate-400"
+                      )}
+                    >
                       {planet.degree}
-                      {planet.isRetrograde && <span className="ml-1 text-amber-300/80">℞</span>}
+                      {planet.isRetrograde && <span className="ml-1">℞</span>}
                     </span>
                   </div>
                 );
               })}
               {transits.length === 0 && (
-                <p className="py-4 text-center text-[12px] text-slate-500">
+                <p className="py-3 text-center text-[12px] text-slate-500">
                   Calculate your chart to see today's transits.
                 </p>
               )}
@@ -530,7 +503,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
               ).map(({ label, p }) => (
                 <div
                   key={label}
-                  className="rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-3 text-center"
+                  className="rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-center"
                 >
                   <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
                   <p className="mt-1 text-[15px] font-medium text-white">{p?.sign ?? "—"}</p>
@@ -538,18 +511,22 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                 </div>
               ))}
             </div>
-            <div className="divide-y divide-white/[0.05]">
+            <div className="divide-y divide-white/5">
               {natal
                 .filter((p) => !["Sun", "Moon", "Ascendant"].includes(p.name))
                 .map((planet) => (
                   <div key={planet.name} className="flex items-center justify-between py-2.5 text-[13px]">
                     <span className="flex items-center gap-2 text-slate-300">
-                      <span className="text-base text-slate-500">{GLYPHS[planet.name] ?? "•"}</span>
+                      <span className="w-6 text-center text-base text-slate-500">
+                        {GLYPHS[planet.name] ?? "•"}
+                      </span>
                       {planet.name}
                     </span>
                     <span className="text-slate-200 tabular-nums">
                       {planet.sign} {planet.degree}
-                      {planet.house ? <span className="ml-1 text-[11px] text-slate-500">H{planet.house}</span> : null}
+                      {planet.house ? (
+                        <span className="ml-1 text-[11px] text-slate-500">· {ordinal(planet.house)}</span>
+                      ) : null}
                     </span>
                   </div>
                 ))}
@@ -561,33 +538,35 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             </div>
           </SkyCard>
 
-          {/* ── ROW: Next moon event | mini weather (weather hides itself if unavailable) ── */}
+          {/* ── ROW: Next moon event | mini weather (hides itself if unavailable) ── */}
           <div className={cn("grid gap-3", weather ? "grid-cols-2" : "grid-cols-1")}>
             {moonPhase && (
               <SkyCard icon={CalendarDays} label={`Next ${moonPhase.nextEventName}`}>
-                <p className="text-[40px] font-extralight leading-none text-white tabular-nums">
+                <p className="text-[38px] font-extralight leading-none text-white tabular-nums">
                   {moonPhase.daysUntilNextEvent}
-                  <span className="ml-1 align-baseline text-[14px] font-normal uppercase tracking-wide text-slate-400">
+                  <span className="ml-1 align-baseline text-[13px] font-normal uppercase tracking-wide text-slate-400">
                     days
                   </span>
                 </p>
-                <p className="mt-5 text-[12px] leading-5 text-slate-400">
+                <p className="mt-4 text-[12px] leading-5 text-slate-400">
                   {waxing ? "The Moon is building toward fullness." : "The Moon is emptying toward a reset."}
                 </p>
               </SkyCard>
             )}
             {weather && (
               <SkyCard icon={CloudSun} label="Weather">
-                <p className="text-[40px] font-extralight leading-none text-white tabular-nums">
+                <p className="text-[38px] font-extralight leading-none text-white tabular-nums">
                   {weather.temp}°
                 </p>
-                <p className="mt-5 text-[12px] leading-5 text-slate-400">{weather.label} where you are now.</p>
+                <p className="mt-4 text-[12px] leading-5 text-slate-400">
+                  {weather.label} where you are now.
+                </p>
               </SkyCard>
             )}
           </div>
 
-          <p className="pt-2 text-center text-[10px] text-slate-600">
-            {transits.length} transits · {retrogrades.length} retrograde · updated live
+          <p className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
+            Swipe right for readings <ChevronRight className="h-3 w-3" />
           </p>
         </motion.div>
       </div>
