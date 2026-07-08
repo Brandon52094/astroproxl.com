@@ -589,12 +589,6 @@ export default function ReadingIntakeScreen({
     return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
   }, [getAreaColors]);
 
-  // Colors for the submit button — inherits the selected area's palette.
-  const submitColors = useMemo(
-    () => (selectedArea ? getAreaColors(selectedArea) : null),
-    [selectedArea, getAreaColors]
-  );
-
   const renderCardContent = useCallback((index: number) => {
     switch (index) {
       case 0:
@@ -837,21 +831,23 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── HERO — borderless, floating on the starfield ── */}
-          <section className="mb-6 pt-4 text-center">
-            <div className="mb-3 flex items-center justify-center gap-3">
-              <span className="h-px w-8 bg-white/15" aria-hidden="true" />
-              <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-400">
-                Real Astrological Predictions
-              </span>
-              <span className="h-px w-8 bg-white/15" aria-hidden="true" />
+          {/* ── HERO ── */}
+          <section className="mb-5 pt-1">
+            <div className="hero-card-shadow relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 py-7 text-center">
+              <div className="relative z-10 mx-auto max-w-[560px]">
+                <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white">
+                    Real Astrological Predictions
+                  </span>
+                </div>
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                  Ask Anything
+                </h1>
+                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
+                  Many things being calculated to give you the perfect, unbiased results.
+                </p>
+              </div>
             </div>
-            <h1 className="text-[40px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-              Ask Anything
-            </h1>
-            <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-              Many things being calculated to give you the perfect, unbiased results.
-            </p>
           </section>
 
           {/* ── Reading cycle ── */}
@@ -1034,7 +1030,7 @@ export default function ReadingIntakeScreen({
                 })}
               </section>
 
-              {/* ── TEXTAREA — one clean surface, focus glow in the area's color ── */}
+              {/* ── TEXTAREA ── */}
               <AnimatePresence>
                 {selectedArea && selectedArea !== "other" && (
                   <motion.section
@@ -1045,31 +1041,23 @@ export default function ReadingIntakeScreen({
                     className="mt-6 space-y-2"
                   >
                     <div
-                      className="standard-shadow rounded-[24px] border bg-white/[0.03] px-4 py-2"
-                      style={{
-                        borderColor: "rgba(255,255,255,0.10)",
-                        transition: "border-color 0.3s ease, box-shadow 0.3s ease",
-                      }}
-                      onFocus={(e) => {
-                        const c = getAreaColors(selectedArea ?? "other");
-                        e.currentTarget.style.borderColor = c.border;
-                        e.currentTarget.style.boxShadow = `0 0 40px ${c.glow}, 0 18px 44px rgba(0,0,0,0.72)`;
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
-                        e.currentTarget.style.boxShadow = "";
-                      }}
+                      className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px] standard-shadow"
+                      style={{ transition: "box-shadow 0.3s ease, border-color 0.3s ease" }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)"; e.currentTarget.style.boxShadow = "0 0 50px rgba(255,255,255,0.15), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
                     >
-                      <Textarea
-                        id="question"
-                        ref={textareaRef}
-                        rows={5}
-                        value={question}
-                        onChange={(e) => setQuestion(e.target.value)}
-                        placeholder={AREAS.find(a => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
-                        className="min-h-[132px] w-full border-0 bg-transparent px-1 py-2 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0 focus-visible:ring-0"
-                        style={{ backgroundColor: "transparent" }}
-                      />
+                      <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
+                        <Textarea
+                          id="question"
+                          ref={textareaRef}
+                          rows={5}
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          placeholder={AREAS.find(a => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
+                          className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
+                          style={{ backgroundColor: "transparent" }}
+                        />
+                      </div>
                     </div>
                     <p className="text-xs leading-5 text-slate-300/80">Be specific. The clearer your question, the sharper the reading.</p>
                   </motion.section>
@@ -1078,7 +1066,7 @@ export default function ReadingIntakeScreen({
             </>
           )}
 
-          {/* ── SUBMIT — inherits the selected area's color ── */}
+          {/* ── SUBMIT ── */}
           <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             {!onCooldown && (
@@ -1086,21 +1074,7 @@ export default function ReadingIntakeScreen({
                 type="button"
                 onClick={handleStartReading}
                 disabled={!canSubmit || isCreatingReading}
-                className={cn(
-                  "standard-shadow h-14 w-full rounded-2xl border text-[15px] font-medium transition-all duration-300",
-                  canSubmit && submitColors
-                    ? "text-white hover:scale-[1.01]"
-                    : "cursor-not-allowed border-white/10 bg-white/[0.03] text-slate-500"
-                )}
-                style={
-                  canSubmit && submitColors
-                    ? {
-                        background: submitColors.gradient,
-                        borderColor: submitColors.border,
-                        boxShadow: `0 0 34px ${submitColors.glow}, 0 18px 44px rgba(0,0,0,0.72)`,
-                      }
-                    : undefined
-                }
+                className="standard-shadow h-14 w-full rounded-2xl border border-indigo-400/30 bg-gradient-to-b from-indigo-500 to-indigo-700 text-white text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
               >
                 {buttonCopy}
               </Button>
@@ -1230,3 +1204,5 @@ export default function ReadingIntakeScreen({
     </div>
   );
 }
+
+
