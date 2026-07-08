@@ -273,6 +273,19 @@ export default function ReadingIntakeScreen({
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const stars = useMemo(
+    () =>
+      Array.from({ length: 28 }).map((_, i) => {
+        const left = `${((i * 37) % 100)}%`;
+        const top = `${((i * 19 + 13) % 100)}%`;
+        const size = i % 7 === 0 ? 2 : 1;
+        const opacity = i % 5 === 0 ? 0.72 : 0.34;
+        const delay = (i * 0.37) % 4;
+        return { left, top, size, opacity, delay, id: i };
+      }),
+    []
+  );
+
   const comingSoonSparkles = useMemo(
     () => [
       { left: "12%", top: "22%", size: 7, delay: 0.1, color: "indigo" as const },
@@ -688,7 +701,7 @@ export default function ReadingIntakeScreen({
 
   return (
     <div
-      className="no-scrollbar h-screen overflow-y-auto overscroll-none text-slate-100"
+      className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
       style={{
         WebkitOverflowScrolling: "touch",
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
@@ -772,6 +785,41 @@ export default function ReadingIntakeScreen({
           .carousel-container::after { animation: none !important; }
         }
       `}</style>
+
+      {/* ── STARS ── */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        {stars.map((star) => (
+          <motion.span
+            key={star.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+            }}
+            animate={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
+                    scale: [1, 1.6, 1],
+                  }
+            }
+            transition={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    duration: 2.6 + (star.id % 5) * 0.6,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: star.delay,
+                  }
+            }
+          />
+        ))}
+      </div>
 
       <div
         className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
