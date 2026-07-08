@@ -222,13 +222,8 @@ function formatTimeRemaining(expiresAt: string): string {
 
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const MAJOR_PLANETS = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
-const TOTAL_CARDS = 5;
 const CARD_TITLES = [
   "Unlimited Access",
-  "Your Natal Chart",
-  "Today's Astrological Calendar",
-  "Current Important Transits",
-  "Coming Soon",
 ];
 
 export default function ReadingIntakeScreen({
@@ -244,11 +239,7 @@ export default function ReadingIntakeScreen({
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
-  const [touchStartX, setTouchStartX] = useState(0);
-  const [touchEndX, setTouchEndX] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
 
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
@@ -538,36 +529,6 @@ export default function ReadingIntakeScreen({
     return `Free reading resets in ${parts.join(" ")}`;
   }, [userStatus, onCooldown, now]);
 
-  const goToPrevious = useCallback(() => setCurrentCardIndex(p => (p === 0 ? TOTAL_CARDS - 1 : p - 1)), []);
-  const goToNext = useCallback(() => setCurrentCardIndex(p => (p === TOTAL_CARDS - 1 ? 0 : p + 1)), []);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.touches[0].clientX);
-    setTouchEndX(e.touches[0].clientX);
-    setIsDragging(true);
-  };
-  const handleTouchMove = (e: React.TouchEvent) => { if (isDragging) setTouchEndX(e.touches[0].clientX); };
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-    const dist = touchStartX - touchEndX;
-    if (dist > 50) goToNext();
-    else if (dist < -50) goToPrevious();
-    setTouchStartX(0); setTouchEndX(0);
-  };
-
-  const [mouseStartX, setMouseStartX] = useState(0);
-  const [mouseEndX, setMouseEndX] = useState(0);
-  const [isMouseDragging, setIsMouseDragging] = useState(false);
-  const handleMouseDown = (e: React.MouseEvent) => { setMouseStartX(e.clientX); setMouseEndX(e.clientX); setIsMouseDragging(true); };
-  const handleMouseMove = (e: React.MouseEvent) => { if (isMouseDragging) setMouseEndX(e.clientX); };
-  const handleMouseUp = () => {
-    setIsMouseDragging(false);
-    const dist = mouseStartX - mouseEndX;
-    if (dist > 50) goToNext();
-    else if (dist < -50) goToPrevious();
-    setMouseStartX(0); setMouseEndX(0);
-  };
-
   const getAreaColors = useCallback((areaId: string) => {
     const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
     return theme.areaColors[key];
@@ -750,6 +711,67 @@ export default function ReadingIntakeScreen({
         .hero-card-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
         .selected-card-glow { animation: selectedWhiteGlow 2.8s ease-in-out infinite; }
 
+        /* ── HERO ANIMATED OUTLINE ── */
+        @keyframes heroOutline {
+          0%   { box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 22px rgba(255,255,255,0.18), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.55); }
+          20%  { box-shadow: 0 0 0 2px rgba(94,234,212,0.70), 0 0 28px rgba(94,234,212,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(94,234,212,0.70); }
+          40%  { box-shadow: 0 0 0 2px rgba(129,140,248,0.70), 0 0 28px rgba(129,140,248,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(129,140,248,0.70); }
+          60%  { box-shadow: 0 0 0 2px rgba(167,139,250,0.70), 0 0 28px rgba(167,139,250,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(167,139,250,0.70); }
+          80%  { box-shadow: 0 0 0 2px rgba(45,212,191,0.70), 0 0 28px rgba(45,212,191,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(45,212,191,0.70); }
+          100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 22px rgba(255,255,255,0.18), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.55); }
+        }
+        .hero-outline { animation: heroOutline 8s ease-in-out infinite; border-width: 2px; }
+
+        /* ── ASK ANYTHING SHIMMER — synced to hero outline color cycle ── */
+        @keyframes textShimmerSweep {
+          0%, 72% { background-position: -200% center; }
+          80%     { background-position: 0% center; }
+          88%     { background-position: 200% center; }
+          100%    { background-position: 200% center; }
+        }
+        @keyframes shimmerColor {
+          0%   { --shimmer-color: rgba(255,255,255,0.9); }
+          20%  { --shimmer-color: rgba(94,234,212,0.9); }
+          40%  { --shimmer-color: rgba(129,140,248,0.9); }
+          60%  { --shimmer-color: rgba(167,139,250,0.9); }
+          80%  { --shimmer-color: rgba(45,212,191,0.9); }
+          100% { --shimmer-color: rgba(255,255,255,0.9); }
+        }
+        .ask-anything-text {
+          background: linear-gradient(
+            105deg,
+            transparent 30%,
+            rgba(255,255,255,0.85) 48%,
+            rgba(200,240,255,0.95) 50%,
+            rgba(255,255,255,0.85) 52%,
+            transparent 70%
+          );
+          background-size: 300% 100%;
+          background-clip: text;
+          -webkit-background-clip: text;
+          color: transparent;
+          -webkit-text-fill-color: transparent;
+          animation: textShimmerSweep 8s ease-in-out infinite;
+        }
+
+        /* ── TEAL OUTLINE BUTTON ── */
+        .teal-outline-btn {
+          background: transparent !important;
+          border: 2px solid rgba(94,234,212,0.6) !important;
+          color: rgba(94,234,212,0.95) !important;
+          box-shadow: 0 0 16px rgba(45,212,191,0.18), 0 18px 44px rgba(0,0,0,0.72) !important;
+          transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+        }
+        .teal-outline-btn:hover:not(:disabled) {
+          border-color: rgba(94,234,212,0.85) !important;
+          box-shadow: 0 0 24px rgba(45,212,191,0.32), 0 18px 44px rgba(0,0,0,0.72) !important;
+        }
+        .teal-outline-btn:disabled {
+          border-color: rgba(255,255,255,0.10) !important;
+          color: rgb(100,116,139) !important;
+          box-shadow: none !important;
+        }
+
         .gold-shimmer { position: relative; overflow: hidden; border-radius: 18px; border: 2px solid rgba(251,191,36,0.6); background: linear-gradient(180deg, rgba(120,84,18,0.45), rgba(50,34,10,0.25)); box-shadow: 0 0 60px rgba(251,191,36,0.25), 0 18px 36px rgba(0,0,0,0.65); cursor: pointer; }
         .gold-shimmer::before { content: ""; position: absolute; inset: -40%; background-image: linear-gradient(120deg, rgba(253,230,138,0) 0%, rgba(253,230,138,0.3) 35%, rgba(250,204,21,0.7) 50%, rgba(253,230,138,0.3) 65%, rgba(253,230,138,0) 100%); mix-blend-mode: screen; pointer-events: none; opacity: 1; transform: translateX(-60%); animation: jxlShimmer 3s linear infinite; z-index: 0; }
         .gold-shimmer > * { position: relative; z-index: 1; }
@@ -771,9 +793,6 @@ export default function ReadingIntakeScreen({
         .carousel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; cursor: pointer; transition: background 0.15s ease; width: 100%; text-align: left; background: transparent; border: none; color: inherit; font: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         .carousel-header:hover { background: rgba(255,255,255,0.02); }
         .carousel-content { border-top: 1px solid rgba(251,191,36,0.1); padding: 0; display: flex; flex-direction: column; }
-        .carousel-track { display: flex; height: 100%; transition: transform 0.4s ease; will-change: transform; cursor: grab; user-select: none; }
-        .carousel-track:active { cursor: grabbing; }
-        .carousel-card { min-width: 100%; padding: 0; height: 100%; }
         .locked-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,8,22,0.7); backdrop-filter: blur(8px); border-radius: 16px; z-index: 10; }
         .blur-content { filter: blur(6px); opacity: 0.4; pointer-events: none; user-select: none; }
 
@@ -833,14 +852,14 @@ export default function ReadingIntakeScreen({
         >
           {/* ── HERO ── */}
           <section className="mb-5 pt-1">
-            <div className="hero-card-shadow relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 py-7 text-center">
+            <div className="hero-outline relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/[0.04] px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white">
                     Real Astrological Predictions
                   </span>
                 </div>
-                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                <h1 className="ask-anything-text text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] sm:text-[48px]">
                   Ask Anything
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
@@ -1074,7 +1093,7 @@ export default function ReadingIntakeScreen({
                 type="button"
                 onClick={handleStartReading}
                 disabled={!canSubmit || isCreatingReading}
-                className="standard-shadow h-14 w-full rounded-2xl border border-indigo-400/30 bg-gradient-to-b from-indigo-500 to-indigo-700 text-white text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+                className="teal-outline-btn standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium"
               >
                 {buttonCopy}
               </Button>
@@ -1109,30 +1128,9 @@ export default function ReadingIntakeScreen({
                 {isCarouselOpen && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: "easeOut" }} className="overflow-hidden">
                     <div className="carousel-content">
-                      <div className="relative" style={{ padding: 0, overflow: "hidden", flex: 1 }}
-                        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-                        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
-                      >
-                        <div className="carousel-track" style={{ display: "flex", height: "100%", transform: `translateX(-${currentCardIndex * 100}%)`, transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease" }}>
-                          {Array.from({ length: TOTAL_CARDS }).map((_, index) => {
-                            const shouldBlur = !userStatus?.isSubscribed && index !== 0;
-                            return (
-                              <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0, height: "100%" }}>
-                                <div className="relative w-full h-full min-h-[220px] bg-black/20 p-6 flex flex-col">
-                                  <h3 className="text-sm font-semibold text-amber-200 mb-3">{CARD_TITLES[index]}</h3>
-                                  <div className={shouldBlur ? "blur-content flex-1" : "flex-1"}>{renderCardContent(index)}</div>
-                                  {shouldBlur && (
-                                    <div className="locked-overlay">
-                                      <Lock className="h-8 w-8 text-amber-300/60 mb-2" />
-                                      <p className="text-xs text-amber-200/60 font-medium">Premium Feature</p>
-                                      <p className="text-[10px] text-slate-400 mt-1">Subscribe to unlock</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                      <div className="relative w-full min-h-[220px] bg-black/20 p-6 flex flex-col">
+                        <h3 className="text-sm font-semibold text-amber-200 mb-3">{CARD_TITLES[0]}</h3>
+                        <div className="flex-1">{renderCardContent(0)}</div>
                       </div>
                       {!userStatus?.isSubscribed && (
                         <div className="p-4 pt-3 border-t border-amber-300/10">
