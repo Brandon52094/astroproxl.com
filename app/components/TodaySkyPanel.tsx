@@ -2,20 +2,23 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Sparkles, RotateCcw, Crown, ChevronRight } from "lucide-react";
+import { Sparkles, RotateCcw, Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 
 /**
- * TODAY'S SKY — v3
+ * TODAY'S SKY — v4
  *
- * - Weather card removed. "Next New/Full Moon" card removed — that info
- *   now lives in the hero, directly under the moon disc.
- * - Section order: HERO → Retrogrades | Time Lord → YOUR BIRTH CHART →
- *   TRANSITS (last on the page).
- * - Big 3 boxes are outlined in their sign's ELEMENT color (fire, earth,
- *   air, water) with a soft glow and a slow shine sweep — outline only,
- *   the box fill stays dark. Element name sits under the degree.
+ * Present-tense sky panel. The birth chart moved to its own sibling
+ * panel (BirthChartPanel); this one keeps what's happening NOW:
+ *
+ *   HERO → Sun season + Moon (with drawn moon disc + next event)
+ *   Retrogrades | Time Lord
+ *   Transits (full list, last on the page)
+ *
+ * Time Lord lives here (not on the birth chart page) because it's a
+ * timing pointer — "what's steering your year right now" — which is the
+ * same present tense as transits and the moon.
  *
  * This panel has NO overflow of its own — PagerContainer's wrapper
  * scrolls it. Keep it that way.
@@ -45,13 +48,6 @@ interface TransitPlanet {
   house?: number;
 }
 
-interface NatalPlacement {
-  name: string;
-  sign: string;
-  degree: string;
-  house?: number;
-}
-
 interface MoonPhaseData {
   phaseName: string;
   illuminationPercent: number;
@@ -78,31 +74,7 @@ const GLYPHS: Record<string, string> = {
 };
 
 const IMPORTANT_PLANETS = ["Moon", "Mercury", "Venus", "Mars", "North Node", "South Node"];
-const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const TRANSIT_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node", "South Node"];
-
-/* ── The four elements ─────────────────────────────────────────────── */
-
-type Element = "Fire" | "Earth" | "Air" | "Water";
-
-const SIGN_ELEMENTS: Record<string, Element> = {
-  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
-  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
-  Gemini: "Air", Libra: "Air", Aquarius: "Air",
-  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
-};
-
-const ELEMENT_COLORS: Record<Element, { border: string; glow: string; text: string }> = {
-  Fire:  { border: "rgba(249, 115, 22, 0.75)", glow: "rgba(239, 68, 68, 0.28)",  text: "#FDBA74" },
-  Earth: { border: "rgba(52, 211, 153, 0.65)", glow: "rgba(16, 185, 129, 0.24)", text: "#6EE7B7" },
-  Air:   { border: "rgba(186, 230, 253, 0.60)", glow: "rgba(125, 211, 252, 0.22)", text: "#BAE6FD" },
-  Water: { border: "rgba(96, 165, 250, 0.70)",  glow: "rgba(59, 130, 246, 0.26)",  text: "#93C5FD" },
-};
-
-function elementOf(sign?: string): Element | null {
-  if (!sign) return null;
-  return SIGN_ELEMENTS[sign] ?? null;
-}
 
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
@@ -110,7 +82,7 @@ function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
-/* ── Card chrome — matches Reading Intake surfaces ─────────────────── */
+/* ── Card chrome ───────────────────────────────────────────────────── */
 
 function SkyCard({
   icon: Icon,
@@ -184,7 +156,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const shouldReduceMotion = useReducedMotion();
 
   const [transits, setTransits] = useState<TransitPlanet[]>([]);
-  const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -199,17 +170,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       transits?: TransitPlanet[];
       moonPhase?: MoonPhaseData;
       profection?: ProfectionData;
-      tropical?: { planets?: NatalPlacement[] };
     };
-    
-    // ── DEBUG: Check if isRetrograde exists ──
-    console.log("[TodaySkyPanel] Full chart data:", data);
-    console.log("[TodaySkyPanel] Transits array:", data.transits);
-    console.log("[TodaySkyPanel] Mercury:", data.transits?.find(p => p.name === "Mercury"));
-    console.log("[TodaySkyPanel] Mercury retrograde?", data.transits?.find(p => p.name === "Mercury")?.isRetrograde);
-    console.log("[TodaySkyPanel] Venus:", data.transits?.find(p => p.name === "Venus"));
-    console.log("[TodaySkyPanel] Venus retrograde?", data.transits?.find(p => p.name === "Venus")?.isRetrograde);
-    
     if (data.transits) {
       setTransits(
         [...data.transits].sort(
@@ -219,16 +180,10 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
     }
     if (data.moonPhase) setMoonPhase(data.moonPhase);
     if (data.profection) setProfection(data.profection);
-    const planets = data.tropical?.planets ?? [];
-    setNatal(
-      planets
-        .filter((p) => NATAL_ORDER.includes(p.name))
-        .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
-    );
     setIsLoading(false);
   }, []);
 
-  // Same star recipe as ReadingIntakeScreen — 68 stars, same seeds.
+  // Same star recipe across all panels — continuous sky when you swipe.
   const stars = useMemo(
     () =>
       Array.from({ length: 68 }).map((_, i) => ({
@@ -245,10 +200,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const sunNow = useMemo(() => transits.find((p) => p.name === "Sun"), [transits]);
   const moonNow = useMemo(() => transits.find((p) => p.name === "Moon"), [transits]);
   const retrogrades = useMemo(() => transits.filter((p) => p.isRetrograde === true), [transits]);
-  const bigThree = useMemo(() => {
-    const find = (n: string) => natal.find((p) => p.name === n);
-    return { sun: find("Sun"), moon: find("Moon"), rising: find("Ascendant") };
-  }, [natal]);
 
   const hasProfection =
     !!profection &&
@@ -291,41 +242,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
-      <style jsx>{`
-        /* Slow shine sweep across the Big 3 element boxes */
-        @keyframes elementShine {
-          0% { transform: translateX(-140%) skewX(-18deg); }
-          60% { transform: translateX(240%) skewX(-18deg); }
-          100% { transform: translateX(240%) skewX(-18deg); }
-        }
-        .element-box { position: relative; overflow: hidden; isolation: isolate; }
-        .element-box::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          width: 45%;
-          background: linear-gradient(
-            105deg,
-            transparent 0%,
-            rgba(255, 255, 255, 0.09) 45%,
-            rgba(255, 255, 255, 0.16) 50%,
-            rgba(255, 255, 255, 0.09) 55%,
-            transparent 100%
-          );
-          transform: translateX(-140%) skewX(-18deg);
-          animation: elementShine 4.6s ease-in-out infinite;
-          pointer-events: none;
-          z-index: 1;
-        }
-        .element-box > * { position: relative; z-index: 2; }
-
-        @media (prefers-reduced-motion: reduce) {
-          .element-box::after { animation: none !important; opacity: 0; }
-        }
-      `}</style>
-
       {/* ── Starfield ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         {stars.map((star) => (
@@ -389,7 +305,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                 <div style={{ filter: "drop-shadow(0 0 26px rgba(226,223,240,0.16))" }}>
                   <MoonDisc illumination={moonPhase.illuminationPercent} waxing={waxing} />
                 </div>
-                {/* Next event — surplus info, right under the moon */}
                 <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-500">
                   {moonPhase.nextEventName}
                 </p>
@@ -400,7 +315,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             )}
           </div>
 
-          {/* Phase stats — borderless, right under the hero */}
           {moonPhase && (
             <div className="mt-5 flex items-center justify-between border-t border-white/[0.06] pt-3">
               <div>
@@ -456,80 +370,12 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             </SkyCard>
           </div>
 
-          {/* ── FULL: Your birth chart — Big 3 outlined in their element ── */}
-          <SkyCard icon={Sparkles} label="Your Birth Chart">
-            <div className="mb-4 grid grid-cols-3 gap-2">
-              {(
-                [
-                  { label: "Sun", p: bigThree.sun },
-                  { label: "Moon", p: bigThree.moon },
-                  { label: "Rising", p: bigThree.rising },
-                ] as const
-              ).map(({ label, p }) => {
-                const element = elementOf(p?.sign);
-                const colors = element ? ELEMENT_COLORS[element] : null;
-                return (
-                  <div
-                    key={label}
-                    className="element-box rounded-2xl border bg-black/20 px-3 py-3 text-center"
-                    style={
-                      colors
-                        ? {
-                            borderColor: colors.border,
-                            boxShadow: `0 0 22px ${colors.glow}, inset 0 0 14px ${colors.glow}`,
-                          }
-                        : { borderColor: "rgba(255,255,255,0.10)" }
-                    }
-                  >
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                    <p className="mt-1 text-[15px] font-medium text-white">{p?.sign ?? "—"}</p>
-                    <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
-                    {element && colors && (
-                      <p
-                        className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em]"
-                        style={{ color: colors.text }}
-                      >
-                        {element}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="divide-y divide-white/5">
-              {natal
-                .filter((p) => !["Sun", "Moon", "Ascendant"].includes(p.name))
-                .map((planet) => (
-                  <div key={planet.name} className="flex items-center justify-between py-2.5 text-[13px]">
-                    <span className="flex items-center gap-2 text-slate-300">
-                      <span className="w-6 text-center text-base text-slate-500">
-                        {GLYPHS[planet.name] ?? "•"}
-                      </span>
-                      {planet.name}
-                    </span>
-                    <span className="text-slate-200 tabular-nums">
-                      {planet.sign} {planet.degree}
-                      {planet.house ? (
-                        <span className="ml-1 text-[11px] text-slate-500">· {ordinal(planet.house)}</span>
-                      ) : null}
-                    </span>
-                  </div>
-                ))}
-              {natal.length === 0 && (
-                <p className="py-4 text-center text-[12px] text-slate-500">
-                  Enter your birth details to see your placements here.
-                </p>
-              )}
-            </div>
-          </SkyCard>
-
           {/* ── FULL: Transits — last on the page ── */}
           <SkyCard icon={Sparkles} label="Transits">
             <div className="space-y-3">
               {transits.map((planet, index) => {
                 const important = IMPORTANT_PLANETS.includes(planet.name);
                 const isRetrograde = planet.isRetrograde === true;
-                
                 return (
                   <div
                     key={planet.name}
@@ -583,7 +429,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           </SkyCard>
 
           <p className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
-            Swipe right for readings <ChevronRight className="h-3 w-3" />
+            <ChevronLeft className="h-3 w-3" /> Your Birth Chart
           </p>
         </motion.div>
       </div>
