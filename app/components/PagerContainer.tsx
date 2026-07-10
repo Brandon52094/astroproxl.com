@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
+import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
 import { migrateChartV2 } from "@/lib/chartStore";
 
@@ -18,16 +19,19 @@ interface UserStatus {
 }
 
 /**
- * PAGER — two panels:
+ * PAGER — three panels:
  *
- *   [0: Reading Intake (main)]  ⇄  [1: Today's Sky]
+ *   [0: Reading Intake (main)]  ⇄  [1: Your Birth Chart]  ⇄  [2: Today's Sky]
  *
- * Swipe left from the main screen to reach Today's Sky; swipe right to return.
+ * Swipe left from the main screen to reach your birth chart (who you are),
+ * then again to Today's Sky (what the sky is doing now). Swipe right to
+ * come back. The loop wraps: from Today's Sky one more left returns to the
+ * main screen.
  *
  * The infinite-loop clone technique: a clone of the last panel sits before
  * the first, and a clone of the first sits after the last. When a transition
  * lands on a clone we disable the transition for one frame and snap to the
- * matching real panel.
+ * matching real panel, so the wraparound is seamless in both directions.
  */
 
 const DIRECTION_LOCK_THRESHOLD = 12;
@@ -37,12 +41,12 @@ const HORIZONTAL_DOMINANCE_RATIO = 1.4;
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 export default function PagerContainer() {
-  const totalPanels = 2; // real panels: Reading Intake, Today's Sky
+  const totalPanels = 3; // real panels: Reading Intake, Birth Chart, Today's Sky
 
   // extendedIndex lives in [0, totalPanels + 1]:
-  //   0               -> clone of LAST real panel
-  //   1..totalPanels  -> real panels (1 = real index 0, ...)
-  //   totalPanels + 1 -> clone of FIRST real panel
+  //   0               -> clone of LAST real panel (Today's Sky)
+  //   1..totalPanels  -> real panels (1 = Reading Intake, 2 = Birth Chart, 3 = Today's Sky)
+  //   totalPanels + 1 -> clone of FIRST real panel (Reading Intake)
   const [extendedIndex, setExtendedIndex] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [suppressTransition, setSuppressTransition] = useState(false);
@@ -52,7 +56,7 @@ export default function PagerContainer() {
   // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
     // Silent, guarded, one-time — heals stale charts missing retrograde data.
-    // Fires before any panel reads the chart, so Today's Sky shows correct
+    // Fires before any panel reads the chart, so the panels show correct
     // retrogrades even on the first post-deploy load. Never throws.
     migrateChartV2();
 
@@ -236,7 +240,12 @@ export default function PagerContainer() {
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
 
-          {/* ── PANEL 1: Today's Sky ── */}
+          {/* ── PANEL 1: Your Birth Chart ── */}
+          <div className="min-w-full h-full overflow-y-auto">
+            <BirthChartPanel userStatus={userStatus} />
+          </div>
+
+          {/* ── PANEL 2: Today's Sky ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <TodaySkyPanel userStatus={userStatus} />
           </div>
