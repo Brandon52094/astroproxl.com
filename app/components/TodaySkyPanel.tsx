@@ -201,6 +201,15 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       profection?: ProfectionData;
       tropical?: { planets?: NatalPlacement[] };
     };
+    
+    // ── DEBUG: Check if isRetrograde exists ──
+    console.log("[TodaySkyPanel] Full chart data:", data);
+    console.log("[TodaySkyPanel] Transits array:", data.transits);
+    console.log("[TodaySkyPanel] Mercury:", data.transits?.find(p => p.name === "Mercury"));
+    console.log("[TodaySkyPanel] Mercury retrograde?", data.transits?.find(p => p.name === "Mercury")?.isRetrograde);
+    console.log("[TodaySkyPanel] Venus:", data.transits?.find(p => p.name === "Venus"));
+    console.log("[TodaySkyPanel] Venus retrograde?", data.transits?.find(p => p.name === "Venus")?.isRetrograde);
+    
     if (data.transits) {
       setTransits(
         [...data.transits].sort(
@@ -235,7 +244,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
   const sunNow = useMemo(() => transits.find((p) => p.name === "Sun"), [transits]);
   const moonNow = useMemo(() => transits.find((p) => p.name === "Moon"), [transits]);
-  const retrogrades = useMemo(() => transits.filter((p) => p.isRetrograde), [transits]);
+  const retrogrades = useMemo(() => transits.filter((p) => p.isRetrograde === true), [transits]);
   const bigThree = useMemo(() => {
     const find = (n: string) => natal.find((p) => p.name === n);
     return { sun: find("Sun"), moon: find("Moon"), rising: find("Ascendant") };
@@ -519,6 +528,8 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             <div className="space-y-3">
               {transits.map((planet, index) => {
                 const important = IMPORTANT_PLANETS.includes(planet.name);
+                const isRetrograde = planet.isRetrograde === true;
+                
                 return (
                   <div
                     key={planet.name}
@@ -558,7 +569,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                       )}
                     >
                       {planet.degree}
-                      {planet.isRetrograde && <span className="ml-1">℞</span>}
+                      {isRetrograde && <span className="ml-1 text-amber-300/80">℞</span>}
                     </span>
                   </div>
                 );
