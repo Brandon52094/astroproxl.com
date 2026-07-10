@@ -227,7 +227,7 @@ function calculatePlanets(
     { id: swisseph.SE_PLUTO,     name: "Pluto" },
     { id: swisseph.SE_TRUE_NODE, name: "North Node" },
   ];
-  const iflag = ayanamsa !== undefined ? (4 | 65536) : 4;
+  const iflag = ayanamsa !== undefined ? (4 | 65536 | 256) : (4 | 256);
   if (ayanamsa !== undefined) swisseph.swe_set_sid_mode(ayanamsa, 0, 0);
   const houses = swisseph.swe_houses(jd, lat, lng, "W");
   const ascLongitude = houses.ascendant;
@@ -410,7 +410,7 @@ function calculatePlanetaryStations(natalRaw: ReturnType<typeof calculatePlanets
       const checkDate = new Date(today);
       checkDate.setDate(today.getDate() + dayOffset);
       const jd = toJulianDay(checkDate.toISOString().slice(0, 10), "12:00", 0);
-      const result = swisseph.swe_calc_ut(jd, planet.id, 4);
+      const result = swisseph.swe_calc_ut(jd, planet.id, 4 | 256);
       const speed = result.longitudeSpeed;
       const longitude = result.longitude;
       if (prevSpeed !== null && ((prevSpeed > 0 && speed <= 0) || (prevSpeed < 0 && speed >= 0))) {

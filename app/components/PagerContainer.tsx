@@ -3,6 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import TodaySkyPanel from "./TodaySkyPanel";
+import { migrateChartV2 } from "@/lib/chartStore";
 
 interface UserStatus {
   firstReadingUsed: boolean;
@@ -17,18 +18,16 @@ interface UserStatus {
 }
 
 /**
- * PAGER — now just two panels:
+ * PAGER — two panels:
  *
  *   [0: Reading Intake (main)]  ⇄  [1: Today's Sky]
  *
- * Today's Sky merges the old Birth Chart, Daily Transits, and
- * Moon & Cycles panels into one weather-app-style vertical scroll.
- * Swipe left from the main screen to reach it; swipe right to return.
+ * Swipe left from the main screen to reach Today's Sky; swipe right to return.
  *
- * The infinite-loop clone technique is unchanged from before: a clone
- * of the last panel sits before the first, and a clone of the first
- * sits after the last. When a transition lands on a clone we disable
- * the transition for one frame and snap to the matching real panel.
+ * The infinite-loop clone technique: a clone of the last panel sits before
+ * the first, and a clone of the first sits after the last. When a transition
+ * lands on a clone we disable the transition for one frame and snap to the
+ * matching real panel.
  */
 
 const DIRECTION_LOCK_THRESHOLD = 12;
@@ -50,8 +49,13 @@ export default function PagerContainer() {
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ── Fetch user status ────────────────────────────────────────────────
+  // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
+    // Silent, guarded, one-time — heals stale charts missing retrograde data.
+    // Fires before any panel reads the chart, so Today's Sky shows correct
+    // retrogrades even on the first post-deploy load. Never throws.
+    migrateChartV2();
+
     const fetchStatus = async () => {
       try {
         const response = await fetch("/api/user/credits");
