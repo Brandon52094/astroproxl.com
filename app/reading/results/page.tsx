@@ -139,30 +139,30 @@ function ResultsPageInner() {
     ).join("\n\n");
 
     try {
-       const response = await fetch("/api/readings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            topic: intake.topic,
-            question: intake.question,
-            timeframeType: intake.timeframeType,
-            timeframeValue: intake.timeframeValue,
-            birthDate: chart.birthDate,
-            birthTime: chart.birthTime,
-            birthPlace: chart.birthPlace,
-            tropical: chart.chartData.tropical,
-            sidereal: chart.chartData.sidereal,
-            transits: chart.chartData.transits,
-            transitAspects: chart.chartData.transitAspects, 
-            profection: chart.chartData.profection,
-            progressions: chart.chartData.progressions,
-            solarArcs: chart.chartData.solarArcs,
-            upcomingTrigger: chart.chartData.upcomingTrigger,
-            planetaryStations: chart.chartData.planetaryStations,
-            solarReturn: chart.chartData.solarReturn,
-            moonPhase: chart.chartData.moonPhase,            
-          }),
-        });
+      const response = await fetch("/api/readings/followup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          originalReading: storedReading.pages[0]?.content ?? "",
+          originalTitle: storedReading.pages[0]?.title ?? "",
+          topic: storedReading.topic,
+          // ── Full chart payload ──
+          tropical: chart.chartData.tropical,
+          sidereal: chart.chartData.sidereal,
+          transits: chart.chartData.transits,
+          transitAspects: chart.chartData.transitAspects,
+          profection: chart.chartData.profection,
+          progressions: chart.chartData.progressions,
+          solarArcs: chart.chartData.solarArcs,
+          upcomingTrigger: chart.chartData.upcomingTrigger,
+          planetaryStations: chart.chartData.planetaryStations,
+          solarReturn: chart.chartData.solarReturn,
+          moonPhase: chart.chartData.moonPhase,   
+
+          conversationHistory: conversationHistory || undefined,
+        }),
+      });
 
       const data = await response.json();
       if (!response.ok || !data.content) throw new Error(data.error ?? "Failed to generate response.");

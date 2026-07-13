@@ -1,6 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
+import type { TransitAspect } from "@/lib/transitAspects";
 
 interface PlanetPlacement {
   name: string;
@@ -73,6 +74,15 @@ interface SolarReturnData {
   timeLordSRHouse: number | null;
 }
 
+interface MoonPhaseData {
+  phaseName: string;
+  illuminationPercent: number;
+  nextEventName: "New Moon" | "Full Moon";
+  daysUntilNextEvent: number;
+  moonSign: string;
+  moonDegree: string;
+}
+
 interface FollowupRequestBody {
   question: string;
   originalReading: string;
@@ -81,12 +91,14 @@ interface FollowupRequestBody {
   tropical: { planets: PlanetPlacement[]; aspects: Aspect[] };
   sidereal?: { planets: PlanetPlacement[] };
   transits: TransitPlanet[];
+  transitAspects?: TransitAspect[];
   profection: ProfectionData;
   progressions?: ProgressedPlanet[];
   solarArcs?: SolarArcPlanet[];
   upcomingTrigger?: UpcomingTrigger;
   planetaryStations?: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
+  moonPhase?: MoonPhaseData;
   conversationHistory?: string;
 }
 
@@ -112,6 +124,42 @@ function fmtSolarArc(p: SolarArcPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree;
 }
 
+/**
+ * Same calculated-aspect block as the main reading. The follow-up is exactly
+ * where people push for specifics — "when?", "are you sure?", "what about
+ * next week?" — so it is the LAST place we want the model estimating orbs
+ * by eye. It gets the same finished answers the main reading got.
+ */
+function fmtTransitAspects(aspects: TransitAspect[] | undefined): string {
+  if (!aspects || aspects.length === 0) {
+    return "TRANSIT-TO-NATAL ASPECTS: none within orb right now. Answer from progressions, stations, and the profection year instead.";
+  }
+
+  const lines = [
+    "TRANSIT-TO-NATAL ASPECTS — CALCULATED, EXACT, SORTED TIGHTEST FIRST",
+    "These are given to you. Do NOT compute aspects yourself. Do NOT use any aspect not on this list.",
+    "If it is not here, it is not happening, and you may not mention it.",
+    "",
+    "EXACT = under 1° orb — firing right now.",
+    "LIVE = under 3° orb — active, lead with these.",
+    "BACKGROUND = 3-6° orb — context only, never a date anchor.",
+    "APPLYING = still tightening, the event is building. SEPARATING = the peak has passed.",
+    "",
+  ];
+
+  for (const a of aspects) {
+    const motion = a.isApplying ? "APPLYING" : "SEPARATING";
+    const rx = a.isRetrograde ? " Rx" : "";
+    lines.push(
+      `[${a.band.toUpperCase()}] Transit ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
+      `${a.aspectType} natal ${a.natalPlanet} ${a.natalSign} ${a.natalDegree} ` +
+      `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}`
+    );
+  }
+
+  return lines.join(NL);
+}
+
 function buildFollowupPrompt(body: FollowupRequestBody): string {
   const {
     question,
@@ -121,12 +169,14 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     tropical,
     sidereal,
     transits,
+    transitAspects,
     profection,
     progressions,
     solarArcs,
     upcomingTrigger,
     planetaryStations,
     solarReturn,
+    moonPhase,
     conversationHistory,
   } = body;
 
@@ -149,21 +199,49 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
 
   const transitList = (transits || []).map(fmtTransit).join(NL);
 
+  const transitAspectBlock = fmtTransitAspects(transitAspects);
+
   const progressionsBlock =
     progressions && progressions.length > 0
-      ? NL + "SECONDARY PROGRESSIONS (Current):" + NL + progressions.map(fmtProgression).join(NL) + NL
+      ? NL +
+        [
+          "SECONDARY PROGRESSIONS (current — inner development):",
+          ...progressions.map(fmtProgression),
+          "ROLE: The transit is the event; the progression is the person it is happening to. Use these to",
+          "explain WHY something is landing the way it is.",
+          "",
+        ].join(NL)
       : "";
 
   const solarArcsBlock =
     solarArcs && solarArcs.length > 0
-      ? NL + "SOLAR ARC DIRECTIONS (Current):" + NL + solarArcs.map(fmtSolarArc).join(NL) + NL
+      ? NL +
+        [
+          "SOLAR ARC DIRECTIONS (current — long-arc structural timing):",
+          ...solarArcs.map(fmtSolarArc),
+          "ROLE: Only meaningful within 1° of a natal planet or angle. Then it marks a multi-year structural",
+          "shift underneath the moment. Otherwise ignore entirely.",
+          "",
+        ].join(NL)
       : "";
 
   const upcomingTriggerBlock = upcomingTrigger
     ? NL +
-      "NEXT EXACT ASPECT (Ephemeris-Calculated — primary timing anchor):" + NL +
+      "NEXT EXACT ASPECT (ephemeris-calculated — primary timing anchor):" + NL +
       `${upcomingTrigger.transitPlanet} ${upcomingTrigger.aspect} natal ${upcomingTrigger.natalPlanet} — exact within 1° on ${upcomingTrigger.date}` +
       NL
+    : "";
+
+  const moonPhaseBlock = moonPhase
+    ? NL +
+      [
+        "MOON PHASE (timing texture — shapes WHEN, never what):",
+        `${moonPhase.phaseName}, ${moonPhase.illuminationPercent}% illuminated. Moon in ${moonPhase.moonSign}.`,
+        `Next ${moonPhase.nextEventName} in ${moonPhase.daysUntilNextEvent} days.`,
+        "ROLE: Waxing supports initiating and building. Waning supports closing, releasing, and cutting.",
+        "Use to choose which window to push toward — never as a prediction on its own.",
+        "",
+      ].join(NL)
     : "";
 
   const stationsBlock =
@@ -171,7 +249,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
       ? NL +
         [
           "PLANETARY STATIONS (next 60 days — crystallization points):",
-          "Stations with natal hits are PRIMARY timing anchors.",
+          "ROLE: Stations with natal hits are PRIMARY timing anchors and outrank ordinary transits.",
           ...planetaryStations.map((s) => {
             const hit = s.natalPlanetHit
               ? ` — stations within ${s.orbDegrees}° of natal ${s.natalPlanetHit} (House ${s.natalHouse})`
@@ -192,7 +270,8 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
           ? `Time Lord (${profection.timeLord}) falls in SR ${solarReturn.timeLordInSR}.`
           : "",
         "SR Planets: " + solarReturn.planets.map((p) => `${p.name} ${p.sign} H${p.house}`).join(", "),
-        "Use Solar Return to confirm or downgrade major event claims.",
+        "ROLE — FILTER RULE: A transit must be reflected in Solar Return themes to trigger a major external",
+        "event. Use SR to CONFIRM or DOWNGRADE. No SR support means the shift is internal, not an event.",
         "",
       ]
         .filter(Boolean)
@@ -201,7 +280,15 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
 
   const siderealBlock =
     sidereal?.planets?.length
-      ? NL + "SIDEREAL PLACEMENTS:" + NL + sidereal.planets.map(fmtPlanet).join(NL) + NL
+      ? NL +
+        [
+          "SIDEREAL PLACEMENTS:",
+          ...sidereal.planets.map(fmtPlanet),
+          "ROLE — CONFIRMATION FILTER: A second opinion, not a second reading. Agrees with tropical → say it",
+          "with more force. Disagrees → soften the certainty of that specific claim. NEVER mention sidereal,",
+          "tropical, or any system name in the prose. It shapes confidence; it is not content.",
+          "",
+        ].join(NL)
       : "";
 
   const voiceCalibrationBlock = buildVoiceCalibrationBlock(
@@ -213,7 +300,28 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     : "";
 
   return [
-    "CRITICAL REAL-ESTATE RULE: Mobile screen. Short, heavy sentences. No fluff. No recycled wording. Answer the latest question only, but answer it from the chart.",
+    "You are answering a follow-up from a real person who is paying for clarity about something that matters",
+    "to them. They may know nothing about astrology. Write so they understand every sentence.",
+    "",
+    "CRITICAL REAL-ESTATE RULE: Mobile screen. Short, heavy sentences. No fluff. No recycled wording.",
+    "Answer the latest question only — but answer it from the chart.",
+    "",
+    "═══════════════════════════════════════════",
+    "THE LANGUAGE RULE — THIS GOVERNS EVERYTHING",
+    "═══════════════════════════════════════════",
+    "The prose is for a human being. This is a conversation, not a technical readout.",
+    "",
+    "DO NOT WRITE: degrees, minutes, orb numbers, or the words 'orb', 'anaretic', 'applying', 'separating',",
+    "'ingress', 'cusp'. Never name sidereal, tropical, solar arc, or any system.",
+    "",
+    "DO WRITE: the planet, the aspect, and the house TRANSLATED into what it governs.",
+    "  Not: 'Mercury at 24°35' Cancer trine natal North Node at 23°47' Scorpio, 1° orb.'",
+    "  But: 'Mercury is exactly trine your North Node right now, in the part of your chart that rules courts.'",
+    "Houses by MEANING, not number. Plain consequence. What they will actually feel, face, or decide.",
+    "",
+    "This loses NO precision. Every claim still rests on an exact calculated aspect. Precision lives in the",
+    "sharpness of the consequence — 'you will feel it Thursday and here is exactly what it looks like' —",
+    "never in decimal places.",
     "",
     "═══════════════════════════════════════════",
     "QUESTION + CONTEXT",
@@ -221,7 +329,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     `TOPIC: ${topicLabel}`,
     `ORIGINAL TITLE: ${originalTitle}`,
     "",
-    "ORIGINAL READING:",
+    "ORIGINAL READING (context only — NOT your evidence):",
     originalReading,
     "",
     conversationBlock,
@@ -229,19 +337,24 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     `"${question}"`,
     "",
     "═══════════════════════════════════════════",
-    "EVIDENCE — USE THIS, NOT VAGUE MEMORY",
+    "EVIDENCE — THE MATH IS DONE FOR YOU",
     "═══════════════════════════════════════════",
     voiceCalibrationBlock,
+    "",
+    transitAspectBlock,
+    "",
     upcomingTriggerBlock,
     stationsBlock,
+    moonPhaseBlock,
     solarReturnBlock,
     "NATAL PLACEMENTS:",
     planetList,
     "",
-    "NATAL ASPECTS (tightest first — priority order):",
+    "NATAL ASPECTS (tightest first — the fixed wiring they were born with):",
     aspectList || "None provided.",
+    "ROLE: These never change. They are the pattern the transits are ACTIVATING.",
     siderealBlock,
-    "CURRENT TRANSITS:",
+    "CURRENT TRANSIT POSITIONS:",
     transitList || "None provided.",
     "",
     "ANNUAL PROFECTION:",
@@ -249,28 +362,35 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
       (profection.timeLordNatalSign
         ? ` (Natal: ${profection.timeLordNatalSign}${profection.timeLordNatalHouse ? `, House ${profection.timeLordNatalHouse}` : ""})`
         : ""),
+    "ROLE: Any transit involving the Time Lord is AMPLIFIED — it carries more weight this year than it",
+    "otherwise would. If your answer rests on a Time Lord transit, that is the strongest answer available.",
     progressionsBlock,
     solarArcsBlock,
     "",
     "═══════════════════════════════════════════",
     "FOLLOW-UP RULES",
     "═══════════════════════════════════════════",
-    "You are not writing a new full reading. You are answering one follow-up question using the chart data above.",
-    "Use the ORIGINAL READING only as prior context. Do not treat it as your evidence. Use the chart blocks above as evidence.",
-    "If they ask WHY, identify the tightest natal aspect or current transit driving it.",
-    "If they ask WHEN, answer from current transits, the upcoming trigger, stations, progressions, solar arcs, and solar return confirmation.",
-    "If they ask WHAT TO DO, give one concrete action tied to the nearest valid timing window.",
-    "If they ask about a specific planet, house, aspect, or date, stay on that thread and go deeper there only.",
-    "Name the exact planet, sign, degree, house, and orb when available.",
-    "Tight orbs lead. Wide orbs are background only. Ignore wide aspects over 6°.",
-    "Transits within 2° are urgent. Beyond 5° are not valid timing anchors.",
-    "No hedging. No generic spiritual filler. No copy-pasting the original reading.",
-    "You in every sentence. No passive voice.",
+    "You are not writing a new full reading. You are answering one question using the chart data above.",
+    "The ORIGINAL READING is prior context only. The chart blocks are your evidence.",
+    "",
+    "If they ask WHY → identify the tightest natal aspect or calculated transit driving it.",
+    "If they ask WHEN → answer from the calculated aspects, the next exact aspect, stations, and moon phase.",
+    "If they ask WHAT TO DO → one concrete action tied to the nearest valid window.",
+    "If they ask about a specific planet, house, or date → stay on that thread and go deeper there only.",
+    "",
+    "ONLY calculated aspects. Never invent one. Never manufacture a date.",
+    "An APPLYING aspect is building — speak of it as coming. A SEPARATING one has peaked — speak of it as passing.",
+    "No degrees, no orbs, no jargon. No hedging. No generic spiritual filler. No copy-pasting the original reading.",
+    "'You' in every sentence. No passive voice. Outcomes as facts.",
     "3-5 compact paragraphs maximum. No headers.",
     "End with one sentence that either closes the loop or opens the next natural question.",
     "",
+    "VOICE: The calibration above governs DELIVERY, never content. If a voice instruction calls for precision",
+    "or exactness, deliver it through SHARPNESS OF CONSEQUENCE — never by reciting degrees. The LANGUAGE RULE",
+    "overrides any voice instruction that would pull you toward jargon.",
+    "",
     "Return ONLY a valid JSON object:",
-    '{ "title": "A sharp 4-6 word title specific to their question", "content": "The deeper chart-grounded response as flowing prose." }',
+    '{ "title": "A sharp 4-6 word title specific to their question", "content": "The deeper chart-grounded response as flowing prose, in plain human language." }',
   ].join(NL);
 }
 
@@ -332,7 +452,16 @@ export async function POST(request: NextRequest) {
         model: "claude-sonnet-4-6",
         max_tokens: 1400,
         system:
-          "You are a precision astrologer answering a follow-up question after an initial reading. You must answer from the supplied chart data, not from vague memory of the original reading. The original reading is context only. The chart data is evidence. Speak directly to the person as 'you'. State outcomes as facts. Name specific planets, signs, degrees, houses, and timing windows when available. Keep it tight, mobile-optimized, and specific. Output ONLY raw valid JSON — no markdown, no code fences, no preamble.",
+          "You are a precision astrologer answering a follow-up question after an initial reading, for a real " +
+          "person who may know nothing about astrology. Write so they understand every sentence. " +
+          "Answer from the supplied chart data, not from vague memory of the original reading — the original " +
+          "reading is context only; the chart data is evidence. " +
+          "The transit aspects are calculated and given to you — never compute or invent one. " +
+          "CRITICAL: no degrees, no orbs, and no astrological jargon in your prose. This is a conversation, not " +
+          "a technical readout. You lose no precision — precision lives in the sharpness of the consequence, " +
+          "not in decimal places. " +
+          "Speak directly to the person as 'you'. State outcomes as facts. Keep it tight and mobile-optimized. " +
+          "Output ONLY raw valid JSON — no markdown, no code fences, no preamble.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
