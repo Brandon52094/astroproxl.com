@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { NormalizedChart } from "@/lib/schema/charts";
+import { calculateTransitAspects, type TransitAspect } from "@/lib/transitAspects";
 
 export interface ChartCalculateRequest {
   birthDate: string;
@@ -70,7 +71,6 @@ export interface SolarReturnData {
   timeLordSRHouse: number | null;
 }
 
-// ── NEW: Moon Phase data ──────────────────────────────────────────────────────
 export interface MoonPhaseData {
   phaseName: string;           // e.g. "Waxing Gibbous"
   illuminationPercent: number; // 0-100
@@ -85,13 +85,14 @@ export interface ChartCalculateResponse {
   tropical: NormalizedChart;
   sidereal: NormalizedChart;
   transits: TransitPlanet[];
+  transitAspects: TransitAspect[];   // NEW — transit-to-natal, calculated not inferred
   profection: ProfectionData;
   progressions: ProgressedPlanet[];
   solarArcs: SolarArcPlanet[];
   upcomingTrigger?: UpcomingTriggerData;
   planetaryStations: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
-  moonPhase?: MoonPhaseData;   // NEW
+  moonPhase?: MoonPhaseData;
   error?: string;
 }
 
@@ -204,10 +205,19 @@ function longitudeToSignDegree(longitude: number): { sign: string; degree: strin
   return { sign: SIGNS[signIndex], degree: `${degrees}°${String(minutes).padStart(2, "0")}'` };
 }
 
+/**
+ * CHANGED: now also returns longitudeSpeed on each planet.
+ *
+ * Speed was already being computed (that's what SEFLG_SPEED / the 256 flag
+ * buys us) but it was being discarded after the isRetrograde check. We need
+ * the raw value to determine whether a transit aspect is APPLYING (still
+ * tightening — the event is building) or SEPARATING (peak has passed).
+ * A model cannot infer that from position alone; code can, exactly.
+ */
 function calculatePlanets(
   jd: number, lat: number, lng: number, houseSystem: string, ayanamsa?: number
 ): {
-  planets: Array<{ name: string; longitude: number; isRetrograde: boolean }>;
+  planets: Array<{ name: string; longitude: number; isRetrograde: boolean; longitudeSpeed: number }>;
   ascLongitude: number;
   mcLongitude: number;
   houseCusps: number[];
@@ -227,6 +237,7 @@ function calculatePlanets(
     { id: swisseph.SE_PLUTO,     name: "Pluto" },
     { id: swisseph.SE_TRUE_NODE, name: "North Node" },
   ];
+  // 4 = SEFLG_SWIEPH, 256 = SEFLG_SPEED, 65536 = SEFLG_SIDEREAL
   const iflag = ayanamsa !== undefined ? (4 | 65536 | 256) : (4 | 256);
   if (ayanamsa !== undefined) swisseph.swe_set_sid_mode(ayanamsa, 0, 0);
   const houses = swisseph.swe_houses(jd, lat, lng, "W");
@@ -235,7 +246,12 @@ function calculatePlanets(
   const houseCusps = houses.house;
   const planets = PLANETS.map(({ id, name }) => {
     const result = swisseph.swe_calc_ut(jd, id, iflag);
-    return { name, longitude: result.longitude, isRetrograde: result.longitudeSpeed < 0 };
+    return {
+      name,
+      longitude: result.longitude,
+      isRetrograde: result.longitudeSpeed < 0,
+      longitudeSpeed: result.longitudeSpeed,
+    };
   });
   return { planets, ascLongitude, mcLongitude, houseCusps };
 }
@@ -309,6 +325,16 @@ function calculateProfection(
   return { age, profectionYear, activatedHouse, activatedSign, timeLord, timeLordNatalSign: timeLordNatal?.sign ?? "", timeLordNatalHouse: timeLordNatal?.house ?? 0 };
 }
 
+/**
+ * CHANGED: now includes the PROGRESSED ANGLES (Ascendant and Midheaven).
+ *
+ * These were being calculated all along — calculatePlanets returns
+ * ascLongitude and mcLongitude — but the function was only mapping over
+ * .planets and dropping them. The progressed Ascendant changing sign is one
+ * of the strongest "your life is visibly different now" markers in
+ * predictive astrology, and the progressed MC does the same for career.
+ * Solar arcs already included their angles; progressions just got missed.
+ */
 function calculateProgressions(jdBirth: number, birthDate: string, lat: number, lng: number): ProgressedPlanet[] {
   const [birthYear, birthMonth, birthDay] = birthDate.split("-").map(Number);
   const now = new Date();
@@ -320,12 +346,21 @@ function calculateProgressions(jdBirth: number, birthDate: string, lat: number, 
   const jdProgressed = jdBirth + fractionalAge;
   const raw = calculatePlanets(jdProgressed, lat, lng, "W");
   const PLANET_NAMES = ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","North Node"];
-  return raw.planets
+
+  const progressed: ProgressedPlanet[] = raw.planets
     .filter(p => PLANET_NAMES.includes(p.name))
     .map(({ name, longitude, isRetrograde }) => {
       const { sign, degree } = longitudeToSignDegree(longitude);
       return { name, sign, degree: isRetrograde ? `${degree} Rx` : degree, isRetrograde };
     });
+
+  // ── The progressed angles — previously dropped ──
+  const pAsc = longitudeToSignDegree(raw.ascLongitude);
+  const pMc  = longitudeToSignDegree(raw.mcLongitude);
+  progressed.push({ name: "Ascendant", sign: pAsc.sign, degree: pAsc.degree, isRetrograde: false });
+  progressed.push({ name: "Midheaven", sign: pMc.sign,  degree: pMc.degree,  isRetrograde: false });
+
+  return progressed;
 }
 
 function calculateSolarArcs(jdBirth: number, birthDate: string, lat: number, lng: number): SolarArcPlanet[] {
@@ -339,8 +374,8 @@ function calculateSolarArcs(jdBirth: number, birthDate: string, lat: number, lng
   const daysSinceLastBirthday = Math.floor((now.getTime() - lastBirthday.getTime()) / 86400000);
   const fractionalAge = age + daysSinceLastBirthday / 365.25;
   const jdProgressed = jdBirth + fractionalAge;
-  const natalSunResult = swisseph.swe_calc_ut(jdBirth, swisseph.SE_SUN, 4);
-  const progressedSunResult = swisseph.swe_calc_ut(jdProgressed, swisseph.SE_SUN, 4);
+  const natalSunResult = swisseph.swe_calc_ut(jdBirth, swisseph.SE_SUN, 4 | 256);
+  const progressedSunResult = swisseph.swe_calc_ut(jdProgressed, swisseph.SE_SUN, 4 | 256);
   let solarArc = progressedSunResult.longitude - natalSunResult.longitude;
   if (solarArc < 0) solarArc += 360;
   const natalRaw = calculatePlanets(jdBirth, lat, lng, "W");
@@ -458,7 +493,7 @@ function calculateSolarReturn(
 
   for (let offset = -3 * 24; offset <= 3 * 24; offset++) {
     const jdCheck = approxJD + offset / 24;
-    const sunResult = swisseph.swe_calc_ut(jdCheck, swisseph.SE_SUN, 4);
+    const sunResult = swisseph.swe_calc_ut(jdCheck, swisseph.SE_SUN, 4 | 256);
     let diff = Math.abs(sunResult.longitude - natalSunLongitude);
     if (diff > 180) diff = 360 - diff;
     if (diff < smallestDiff) {
@@ -497,13 +532,11 @@ function calculateSolarReturn(
   };
 }
 
-// ── NEW: Moon Phase ────────────────────────────────────────────────────────────
+// ── Moon Phase ────────────────────────────────────────────────────────────────
 // Phase is determined by the angular distance between Moon and Sun longitudes:
 //   0°   = New Moon          90°  = First Quarter
 //   180° = Full Moon         270° = Last Quarter
 // Illumination % follows from that same angle via (1 - cos(angle)) / 2.
-// "Days until next event" sweeps forward day-by-day until the angle crosses
-// 0° (New Moon) or 180° (Full Moon), whichever comes first.
 
 const MOON_PHASE_NAMES: Array<{ maxAngle: number; name: string }> = [
   { maxAngle: 11.25,  name: "New Moon" },
@@ -541,7 +574,7 @@ function calculateMoonPhase(
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const swisseph = require("swisseph");
 
-  const sunResult = swisseph.swe_calc_ut(jdNow, swisseph.SE_SUN, 4);
+  const sunResult = swisseph.swe_calc_ut(jdNow, swisseph.SE_SUN, 4 | 256);
   const sunLongitude = sunResult.longitude;
 
   let moonSunAngle = moonLongitude - sunLongitude;
@@ -550,15 +583,13 @@ function calculateMoonPhase(
   const phaseName = getMoonPhaseName(moonSunAngle);
   const illuminationPercent = getMoonIllumination(moonSunAngle);
 
-  // Sweep forward up to 30 days to find the next New Moon (angle crosses 0/360)
-  // or Full Moon (angle crosses 180), whichever happens first.
   let daysUntilNextEvent = 30;
   let nextEventName: "New Moon" | "Full Moon" = moonSunAngle < 180 ? "Full Moon" : "New Moon";
 
   for (let dayOffset = 0; dayOffset <= 30; dayOffset++) {
     const jdCheck = jdNow + dayOffset;
-    const sunCheck = swisseph.swe_calc_ut(jdCheck, swisseph.SE_SUN, 4);
-    const moonCheck = swisseph.swe_calc_ut(jdCheck, swisseph.SE_MOON, 4);
+    const sunCheck = swisseph.swe_calc_ut(jdCheck, swisseph.SE_SUN, 4 | 256);
+    const moonCheck = swisseph.swe_calc_ut(jdCheck, swisseph.SE_MOON, 4 | 256);
     let angleCheck = moonCheck.longitude - sunCheck.longitude;
     angleCheck = ((angleCheck % 360) + 360) % 360;
 
@@ -624,6 +655,23 @@ export async function POST(req: NextRequest) {
       return { name, sign, degree, isRetrograde };
     });
 
+    // ── NEW: transit-to-natal aspects, calculated not inferred ────────────────
+    // Every transiting body crossed against every natal planet AND both angles,
+    // filtered to real orbs, sorted tightest first, with applying/separating
+    // determined from longitude speed. The reading engine no longer has to do
+    // ~700 arc-distance comparisons in its head — it receives the answer.
+    let transitAspects: TransitAspect[] = [];
+    try {
+      transitAspects = calculateTransitAspects(
+        transitRaw.planets,
+        tropicalRaw,
+        longitudeToSignDegree,
+        getWholeSignHouse
+      );
+    } catch (e) {
+      console.warn("[chart-calculate] Transit aspect calculation failed:", e);
+    }
+
     const ascSign = tropicalChart.angles.asc?.sign ?? "Aries";
     const natalPlanetsForProfection = tropicalRaw.planets.map(({ name, longitude }) => {
       const { sign } = longitudeToSignDegree(longitude);
@@ -661,7 +709,6 @@ export async function POST(req: NextRequest) {
       console.warn("[chart-calculate] Solar return calculation failed:", e);
     }
 
-    // ── NEW: Moon Phase ──────────────────────────────────────────────────────
     let moonPhase: MoonPhaseData | undefined;
     try {
       const transitMoon = transitRaw.planets.find(p => p.name === "Moon");
@@ -678,6 +725,7 @@ export async function POST(req: NextRequest) {
       tropical: tropicalChart,
       sidereal: siderealChart,
       transits,
+      transitAspects,
       profection,
       progressions,
       solarArcs,
