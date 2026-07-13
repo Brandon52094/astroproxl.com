@@ -307,7 +307,6 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "",
     "LOCK IN BY [SPECIFIC DATE]: The structural commitment that must be sealed before the window closes. Max 3 sentences.",
     "",
-    "End with 1 sentence opening the door to JXL — frame as real-time calibration of these windows, not a sales line.",
     "",
     "═══════════════════════════════════════════",
     "PART 5 — THE ACTUAL ANSWER (Exactly 1-2 warm sentences, after Part 4, before the JXL line)",

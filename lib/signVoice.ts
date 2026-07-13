@@ -68,8 +68,8 @@ export const SIGN_VOICE: Record<string, SignVoice> = {
 };
 
 export const DEFAULT_SIGN_VOICE: SignVoice = {
-  rhythm: "Clear, direct, and entirely grounded in the mechanical facts of the chart.",
-  trigger: "Confront the pattern in the chart data directly, without softening.",
+  rhythm: "Clear, direct, still supportive and entirely grounded in the mechanical facts of the chart.",
+  trigger: "Confront the pattern in the chart data directly like a support astrologer, without softening.",
   forbidden: "Never use vague generalizations or unearned reassurance.",
 };
 
