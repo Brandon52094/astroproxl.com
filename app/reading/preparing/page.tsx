@@ -87,7 +87,7 @@ function PreparingPageInner() {
           return;
         }
 
-        const response = await fetch("/api/readings", {
+         const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -101,12 +101,14 @@ function PreparingPageInner() {
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
+            transitAspects: chart.chartData.transitAspects,   // ← ADD
             profection: chart.chartData.profection,
             progressions: chart.chartData.progressions,
             solarArcs: chart.chartData.solarArcs,
             upcomingTrigger: chart.chartData.upcomingTrigger,
             planetaryStations: chart.chartData.planetaryStations,
             solarReturn: chart.chartData.solarReturn,
+            moonPhase: chart.chartData.moonPhase,             // ← ADD
           }),
         });
 
