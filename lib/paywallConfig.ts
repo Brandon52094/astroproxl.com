@@ -126,12 +126,12 @@ export function isValidBundleTier(n: string): n is "2" | "3" | "4" {
 }
 
 // ── Single subscription tier ──────────────────────────────────────────────────
-// $12.99/mo — 8 readings + 2 free follow-up replies per reading + free downloads + no cooldowns
+// $10.00/mo — Unlimited Everything - no cooldowns. 
 export const SUBSCRIPTION_TIER: SubscriptionTier = {
   name: "AstroXL",
-  tagline: "8 readings/mo + 2 free replies per reading + free downloads — no cooldowns",
+  tagline: "Unlimited Readings + Free Replies + free downloads — no cooldowns",
   price: 1299,
-  displayPrice: "$12.99/mo",
+  displayPrice: "$10.00/mo",
   tier: "sub_base",
   isBestOffer: true,
   readingsPerMonth: 8,

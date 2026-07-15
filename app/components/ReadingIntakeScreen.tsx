@@ -816,7 +816,7 @@ export default function ReadingIntakeScreen({
                     </div>
                   ))}
                 </div>
-                <p className="text-[11px] text-amber-300/60">More, still premium.</p>
+                <p className="text-[11px] text-amber-300/60">Incredible Savings.</p>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-4 flex-1">
@@ -1389,7 +1389,7 @@ export default function ReadingIntakeScreen({
                             type="button"
                             onClick={() => {
                               setIsSubscribeLoading(true);
-                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
+                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 10.00, currency: "USD" });
                               (async () => {
                                 try {
                                   const res = await fetch("/api/stripe/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ returnUrl: `${window.location.origin}/reading/intake`, mode: "subscription", paywallIndex: 1 }) });
@@ -1400,7 +1400,7 @@ export default function ReadingIntakeScreen({
                             }}
                             className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
                           >
-                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — $12.99/mo"}
+                            {isSubscribeLoading ? "Loading…" : "SPECIAL 6 Month Price — $10.00/mo"}
                           </motion.button>
                         </div>
                       )}
