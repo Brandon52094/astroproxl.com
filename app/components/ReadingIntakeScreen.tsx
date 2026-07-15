@@ -816,7 +816,7 @@ export default function ReadingIntakeScreen({
                     </div>
                   ))}
                 </div>
-                <p className="text-[11px] text-amber-300/60">More, still premium.</p>
+                <p className="text-[11px] text-amber-300/60">Savings: $41.01 — about 76% off.</p>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-4 flex-1">
