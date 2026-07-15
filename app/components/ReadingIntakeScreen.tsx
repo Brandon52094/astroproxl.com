@@ -11,6 +11,8 @@ import {
   Lock,
   Timer,
   ChevronRight,
+  Layers,
+  Check,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -88,6 +90,7 @@ interface UserStatus {
   canBypass: boolean;
   freeReadingResetAt: string | null;
   freeReadingAvailable: boolean;
+  credits?: number; // Added for CTA price fix
 }
 
 interface ReadingIntakeScreenProps {
@@ -211,6 +214,190 @@ const THEMES: Record<ThemeName, ThemeColors> = {
   },
 };
 
+// ── Bundle Purchase Component ──
+interface BundleTier {
+  key: "2" | "3" | "4";
+  readings: number;
+  price: number;
+  perReading: string;
+  saving: number;
+}
+
+const BUNDLE_TIERS: BundleTier[] = [
+  { key: "2", readings: 2, price: 7, perReading: "3.50", saving: 1 },
+  { key: "3", readings: 3, price: 10, perReading: "3.33", saving: 2 },
+  { key: "4", readings: 4, price: 13, perReading: "3.25", saving: 3 },
+];
+
+function BundlePurchase() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selected, setSelected] = useState<BundleTier["key"] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const chosen = BUNDLE_TIERS.find((t) => t.key === selected) ?? null;
+
+  const handlePurchase = async () => {
+    if (!chosen || isLoading) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "bundle",
+          bundleTier: chosen.key,
+          returnUrl: `${window.location.origin}/reading/intake`,
+        }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="bundle-card">
+      <style jsx>{`
+        .bundle-card {
+          position: relative;
+          overflow: hidden;
+          border-radius: 24px;
+          border: 1px solid rgba(129, 140, 248, 0.25);
+          background: linear-gradient(180deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.03));
+          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(99, 102, 241, 0.06);
+        }
+        .bundle-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 18px;
+          width: 100%;
+          background: transparent;
+          border: none;
+          color: inherit;
+          font: inherit;
+          cursor: pointer;
+          text-align: left;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .tier-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 13px 14px;
+          border-radius: 16px;
+          border: 1px solid rgba(129, 140, 248, 0.18);
+          background: rgba(10, 14, 39, 0.4);
+          cursor: pointer;
+          transition: border-color 0.2s ease, background 0.2s ease;
+        }
+        .tier-row.active {
+          border-color: rgba(129, 140, 248, 0.7);
+          background: rgba(99, 102, 241, 0.12);
+          box-shadow: 0 0 22px rgba(99, 102, 241, 0.14);
+        }
+        .buy-btn {
+          height: 52px;
+          width: 100%;
+          border-radius: 16px;
+          border: none;
+          background: #818cf8;
+          color: #0a0e27;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          box-shadow: 0 0 30px rgba(129, 140, 248, 0.3);
+        }
+        .buy-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+      `}</style>
+
+      <button
+        type="button"
+        className="bundle-header"
+        onClick={() => setIsOpen((o) => !o)}
+        aria-expanded={isOpen}
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/25 bg-indigo-400/10 text-indigo-300">
+            <Layers className="h-4 w-4" />
+          </div>
+          <div>
+            <h2 className="text-[15px] font-semibold text-indigo-200">Buy Readings in Bulk</h2>
+            <p className="text-[11px] text-slate-400">Save more the more you get</p>
+          </div>
+        </div>
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-full border border-indigo-400/20 bg-black/20 text-indigo-300/70 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </div>
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2.5 px-4 pb-4">
+              {BUNDLE_TIERS.map((tier) => {
+                const active = selected === tier.key;
+                return (
+                  <button
+                    key={tier.key}
+                    type="button"
+                    className={`tier-row w-full ${active ? "active" : ""}`}
+                    onClick={() => setSelected(tier.key)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-5 w-5 items-center justify-center rounded-full border ${active ? "border-indigo-300 bg-indigo-400/30" : "border-white/20"}`}
+                      >
+                        {active && <Check className="h-3 w-3 text-indigo-200" />}
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[15px] font-medium text-white">
+                          {tier.readings} readings
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          ${tier.perReading} each · save ${tier.saving}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[17px] font-semibold text-indigo-200">${tier.price}</span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                className="buy-btn mt-1"
+                onClick={handlePurchase}
+                disabled={!chosen || isLoading}
+              >
+                {isLoading
+                  ? "Loading…"
+                  : chosen
+                  ? `Get ${chosen.readings} readings — $${chosen.price}`
+                  : "Select a bundle"}
+              </button>
+              <p className="text-center text-[10px] text-slate-500">
+                Credits never expire. Use them anytime.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "soon";
@@ -230,6 +417,9 @@ const CARD_TITLES = [
   "Current Important Transits",
   "Coming Soon",
 ];
+
+// ── Constants for CTA price fix ──
+const CREDITS_PER_READING = 12;
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
@@ -396,6 +586,7 @@ export default function ReadingIntakeScreen({
         canBypass: data.canBypass === true,
         freeReadingResetAt: data.freeReadingResetAt ?? null,
         freeReadingAvailable: data.freeReadingAvailable === true,
+        credits: Number(data.credits ?? 0), // Added for CTA price fix
       });
       return activePaywallIndex;
     } catch { return 0; }
@@ -432,11 +623,22 @@ export default function ReadingIntakeScreen({
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
+  // ── UPDATED: CTA price fix ──
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
     if (!selectedAreaConfig) return "Choose a reading type";
-    if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) return `${selectedAreaConfig.cta} — $4.00`;
+
+    // Does the user already have a way to read WITHOUT paying $4 right now?
+    const hasFreeReading = userStatus?.freeReadingAvailable === true;
+    const hasCredits = Number(userStatus?.credits ?? 0) >= CREDITS_PER_READING;
+    const isSubscribed = userStatus?.isSubscribed === true;
+    const readsWithoutCharge = hasFreeReading || hasCredits || isSubscribed;
+
+    // Only show the price when they'd genuinely be charged.
+    if (!readsWithoutCharge) {
+      return `${selectedAreaConfig.cta} — $4.00`;
+    }
     return selectedAreaConfig.cta;
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
 
@@ -1121,7 +1323,12 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-          <div className="mt-8 flex items-center gap-3">
+          {/* ── BUNDLE PURCHASE (NEW) ── */}
+          <div className="mt-4">
+            <BundlePurchase />
+          </div>
+
+          <div className="mt-4 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Unlimited Access</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
