@@ -47,120 +47,20 @@ function consumeFollowupReturnFlag(): { isReturn: boolean; question: string } {
   return { isReturn, question };
 }
 
-// ── Existing date badge renderer, reused inside cards ──
+// ── Parse content and pull out [[DATE: ...]] markers into simple yellow text ──
 function renderContentWithDateBadges(content: string): React.ReactNode[] {
   const parts = content.split(/(\[\[DATE:[^\]]+\]\])/g);
   return parts.map((part, i) => {
     const match = part.match(/^\[\[DATE:\s*(.+?)\]\]$/);
     if (match) {
       return (
-        <span
-          key={i}
-          className="inline-flex rounded-full bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300 date-badge"
-        >
+        <span key={i} className="font-semibold text-amber-300">
           {match[1]}
         </span>
       );
     }
     return <Fragment key={i}>{part}</Fragment>;
   });
-}
-
-// ── Parsed reading structures ──
-type DirectiveKind = "drop" | "execute" | "lock";
-
-interface DateWindowBlock {
-  date: string;
-  body: string;
-}
-
-interface DirectiveBlock {
-  kind: DirectiveKind;
-  label: string;
-  date?: string;
-  body: string;
-}
-
-interface ParsedReading {
-  intro: string[];
-  dateWindows: DateWindowBlock[];
-  directives: DirectiveBlock[];
-  closing: string[];
-}
-
-function parseReadingContent(content: string): ParsedReading {
-  if (!content) {
-    return { intro: [], dateWindows: [], directives: [], closing: [] };
-  }
-
-  const cleaned = content.replace(/\r\n/g, "\n").trim();
-
-  const directiveRegex =
-    /(DROP:|EXECUTE BY \[\[DATE:\s*([^\]]+)\]\]:|LOCK IN BY \[\[DATE:\s*([^\]]+)\]\]:)/g;
-
-  const directives: DirectiveBlock[] = [];
-  let dMatch: RegExpExecArray | null;
-
-  while ((dMatch = directiveRegex.exec(cleaned)) !== null) {
-    const fullLabel = dMatch[1];
-    const executeDate = dMatch[2];
-    const lockDate = dMatch[3];
-
-    const kind: DirectiveKind =
-      fullLabel.startsWith("DROP")
-        ? "drop"
-        : fullLabel.startsWith("EXECUTE BY")
-        ? "execute"
-        : "lock";
-
-    const label =
-      kind === "drop"
-        ? "DROP"
-        : kind === "execute"
-        ? "EXECUTE BY"
-        : "LOCK IN BY";
-
-    const bodyStart = directiveRegex.lastIndex;
-    const nextDirective = cleaned.slice(bodyStart).search(directiveRegex);
-    const bodyEnd =
-      nextDirective === -1 ? cleaned.length : bodyStart + nextDirective;
-    const body = cleaned.slice(bodyStart, bodyEnd).trim();
-
-    directives.push({
-      kind,
-      label,
-      date: executeDate || lockDate,
-      body,
-    });
-  }
-
-  const proseWithoutDirectives = cleaned.replace(directiveRegex, "").trim();
-
-  const windowRegex =
-    /\[\[DATE:\s*([^\]]+)\]\]\s*([\s\S]*?)(?=(\[\[DATE:\s*[^\]]+\]\])|(DROP:|EXECUTE BY|LOCK IN BY)|$)/g;
-
-  const dateWindows: DateWindowBlock[] = [];
-  let wMatch: RegExpExecArray | null;
-
-  while ((wMatch = windowRegex.exec(proseWithoutDirectives)) !== null) {
-    dateWindows.push({
-      date: wMatch[1].trim(),
-      body: wMatch[2].trim(),
-    });
-  }
-
-  const proseWithoutWindows = proseWithoutDirectives.replace(windowRegex, "").trim();
-
-  const paragraphs = proseWithoutWindows
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-
-  const intro =
-    paragraphs.length > 1 ? paragraphs.slice(0, paragraphs.length - 1) : paragraphs;
-  const closing = paragraphs.length > 1 ? [paragraphs[paragraphs.length - 1]] : [];
-
-  return { intro, dateWindows, directives, closing };
 }
 
 interface Credits {
@@ -180,67 +80,6 @@ interface FollowupEntry {
   question: string;
   title: string;
   content: string;
-}
-
-// ── Presentational blocks ──
-function DateWindowCard({ window }: { window: DateWindowBlock }) {
-  return (
-    <div className="mb-3 rounded-[20px] border border-teal-300/18 bg-[#071827] px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-teal-300">
-        {window.date}
-      </p>
-      <p className="mt-2 text-sm leading-6 text-slate-200 whitespace-pre-line">
-        {renderContentWithDateBadges(window.body)}
-      </p>
-    </div>
-  );
-}
-
-function DirectiveRow({ directive }: { directive: DirectiveBlock }) {
-  const accentClass =
-    directive.kind === "drop"
-      ? "text-rose-300"
-      : directive.kind === "execute"
-      ? "text-teal-300"
-      : "text-amber-300";
-
-  const railClass =
-    directive.kind === "drop"
-      ? "bg-rose-500/70"
-      : directive.kind === "execute"
-      ? "bg-teal-400/70"
-      : "bg-amber-400/70";
-
-  return (
-    <div className="flex items-start gap-3 border-t border-white/5 px-3 py-3 first:border-t-0">
-      <div className="mt-0.5 h-7 w-0.5 rounded-full bg-gradient-to-b from-transparent via-white/40 to-transparent" />
-      <div className="flex-1">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em]">
-          <span className={accentClass}>{directive.label}</span>
-          {directive.date && (
-            <span className="rounded-full bg-white/6 px-2 py-0.5 text-[10px] text-slate-200">
-              {directive.date}
-            </span>
-          )}
-        </div>
-        <p className="mt-2 text-sm leading-6 text-slate-200 whitespace-pre-line">
-          {renderContentWithDateBadges(directive.body)}
-        </p>
-      </div>
-      <div className={`mt-0.5 h-7 w-0.5 rounded-full ${railClass} opacity-70`} />
-    </div>
-  );
-}
-
-function ClosingNote({ text }: { text: string }) {
-  if (!text) return null;
-  return (
-    <div className="mt-6 border-t border-white/10 pt-4 text-center">
-      <p className="text-[18px] font-medium italic leading-7 text-slate-100">
-        {text}
-      </p>
-    </div>
-  );
 }
 
 function ResultsPageInner() {
@@ -308,6 +147,7 @@ function ResultsPageInner() {
           originalReading: storedReading.pages[0]?.content ?? "",
           originalTitle: storedReading.pages[0]?.title ?? "",
           topic: storedReading.topic,
+          // ── Full chart payload ──
           tropical: chart.chartData.tropical,
           sidereal: chart.chartData.sidereal,
           transits: chart.chartData.transits,
@@ -319,6 +159,7 @@ function ResultsPageInner() {
           planetaryStations: chart.chartData.planetaryStations,
           solarReturn: chart.chartData.solarReturn,
           moonPhase: chart.chartData.moonPhase,   
+
           conversationHistory: conversationHistory || undefined,
         }),
       });
@@ -363,6 +204,8 @@ function ResultsPageInner() {
 
     if (stored) {
       setReading(stored);
+      // Record completion the moment the reading loads — counts even if
+      // the user backs out without tapping Done
       recordReadingComplete();
     }
     setLoaded(true);
@@ -485,8 +328,6 @@ function ResultsPageInner() {
       doc.setTextColor(150, 150, 170);
       doc.text("astroproxl.com", pageWidth / 2, 24, { align: "center" });
 
-      const page = reading?.pages[0];
-
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16);
       doc.setFont("helvetica", "bold");
@@ -568,8 +409,8 @@ function ResultsPageInner() {
   }
 
   const page = reading?.pages[0];
+  const page4 = reading?.pages[0];
   const hasSources = page?.sources && page.sources.length > 0;
-  const parsed = parseReadingContent(page?.content ?? "");
 
   return (
     <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
@@ -637,7 +478,8 @@ function ResultsPageInner() {
           </button>
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Your Direct Insights</p>
-            <p className="mt-1 text-xs text-slate-400">The window you&apos;re standing in now</p>
+            <p className="mt-1 text-xs text-slate-400">What We've Gathered</p>
+            <p className="mt-0.5 text-xs font-medium text-amber-300/80"> You can download the synopsis</p>
           </div>
           <div className="w-11" />
         </header>
@@ -648,7 +490,7 @@ function ResultsPageInner() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-4 rounded-[18px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-[12px] text-emerald-200"
           >
-            ✓ Thanks for your support — your reading is unlocked.
+            ✓ Thanks for your support! — Lets get you your reading
           </motion.div>
         )}
 
@@ -663,8 +505,8 @@ function ResultsPageInner() {
             <PaywallScreen
               key="paywall"
               config={paywallConfig}
-              readingTitle={page?.title ?? "Your Reading"}
-              readingTeaser={page?.content ?? ""}
+              readingTitle={page4?.title ?? "Your Reading"}
+              readingTeaser={page4?.content ?? ""}
               onCheckout={handleCheckout}
               onDismiss={handleDismiss}
             />
@@ -677,57 +519,16 @@ function ResultsPageInner() {
               transition={{ duration: 0.4 }}
               className="flex flex-col"
             >
-              {/* Title + main intro */}
-              <div className="mb-4 space-y-2">
-                <h1 className="text-[22px] font-semibold leading-tight text-white">
-                  {page?.title}
-                </h1>
+              {/* Main reading */}
+              <div className="mb-6 space-y-2">
+                <h1 className="text-2xl font-semibold leading-tight text-white">{page?.title}</h1>
               </div>
 
-              {/* Intro block */}
-              {parsed.intro.length > 0 && (
-                <div className="mb-5 rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-                  {parsed.intro.map((para, idx) => (
-                    <p
-                      key={idx}
-                      className={`text-sm leading-7 text-slate-200 whitespace-pre-line ${
-                        idx > 0 ? "mt-3" : ""
-                      }`}
-                    >
-                      {renderContentWithDateBadges(para)}
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              {/* Dated windows */}
-              {parsed.dateWindows.length > 0 && (
-                <div className="mb-5 rounded-[24px] border border-white/10 bg-black/25 p-4">
-                  <p className="mb-3 text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500">
-                    Dated windows
-                  </p>
-                  {parsed.dateWindows.map((window, idx) => (
-                    <DateWindowCard key={idx} window={window} />
-                  ))}
-                </div>
-              )}
-
-              {/* Your moves panel */}
-              {parsed.directives.length > 0 && (
-                <div className="mb-5 rounded-[24px] border border-white/10 bg-[#050c17] p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                      Your moves
-                    </p>
-                  </div>
-                  {parsed.directives.map((directive, idx) => (
-                    <DirectiveRow key={idx} directive={directive} />
-                  ))}
-                </div>
-              )}
-
-              {/* Closing note */}
-              <ClosingNote text={parsed.closing[0] ?? ""} />
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+                <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
+                  {page?.content ? renderContentWithDateBadges(page.content) : null}
+                </p>
+              </div>
 
               {credits && credits.firstReadingUsed && credits.credits > 0 && (
                 <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
@@ -775,12 +576,12 @@ function ResultsPageInner() {
                     <div className="mb-3 flex items-center gap-2">
                       <div className="h-px flex-1 bg-white/[0.06]" />
                       <span className="ask-followup-label text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300">
-                        Ask a follow up
+                        Ask a Follow Up
                       </span>
                       <div className="h-px flex-1 bg-white/[0.06]" />
                     </div>
                     <p className="mb-3 text-[11px] text-slate-500">
-                      Don&apos;t overthink it. Just say what&apos;s on your mind.
+                      Don't over think this. Just say what's on your mind.
                     </p>
                   </>
                 )}
