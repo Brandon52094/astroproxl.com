@@ -149,6 +149,7 @@ export default function ReadingResultsPage() {
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const followupEndRef = useRef<HTMLDivElement | null>(null);
+  const hasMarkedComplete = useRef(false);
 
   useEffect(() => {
     const stored = loadReading();
@@ -159,6 +160,26 @@ export default function ReadingResultsPage() {
     setReading(stored);
     setIsLoading(false);
   }, [router]);
+
+  // ── Mark the reading complete exactly once, when a real reading has loaded.
+  // This is what advances readingsCompleted, deducts per-reading credits, and
+  // triggers the cooldown at 4. It lives here (not in the webhook) because the
+  // webhook only handles payment events — completing a reading is a separate
+  // event. The useRef guard ensures it fires once per loaded reading, not on
+  // every re-render (follow-ups, credit refetches, animations all re-render).
+  useEffect(() => {
+    if (reading && !hasMarkedComplete.current) {
+      hasMarkedComplete.current = true;
+      fetch("/api/user/reading-complete", { method: "POST" })
+        .then((res) => {
+          if (!res.ok) throw new Error("reading-complete failed");
+        })
+        .catch(() => {
+          // Allow a retry on failure rather than silently losing the count.
+          hasMarkedComplete.current = false;
+        });
+    }
+  }, [reading]);
 
   useEffect(() => {
     const fetchCredits = async () => {
