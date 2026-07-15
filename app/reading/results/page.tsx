@@ -11,26 +11,6 @@ import {
   type StoredReading,
 } from "@/lib/chartStore";
 
-/**
- * READING RESULTS — v3 "Borderless sections"
- *
- * The reading no longer sits inside one big frosted card. It breathes
- * directly on the starfield — borderless chapters, the way the mock the
- * user liked did it. Only the dated windows get a soft card; everything
- * else floats on the sky.
- *
- * Layout comes from the mock; theme comes from the app: indigo gradient,
- * animated starfield, GLOWING amber date badges, serif body.
- *
- * SCROLL FIX: this is a standalone route, so the page flows in normal
- * document flow — no locked height, no min-height:100vh fighting the fixed
- * bar. Only the bottom action bar is fixed. That was the scroll bug.
- *
- * The reading arrives as one block of prose; we PARSE it into sections using
- * markers it already contains — no prompt change, full length preserved. If a
- * reading doesn't match the shape, it renders as classic flowing prose.
- */
-
 interface FollowupEntry {
   id: string;
   question: string;
@@ -43,8 +23,6 @@ interface UserCredits {
   isSubscribed: boolean;
   freeRepliesRemaining: number;
 }
-
-/* ── Section parsing ──────────────────────────────────────────────────── */
 
 type ParsedSection =
   | { kind: "opening"; label: string; body: string }
@@ -158,8 +136,6 @@ function parseReadingSections(content: string): ParsedSection[] | null {
   const hasStructure = sections.some((s) => s.kind === "window" || s.kind === "directive");
   return hasStructure ? sections : null;
 }
-
-/* ── Page ─────────────────────────────────────────────────────────────── */
 
 export default function ReadingResultsPage() {
   const router = useRouter();
@@ -323,15 +299,27 @@ export default function ReadingResultsPage() {
     : -1;
 
   return (
-    <div className="results-root">
+    // 🔥 FIX: Made results-root a proper scroll container
+    <div 
+      className="results-root"
+      style={{
+        position: "relative",
+        minHeight: "100vh",
+        background: "linear-gradient(180deg, #0a0e27 0%, #0d1235 45%, #0a0e27 100%)",
+        color: "#e2e8f0",
+        fontFamily: "var(--font-sans, ui-sans-serif, system-ui)",
+        overflowX: "hidden",
+        overflowY: "auto",
+      }}
+    >
       <style jsx global>{`
-        .results-root {
-          position: relative;
-          background: linear-gradient(180deg, #0a0e27 0%, #0d1235 45%, #0a0e27 100%);
-          color: #e2e8f0;
-          font-family: var(--font-sans, ui-sans-serif, system-ui);
-          overflow-x: hidden;
+        /* Reset any parent scrolling issues */
+        html, body {
+          overflow: auto !important;
+          height: auto !important;
+          min-height: 100vh;
         }
+        
         .results-bg {
           position: fixed;
           inset: 0;
@@ -550,9 +538,13 @@ export default function ReadingResultsPage() {
         ))}
       </div>
 
+      {/* 🔥 FIX: Increased bottom padding to clear the fixed bar */}
       <div
         className="relative z-10 mx-auto w-full max-w-[560px] px-5 pt-5"
-        style={{ paddingBottom: "calc(120px + env(safe-area-inset-bottom))" }}
+        style={{ 
+          paddingBottom: "calc(160px + env(safe-area-inset-bottom))",
+          minHeight: "calc(100vh - 40px)",
+        }}
       >
         {/* ── Header ── */}
         <header className="mb-6 flex items-start gap-3">
