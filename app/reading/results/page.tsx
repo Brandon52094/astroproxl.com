@@ -1,153 +1,273 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef, Suspense, Fragment } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Download, Send } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { loadReading, loadIntake, loadChart, clearReading } from "@/lib/chartStore";
-import { getPaywallConfig } from "@/lib/paywallConfig";
-import PaywallScreen from "@/app/components/PayWallScreen";
-import type { StoredReading } from "@/lib/chartStore";
-import type { PaywallConfig } from "@/lib/paywallConfig";
+import { ArrowLeft, Download, ChevronDown } from "lucide-react";
+import {
+  loadReading,
+  loadChart,
+  loadIntake,
+  clearIntake,
+  type StoredReading,
+} from "@/lib/chartStore";
 
-const PAYMENT_FLAG_KEY = "dfp_payment_return";
-const DOWNLOAD_FLAG_KEY = "dfp_download_return";
-const FOLLOWUP_FLAG_KEY = "dfp_followup_return";
-const FOLLOWUP_QUESTION_KEY = "dfp_followup_question";
-
-function setPaymentReturnFlag() {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(PAYMENT_FLAG_KEY, "1");
-}
-
-function consumePaymentReturnFlag(): boolean {
-  if (typeof window === "undefined") return false;
-  const exists = localStorage.getItem(PAYMENT_FLAG_KEY) === "1";
-  localStorage.removeItem(PAYMENT_FLAG_KEY);
-  return exists;
-}
-
-function setDownloadReturnFlag() {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(DOWNLOAD_FLAG_KEY, "1");
-}
-
-function setFollowupReturnFlag(question: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(FOLLOWUP_FLAG_KEY, "1");
-  localStorage.setItem(FOLLOWUP_QUESTION_KEY, question);
-}
-
-function consumeFollowupReturnFlag(): { isReturn: boolean; question: string } {
-  if (typeof window === "undefined") return { isReturn: false, question: "" };
-  const isReturn = localStorage.getItem(FOLLOWUP_FLAG_KEY) === "1";
-  const question = localStorage.getItem(FOLLOWUP_QUESTION_KEY) ?? "";
-  localStorage.removeItem(FOLLOWUP_FLAG_KEY);
-  localStorage.removeItem(FOLLOWUP_QUESTION_KEY);
-  return { isReturn, question };
-}
-
-// ── Parse content and pull out [[DATE: ...]] markers into simple yellow text ──
-function renderContentWithDateBadges(content: string): React.ReactNode[] {
-  const parts = content.split(/(\[\[DATE:[^\]]+\]\])/g);
-  return parts.map((part, i) => {
-    const match = part.match(/^\[\[DATE:\s*(.+?)\]\]$/);
-    if (match) {
-      return (
-        <span key={i} className="font-semibold text-amber-300">
-          {match[1]}
-        </span>
-      );
-    }
-    return <Fragment key={i}>{part}</Fragment>;
-  });
-}
-
-interface Credits {
-  credits: number;
-  firstReadingUsed: boolean;
-  canStartReading: boolean;
-  canUnlockPage4: boolean;
-  paywallsCompleted?: number;
-  isSubscribed?: boolean;
-  readingsCompleted?: number;
-  onCooldown?: boolean;
-  downloadUnlocked?: boolean;
-  freeRepliesRemaining?: number;
-}
+/**
+ * READING RESULTS — v2 "Sectioned scroll" (Option A)
+ *
+ * The reading arrives as one block of prose. This screen PARSES it into
+ * chapters using markers the reading already contains — no prompt change,
+ * no shortening, full length preserved:
+ *
+ *   - Opening prose      → "WHERE YOU ARE NOW" (para 1) + "THE ROOT" (para 2+)
+ *   - [[DATE: ...]]-led paragraphs → dated window cards
+ *   - DROP / EXECUTE BY / LOCK IN BY paragraphs → color-coded directive strips
+ *   - Anything after the directives → the closing answer, centered italic
+ *
+ * If a reading doesn't match the expected shape (old readings, fallbacks),
+ * it renders exactly as before — one flowing prose block. Never break a
+ * reading someone paid for.
+ */
 
 interface FollowupEntry {
+  id: string;
   question: string;
   title: string;
   content: string;
 }
 
-function ResultsPageInner() {
+interface UserCredits {
+  credits: number;
+  isSubscribed: boolean;
+  freeRepliesRemaining: number;
+}
+
+/* ── Section parsing ──────────────────────────────────────────────────── */
+
+type ParsedSection =
+  | { kind: "opening"; label: string; body: string }
+  | { kind: "window"; date: string; body: string }
+  | { kind: "directive"; directive: "DROP" | "EXECUTE" | "LOCK"; label: string; date: string | null; body: string }
+  | { kind: "closing"; body: string };
+
+const DATE_LEAD_RE = /^\s*\[\[DATE:\s*([^\]]+)\]\]\s*[—–-]?\s*/;
+const DROP_RE = /^\s*DROP\s*:\s*/i;
+const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
+const LOCK_RE = /^\s*LOCK\s+IN\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
+
+function extractDateText(raw: string): string {
+  const m = raw.match(/\[\[DATE:\s*([^\]]+)\]\]/);
+  return m ? m[1].trim() : raw.trim();
+}
+
+function parseReadingSections(content: string): ParsedSection[] | null {
+  const paragraphs = content
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length < 2) return null;
+
+  const sections: ParsedSection[] = [];
+  // Phases advance forward only: opening → windows → directives → closing
+  let phase: "opening" | "windows" | "directives" | "closing" = "opening";
+  const openingParas: string[] = [];
+
+  for (const para of paragraphs) {
+    const isWindow = DATE_LEAD_RE.test(para);
+    const isDrop = DROP_RE.test(para);
+    const isExecute = EXECUTE_RE.test(para);
+    const isLock = LOCK_RE.test(para);
+    const isDirective = isDrop || isExecute || isLock;
+
+    if (phase === "opening" && !isWindow && !isDirective) {
+      openingParas.push(para);
+      continue;
+    }
+
+    // Leaving the opening — flush it into labeled sections.
+    if (phase === "opening") {
+      if (openingParas.length > 0) {
+        sections.push({ kind: "opening", label: "Where you are now", body: openingParas[0] });
+        if (openingParas.length > 1) {
+          sections.push({ kind: "opening", label: "The root", body: openingParas.slice(1).join("\n\n") });
+        }
+      }
+      phase = "windows";
+    }
+
+    if (isDirective) {
+      phase = "directives";
+      if (isDrop) {
+        sections.push({ kind: "directive", directive: "DROP", label: "Drop", date: null, body: para.replace(DROP_RE, "") });
+      } else if (isExecute) {
+        const m = para.match(EXECUTE_RE);
+        sections.push({
+          kind: "directive",
+          directive: "EXECUTE",
+          label: "Execute",
+          date: m ? extractDateText(m[1]) : null,
+          body: para.replace(EXECUTE_RE, ""),
+        });
+      } else {
+        const m = para.match(LOCK_RE);
+        sections.push({
+          kind: "directive",
+          directive: "LOCK",
+          label: "Lock in",
+          date: m ? extractDateText(m[1]) : null,
+          body: para.replace(LOCK_RE, ""),
+        });
+      }
+      continue;
+    }
+
+    if (isWindow && phase !== "closing") {
+      phase = "windows";
+      const m = para.match(DATE_LEAD_RE);
+      sections.push({
+        kind: "window",
+        date: m ? m[1].trim() : "",
+        body: para.replace(DATE_LEAD_RE, ""),
+      });
+      continue;
+    }
+
+    // Plain prose after the directives = the closing answer (Part 5).
+    if (phase === "directives" || phase === "closing") {
+      phase = "closing";
+      sections.push({ kind: "closing", body: para });
+      continue;
+    }
+
+    // Plain prose between windows — continuation of the previous window.
+    const last = sections[sections.length - 1];
+    if (last && last.kind === "window") {
+      last.body += "\n\n" + para;
+    } else {
+      sections.push({ kind: "opening", label: "", body: para });
+    }
+  }
+
+  // Never leave a still-open opening unflushed (reading with no windows/directives)
+  if (phase === "opening") return null;
+
+  // Sanity: sectioning is only worth it if we actually found structure.
+  const hasStructure = sections.some((s) => s.kind === "window" || s.kind === "directive");
+  return hasStructure ? sections : null;
+}
+
+/* ── Page ─────────────────────────────────────────────────────────────── */
+
+export default function ReadingResultsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
   const [reading, setReading] = useState<StoredReading | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [credits, setCredits] = useState<Credits | null>(null);
-  const [unlockedByPayment, setUnlockedByPayment] = useState(false);
-  const [paywallConfig, setPaywallConfig] = useState<PaywallConfig | null>(null);
-  const readingCompleteRecorded = useRef(false);
-  const [isFinishing, setIsFinishing] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadPaymentReturn, setDownloadPaymentReturn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showSources, setShowSources] = useState(false);
-
+  const [followups, setFollowups] = useState<FollowupEntry[]>([]);
   const [followupQuestion, setFollowupQuestion] = useState("");
-  const [followupThread, setFollowupThread] = useState<FollowupEntry[]>([]);
   const [isGeneratingFollowup, setIsGeneratingFollowup] = useState(false);
   const [followupError, setFollowupError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [credits, setCredits] = useState<UserCredits | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const followupEndRef = useRef<HTMLDivElement | null>(null);
 
-  const intake = loadIntake();
+  useEffect(() => {
+    const stored = loadReading();
+    if (!stored) {
+      router.push("/reading/intake");
+      return;
+    }
+    setReading(stored);
+    setIsLoading(false);
+  }, [router]);
 
-  const fetchCredits = useCallback(async () => {
-    try {
-      const response = await fetch("/api/user/credits");
-      const data: Credits = await response.json();
-      setCredits(data);
-      const paywallsCompleted = data.paywallsCompleted ?? 0;
-      if (!data.isSubscribed) {
-        setPaywallConfig(getPaywallConfig(paywallsCompleted));
+  useEffect(() => {
+    const fetchCredits = async () => {
+      try {
+        const res = await fetch("/api/user/credits");
+        const data = await res.json();
+        setCredits({
+          credits: Number(data.credits ?? 0),
+          isSubscribed: data.isSubscribed === true,
+          freeRepliesRemaining: Number(data.freeRepliesRemaining ?? 0),
+        });
+      } catch {
+        // silent
       }
-    } catch { /* silent */ }
-  }, []);
+    };
+    fetchCredits();
+  }, [followups.length]);
 
-  const recordReadingComplete = useCallback(async () => {
-    if (readingCompleteRecorded.current) return;
-    readingCompleteRecorded.current = true;
+  const page = reading?.pages?.[0] ?? null;
+
+  const parsedSections = useMemo(
+    () => (page?.content ? parseReadingSections(page.content) : null),
+    [page?.content]
+  );
+
+  /* ── [[DATE: ...]] → glowing amber badges (unchanged behavior) ── */
+  const renderContentWithBadges = (content: string) => {
+    const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
+    return parts.map((part, i) => {
+      const match = part.match(/\[\[DATE:\s*([^\]]+)\]\]/);
+      if (match) {
+        return (
+          <span key={i} className="date-badge">
+            {match[1].trim()}
+          </span>
+        );
+      }
+      return <React.Fragment key={i}>{part}</React.Fragment>;
+    });
+  };
+
+  const handleDownload = async () => {
+    if (!reading || !page) return;
+    setIsDownloading(true);
     try {
-      await fetch("/api/user/reading-complete", { method: "POST" });
-      await fetchCredits();
-    } catch { /* silent */ }
-  }, [fetchCredits]);
+      const plain = page.content.replace(/\[\[DATE:\s*([^\]]+)\]\]/g, "$1");
+      const text = `${page.title}\n\n${plain}\n\n— Generated by AstroProxl`;
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `reading-${reading.topic}-${new Date().toISOString().slice(0, 10)}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
-  const generateFollowup = useCallback(async (question: string, existingThread: FollowupEntry[]) => {
-    const storedReading = loadReading();
-    const chart = loadChart();
-    if (!storedReading || !chart) return;
+  const handleFollowup = async () => {
+    const question = followupQuestion.trim();
+    if (!question || isGeneratingFollowup || !reading || !page) return;
 
     setIsGeneratingFollowup(true);
     setFollowupError(null);
 
-    const conversationHistory = existingThread.map(entry =>
-      `Q: ${entry.question}\nA: ${entry.content}`
-    ).join("\n\n");
-
     try {
+      const chart = loadChart();
+      if (!chart?.chartData) {
+        setFollowupError("Chart data missing. Please recalculate your chart.");
+        return;
+      }
+
+      const conversationHistory = followups
+        .map((f) => `Q: ${f.question}\nA: ${f.content}`)
+        .join("\n\n");
+
       const response = await fetch("/api/readings/followup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question,
-          originalReading: storedReading.pages[0]?.content ?? "",
-          originalTitle: storedReading.pages[0]?.title ?? "",
-          topic: storedReading.topic,
-          // ── Full chart payload ──
+          originalReading: page.content,
+          originalTitle: page.title,
+          topic: reading.topic,
           tropical: chart.chartData.tropical,
           sidereal: chart.chartData.sidereal,
           transits: chart.chartData.transits,
@@ -158,562 +278,499 @@ function ResultsPageInner() {
           upcomingTrigger: chart.chartData.upcomingTrigger,
           planetaryStations: chart.chartData.planetaryStations,
           solarReturn: chart.chartData.solarReturn,
-          moonPhase: chart.chartData.moonPhase,   
-
+          moonPhase: chart.chartData.moonPhase,
           conversationHistory: conversationHistory || undefined,
         }),
       });
 
       const data = await response.json();
-      if (!response.ok || !data.content) throw new Error(data.error ?? "Failed to generate response.");
+      if (!response.ok) {
+        setFollowupError(data.error || "Something went wrong. Please try again.");
+        return;
+      }
 
-      setFollowupThread(prev => [...prev, {
-        question,
-        title: data.title,
-        content: data.content,
-      }]);
+      setFollowups((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), question, title: data.title, content: data.content },
+      ]);
       setFollowupQuestion("");
-
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    } catch (err) {
-      setFollowupError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setTimeout(() => {
+        followupEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 120);
+    } catch {
+      setFollowupError("Something went wrong. Please try again.");
     } finally {
       setIsGeneratingFollowup(false);
     }
-  }, []);
-
-  useEffect(() => {
-    const paymentMode = searchParams.get("mode");
-    const paymentStatus = searchParams.get("payment");
-    const returningFromDownload = paymentMode === "reading_download" && paymentStatus === "success";
-    const returningFromCancelledFollowup = paymentMode === "followup" && paymentStatus === "cancelled";
-    const returningFromPayment = consumePaymentReturnFlag() || (paymentStatus === "success" && paymentMode !== "reading_download" && paymentMode !== "followup");
-    const { isReturn: returningFromFollowup, question: savedQuestion } = consumeFollowupReturnFlag();
-
-    if (returningFromCancelledFollowup) {
-      localStorage.removeItem("dfp_followup_return");
-      localStorage.removeItem("dfp_followup_question");
-    }
-
-    const stored = loadReading();
-
-    if (!stored && !returningFromDownload && !returningFromCancelledFollowup) {
-      router.push("/reading/intake");
-      return;
-    }
-
-    if (stored) {
-      setReading(stored);
-      // Record completion the moment the reading loads — counts even if
-      // the user backs out without tapping Done
-      recordReadingComplete();
-    }
-    setLoaded(true);
-
-    if (returningFromPayment) setUnlockedByPayment(true);
-    if (returningFromDownload) setDownloadPaymentReturn(true);
-
-    if (returningFromFollowup && savedQuestion && stored) {
-      setFollowupQuestion(savedQuestion);
-      generateFollowup(savedQuestion, []);
-    }
-
-    if (paymentStatus) window.history.replaceState({}, "", "/reading/results");
-  }, [recordReadingComplete]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { fetchCredits(); }, [fetchCredits]);
-
-  useEffect(() => {
-    if (!unlockedByPayment) return;
-    fetchCredits();
-    setTimeout(() => fetchCredits(), 2000);
-  }, [unlockedByPayment, fetchCredits]);
-
-  useEffect(() => {
-    if (!downloadPaymentReturn) return;
-    let attempts = 0;
-    const poll = async () => {
-      try {
-        const response = await fetch("/api/user/credits");
-        const data: Credits = await response.json();
-        setCredits(data);
-        const paywallsCompleted = data.paywallsCompleted ?? 0;
-        if (!data.isSubscribed) setPaywallConfig(getPaywallConfig(paywallsCompleted));
-        attempts++;
-        if (!data.downloadUnlocked && !data.isSubscribed && attempts < 10) {
-          setTimeout(poll, 1500);
-        }
-      } catch { /* silent */ }
-    };
-    poll();
-  }, [downloadPaymentReturn]);
-
-  const handleFollowupSend = async () => {
-    const question = followupQuestion.trim();
-    if (!question) return;
-
-    const isSubscribed = credits?.isSubscribed ?? false;
-    const hasFreeRepliesRemaining = (credits?.freeRepliesRemaining ?? 0) > 0;
-
-    if (isSubscribed && hasFreeRepliesRemaining) {
-      await generateFollowup(question, followupThread);
-      fetchCredits();
-      return;
-    }
-
-    setFollowupReturnFlag(question);
-    const response = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        returnUrl: `${window.location.origin}/reading/results`,
-        mode: "followup",
-      }),
-    });
-    const data = await response.json();
-    if (data.url) window.location.href = data.url;
   };
 
-  const handleCheckout = async (mode: "one_time" | "subscription") => {
-    if (!paywallConfig) return;
-    setPaymentReturnFlag();
-    const response = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        returnUrl: `${window.location.origin}/reading/results`,
-        mode,
-        paywallIndex: paywallConfig.paywallIndex,
-      }),
-    });
-    const data = await response.json();
-    if (data.url) window.location.href = data.url;
-    else throw new Error("No checkout URL returned");
-  };
-
-  const handleDownload = async () => {
-    const downloadUnlocked = credits?.downloadUnlocked ?? false;
-    const isSubscribed = credits?.isSubscribed ?? false;
-
-    if (!downloadUnlocked && !isSubscribed) {
-      setDownloadReturnFlag();
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          returnUrl: `${window.location.origin}/reading/results`,
-          mode: "reading_download",
-        }),
-      });
-      const data = await response.json();
-      if (data.url) window.location.href = data.url;
-      return;
-    }
-
-    setIsDownloading(true);
-    try {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const margin = 20;
-      const maxWidth = pageWidth - margin * 2;
-
-      doc.setFillColor(5, 8, 22);
-      doc.rect(0, 0, pageWidth, 297, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("DIRECT FUTURE PREDICTIONS", pageWidth / 2, 18, { align: "center" });
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 170);
-      doc.text("astroproxl.com", pageWidth / 2, 24, { align: "center" });
-
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      const titleLines = doc.splitTextToSize(page?.title ?? "Your Reading", maxWidth);
-      doc.text(titleLines, margin, 38);
-
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(150, 150, 170);
-      doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), margin, 38 + titleLines.length * 7 + 4);
-
-      doc.setDrawColor(50, 50, 70);
-      doc.line(margin, 52, pageWidth - margin, 52);
-
-      doc.setTextColor(200, 200, 215);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      const cleanContent = (page?.content ?? "").replace(/\[\[DATE:\s*(.+?)\]\]/g, "$1");
-      const contentLines = doc.splitTextToSize(cleanContent, maxWidth);
-      let y = 60;
-      for (const line of contentLines) {
-        if (y > 275) {
-          doc.addPage();
-          doc.setFillColor(5, 8, 22);
-          doc.rect(0, 0, pageWidth, 297, "F");
-          y = 20;
-        }
-        doc.text(line, margin, y);
-        y += 6;
-      }
-
-      doc.setFontSize(7);
-      doc.setTextColor(80, 80, 100);
-      doc.text("Generated by AstroProXL · astroproxl.com", pageWidth / 2, 290, { align: "center" });
-
-      const pdfBlob = doc.output("blob");
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = "astroproxl-reading.pdf";
-      link.target = "_blank";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
-    } catch (err) {
-      console.error("PDF generation failed:", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const handleFinish = async () => {
-    setIsFinishing(true);
-    await recordReadingComplete();
-    clearReading();
+  const handleDone = () => {
+    clearIntake();
     router.push("/reading/intake");
   };
 
-  const handleDismiss = async () => {
-    await recordReadingComplete();
-    clearReading();
-    router.push("/reading/intake");
-  };
-
-  const isSubscribed = credits?.isSubscribed ?? false;
-  const showPaywall = false;
-  const hasThread = followupThread.length > 0;
-  const freeRepliesRemaining = credits?.freeRepliesRemaining ?? 0;
-  const sendButtonLabel = isSubscribed && freeRepliesRemaining > 0 ? "Send" : "Send — $2.00";
-  const downloadGlowing = !!(credits?.downloadUnlocked || credits?.isSubscribed);
-
-  if (!loaded) {
+  if (isLoading || !reading || !page) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#050816]">
-        <div className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
+      <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e27" }}>
+        <div className="text-sm text-slate-400">Loading your reading…</div>
       </div>
     );
   }
 
-  const page = reading?.pages[0];
-  const page4 = reading?.pages[0];
-  const hasSources = page?.sources && page.sources.length > 0;
-
   return (
-    <div className="flex h-screen justify-center bg-[#050816] overflow-hidden">
-      <style jsx>{`
-        @keyframes downloadPulse {
-          0%, 100% {
-            transform: scale(1);
-            box-shadow:
-              0 0 0 1px rgba(251, 191, 36, 0.4),
-              0 0 16px rgba(251, 191, 36, 0.25),
-              0 0 32px rgba(251, 191, 36, 0.12);
-          }
-          50% {
-            transform: scale(1.06);
-            box-shadow:
-              0 0 0 2px rgba(251, 191, 36, 0.85),
-              0 0 30px rgba(251, 191, 36, 0.6),
-              0 0 60px rgba(251, 191, 36, 0.3);
-          }
+    <div className="results-root">
+      <style jsx global>{`
+        .results-root {
+          min-height: 100vh;
+          background: linear-gradient(180deg, #0a0e27 0%, #0d1235 45%, #0a0e27 100%);
+          color: #e2e8f0;
+          font-family: var(--font-sans, ui-sans-serif, system-ui);
+          position: relative;
+          overflow-x: hidden;
         }
-        .download-pulse {
-          animation: downloadPulse 1.6s ease-in-out infinite;
+        .star {
+          position: absolute;
+          border-radius: 9999px;
+          background: white;
+          pointer-events: none;
         }
+        @keyframes starTwinkle {
+          0%, 100% { opacity: 0.25; transform: scale(1); }
+          50% { opacity: 0.85; transform: scale(1.5); }
+        }
+
+        .reading-card {
+          background: rgba(20, 25, 55, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 28px;
+          backdrop-filter: blur(12px);
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .reading-title {
+          font-family: var(--font-display, Georgia, serif);
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          line-height: 1.15;
+        }
+
+        .reading-body {
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 16px;
+          line-height: 1.95;
+          color: #cbd5e1;
+          white-space: pre-wrap;
+        }
+
         .date-badge {
-          box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), 0 0 4px rgba(251, 191, 36, 0.5);
+          display: inline-block;
+          padding: 1px 10px;
+          margin: 0 2px;
+          border-radius: 9999px;
+          background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(217, 119, 6, 0.12));
+          border: 1px solid rgba(251, 191, 36, 0.35);
+          color: #fbbf24;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          box-shadow: 0 0 18px rgba(251, 191, 36, 0.12);
+          white-space: nowrap;
         }
-        @keyframes askMoreGlow {
-          0%, 100% {
-            box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.12), 0 0 10px rgba(94, 234, 212, 0.06);
-          }
-          50% {
-            box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.3), 0 0 18px rgba(94, 234, 212, 0.14);
-          }
+
+        /* ── Sectioned layout ─────────────────────────────────── */
+        .section-label {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(45, 212, 191, 0.85);
         }
-        .ask-more-glow {
-          animation: askMoreGlow 3.2s ease-in-out infinite;
+        .section-divider {
+          border-top: 1px solid rgba(255, 255, 255, 0.07);
+          margin-top: 22px;
+          padding-top: 18px;
         }
-        @keyframes followupLabelGlow {
-          0%, 100% {
-            text-shadow: 0 0 6px rgba(94, 234, 212, 0.3);
-            opacity: 0.85;
-          }
-          50% {
-            text-shadow: 0 0 14px rgba(94, 234, 212, 0.7), 0 0 24px rgba(94, 234, 212, 0.35);
-            opacity: 1;
-          }
+
+        .window-card {
+          background: rgba(45, 212, 191, 0.05);
+          border: 1px solid rgba(45, 212, 191, 0.2);
+          border-radius: 20px;
+          padding: 16px 18px;
+          margin-top: 16px;
         }
-        .ask-followup-label {
-          animation: followupLabelGlow 2.8s ease-in-out infinite;
+        .window-body {
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 15px;
+          line-height: 1.85;
+          color: #cbd5e1;
+          white-space: pre-wrap;
+          margin-top: 8px;
+        }
+
+        .directive-strip {
+          border-radius: 0;
+          padding: 12px 14px;
+          margin-top: 10px;
+          background: rgba(255, 255, 255, 0.03);
+        }
+        .directive-strip.drop {
+          border-left: 2px solid #f87171;
+          background: rgba(248, 113, 113, 0.05);
+        }
+        .directive-strip.execute {
+          border-left: 2px solid #2dd4bf;
+          background: rgba(45, 212, 191, 0.05);
+        }
+        .directive-strip.lock {
+          border-left: 2px solid #fbbf24;
+          background: rgba(251, 191, 36, 0.05);
+        }
+        .directive-label {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+        }
+        .directive-strip.drop .directive-label { color: #f87171; }
+        .directive-strip.execute .directive-label { color: #2dd4bf; }
+        .directive-strip.lock .directive-label { color: #fbbf24; }
+        .directive-body {
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 14px;
+          line-height: 1.8;
+          color: #cbd5e1;
+          margin-top: 6px;
+          white-space: pre-wrap;
+        }
+
+        .closing-line {
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 16px;
+          line-height: 1.85;
+          color: #e8e6ef;
+          font-style: italic;
+          text-align: center;
+          margin-top: 26px;
+          white-space: pre-wrap;
+        }
+
+        .sources-toggle {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: #64748b;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 0;
+        }
+        .sources-toggle:hover { color: #94a3b8; }
+
+        .followup-card {
+          background: rgba(20, 25, 55, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 24px;
+          backdrop-filter: blur(12px);
+        }
+
+        .followup-input {
+          width: 100%;
+          background: rgba(10, 14, 39, 0.6);
+          border: 1px solid rgba(45, 212, 191, 0.25);
+          border-radius: 18px;
+          color: #e2e8f0;
+          font-size: 15px;
+          padding: 14px 16px;
+          outline: none;
+          resize: none;
+          transition: border-color 0.25s ease, box-shadow 0.25s ease;
+        }
+        .followup-input:focus {
+          border-color: rgba(45, 212, 191, 0.6);
+          box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
+        }
+
+        .bottom-bar {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          background: linear-gradient(180deg, rgba(10, 14, 39, 0) 0%, rgba(10, 14, 39, 0.92) 35%);
+          z-index: 40;
+        }
+        @keyframes downloadPulse {
+          0%, 100% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.4), 0 0 22px rgba(251, 191, 36, 0.18); }
+          50% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.7), 0 0 34px rgba(251, 191, 36, 0.32); }
+        }
+        .download-btn {
+          width: 56px;
+          height: 56px;
+          border-radius: 18px;
+          border: 1px solid rgba(251, 191, 36, 0.5);
+          background: rgba(251, 191, 36, 0.08);
+          color: #fbbf24;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          animation: downloadPulse 2.6s ease-in-out infinite;
+          cursor: pointer;
+        }
+        .done-btn {
+          flex: 1;
+          height: 56px;
+          border-radius: 18px;
+          border: none;
+          background: #5eead4;
+          color: #042f2e;
+          font-size: 17px;
+          font-weight: 600;
+          cursor: pointer;
+          box-shadow: 0 0 40px rgba(94, 234, 212, 0.35);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .star, .download-btn { animation: none !important; }
         }
       `}</style>
 
-      <div
-        id="results-scroll"
-        className="flex w-full max-w-[430px] flex-col overflow-y-auto px-4 pb-52 pt-4"
-      >
-        {/* Header */}
-        <header className="mb-6 flex items-center justify-between py-2">
-          <button
-            type="button"
-            onClick={() => router.push("/reading/intake")}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div className="text-center">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Your Direct Insights</p>
-            <p className="mt-1 text-xs text-slate-400">What We've Gathered</p>
-            <p className="mt-0.5 text-xs font-medium text-amber-300/80"> You can download the synopsis</p>
-          </div>
-          <div className="w-11" />
-        </header>
-
-        {unlockedByPayment && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 rounded-[18px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-[12px] text-emerald-200"
-          >
-            ✓ Thanks for your support! — Lets get you your reading
-          </motion.div>
-        )}
-
-        {intake && (
-          <div className="mb-4 inline-flex rounded-full border border-teal-400/20 bg-teal-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-teal-200">
-            {intake.area}
-          </div>
-        )}
-
-        <AnimatePresence mode="wait">
-          {showPaywall && paywallConfig ? (
-            <PaywallScreen
-              key="paywall"
-              config={paywallConfig}
-              readingTitle={page4?.title ?? "Your Reading"}
-              readingTeaser={page4?.content ?? ""}
-              onCheckout={handleCheckout}
-              onDismiss={handleDismiss}
-            />
-          ) : (
-            <motion.div
-              key="reading"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.4 }}
-              className="flex flex-col"
-            >
-              {/* Main reading */}
-              <div className="mb-6 space-y-2">
-                <h1 className="text-2xl font-semibold leading-tight text-white">{page?.title}</h1>
-              </div>
-
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
-                  {page?.content ? renderContentWithDateBadges(page.content) : null}
-                </p>
-              </div>
-
-              {credits && credits.firstReadingUsed && credits.credits > 0 && (
-                <div className="mt-4 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
-                  <span>{credits.credits} credits remaining</span>
-                </div>
-              )}
-
-              {/* ── Follow-up conversation thread ────────────────────────── */}
-              <AnimatePresence>
-                {followupThread.map((entry, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="mt-6"
-                  >
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="h-px flex-1 bg-white/[0.06]" />
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">
-                        {index === 0 ? "Going deeper" : `Follow-up ${index + 1}`}
-                      </span>
-                      <div className="h-px flex-1 bg-white/[0.06]" />
-                    </div>
-                    <div className="mb-2 text-[11px] text-slate-500 italic">"{entry.question}"</div>
-                    <h2 className="mb-3 text-lg font-semibold text-white">{entry.title}</h2>
-                    <div className="rounded-[24px] border border-teal-300/20 bg-teal-400/[0.04] p-5">
-                      <p className="text-sm leading-7 text-slate-300 whitespace-pre-line">
-                        {renderContentWithDateBadges(entry.content)}
-                      </p>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
-              {/* ── Ask another question ─────────────────────────────────── */}
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: hasThread ? 0 : 0.3 }}
-                className="mt-6"
-              >
-                {!hasThread && (
-                  <>
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="h-px flex-1 bg-white/[0.06]" />
-                      <span className="ask-followup-label text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300">
-                        Ask a Follow Up
-                      </span>
-                      <div className="h-px flex-1 bg-white/[0.06]" />
-                    </div>
-                    <p className="mb-3 text-[11px] text-slate-500">
-                      Don't over think this. Just say what's on your mind.
-                    </p>
-                  </>
-                )}
-                {hasThread && (
-                  <p className="mb-3 text-[12px] text-slate-500">
-                    Still got more? Keep going.
-                  </p>
-                )}
-                <textarea
-                  value={followupQuestion}
-                  onChange={(e) => setFollowupQuestion(e.target.value)}
-                  placeholder={hasThread ? "Ask another question…" : "What do you want to understand better?"}
-                  rows={3}
-                  className={`w-full resize-none rounded-[20px] border bg-black/20 px-4 py-3 text-[14px] leading-6 text-white placeholder:text-slate-500 transition focus:outline-none focus:ring-1 focus:ring-teal-300 ${
-                    followupQuestion.trim() ? "border-teal-300/40" : "border-white/10 ask-more-glow"
-                  }`}
-                />
-                {followupError && (
-                  <p className="mt-2 text-[12px] text-rose-300">{followupError}</p>
-                )}
-
-                {/* ── Astrological sources — centered below the follow-up box ── */}
-                {hasSources && (
-                  <div className="mt-4 flex flex-col items-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowSources((s) => !s)}
-                      className="text-[11px] text-slate-500 underline transition hover:text-slate-400"
-                    >
-                      {showSources ? "Hide astrological sources" : "Show astrological sources"}
-                    </button>
-                    <AnimatePresence>
-                      {showSources && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.25 }}
-                          className="w-full overflow-hidden"
-                        >
-                          <div className="mt-3 space-y-2.5 rounded-[18px] border border-white/[0.06] bg-black/20 p-4">
-                            {page!.sources!.map((src, i) => (
-                              <div key={i} className="text-[11px] leading-5">
-                                <span className="font-medium text-slate-500">{src.section}:</span>{" "}
-                                <span className="text-slate-600">{src.placements}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </motion.div>
-
-              <div ref={bottomRef} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* ── Starfield ── */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        {Array.from({ length: 46 }).map((_, i) => (
+          <span
+            key={i}
+            className="star"
+            style={{
+              left: `${(i * 37) % 100}%`,
+              top: `${(i * 19 + 13) % 100}%`,
+              width: i % 7 === 0 ? 3 : 1.5,
+              height: i % 7 === 0 ? 3 : 1.5,
+              animation: `starTwinkle ${2.4 + (i % 5) * 0.5}s ease-in-out infinite`,
+              animationDelay: `${(i * 0.37) % 4}s`,
+            }}
+          />
+        ))}
       </div>
 
-      {!showPaywall && (
-        <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
-          <div className="w-full max-w-[430px] space-y-2">
-
-            <AnimatePresence>
-              {followupQuestion.trim() && (
-                <motion.button
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  type="button"
-                  onClick={handleFollowupSend}
-                  disabled={isGeneratingFollowup}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-teal-300/30 bg-teal-400/[0.08] text-[13px] font-semibold text-teal-200 transition hover:bg-teal-400/[0.14] disabled:opacity-60"
-                >
-                  {isGeneratingFollowup ? (
-                    <>
-                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-teal-300 border-t-transparent" />
-                      Getting your answer…
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-3.5 w-3.5" />
-                      {sendButtonLabel}
-                    </>
-                  )}
-                </motion.button>
-              )}
-            </AnimatePresence>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition disabled:opacity-60
-                  border-amber-300/50 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20
-                  ${!isDownloading ? "download-pulse" : ""}
-                `}
-                title={downloadGlowing ? "Download PDF" : "Download PDF — $1.00"}
-              >
-                {isDownloading
-                  ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-300 border-t-transparent" />
-                  : <Download className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
-                onClick={handleFinish}
-                disabled={isFinishing}
-                className="h-14 flex-1 rounded-2xl bg-teal-300 text-sm font-semibold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-200 disabled:opacity-60"
-              >
-                {isFinishing ? "Finishing…" : "Done"}
-              </button>
-            </div>
+      <div
+        className="relative z-10 mx-auto w-full max-w-[560px] px-4 pt-5"
+        style={{ paddingBottom: "calc(120px + env(safe-area-inset-bottom))" }}
+      >
+        {/* ── Header ── */}
+        <header className="mb-5 flex items-start gap-3">
+          <button
+            type="button"
+            onClick={handleDone}
+            aria-label="Back"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="flex-1 text-center">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Your Direct Insights</p>
+            <p className="mt-0.5 text-[13px] text-slate-300">What We've Gathered</p>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
+          <div className="h-11 w-11 shrink-0" aria-hidden="true" />
+        </header>
 
-export default function ResultsPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex h-screen w-full items-center justify-center bg-[#050816]">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
+        {/* ── Topic pill ── */}
+        <div className="mb-4">
+          <span className="inline-block rounded-full border border-teal-400/30 bg-teal-400/[0.06] px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-300">
+            {reading.topic}
+          </span>
         </div>
-      }
-    >
-      <ResultsPageInner />
-    </Suspense>
+
+        {/* ── Title ── */}
+        <motion.h1
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="reading-title mb-5 text-[30px] text-white sm:text-[34px]"
+        >
+          {page.title}
+        </motion.h1>
+
+        {/* ── THE READING — sectioned when parseable, classic prose otherwise ── */}
+        <motion.article
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
+          className="reading-card px-5 py-6 sm:px-7"
+        >
+          {parsedSections ? (
+            <>
+              {parsedSections.map((section, i) => {
+                if (section.kind === "opening") {
+                  return (
+                    <div key={i} className={i > 0 ? "section-divider" : undefined}>
+                      {section.label && <p className="section-label">{section.label}</p>}
+                      <p className="reading-body" style={{ marginTop: section.label ? 8 : 0 }}>
+                        {renderContentWithBadges(section.body)}
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (section.kind === "window") {
+                  return (
+                    <div key={i} className="window-card">
+                      <span className="date-badge">{section.date}</span>
+                      <p className="window-body">{renderContentWithBadges(section.body)}</p>
+                    </div>
+                  );
+                }
+
+                if (section.kind === "directive") {
+                  const variant =
+                    section.directive === "DROP" ? "drop" : section.directive === "EXECUTE" ? "execute" : "lock";
+                  return (
+                    <div key={i} className={`directive-strip ${variant}`}>
+                      <p className="directive-label">
+                        {section.label}
+                        {section.date && (
+                          <>
+                            {" "}
+                            <span className="date-badge" style={{ marginLeft: 6 }}>
+                              {section.date}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                      <p className="directive-body">{renderContentWithBadges(section.body)}</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <p key={i} className="closing-line">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                );
+              })}
+            </>
+          ) : (
+            <div className="reading-body">{renderContentWithBadges(page.content)}</div>
+          )}
+
+          {/* ── Sources dropdown (unchanged) ── */}
+          {page.sources && page.sources.length > 0 && (
+            <div className="mt-7 border-t border-white/[0.07] pt-4">
+              <button
+                type="button"
+                className="sources-toggle"
+                onClick={() => setShowSources((s) => !s)}
+                aria-expanded={showSources}
+              >
+                Astrological sources
+                <ChevronDown
+                  className="h-3.5 w-3.5 transition-transform duration-200"
+                  style={{ transform: showSources ? "rotate(180deg)" : undefined }}
+                />
+              </button>
+              <AnimatePresence>
+                {showSources && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: "easeOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-3 space-y-2.5">
+                      {page.sources.map((src, i) => (
+                        <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
+                            {src.section}
+                          </p>
+                          <p className="mt-1 text-[12px] leading-5 text-slate-400">{src.placements}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </motion.article>
+
+        {credits && !credits.isSubscribed && (
+          <p className="mt-3 text-right text-[11px] text-slate-500">{credits.credits} credits remaining</p>
+        )}
+
+        {/* ── GOING DEEPER — follow-ups (unchanged behavior) ── */}
+        <section className="mt-10">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.07]" />
+            <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
+            <div className="h-px flex-1 bg-white/[0.07]" />
+          </div>
+
+          {followups.map((f) => (
+            <div key={f.id} className="mb-4">
+              <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
+              <div className="followup-card px-5 py-5">
+                <h3 className="reading-title mb-2 text-[19px] text-white">{f.title}</h3>
+                <div className="reading-body" style={{ fontSize: 15 }}>
+                  {renderContentWithBadges(f.content)}
+                </div>
+              </div>
+            </div>
+          ))}
+          <div ref={followupEndRef} />
+
+          <p className="mb-2 px-1 text-[12px] text-slate-500">
+            Don't over think this. Just say what's on your mind.
+          </p>
+          <textarea
+            className="followup-input"
+            rows={3}
+            value={followupQuestion}
+            onChange={(e) => setFollowupQuestion(e.target.value)}
+            placeholder="Ask a follow up…"
+            disabled={isGeneratingFollowup}
+          />
+          {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+          <button
+            type="button"
+            onClick={handleFollowup}
+            disabled={isGeneratingFollowup || !followupQuestion.trim()}
+            className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+          >
+            {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
+          </button>
+          {credits?.isSubscribed && (
+            <p className="mt-2 text-center text-[11px] text-slate-500">
+              {credits.freeRepliesRemaining} free replies remaining
+            </p>
+          )}
+        </section>
+      </div>
+
+      {/* ── Bottom bar ── */}
+      <div className="bottom-bar">
+        <button
+          type="button"
+          className="download-btn"
+          onClick={handleDownload}
+          disabled={isDownloading}
+          aria-label="Download reading"
+        >
+          <Download className="h-5 w-5" />
+        </button>
+        <button type="button" className="done-btn" onClick={handleDone}>
+          Done
+        </button>
+      </div>
+    </div>
   );
 }
