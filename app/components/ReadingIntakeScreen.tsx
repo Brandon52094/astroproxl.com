@@ -881,10 +881,10 @@ export default function ReadingIntakeScreen({
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  You Can Ask Anything 
+                  Ask Anything 
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  Calculated Astrological Prediction. 
+                  Your Personal Astrological Predictions. 
                 </p>
               </div>
             </div>
