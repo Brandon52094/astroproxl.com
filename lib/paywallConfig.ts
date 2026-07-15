@@ -77,6 +77,54 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
   },
 };
 
+// ── Reading bundles ────────────────────────────────────────────────────────────
+// Credits = 12 per reading (matches ONE_TIME_PACKS credit value), so a bundle
+// purchase grants the exact number of credits needed to complete that many
+// full readings. Prices give a flat $1 savings per additional tier.
+export interface BundlePack {
+  key: "2" | "3" | "4";
+  name: string;
+  description: string;
+  price: number;
+  displayPrice: string;
+  readings: number;
+  credits: number;
+}
+
+export const BUNDLE_PACKS: Record<"2" | "3" | "4", BundlePack> = {
+  "2": {
+    key: "2",
+    name: "2 Reading Bundle",
+    description: "2 readings, ready whenever you need them",
+    price: 700,
+    displayPrice: "$7.00",
+    readings: 2,
+    credits: 24,
+  },
+  "3": {
+    key: "3",
+    name: "3 Reading Bundle",
+    description: "3 readings, ready whenever you need them",
+    price: 1000,
+    displayPrice: "$10.00",
+    readings: 3,
+    credits: 36,
+  },
+  "4": {
+    key: "4",
+    name: "4 Reading Bundle",
+    description: "4 readings, ready whenever you need them",
+    price: 1300,
+    displayPrice: "$13.00",
+    readings: 4,
+    credits: 48,
+  },
+};
+
+export function isValidBundleTier(n: string): n is "2" | "3" | "4" {
+  return n === "2" || n === "3" || n === "4";
+}
+
 // ── Single subscription tier ──────────────────────────────────────────────────
 // $12.99/mo — 8 readings + 2 free follow-up replies per reading + free downloads + no cooldowns
 export const SUBSCRIPTION_TIER: SubscriptionTier = {

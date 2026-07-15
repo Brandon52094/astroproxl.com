@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { ONE_TIME_PACKS, SUBSCRIPTION_TIER, SUBSCRIBER_TOPUP, DOWNLOAD_PRICE, FOLLOWUP_PRICE, COOLDOWN_BYPASS_PRICE } from "@/lib/paywallConfig";
+import { ONE_TIME_PACKS, SUBSCRIPTION_TIER, SUBSCRIBER_TOPUP, DOWNLOAD_PRICE, FOLLOWUP_PRICE, COOLDOWN_BYPASS_PRICE, BUNDLE_PACKS, isValidBundleTier } from "@/lib/paywallConfig";
 import { JXL_PACKS, isValidJxlTier, JxlTier } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -20,11 +20,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { returnUrl, mode, paywallIndex, jxlTier } = body as {
+    const { returnUrl, mode, paywallIndex, jxlTier, bundleTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "bypass" | "jxl" | "subscriber_topup" | "reading_download" | "followup";
+      mode: "one_time" | "subscription" | "bypass" | "jxl" | "subscriber_topup" | "reading_download" | "followup" | "bundle";
       paywallIndex?: number;
       jxlTier?: string;
+      bundleTier?: string;
     };
 
     if (!returnUrl) {
@@ -123,6 +124,35 @@ export async function POST(request: NextRequest) {
         }],
         metadata: { userId, mode: "followup" },
         success_url: `${returnUrl}?payment=success&mode=followup`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Reading bundle — $7 / $10 / $13 ───────────────────────────────────────
+    if (mode === "bundle") {
+      if (!bundleTier || !isValidBundleTier(bundleTier)) {
+        return NextResponse.json({ error: "Invalid bundleTier" }, { status: 400 });
+      }
+      const bundle = BUNDLE_PACKS[bundleTier];
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: bundle.name, description: bundle.description },
+            unit_amount: bundle.price,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "bundle",
+          bundleTier: bundle.key,
+          credits: bundle.credits,
+        },
+        success_url: `${returnUrl}?payment=success&mode=bundle`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });

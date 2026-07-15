@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       | "subscriber_topup"
       | "reading_download"
       | "followup"
+      | "bundle"
       | undefined;
 
     if (!userId || !mode) {
@@ -89,6 +90,24 @@ export async function POST(request: NextRequest) {
           `[webhook] one_time — granted ${credits} reading credits` +
           (jxlCredits > 0 ? ` + ${jxlCredits} Jxl credits` : "") +
           ` to ${userId}. Paywall ${paywallIndex} complete.`
+        );
+
+      // ── Reading bundle purchase ──────────────────────────────────────────────
+      } else if (mode === "bundle") {
+        const bundleCredits = Number(session.metadata?.credits ?? 0);
+        const bundleTier = session.metadata?.bundleTier ?? "";
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            credits: currentCredits + bundleCredits,
+            firstReadingUsed: true,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] bundle — granted ${bundleCredits} reading credits (tier ${bundleTier}) to ${userId}.`
         );
 
       // ── Subscription ────────────────────────────────────────────────────────
