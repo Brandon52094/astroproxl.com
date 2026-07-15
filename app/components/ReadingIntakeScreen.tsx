@@ -816,7 +816,7 @@ export default function ReadingIntakeScreen({
                     </div>
                   ))}
                 </div>
-                <p className="text-[11px] text-amber-300/60">Incredible Savings.</p>
+                <p className="text-[11px] text-amber-300/60">More, still premium.</p>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-4 flex-1">
@@ -1400,7 +1400,7 @@ export default function ReadingIntakeScreen({
                             }}
                             className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
                           >
-                            {isSubscribeLoading ? "Loading…" : "SPECIAL 6 Month Price — $10.00/mo"}
+                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — $12.99/mo"}
                           </motion.button>
                         </div>
                       )}
