@@ -25,15 +25,12 @@ import { loadChart } from "@/lib/chartStore";
  */
 
 interface UserStatus {
-  firstReadingUsed: boolean;
-  paywallsCompleted: number;
+  credits: number;
   isSubscribed: boolean;
   readingsCompleted: number;
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
-  freeReadingResetAt: string | null;
-  freeReadingAvailable: boolean;
 }
 
 interface TodaySkyPanelProps {
