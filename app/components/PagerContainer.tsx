@@ -6,16 +6,14 @@ import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
 import { migrateChartV2 } from "@/lib/chartStore";
 
+// ── Simplified to match ReadingIntakeScreen ───────────────────────────────────
 interface UserStatus {
-  firstReadingUsed: boolean;
-  paywallsCompleted: number;
+  credits: number;
   isSubscribed: boolean;
   readingsCompleted: number;
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
-  freeReadingResetAt: string | null;
-  freeReadingAvailable: boolean;
 }
 
 /**
@@ -41,12 +39,8 @@ const HORIZONTAL_DOMINANCE_RATIO = 1.4;
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 export default function PagerContainer() {
-  const totalPanels = 3; // real panels: Reading Intake, Birth Chart, Today's Sky
+  const totalPanels = 3;
 
-  // extendedIndex lives in [0, totalPanels + 1]:
-  //   0               -> clone of LAST real panel (Today's Sky)
-  //   1..totalPanels  -> real panels (1 = Reading Intake, 2 = Birth Chart, 3 = Today's Sky)
-  //   totalPanels + 1 -> clone of FIRST real panel (Reading Intake)
   const [extendedIndex, setExtendedIndex] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [suppressTransition, setSuppressTransition] = useState(false);
@@ -55,9 +49,6 @@ export default function PagerContainer() {
 
   // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
-    // Silent, guarded, one-time — heals stale charts missing retrograde data.
-    // Fires before any panel reads the chart, so the panels show correct
-    // retrogrades even on the first post-deploy load. Never throws.
     migrateChartV2();
 
     const fetchStatus = async () => {
@@ -65,15 +56,12 @@ export default function PagerContainer() {
         const response = await fetch("/api/user/credits");
         const data = await response.json();
         setUserStatus({
-          firstReadingUsed: data.firstReadingUsed === true,
-          paywallsCompleted: Number(data.paywallsCompleted ?? 0),
+          credits: Number(data.credits ?? 0),
           isSubscribed: data.isSubscribed === true,
           readingsCompleted: Number(data.readingsCompleted ?? 0),
           onCooldown: data.onCooldown === true,
           cooldownExpiresAt: data.cooldownExpiresAt ?? null,
           canBypass: data.canBypass === true,
-          freeReadingResetAt: data.freeReadingResetAt ?? null,
-          freeReadingAvailable: data.freeReadingAvailable === true,
         });
       } catch {
         // silent
