@@ -11,8 +11,6 @@ import {
   Lock,
   Timer,
   ChevronRight,
-  Layers,
-  Check,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -80,17 +78,14 @@ const AREAS = [
   },
 ];
 
+// ── Simplified UserStatus — free reading fields removed ──────────────────────
 interface UserStatus {
-  firstReadingUsed: boolean;
-  paywallsCompleted: number;
+  credits: number;
   isSubscribed: boolean;
   readingsCompleted: number;
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
-  freeReadingResetAt: string | null;
-  freeReadingAvailable: boolean;
-  credits?: number; // Added for CTA price fix
 }
 
 interface ReadingIntakeScreenProps {
@@ -214,190 +209,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
   },
 };
 
-// ── Bundle Purchase Component ──
-interface BundleTier {
-  key: "2" | "3" | "4";
-  readings: number;
-  price: number;
-  perReading: string;
-  saving: number;
-}
-
-const BUNDLE_TIERS: BundleTier[] = [
-  { key: "2", readings: 2, price: 7, perReading: "3.50", saving: 1 },
-  { key: "3", readings: 3, price: 10, perReading: "3.33", saving: 2 },
-  { key: "4", readings: 4, price: 13, perReading: "3.25", saving: 3 },
-];
-
-function BundlePurchase() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selected, setSelected] = useState<BundleTier["key"] | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const chosen = BUNDLE_TIERS.find((t) => t.key === selected) ?? null;
-
-  const handlePurchase = async () => {
-    if (!chosen || isLoading) return;
-    setIsLoading(true);
-    try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "bundle",
-          bundleTier: chosen.key,
-          returnUrl: `${window.location.origin}/reading/intake`,
-        }),
-      });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-    } catch {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="bundle-card">
-      <style jsx>{`
-        .bundle-card {
-          position: relative;
-          overflow: hidden;
-          border-radius: 24px;
-          border: 1px solid rgba(129, 140, 248, 0.25);
-          background: linear-gradient(180deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.03));
-          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(99, 102, 241, 0.06);
-        }
-        .bundle-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 16px 18px;
-          width: 100%;
-          background: transparent;
-          border: none;
-          color: inherit;
-          font: inherit;
-          cursor: pointer;
-          text-align: left;
-          touch-action: manipulation;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .tier-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 13px 14px;
-          border-radius: 16px;
-          border: 1px solid rgba(129, 140, 248, 0.18);
-          background: rgba(10, 14, 39, 0.4);
-          cursor: pointer;
-          transition: border-color 0.2s ease, background 0.2s ease;
-        }
-        .tier-row.active {
-          border-color: rgba(129, 140, 248, 0.7);
-          background: rgba(99, 102, 241, 0.12);
-          box-shadow: 0 0 22px rgba(99, 102, 241, 0.14);
-        }
-        .buy-btn {
-          height: 52px;
-          width: 100%;
-          border-radius: 16px;
-          border: none;
-          background: #818cf8;
-          color: #0a0e27;
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          box-shadow: 0 0 30px rgba(129, 140, 248, 0.3);
-        }
-        .buy-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
-      `}</style>
-
-      <button
-        type="button"
-        className="bundle-header"
-        onClick={() => setIsOpen((o) => !o)}
-        aria-expanded={isOpen}
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/25 bg-indigo-400/10 text-indigo-300">
-            <Layers className="h-4 w-4" />
-          </div>
-          <div>
-            <h2 className="text-[15px] font-semibold text-indigo-200">Buy Readings in Bulk</h2>
-            <p className="text-[11px] text-slate-400">Save more the more you get</p>
-          </div>
-        </div>
-        <div
-          className={`flex h-8 w-8 items-center justify-center rounded-full border border-indigo-400/20 bg-black/20 text-indigo-300/70 transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </div>
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <div className="space-y-2.5 px-4 pb-4">
-              {BUNDLE_TIERS.map((tier) => {
-                const active = selected === tier.key;
-                return (
-                  <button
-                    key={tier.key}
-                    type="button"
-                    className={`tier-row w-full ${active ? "active" : ""}`}
-                    onClick={() => setSelected(tier.key)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-5 w-5 items-center justify-center rounded-full border ${active ? "border-indigo-300 bg-indigo-400/30" : "border-white/20"}`}
-                      >
-                        {active && <Check className="h-3 w-3 text-indigo-200" />}
-                      </div>
-                      <div className="text-left">
-                        <p className="text-[15px] font-medium text-white">
-                          {tier.readings} readings
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          ${tier.perReading} each · save ${tier.saving}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[17px] font-semibold text-indigo-200">${tier.price}</span>
-                  </button>
-                );
-              })}
-
-              <button
-                type="button"
-                className="buy-btn mt-1"
-                onClick={handlePurchase}
-                disabled={!chosen || isLoading}
-              >
-                {isLoading
-                  ? "Loading…"
-                  : chosen
-                  ? `Get ${chosen.readings} readings — $${chosen.price}`
-                  : "Select a bundle"}
-              </button>
-              <p className="text-center text-[10px] text-slate-500">
-                Credits never expire. Use them anytime.
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 function formatTimeRemaining(expiresAt: string): string {
   const ms = new Date(expiresAt).getTime() - Date.now();
   if (ms <= 0) return "soon";
@@ -409,17 +220,7 @@ function formatTimeRemaining(expiresAt: string): string {
 
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const MAJOR_PLANETS = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
-const TOTAL_CARDS = 5;
-const CARD_TITLES = [
-  "Unlimited Access",
-  "Your Natal Chart",
-  "Today's Astrological Calendar",
-  "Current Important Transits",
-  "Coming Soon",
-];
-
-// ── Constants for CTA price fix ──
-const CREDITS_PER_READING = 12;
+const CARD_TITLES = ["Unlimited Access"];
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
@@ -434,11 +235,7 @@ export default function ReadingIntakeScreen({
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
-  const [touchStartX, setTouchStartX] = useState(0);
-  const [touchEndX, setTouchEndX] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
 
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
@@ -451,12 +248,6 @@ export default function ReadingIntakeScreen({
 
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
-
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
-  }, []);
 
   const clusterTopRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -568,44 +359,26 @@ export default function ReadingIntakeScreen({
   }, [chartStatus]);
 
   const fetchInFlight = useRef(false);
-  const fetchStatus = useCallback(async (): Promise<number> => {
-    if (fetchInFlight.current) return 0;
+  const fetchStatus = useCallback(async () => {
+    if (fetchInFlight.current) return;
     fetchInFlight.current = true;
     try {
       const response = await fetch("/api/user/credits");
       const data = await response.json();
-      const rawPaywalls = Number(data.paywallsCompleted ?? 0);
-      const activePaywallIndex = rawPaywalls >= 4 ? 0 : rawPaywalls;
       setUserStatus({
-        firstReadingUsed: data.firstReadingUsed === true,
-        paywallsCompleted: activePaywallIndex,
+        credits: Number(data.credits ?? 0),
         isSubscribed: data.isSubscribed === true,
         readingsCompleted: Number(data.readingsCompleted ?? 0),
         onCooldown: data.onCooldown === true,
         cooldownExpiresAt: data.cooldownExpiresAt ?? null,
         canBypass: data.canBypass === true,
-        freeReadingResetAt: data.freeReadingResetAt ?? null,
-        freeReadingAvailable: data.freeReadingAvailable === true,
-        credits: Number(data.credits ?? 0), // Added for CTA price fix
       });
-      return activePaywallIndex;
-    } catch { return 0; }
+    } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
   }, []);
 
   useEffect(() => {
-    (async () => {
-      const initialPaywalls = await fetchStatus();
-      if (initialPaywalls === 0) {
-        let attempts = 0;
-        const poll = async () => {
-          const paywalls = await fetchStatus();
-          attempts++;
-          if (paywalls === 0 && attempts < 4) setTimeout(poll, 3000);
-        };
-        setTimeout(poll, 3000);
-      }
-    })();
+    fetchStatus();
   }, [fetchStatus]);
 
   useEffect(() => {
@@ -623,22 +396,14 @@ export default function ReadingIntakeScreen({
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
-  // ── UPDATED: CTA price fix ──
+  // ── Simple: credits or subscribed = free, otherwise $4 ───────────────────
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
     if (!selectedAreaConfig) return "Choose a reading type";
-
-    // Does the user already have a way to read WITHOUT paying $4 right now?
-    const hasFreeReading = userStatus?.freeReadingAvailable === true;
-    const hasCredits = Number(userStatus?.credits ?? 0) >= CREDITS_PER_READING;
+    const hasCredits = Number(userStatus?.credits ?? 0) > 0;
     const isSubscribed = userStatus?.isSubscribed === true;
-    const readsWithoutCharge = hasFreeReading || hasCredits || isSubscribed;
-
-    // Only show the price when they'd genuinely be charged.
-    if (!readsWithoutCharge) {
-      return `${selectedAreaConfig.cta} — $4.00`;
-    }
+    if (!hasCredits && !isSubscribed) return `${selectedAreaConfig.cta} — $4.00`;
     return selectedAreaConfig.cta;
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
 
@@ -682,22 +447,25 @@ export default function ReadingIntakeScreen({
         timeframeType: "month",
         timeframeValue: "next-45-days",
       });
-      if (userStatus?.firstReadingUsed && !userStatus?.isSubscribed) {
-        const creditsRes = await fetch("/api/user/credits");
-        const creditsData = await creditsRes.json();
-        if (Number(creditsData.credits ?? 0) <= 0) {
-          const paywallsCompleted = Number(creditsData.paywallsCompleted ?? 0);
-          const paywallIndex = Math.min(paywallsCompleted + 1, 4);
-          trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.00, currency: "USD" });
-          const checkoutRes = await fetch("/api/stripe/checkout", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ returnUrl: window.location.origin + "/reading/preparing", mode: "one_time", paywallIndex }),
-          });
-          const checkoutData = await checkoutRes.json();
-          if (checkoutData.url) { window.location.href = checkoutData.url; return; }
-        }
+
+      // ── Check credits first, otherwise flat $4 Stripe checkout ──────────
+      const hasCredits = Number(userStatus?.credits ?? 0) > 0;
+      const isSubscribed = userStatus?.isSubscribed === true;
+
+      if (!hasCredits && !isSubscribed) {
+        trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.00, currency: "USD" });
+        const checkoutRes = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            returnUrl: window.location.origin + "/reading/preparing",
+            mode: "one_time",
+          }),
+        });
+        const checkoutData = await checkoutRes.json();
+        if (checkoutData.url) { window.location.href = checkoutData.url; return; }
       }
+
       router.push("/reading/preparing");
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Something went wrong");
@@ -725,61 +493,10 @@ export default function ReadingIntakeScreen({
   const onCooldown = userStatus?.onCooldown ?? false;
   const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
-  const freeReadingCooldownLine = useMemo(() => {
-    if (!userStatus?.freeReadingResetAt) return null;
-    if (onCooldown) return null;
-    if (userStatus?.isSubscribed) return null;
-    const ms = new Date(userStatus.freeReadingResetAt).getTime() - now;
-    if (ms <= 0) return null;
-    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-    const parts: string[] = [];
-    if (days > 0) parts.push(`${days}d`);
-    parts.push(`${hours}h`, `${minutes}m`);
-    return `Free reading resets in ${parts.join(" ")}`;
-  }, [userStatus, onCooldown, now]);
-
-  const goToPrevious = useCallback(() => setCurrentCardIndex(p => (p === 0 ? TOTAL_CARDS - 1 : p - 1)), []);
-  const goToNext = useCallback(() => setCurrentCardIndex(p => (p === TOTAL_CARDS - 1 ? 0 : p + 1)), []);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.touches[0].clientX);
-    setTouchEndX(e.touches[0].clientX);
-    setIsDragging(true);
-  };
-  const handleTouchMove = (e: React.TouchEvent) => { if (isDragging) setTouchEndX(e.touches[0].clientX); };
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-    const dist = touchStartX - touchEndX;
-    if (dist > 50) goToNext();
-    else if (dist < -50) goToPrevious();
-    setTouchStartX(0); setTouchEndX(0);
-  };
-
-  const [mouseStartX, setMouseStartX] = useState(0);
-  const [mouseEndX, setMouseEndX] = useState(0);
-  const [isMouseDragging, setIsMouseDragging] = useState(false);
-  const handleMouseDown = (e: React.MouseEvent) => { setMouseStartX(e.clientX); setMouseEndX(e.clientX); setIsMouseDragging(true); };
-  const handleMouseMove = (e: React.MouseEvent) => { if (isMouseDragging) setMouseEndX(e.clientX); };
-  const handleMouseUp = () => {
-    setIsMouseDragging(false);
-    const dist = mouseStartX - mouseEndX;
-    if (dist > 50) goToNext();
-    else if (dist < -50) goToPrevious();
-    setMouseStartX(0); setMouseEndX(0);
-  };
-
   const getAreaColors = useCallback((areaId: string) => {
     const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
     return theme.areaColors[key];
   }, [theme]);
-
-  const getCardAnimation = useCallback((isSelected: boolean, areaId: string) => {
-    const areaColors = getAreaColors(areaId);
-    if (!isSelected) return { backgroundColor: "rgba(255, 255, 255, 0.03)", borderColor: theme.unselectedBorder, y: 0 };
-    return { backgroundColor: areaColors.bg, borderColor: areaColors.border, y: shouldReduceMotion ? 0 : -2 };
-  }, [getAreaColors, theme.unselectedBorder, shouldReduceMotion]);
 
   const getGlowOverlay = useCallback((areaId: string) => {
     const c = getAreaColors(areaId);
@@ -791,115 +508,42 @@ export default function ReadingIntakeScreen({
     return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
   }, [getAreaColors]);
 
-  const renderCardContent = useCallback((index: number) => {
-    switch (index) {
-      case 0:
-        return (
-          <div className="space-y-4 flex-1">
-            <div>
-              <h3 className="text-[15px] font-semibold leading-snug text-white">
-                {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Readings, No Waiting."}
-              </h3>
-              {!userStatus?.isSubscribed && (
-                <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-                  Need more than one reading a week? This is the best route. Financially & mathematically. See what you get below!
-                </p>
-              )}
-            </div>
-            {!userStatus?.isSubscribed ? (
-              <>
-                <div className="space-y-2">
-                  {["Unlimited Readings", "Unlimited Replies", "Daily Transits & Moon Cycles", "Free Reading Downloads.", "New Premium Feature in Development", "Lock in a Low Price Now"].map(perk => (
-                    <div key={perk} className="flex items-center gap-2.5">
-                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">✓</span>
-                      <span className="text-[12px] text-slate-300">{perk}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[11px] text-amber-300/60">Savings: $41.01 — about 76% off.</p>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-4 flex-1">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
-                  <Sparkles className="h-6 w-6" />
-                </div>
-                <p className="mt-3 text-center text-sm text-slate-300">You have full access to all features.</p>
-                <p className="text-center text-xs text-slate-500 mt-1">Enjoy your Unlimited Access.</p>
+  // ── Carousel card — subscription sale only ──────────────────────────────
+  const renderCardContent = useCallback(() => (
+    <div className="space-y-4 flex-1">
+      <div>
+        <h3 className="text-[15px] font-semibold leading-snug text-white">
+          {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Readings, No Waiting."}
+        </h3>
+        {!userStatus?.isSubscribed && (
+          <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
+            Need more than one reading a week? This is the best route. Financially & mathematically.
+          </p>
+        )}
+      </div>
+      {!userStatus?.isSubscribed ? (
+        <>
+          <div className="space-y-2">
+            {["Unlimited Readings", "Unlimited Replies", "Daily Transits & Moon Cycles", "Free Reading Downloads.", "New Premium Feature in Development", "Lock in a Low Price Now"].map(perk => (
+              <div key={perk} className="flex items-center gap-2.5">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">✓</span>
+                <span className="text-[12px] text-slate-300">{perk}</span>
               </div>
-            )}
+            ))}
           </div>
-        );
-      case 1:
-        return (
-          <div className="space-y-3 flex-1">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Sun</span><p className="text-sm text-white font-medium">{natalSun ? `${natalSun.sign} ${natalSun.degree}` : "—"}</p></div>
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Moon</span><p className="text-sm text-white font-medium">{natalMoon ? `${natalMoon.sign} ${natalMoon.degree}` : "—"}</p></div>
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Rising</span><p className="text-sm text-white font-medium">{natalRising ? `${natalRising.sign} ${natalRising.degree}` : "—"}</p></div>
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Planets</span><p className="text-sm text-white font-medium">{allPlanets.length}</p></div>
-            </div>
-            <div className="max-h-[100px] overflow-y-auto space-y-1">
-              {allPlanets.slice(0, 5).map(planet => (
-                <div key={planet.name} className="flex justify-between text-xs">
-                  <span className="text-slate-400">{planet.name}</span>
-                  <span className="text-white">{planet.sign} {planet.degree}</span>
-                </div>
-              ))}
-              {allPlanets.length > 5 && <div className="text-xs text-slate-500">+{allPlanets.length - 5} more</div>}
-            </div>
+          <p className="text-[11px] text-amber-300/60">Savings: $41.01 — about 76% off.</p>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-4 flex-1">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
+            <Sparkles className="h-6 w-6" />
           </div>
-        );
-      case 2:
-        return (
-          <div className="space-y-3 flex-1">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Moon Phase</span><p className="text-sm text-white font-medium">{moonPhase?.phaseName || "—"}</p></div>
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Illumination</span><p className="text-sm text-white font-medium">{moonPhase?.illuminationPercent || "—"}%</p></div>
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Moon Sign</span><p className="text-sm text-white font-medium">{moonPhase?.moonSign || "—"}</p></div>
-              <div className="rounded-xl bg-white/[0.03] px-3 py-2"><span className="text-xs text-slate-400">Retrogrades</span><p className="text-sm text-white font-medium">{todayPlanets.filter(p => p.isRetrograde).length || 0}</p></div>
-            </div>
-            <div className="space-y-1 max-h-[80px] overflow-y-auto">
-              {todayPlanets.slice(0, 4).map(planet => (
-                <div key={planet.name} className="flex justify-between text-xs">
-                  <span className="text-slate-400">{planet.name}</span>
-                  <span className="text-white">{planet.sign} {planet.degree}{planet.isRetrograde ? " ℞" : ""}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      case 3: {
-        const majorTransits = todayPlanets.filter(p => MAJOR_PLANETS.includes(p.name));
-        return (
-          <div className="space-y-3 flex-1">
-            <div className="text-xs text-slate-400 mb-2">Major planetary transits</div>
-            {majorTransits.length > 0 ? (
-              <div className="space-y-2">
-                {majorTransits.map(planet => (
-                  <div key={planet.name} className="flex justify-between items-center rounded-xl bg-white/[0.03] px-3 py-2">
-                    <span className="text-sm text-slate-300">{planet.name}</span>
-                    <span className="text-sm text-white">{planet.sign} {planet.degree}{planet.isRetrograde && " ℞"}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center text-sm text-slate-500 py-4">Loading transits...</div>
-            )}
-          </div>
-        );
-      }
-      case 4:
-        return (
-          <div className="flex flex-col items-center justify-center h-full py-8 flex-1">
-            <Sparkles className="h-12 w-12 text-amber-300/40 mb-4" />
-            <p className="text-center text-sm text-slate-400">More features coming soon</p>
-            <p className="text-center text-xs text-slate-500 mt-2">Stay tuned for updates</p>
-          </div>
-        );
-      default:
-        return null;
-    }
-  }, [userStatus, natalSun, natalMoon, natalRising, allPlanets, moonPhase, todayPlanets]);
+          <p className="mt-3 text-center text-sm text-slate-300">You have full access to all features.</p>
+          <p className="text-center text-xs text-slate-500 mt-1">Enjoy your Unlimited Access.</p>
+        </div>
+      )}
+    </div>
+  ), [userStatus]);
 
   return (
     <div
@@ -912,8 +556,6 @@ export default function ReadingIntakeScreen({
       <style jsx>{`
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
-
-        /* ── kills 300ms tap delay on the area buttons ── */
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
         @keyframes jxlAmberPulse {
@@ -943,38 +585,32 @@ export default function ReadingIntakeScreen({
           94% { opacity: 0.78; transform: scale(1); }
         }
 
-        /* ── Hero shine sweep ── */
-        @keyframes heroShine {
-          0% { transform: translateX(-140%) skewX(-18deg); }
-          60% { transform: translateX(240%) skewX(-18deg); }
-          100% { transform: translateX(240%) skewX(-18deg); }
+        /* ── Hero animated outline ── */
+        @keyframes heroOutline {
+          0%   { box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 22px rgba(255,255,255,0.18), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.55); }
+          20%  { box-shadow: 0 0 0 2px rgba(94,234,212,0.70), 0 0 28px rgba(94,234,212,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(94,234,212,0.70); }
+          40%  { box-shadow: 0 0 0 2px rgba(129,140,248,0.70), 0 0 28px rgba(129,140,248,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(129,140,248,0.70); }
+          60%  { box-shadow: 0 0 0 2px rgba(167,139,250,0.70), 0 0 28px rgba(167,139,250,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(167,139,250,0.70); }
+          80%  { box-shadow: 0 0 0 2px rgba(45,212,191,0.70), 0 0 28px rgba(45,212,191,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(45,212,191,0.70); }
+          100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 22px rgba(255,255,255,0.18), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.55); }
         }
-        .hero-shine {
-          position: relative;
-          overflow: hidden;
-          isolation: isolate;
+        .hero-outline { animation: heroOutline 8s ease-in-out infinite; border-width: 2px; }
+
+        /* ── Ask Anything shimmer sweep — overlay, text stays white ── */
+        @keyframes textSweep {
+          0%, 70%  { transform: translateX(-180%); opacity: 0; }
+          75%      { opacity: 1; }
+          90%      { transform: translateX(180%); opacity: 0; }
+          100%     { transform: translateX(180%); opacity: 0; }
         }
-        .hero-shine::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          width: 45%;
-          background: linear-gradient(
-            105deg,
-            transparent 0%,
-            rgba(255, 255, 255, 0.09) 45%,
-            rgba(255, 255, 255, 0.16) 50%,
-            rgba(255, 255, 255, 0.09) 55%,
-            transparent 100%
-          );
-          transform: translateX(-140%) skewX(-18deg);
-          animation: heroShine 4.6s ease-in-out infinite;
-          pointer-events: none;
-          z-index: 1;
+        .ask-anything-wrap { position: relative; display: inline-block; }
+        .ask-anything-sweep {
+          position: absolute; inset: 0; pointer-events: none;
+          background: linear-gradient(105deg, transparent 30%, rgba(94,234,212,0.55) 48%, rgba(200,255,245,0.75) 50%, rgba(94,234,212,0.55) 52%, transparent 70%);
+          animation: textSweep 8s ease-in-out infinite;
+          mix-blend-mode: overlay;
+          border-radius: 4px;
         }
-        .hero-shine > * { position: relative; z-index: 2; }
 
         .jxl-sparkle { position: absolute; border-radius: 9999px; pointer-events: none; z-index: 5; opacity: 0; animation: jxlGlint 5s ease-in-out infinite; }
         .jxl-sparkle--indigo { background: rgb(199,210,254); box-shadow: 0 0 8px 2px rgba(129,140,248,0.9), 0 0 16px 4px rgba(129,140,248,0.5); }
@@ -982,7 +618,6 @@ export default function ReadingIntakeScreen({
 
         .cooldown-glow { animation: cooldownPulse 3s ease-in-out infinite; }
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
-        .hero-card-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
         .selected-card-glow { animation: selectedWhiteGlow 2.8s ease-in-out infinite; }
 
         .gold-shimmer { position: relative; overflow: hidden; border-radius: 18px; border: 2px solid rgba(251,191,36,0.6); background: linear-gradient(180deg, rgba(120,84,18,0.45), rgba(50,34,10,0.25)); box-shadow: 0 0 60px rgba(251,191,36,0.25), 0 18px 36px rgba(0,0,0,0.65); cursor: pointer; }
@@ -1006,11 +641,6 @@ export default function ReadingIntakeScreen({
         .carousel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; cursor: pointer; transition: background 0.15s ease; width: 100%; text-align: left; background: transparent; border: none; color: inherit; font: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         .carousel-header:hover { background: rgba(255,255,255,0.02); }
         .carousel-content { border-top: 1px solid rgba(251,191,36,0.1); padding: 0; display: flex; flex-direction: column; }
-        .carousel-track { display: flex; height: 100%; transition: transform 0.4s ease; will-change: transform; cursor: grab; user-select: none; }
-        .carousel-track:active { cursor: grabbing; }
-        .carousel-card { min-width: 100%; padding: 0; height: 100%; }
-        .locked-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,8,22,0.7); backdrop-filter: blur(8px); border-radius: 16px; z-index: 10; }
-        .blur-content { filter: blur(6px); opacity: 0.4; pointer-events: none; user-select: none; }
 
         @media (prefers-reduced-motion: reduce) {
           .jxl-sparkle, .gold-shimmer::before,
@@ -1018,7 +648,8 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .carousel-container::after,
-          .hero-shine::after { animation: none !important; opacity: 0; }
+          .hero-outline,
+          .ask-anything-sweep { animation: none !important; }
         }
       `}</style>
 
@@ -1028,30 +659,20 @@ export default function ReadingIntakeScreen({
           <motion.span
             key={star.id}
             className="absolute rounded-full bg-white"
-            style={{
-              left: star.left,
-              top: star.top,
-              width: star.size,
-              height: star.size,
-              opacity: star.opacity,
-            }}
+            style={{ left: star.left, top: star.top, width: star.size, height: star.size, opacity: star.opacity }}
             animate={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
-                    scale: [1, 1.6, 1],
-                  }
+              shouldReduceMotion ? undefined : {
+                opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
+                scale: [1, 1.6, 1],
+              }
             }
             transition={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    duration: 2.34 + (star.id % 5) * 0.54,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: star.delay,
-                  }
+              shouldReduceMotion ? undefined : {
+                duration: 2.34 + (star.id % 5) * 0.54,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: star.delay,
+              }
             }
           />
         ))}
@@ -1069,31 +690,28 @@ export default function ReadingIntakeScreen({
         >
           {/* ── HERO ── */}
           <section className="mb-5 pt-1">
-            <div
-              className="hero-shine hero-card-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
-              style={{
-                borderColor: "rgba(255, 255, 255, 0.60)",
-                boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
-              }}
-            >
+            <div className="hero-outline relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     AstroProXL
                   </span>
                 </div>
-                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  You Can Ask Anything
-                </h1>
+                <div className="ask-anything-wrap">
+                  <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                    You Can Ask Anything
+                  </h1>
+                  <div className="ask-anything-sweep" aria-hidden="true" />
+                </div>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  Your Personal Astrological Predictions. 
+                  Your Personal Astrological Predictions.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* ── Reading cycle ── */}
-          {(userStatus?.firstReadingUsed || (userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
+          {/* ── Reading cycle — kept for cooldown tracking ── */}
+          {((userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
             <div className="mb-1 flex w-full justify-center">
               <div className="w-full max-w-[280px] space-y-2">
                 <div className="flex items-center justify-center gap-2">
@@ -1119,13 +737,6 @@ export default function ReadingIntakeScreen({
             </div>
           )}
 
-          {freeReadingCooldownLine && (
-            <div className="mb-8 mt-2 flex items-center justify-center gap-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-white/85" />
-              <span className="text-[11px] text-white/74">{freeReadingCooldownLine}</span>
-            </div>
-          )}
-
           {onCooldown ? (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative">
               <div className="pointer-events-none select-none space-y-3 blur-[5px] opacity-30">
@@ -1134,12 +745,9 @@ export default function ReadingIntakeScreen({
                   return (
                     <div key={area.id} className="standard-shadow w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4">
                       <div className="flex items-start gap-3">
-                        <motion.div
-                          animate={getIconPulseAnimation(false)}
-                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-slate-300"
-                        >
+                        <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-slate-300">
                           <Icon className="h-4 w-4" />
-                        </motion.div>
+                        </div>
                         <div>
                           <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
                           <p className="mt-1 text-sm text-slate-400">{area.description}</p>
@@ -1158,7 +766,7 @@ export default function ReadingIntakeScreen({
                   </div>
                   <h2 className="mb-2 text-[16px] font-semibold text-white">Cooldown period active</h2>
                   <p className="mb-1 text-[13px] leading-5 text-slate-400">
-                    We care about your wellbeing, we've implemented a cooldown period between reading cycles.
+                    We care about your wellbeing — we've implemented a cooldown period between reading cycles.
                   </p>
                   {userStatus?.cooldownExpiresAt && (
                     <p className="mt-2 text-[12px] text-indigo-300/80">Resets in {formatTimeRemaining(userStatus.cooldownExpiresAt)}</p>
@@ -1216,10 +824,7 @@ export default function ReadingIntakeScreen({
                       } as React.CSSProperties}
                     >
                       {isSelected && (
-                        <div
-                          className="pointer-events-none absolute inset-0 rounded-[24px]"
-                          style={{ background: getGlowOverlay(area.id), zIndex: 0 }}
-                        />
+                        <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
                       )}
                       <div className="relative z-[1] flex items-start gap-3">
                         <motion.div
@@ -1239,9 +844,7 @@ export default function ReadingIntakeScreen({
                         </motion.div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-3">
-                            <h2 className={cn("text-[15px] font-semibold transition-colors duration-300", isSelected ? "text-white" : "text-white")}>
-                              {area.title}
-                            </h2>
+                            <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
                             <AnimatePresence>
                               {isSelected && (
                                 <motion.span
@@ -1316,25 +919,28 @@ export default function ReadingIntakeScreen({
                 type="button"
                 onClick={handleStartReading}
                 disabled={!canSubmit || isCreatingReading}
-                className="standard-shadow h-14 w-full rounded-2xl border border-indigo-400/30 bg-gradient-to-b from-indigo-500 to-indigo-700 text-white text-[15px] font-medium transition-all duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900/60 disabled:text-slate-500"
+                className="standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  background: "transparent",
+                  border: "2px solid rgba(94,234,212,0.65)",
+                  color: "rgba(94,234,212,0.95)",
+                  boxShadow: canSubmit && !isCreatingReading
+                    ? "0 0 18px rgba(45,212,191,0.22), 0 18px 44px rgba(0,0,0,0.72)"
+                    : "0 18px 44px rgba(0,0,0,0.72)",
+                }}
               >
                 {buttonCopy}
               </Button>
             )}
           </div>
 
-          {/* ── BUNDLE PURCHASE (NEW) ── */}
-          <div className="mt-4">
-            <BundlePurchase />
-          </div>
-
           <div className="mt-4 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Swipe Left</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Unlimited Access</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── CAROUSEL ── */}
+          {/* ── CAROUSEL — subscription sale only ── */}
           <div className="mt-4">
             <div className="carousel-container">
               <button type="button" onClick={() => setIsCarouselOpen(!isCarouselOpen)} className="carousel-header" aria-expanded={isCarouselOpen}>
@@ -1356,30 +962,9 @@ export default function ReadingIntakeScreen({
                 {isCarouselOpen && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: "easeOut" }} className="overflow-hidden">
                     <div className="carousel-content">
-                      <div className="relative" style={{ padding: 0, overflow: "hidden", flex: 1 }}
-                        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-                        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
-                      >
-                        <div className="carousel-track" style={{ display: "flex", height: "100%", transform: `translateX(-${currentCardIndex * 100}%)`, transition: isDragging || isMouseDragging ? "none" : "transform 0.4s ease" }}>
-                          {Array.from({ length: TOTAL_CARDS }).map((_, index) => {
-                            const shouldBlur = !userStatus?.isSubscribed && index !== 0;
-                            return (
-                              <div key={index} className="carousel-card" style={{ minWidth: "100%", padding: 0, height: "100%" }}>
-                                <div className="relative w-full h-full min-h-[220px] bg-black/20 p-6 flex flex-col">
-                                  <h3 className="text-sm font-semibold text-amber-200 mb-3">{CARD_TITLES[index]}</h3>
-                                  <div className={shouldBlur ? "blur-content flex-1" : "flex-1"}>{renderCardContent(index)}</div>
-                                  {shouldBlur && (
-                                    <div className="locked-overlay">
-                                      <Lock className="h-8 w-8 text-amber-300/60 mb-2" />
-                                      <p className="text-xs text-amber-200/60 font-medium">Premium Feature</p>
-                                      <p className="text-[10px] text-slate-400 mt-1">Subscribe to unlock</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                      <div className="relative w-full min-h-[220px] bg-black/20 p-6 flex flex-col">
+                        <h3 className="text-sm font-semibold text-amber-200 mb-3">{CARD_TITLES[0]}</h3>
+                        <div className="flex-1">{renderCardContent()}</div>
                       </div>
                       {!userStatus?.isSubscribed && (
                         <div className="p-4 pt-3 border-t border-amber-300/10">
@@ -1389,10 +974,14 @@ export default function ReadingIntakeScreen({
                             type="button"
                             onClick={() => {
                               setIsSubscribeLoading(true);
-                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 10.00, currency: "USD" });
+                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
                               (async () => {
                                 try {
-                                  const res = await fetch("/api/stripe/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ returnUrl: `${window.location.origin}/reading/intake`, mode: "subscription", paywallIndex: 1 }) });
+                                  const res = await fetch("/api/stripe/checkout", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ returnUrl: `${window.location.origin}/reading/intake`, mode: "subscription" }),
+                                  });
                                   const data = await res.json();
                                   if (data.url) window.location.href = data.url;
                                 } finally { setIsSubscribeLoading(false); }

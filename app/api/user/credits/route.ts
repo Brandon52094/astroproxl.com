@@ -2,7 +2,6 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks
-const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 
 // ── GET /api/user/credits ─────────────────────────────────────────────────────
 export async function GET() {
@@ -17,40 +16,8 @@ export async function GET() {
     const metadata = user.publicMetadata;
 
     const credits = Number(metadata?.credits ?? 0);
-    const firstReadingUsed = metadata?.firstReadingUsed === true;
-    const paywallsCompleted = Number(metadata?.paywallsCompleted ?? 0);
     const isSubscribed = metadata?.isSubscribed === true;
     const readingsCompleted = Number(metadata?.readingsCompleted ?? 0);
-
-    // ── Free weekly reading reset logic ───────────────────────────────────────
-    const freeReadingUsedAt = metadata?.freeReadingUsedAt
-      ? new Date(metadata.freeReadingUsedAt as string)
-      : null;
-
-    let freeReadingAvailable = !firstReadingUsed; // brand new user
-    let freeReadingResetAt: string | null = null;
-
-    if (freeReadingUsedAt && !isSubscribed) {
-      const resetAt = new Date(freeReadingUsedAt.getTime() + FREE_READING_RESET_MS);
-      const resetted = Date.now() >= resetAt.getTime();
-
-      if (resetted) {
-        // Weekly reset — give them a free reading again
-        freeReadingAvailable = true;
-        freeReadingResetAt = null;
-        // Clear freeReadingUsedAt so they can take the free reading
-        await client.users.updateUserMetadata(userId, {
-          publicMetadata: {
-            ...metadata,
-            freeReadingUsedAt: undefined,
-            firstReadingUsed: false,
-          },
-        });
-      } else {
-        freeReadingAvailable = false;
-        freeReadingResetAt = resetAt.toISOString();
-      }
-    }
 
     // ── Cooldown logic ────────────────────────────────────────────────────────
     const cooldownStartedAt = metadata?.cooldownStartedAt
@@ -81,33 +48,22 @@ export async function GET() {
           publicMetadata: {
             ...metadata,
             readingsCompleted: 0,
-            paywallsCompleted: 0,
             cooldownStartedAt: undefined,
-            credits: 0,
-            firstReadingUsed: false,
-            freeReadingUsedAt: undefined,
           },
         });
       }
     }
 
-    const canUnlockPage4 = isSubscribed || credits > 0;
     const downloadUnlocked = metadata?.downloadUnlocked === true;
 
-     return NextResponse.json({
+    return NextResponse.json({
       credits,
-      firstReadingUsed: firstReadingUsed && !freeReadingAvailable,
-      paywallsCompleted,
       isSubscribed,
-      canStartReading: isSubscribed || freeReadingAvailable || credits >= 4,
-      canUnlockPage4,
       readingsCompleted,
       onCooldown: isSubscribed ? false : onCooldown,
       cooldownExpiresAt,
       canBypass: isSubscribed ? false : canBypass,
       downloadUnlocked,
-      freeReadingResetAt,
-      freeReadingAvailable,
       freeRepliesRemaining: Number(metadata?.freeRepliesRemaining ?? 0),
     });
   } catch (error) {
@@ -116,7 +72,7 @@ export async function GET() {
   }
 }
 
-// ── POST /api/user/credits ────────────────────────────────────────────────────
+// ── POST /api/user/credits — deduct credits (admin can add via Clerk dashboard) ──
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
