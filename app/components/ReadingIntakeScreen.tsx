@@ -7,7 +7,6 @@ import {
   Briefcase,
   Wallet,
   Sparkles,
-  RefreshCw,
   Lock,
   Timer,
   ChevronRight,
@@ -219,7 +218,6 @@ function formatTimeRemaining(expiresAt: string): string {
 }
 
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
-const MAJOR_PLANETS = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const CARD_TITLES = ["Unlimited Access"];
 
 export default function ReadingIntakeScreen({
@@ -377,9 +375,7 @@ export default function ReadingIntakeScreen({
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
   }, []);
 
-  useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -396,7 +392,6 @@ export default function ReadingIntakeScreen({
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
-  // ── Simple: credits or subscribed = free, otherwise $4 ───────────────────
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
@@ -448,7 +443,6 @@ export default function ReadingIntakeScreen({
         timeframeValue: "next-45-days",
       });
 
-      // ── Check credits first, otherwise flat $4 Stripe checkout ──────────
       const hasCredits = Number(userStatus?.credits ?? 0) > 0;
       const isSubscribed = userStatus?.isSubscribed === true;
 
@@ -508,7 +502,6 @@ export default function ReadingIntakeScreen({
     return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
   }, [getAreaColors]);
 
-  // ── Carousel card — subscription sale only ──────────────────────────────
   const renderCardContent = useCallback(() => (
     <div className="space-y-4 flex-1">
       <div>
@@ -585,32 +578,24 @@ export default function ReadingIntakeScreen({
           94% { opacity: 0.78; transform: scale(1); }
         }
 
-        /* ── Hero animated outline ── */
-        @keyframes heroOutline {
-          0%   { box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 22px rgba(255,255,255,0.18), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.55); }
-          20%  { box-shadow: 0 0 0 2px rgba(94,234,212,0.70), 0 0 28px rgba(94,234,212,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(94,234,212,0.70); }
-          40%  { box-shadow: 0 0 0 2px rgba(129,140,248,0.70), 0 0 28px rgba(129,140,248,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(129,140,248,0.70); }
-          60%  { box-shadow: 0 0 0 2px rgba(167,139,250,0.70), 0 0 28px rgba(167,139,250,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(167,139,250,0.70); }
-          80%  { box-shadow: 0 0 0 2px rgba(45,212,191,0.70), 0 0 28px rgba(45,212,191,0.30), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(45,212,191,0.70); }
-          100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 22px rgba(255,255,255,0.18), 0 18px 44px rgba(0,0,0,0.72); border-color: rgba(255,255,255,0.55); }
+        @keyframes heroShine {
+          0% { transform: translateX(-140%) skewX(-18deg); }
+          60% { transform: translateX(240%) skewX(-18deg); }
+          100% { transform: translateX(240%) skewX(-18deg); }
         }
-        .hero-outline { animation: heroOutline 8s ease-in-out infinite; border-width: 2px; }
-
-        /* ── Ask Anything shimmer sweep — overlay, text stays white ── */
-        @keyframes textSweep {
-          0%, 70%  { transform: translateX(-180%); opacity: 0; }
-          75%      { opacity: 1; }
-          90%      { transform: translateX(180%); opacity: 0; }
-          100%     { transform: translateX(180%); opacity: 0; }
+        .hero-shine { position: relative; overflow: hidden; isolation: isolate; }
+        .hero-shine::after {
+          content: "";
+          position: absolute;
+          top: 0; bottom: 0; left: 0;
+          width: 45%;
+          background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%);
+          transform: translateX(-140%) skewX(-18deg);
+          animation: heroShine 4.6s ease-in-out infinite;
+          pointer-events: none;
+          z-index: 1;
         }
-        .ask-anything-wrap { position: relative; display: inline-block; }
-        .ask-anything-sweep {
-          position: absolute; inset: 0; pointer-events: none;
-          background: linear-gradient(105deg, transparent 30%, rgba(94,234,212,0.55) 48%, rgba(200,255,245,0.75) 50%, rgba(94,234,212,0.55) 52%, transparent 70%);
-          animation: textSweep 8s ease-in-out infinite;
-          mix-blend-mode: overlay;
-          border-radius: 4px;
-        }
+        .hero-shine > * { position: relative; z-index: 2; }
 
         .jxl-sparkle { position: absolute; border-radius: 9999px; pointer-events: none; z-index: 5; opacity: 0; animation: jxlGlint 5s ease-in-out infinite; }
         .jxl-sparkle--indigo { background: rgb(199,210,254); box-shadow: 0 0 8px 2px rgba(129,140,248,0.9), 0 0 16px 4px rgba(129,140,248,0.5); }
@@ -648,8 +633,7 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .carousel-container::after,
-          .hero-outline,
-          .ask-anything-sweep { animation: none !important; }
+          .hero-shine::after { animation: none !important; opacity: 0; }
         }
       `}</style>
 
@@ -690,19 +674,22 @@ export default function ReadingIntakeScreen({
         >
           {/* ── HERO ── */}
           <section className="mb-5 pt-1">
-            <div className="hero-outline relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center">
+            <div
+              className="hero-shine standard-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
+              style={{
+                borderColor: "rgba(255, 255, 255, 0.60)",
+                boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
+              }}
+            >
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     AstroProXL
                   </span>
                 </div>
-                <div className="ask-anything-wrap">
-                  <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                    You Can Ask Anything
-                  </h1>
-                  <div className="ask-anything-sweep" aria-hidden="true" />
-                </div>
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                  You Can Ask Anything
+                </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
                   Your Personal Astrological Predictions.
                 </p>
@@ -745,9 +732,12 @@ export default function ReadingIntakeScreen({
                   return (
                     <div key={area.id} className="standard-shadow w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4">
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-slate-300">
+                        <motion.div
+                          animate={getIconPulseAnimation(false)}
+                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-slate-300"
+                        >
                           <Icon className="h-4 w-4" />
-                        </div>
+                        </motion.div>
                         <div>
                           <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
                           <p className="mt-1 text-sm text-slate-400">{area.description}</p>
@@ -940,7 +930,7 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── CAROUSEL — subscription sale only ── */}
+          {/* ── CAROUSEL — subscription sale only, no swiping ── */}
           <div className="mt-4">
             <div className="carousel-container">
               <button type="button" onClick={() => setIsCarouselOpen(!isCarouselOpen)} className="carousel-header" aria-expanded={isCarouselOpen}>
