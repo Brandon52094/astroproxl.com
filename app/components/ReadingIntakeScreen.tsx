@@ -663,7 +663,7 @@ export default function ReadingIntakeScreen({
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-10"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-4"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -926,7 +926,7 @@ export default function ReadingIntakeScreen({
 
           <div className="mt-4 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Swipe Left</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Unlimited Access</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
