@@ -35,6 +35,18 @@ const DROP_RE = /^\s*DROP\s*:\s*/i;
 const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
 const LOCK_RE = /^\s*LOCK\s+IN\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
 
+/**
+ * Small, stable key derived from a reading's text. Used to (a) reset the free
+ * reply counter when a NEW reading loads, and (b) mark a reading complete only
+ * once — so returning from the Stripe reply-pack checkout can't re-advance the
+ * reading cycle.
+ */
+function hashKey(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
 function extractDateText(raw: string): string {
   const m = raw.match(/\[\[DATE:\s*([^\]]+)\]\]/);
   return m ? m[1].trim() : raw.trim();
@@ -148,6 +160,14 @@ export default function ReadingResultsPage() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // ── Reply system state ──────────────────────────────────────────────────
+  const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
+  const [replyCreditsRemaining, setReplyCreditsRemaining] = useState<number | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [justPurchased, setJustPurchased] = useState(false);
+
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
 
@@ -161,18 +181,38 @@ export default function ReadingResultsPage() {
     setIsLoading(false);
   }, [router]);
 
-  // ── Mark the reading complete exactly once, when a real reading has loaded.
-  // This is what advances readingsCompleted, deducts per-reading credits, and
-  // triggers the cooldown at 4. It lives here (not in the webhook) because the
-  // webhook only handles payment events — completing a reading is a separate
-  // event. The useRef guard ensures it fires once per loaded reading, not on
-  // every re-render (follow-ups, credit refetches, animations all re-render).
+  // ── Mark the reading complete exactly once PER READING (not per mount).
+  // This advances readingsCompleted, deducts a per-reading credit, and triggers
+  // the cooldown at 4. It must fire once for a given reading and never again —
+  // otherwise returning from the reply-pack Stripe checkout (which reloads this
+  // page) would count the same reading twice. We persist a per-reading flag in
+  // localStorage and only set it after a successful call, so a failed call can
+  // still retry.
   useEffect(() => {
-    if (reading && !hasMarkedComplete.current) {
+    if (!reading) return;
+    const page0 = reading.pages?.[0];
+    const key = page0 ? hashKey(page0.title + "::" + page0.content) : "";
+    const completedFlag = key ? "dfp_reading_done_" + key : "";
+
+    try {
+      if (completedFlag && localStorage.getItem(completedFlag) === "1") {
+        hasMarkedComplete.current = true;
+        return;
+      }
+    } catch {
+      // localStorage unavailable — fall through to the in-session guard.
+    }
+
+    if (!hasMarkedComplete.current) {
       hasMarkedComplete.current = true;
       fetch("/api/user/reading-complete", { method: "POST" })
         .then((res) => {
           if (!res.ok) throw new Error("reading-complete failed");
+          try {
+            if (completedFlag) localStorage.setItem(completedFlag, "1");
+          } catch {
+            // ignore persistence failure
+          }
         })
         .catch(() => {
           // Allow a retry on failure rather than silently losing the count.
@@ -180,6 +220,44 @@ export default function ReadingResultsPage() {
         });
     }
   }, [reading]);
+
+  // ── Free-reply counter: reset to 0 whenever a NEW reading loads ──────────
+  // Free replies are tracked client-side and reported to the followup route,
+  // which stays authoritative for PAID replies (replyCredits) and subscriptions.
+  useEffect(() => {
+    if (!reading) return;
+    const page0 = reading.pages?.[0];
+    const key = "k_" + (page0 ? hashKey(page0.title + "::" + page0.content) : "none");
+    try {
+      const storedKey = localStorage.getItem("dfp_free_replies_key");
+      if (storedKey !== key) {
+        localStorage.setItem("dfp_free_replies_key", key);
+        localStorage.setItem("dfp_free_replies_used", "0");
+        setFreeRepliesUsed(0);
+      } else {
+        setFreeRepliesUsed(Math.max(0, Number(localStorage.getItem("dfp_free_replies_used") ?? 0)));
+      }
+    } catch {
+      setFreeRepliesUsed(0);
+    }
+    setShowPaywall(false);
+    setReplyCreditsRemaining(null);
+  }, [reading]);
+
+  // ── Returning from a successful reply-pack purchase ─────────────────────
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("payment") === "success" && params.get("mode") === "reply_pack") {
+        setJustPurchased(true);
+        setShowPaywall(false);
+        // Strip the query params so a refresh doesn't re-show the banner.
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     const fetchCredits = async () => {
@@ -278,14 +356,36 @@ export default function ReadingResultsPage() {
           solarReturn: chart.chartData.solarReturn,
           moonPhase: chart.chartData.moonPhase,
           conversationHistory: conversationHistory || undefined,
+          freeRepliesUsed,
         }),
       });
 
       const data = await response.json();
       if (!response.ok) {
+        // Out of replies → surface the paywall instead of a red error.
+        if (response.status === 402 || data.code === "NO_REPLY_CREDITS") {
+          setShowPaywall(true);
+          return;
+        }
         setFollowupError(data.error || "Something went wrong. Please try again.");
         return;
       }
+
+      // Update counters from the server's authoritative reply metadata.
+      const meta = data.replyMeta;
+      if (meta?.usedFreeReply) {
+        const nextUsed = freeRepliesUsed + 1;
+        setFreeRepliesUsed(nextUsed);
+        try {
+          localStorage.setItem("dfp_free_replies_used", String(nextUsed));
+        } catch {
+          // ignore
+        }
+      }
+      if (meta && typeof meta.replyCreditsRemaining === "number") {
+        setReplyCreditsRemaining(meta.replyCreditsRemaining);
+      }
+      setShowPaywall(false);
 
       setFollowups((prev) => [
         ...prev,
@@ -301,6 +401,36 @@ export default function ReadingResultsPage() {
       setIsGeneratingFollowup(false);
     }
   };
+
+  // ── Reply-pack / subscription checkout ──────────────────────────────────
+  const startCheckout = async (mode: "reply_pack" | "subscription") => {
+    if (isPurchasing) return;
+    setIsPurchasing(true);
+    setFollowupError(null);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          returnUrl: typeof window !== "undefined" ? window.location.href : "",
+        }),
+      });
+      const data = await res.json();
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        setFollowupError("Couldn't start checkout. Please try again.");
+        setIsPurchasing(false);
+      }
+    } catch {
+      setFollowupError("Couldn't start checkout. Please try again.");
+      setIsPurchasing(false);
+    }
+  };
+
+  const handleBuyReplyPack = () => startCheckout("reply_pack");
+  const handleSubscribe = () => startCheckout("subscription");
 
   const handleDone = () => {
     clearIntake();
@@ -318,6 +448,18 @@ export default function ReadingResultsPage() {
   const firstOpeningIndex = parsedSections
     ? parsedSections.findIndex((s) => s.kind === "opening")
     : -1;
+
+  // ── Reply availability (derived) ────────────────────────────────────────
+  const isSubscribed = credits?.isSubscribed === true;
+  const freeRemainingClient = Math.max(0, 2 - freeRepliesUsed);
+  const outOfReplies =
+    !isSubscribed &&
+    freeRemainingClient <= 0 &&
+    replyCreditsRemaining !== null &&
+    replyCreditsRemaining <= 0;
+  // Subscribers never see the paywall. Everyone else sees it when the server
+  // said "no replies" (402 → showPaywall) or once we know credits hit zero.
+  const paywallVisible = !isSubscribed && (showPaywall || outOfReplies);
 
   return (
     // 🔥 FIX: Made results-root a proper scroll container
@@ -483,7 +625,9 @@ export default function ReadingResultsPage() {
           border: 1px solid rgba(45, 212, 191, 0.25);
           border-radius: 18px;
           color: #e2e8f0;
-          font-size: 15px;
+          /* 16px keeps iOS Safari from auto-zooming the page on focus — this is
+             the keyboard "zoom in to fit" issue. Must stay >= 16px. */
+          font-size: 16px;
           padding: 14px 16px;
           outline: none;
           resize: none;
@@ -493,6 +637,67 @@ export default function ReadingResultsPage() {
           border-color: rgba(45, 212, 191, 0.6);
           box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
         }
+
+        /* ── Reply paywall ── */
+        .purchase-success {
+          margin-bottom: 12px;
+          padding: 10px 14px;
+          border-radius: 12px;
+          background: rgba(45, 212, 191, 0.1);
+          border: 1px solid rgba(45, 212, 191, 0.3);
+          color: #5eead4;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 13px;
+          text-align: center;
+        }
+        .paywall-card {
+          background: rgba(20, 25, 55, 0.5);
+          border: 1px solid rgba(251, 191, 36, 0.28);
+          border-radius: 20px;
+          padding: 22px 18px;
+          text-align: center;
+          backdrop-filter: blur(8px);
+        }
+        .paywall-title {
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 19px;
+          color: #ffffff;
+          font-weight: 600;
+        }
+        .paywall-sub {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 13px;
+          line-height: 1.6;
+          color: #94a3b8;
+          margin-top: 8px;
+        }
+        .paywall-buy {
+          margin-top: 18px;
+          width: 100%;
+          height: 54px;
+          border-radius: 16px;
+          border: none;
+          background: linear-gradient(135deg, #fbbf24, #d97706);
+          color: #1a1206;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 15px;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 0 34px rgba(251, 191, 36, 0.22);
+        }
+        .paywall-buy:disabled { opacity: 0.6; cursor: default; }
+        .paywall-sub-link {
+          margin-top: 12px;
+          background: none;
+          border: none;
+          color: #5eead4;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 13px;
+          cursor: pointer;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
 
         .bottom-bar {
           position: fixed;
@@ -717,30 +922,69 @@ export default function ReadingResultsPage() {
           ))}
           <div ref={followupEndRef} />
 
-          <p className="mb-2 px-1 text-[12px] text-slate-500">
-            Don't over think this. Just say what's on your mind.
-          </p>
-          <textarea
-            className="followup-input"
-            rows={3}
-            value={followupQuestion}
-            onChange={(e) => setFollowupQuestion(e.target.value)}
-            placeholder="Ask a follow up…"
-            disabled={isGeneratingFollowup}
-          />
-          {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-          <button
-            type="button"
-            onClick={handleFollowup}
-            disabled={isGeneratingFollowup || !followupQuestion.trim()}
-            className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
-          >
-            {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
-          </button>
-          {credits?.isSubscribed && (
-            <p className="mt-2 text-center text-[11px] text-slate-500">
-              {credits.freeRepliesRemaining} free replies remaining
-            </p>
+          {justPurchased && (
+            <div className="purchase-success">✓ 2 replies added — ask away.</div>
+          )}
+
+          {paywallVisible ? (
+            <div className="paywall-card">
+              <p className="paywall-title">You've used your free replies</p>
+              <p className="paywall-sub">
+                Keep the conversation going and get even more clarity.
+              </p>
+              <button
+                type="button"
+                className="paywall-buy"
+                onClick={handleBuyReplyPack}
+                disabled={isPurchasing}
+              >
+                {isPurchasing ? "Opening checkout…" : "Get 2 more replies · $2"}
+              </button>
+              <button
+                type="button"
+                className="paywall-sub-link"
+                onClick={handleSubscribe}
+                disabled={isPurchasing}
+              >
+                or subscribe for unlimited replies
+              </button>
+              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+            </div>
+          ) : (
+            <>
+              <p className="mb-2 px-1 text-[12px] text-slate-500">
+                Don't over think this. Just say what's on your mind.
+              </p>
+              <textarea
+                className="followup-input"
+                rows={3}
+                value={followupQuestion}
+                onChange={(e) => setFollowupQuestion(e.target.value)}
+                placeholder="Ask a follow up…"
+                disabled={isGeneratingFollowup}
+              />
+              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+              <button
+                type="button"
+                onClick={handleFollowup}
+                disabled={isGeneratingFollowup || !followupQuestion.trim()}
+                className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+              >
+                {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
+              </button>
+
+              {isSubscribed ? (
+                <p className="mt-2 text-center text-[11px] text-slate-500">Unlimited replies included</p>
+              ) : freeRemainingClient > 0 ? (
+                <p className="mt-2 text-center text-[11px] text-slate-500">
+                  {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"} remaining
+                </p>
+              ) : replyCreditsRemaining && replyCreditsRemaining > 0 ? (
+                <p className="mt-2 text-center text-[11px] text-slate-500">
+                  {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"} remaining
+                </p>
+              ) : null}
+            </>
           )}
         </section>
       </div>
