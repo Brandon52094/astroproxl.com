@@ -100,6 +100,13 @@ interface FollowupRequestBody {
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
   conversationHistory?: string;
+  /**
+   * How many free replies the client has already used on THIS reading.
+   * Tracked client-side (localStorage), reset to 0 on every new reading.
+   * The server trusts this for the free tier only — paid replies are
+   * server-authoritative via `replyCredits`.
+   */
+  freeRepliesUsed?: number;
 }
 
 const NL = "\n";
@@ -401,24 +408,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // ── Free-reply gating for subscribers ──────────────────────────────────
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const metadata = user.publicMetadata;
-    const isSubscribed = metadata?.isSubscribed === true;
-    const freeRepliesRemaining = Number(metadata?.freeRepliesRemaining ?? 0);
-    const usingFreeReply = isSubscribed && freeRepliesRemaining > 0;
-
-    if (usingFreeReply) {
-      await client.users.updateUserMetadata(userId, {
-        publicMetadata: {
-          ...metadata,
-          freeRepliesRemaining: freeRepliesRemaining - 1,
-        },
-      });
-    }
-    // ── End gating ──────────────────────────────────────────────────────────
-
+    // ── Parse + validate the body FIRST ─────────────────────────────────────
+    // We need `freeRepliesUsed` from the body to decide access, so parsing has
+    // to happen before the gate (in the old code it ran after).
     const body = (await request.json()) as FollowupRequestBody;
 
     if (
@@ -433,6 +425,45 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
+
+    // ── Reply-access gating ─────────────────────────────────────────────────
+    // Priority: subscribed (unlimited) → free replies → paid replyCredits → block.
+    //
+    // HARD RULE: this route only ever reads/writes `replyCredits`. It never
+    // touches `credits` (readings) or `readingsCompleted`. Sending a reply must
+    // never advance the reading cycle or spend a reading credit.
+    const FREE_REPLIES_PER_READING = 2;
+
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const metadata = user.publicMetadata;
+
+    const isSubscribed = metadata?.isSubscribed === true;
+    const replyCredits = Number(metadata?.replyCredits ?? 0);
+    const freeRepliesUsed = Math.max(0, Number(body.freeRepliesUsed ?? 0));
+
+    let accessTier: "subscribed" | "free" | "credit" | null;
+    if (isSubscribed) {
+      accessTier = "subscribed"; // unlimited, deduct nothing
+    } else if (freeRepliesUsed < FREE_REPLIES_PER_READING) {
+      accessTier = "free"; // client-tracked free reply
+    } else if (replyCredits > 0) {
+      accessTier = "credit"; // paid reply, deduct after success
+    } else {
+      accessTier = null; // out of everything → paywall
+    }
+
+    if (accessTier === null) {
+      return NextResponse.json(
+        {
+          error: "You've used your free replies. Get 2 more for $2 to keep the conversation going.",
+          code: "NO_REPLY_CREDITS",
+        },
+        { status: 402 }
+      );
+    }
+    // Note: deduction happens AFTER a successful generation, so a failed API
+    // call never burns a paid reply credit.
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -509,8 +540,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Spend a PAID reply credit — only on success, only for the credit tier ─
+    // Free replies are tracked client-side and reported via `freeRepliesUsed`.
+    // Subscribers are unlimited. Reading credits are never touched here.
+    let replyCreditsRemaining = replyCredits;
+    if (accessTier === "credit") {
+      replyCreditsRemaining = Math.max(0, replyCredits - 1);
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          ...metadata,
+          replyCredits: replyCreditsRemaining,
+        },
+      });
+      console.log(
+        `[followup] spent 1 reply credit for ${userId}. Remaining: ${replyCreditsRemaining}`
+      );
+    }
+
+    const usedFreeReply = accessTier === "free";
+    const freeRepliesRemaining = Math.max(
+      0,
+      FREE_REPLIES_PER_READING - (freeRepliesUsed + (usedFreeReply ? 1 : 0))
+    );
+
     return NextResponse.json(
-      { title: parsed.title, content: parsed.content },
+      {
+        title: parsed.title,
+        content: parsed.content,
+        // The client uses this to update its free-reply counter and to know
+        // whether to show "replies remaining" vs. the paywall next time.
+        replyMeta: {
+          accessTier,
+          usedFreeReply,
+          freeRepliesRemaining,
+          replyCreditsRemaining,
+          isSubscribed,
+        },
+      },
       { status: 200 }
     );
   } catch (error) {
