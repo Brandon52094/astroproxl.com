@@ -5,7 +5,7 @@ import type { TransitAspect } from "@/lib/transitAspects";
 
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks — must match credits/route.ts
 const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000; // 1 week — must match credits/route.ts
-const CREDITS_PER_READING = 12; // must match reading-complete/route.ts
+const CREDITS_PER_READING = 4; // must match reading-complete/route.ts
 
 interface PlanetPlacement {
   name: string;
