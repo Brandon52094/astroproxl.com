@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       | "reading_download"
       | "followup"
       | "bundle"
+      | "reply_pack"
       | undefined;
 
     if (!userId || !mode) {
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
       const userEmail = user.emailAddresses[0]?.emailAddress;
 
       const currentCredits = Number(meta?.credits ?? 0);
+      const currentReplyCredits = Number(meta?.replyCredits ?? 0);
       const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
       const currentJxlSessionsPurchased = Number(meta?.jxlSessionsPurchased ?? 0);
       const paywallIndex = Number(session.metadata?.paywallIndex ?? 0);
@@ -218,6 +220,26 @@ export async function POST(request: NextRequest) {
           `[webhook] jxl — granted ${jxlReplies} replies (${jxlTier}) to ${userId}. ` +
           `Sessions this cycle: ${currentJxlSessionsPurchased + 1}. ` +
           `Total credits: ${currentJxlCredits + jxlReplies}`
+        );
+
+      // ── Reply pack — $2.00 for 2 follow-up replies ──────────────────────────
+      // Grants replyCredits ONLY. Never touches `credits` (readings) or
+      // `readingsCompleted` — reply spending and reading spending are fully
+      // separate pools, which is the whole point of this system.
+      } else if (mode === "reply_pack") {
+        const replyCreditsToGrant = Number(session.metadata?.replyCredits ?? 0);
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            replyCredits: currentReplyCredits + replyCreditsToGrant,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] reply_pack — granted ${replyCreditsToGrant} reply credits to ${userId}. ` +
+          `Total reply credits: ${currentReplyCredits + replyCreditsToGrant}`
         );
 
       } else if (mode === "followup") {

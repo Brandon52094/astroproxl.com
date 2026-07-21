@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { returnUrl, mode, bundleTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "bypass" | "subscriber_topup" | "reading_download" | "followup" | "bundle";
+      mode: "one_time" | "subscription" | "bypass" | "subscriber_topup" | "reading_download" | "followup" | "bundle" | "reply_pack" ;
       bundleTier?: string;
     };
 
@@ -188,6 +188,32 @@ export async function POST(request: NextRequest) {
           credits: bundle.credits,
         },
         success_url: `${returnUrl}?payment=success&mode=bundle`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+     if (mode === "reply_pack") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "2 Follow-Up Replies",
+              description: "Keep the conversation going — 2 more replies to your reading",
+            },
+            unit_amount: 200,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "reply_pack",
+          replyCredits: 2,
+        },
+        success_url: `${returnUrl}?payment=success&mode=reply_pack`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });
