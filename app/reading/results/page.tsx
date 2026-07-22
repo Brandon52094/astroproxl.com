@@ -171,6 +171,13 @@ export default function ReadingResultsPage() {
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
 
+  // Stable per-reading key for all persisted reply state (survives the Stripe
+  // round-trip). A new reading produces a new key → fresh conversation.
+  const readingKey = useMemo(() => {
+    const p = reading?.pages?.[0];
+    return p ? hashKey(p.title + "::" + p.content) : "";
+  }, [reading]);
+
   useEffect(() => {
     const stored = loadReading();
     if (!stored) {
@@ -189,13 +196,11 @@ export default function ReadingResultsPage() {
   // localStorage and only set it after a successful call, so a failed call can
   // still retry.
   useEffect(() => {
-    if (!reading) return;
-    const page0 = reading.pages?.[0];
-    const key = page0 ? hashKey(page0.title + "::" + page0.content) : "";
-    const completedFlag = key ? "dfp_reading_done_" + key : "";
+    if (!reading || !readingKey) return;
+    const completedFlag = "dfp_reading_done_" + readingKey;
 
     try {
-      if (completedFlag && localStorage.getItem(completedFlag) === "1") {
+      if (localStorage.getItem(completedFlag) === "1") {
         hasMarkedComplete.current = true;
         return;
       }
@@ -209,7 +214,7 @@ export default function ReadingResultsPage() {
         .then((res) => {
           if (!res.ok) throw new Error("reading-complete failed");
           try {
-            if (completedFlag) localStorage.setItem(completedFlag, "1");
+            localStorage.setItem(completedFlag, "1");
           } catch {
             // ignore persistence failure
           }
@@ -219,45 +224,86 @@ export default function ReadingResultsPage() {
           hasMarkedComplete.current = false;
         });
     }
-  }, [reading]);
+  }, [reading, readingKey]);
 
-  // ── Free-reply counter: reset to 0 whenever a NEW reading loads ──────────
-  // Free replies are tracked client-side and reported to the followup route,
-  // which stays authoritative for PAID replies (replyCredits) and subscriptions.
+  // ── Restore per-reading reply state ─────────────────────────────────────
+  // Rehydrates the follow-up conversation, the free-reply count, and the
+  // paywall state for THIS reading — so leaving for Stripe and coming back
+  // (whether you complete or cancel) lands you exactly where you were, with
+  // your replies intact. A new reading has a new key, so it starts fresh.
   useEffect(() => {
-    if (!reading) return;
-    const page0 = reading.pages?.[0];
-    const key = "k_" + (page0 ? hashKey(page0.title + "::" + page0.content) : "none");
+    if (!reading || !readingKey) return;
+
+    // Tidy up the previous reading's stored state when a new one loads.
     try {
-      const storedKey = localStorage.getItem("dfp_free_replies_key");
-      if (storedKey !== key) {
-        localStorage.setItem("dfp_free_replies_key", key);
-        localStorage.setItem("dfp_free_replies_used", "0");
-        setFreeRepliesUsed(0);
-      } else {
-        setFreeRepliesUsed(Math.max(0, Number(localStorage.getItem("dfp_free_replies_used") ?? 0)));
+      const prev = localStorage.getItem("dfp_last_reading_key") ?? "";
+      if (prev && prev !== readingKey) {
+        localStorage.removeItem(`dfp_followups_${prev}`);
+        localStorage.removeItem(`dfp_free_used_${prev}`);
+        localStorage.removeItem(`dfp_paywall_${prev}`);
       }
+      localStorage.setItem("dfp_last_reading_key", readingKey);
+    } catch {
+      // ignore
+    }
+
+    // Free-reply count (0 for a brand-new reading).
+    try {
+      setFreeRepliesUsed(Math.max(0, Number(localStorage.getItem(`dfp_free_used_${readingKey}`) ?? 0)));
     } catch {
       setFreeRepliesUsed(0);
     }
-    setShowPaywall(false);
-    setReplyCreditsRemaining(null);
-  }, [reading]);
 
-  // ── Returning from a successful reply-pack purchase ─────────────────────
-  useEffect(() => {
+    // The follow-up conversation.
+    try {
+      const raw = localStorage.getItem(`dfp_followups_${readingKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setFollowups(parsed as FollowupEntry[]);
+      }
+    } catch {
+      // ignore malformed cache
+    }
+
+    // Paywall: clear it if we just returned from a successful purchase,
+    // otherwise restore whatever we persisted (so a cancelled Stripe trip
+    // keeps the paywall up instead of dropping you back to the input).
+    let cameFromSuccess = false;
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("payment") === "success" && params.get("mode") === "reply_pack") {
-        setJustPurchased(true);
+      cameFromSuccess =
+        params.get("payment") === "success" && params.get("mode") === "reply_pack";
+    } catch {
+      // ignore
+    }
+
+    if (cameFromSuccess) {
+      setJustPurchased(true);
+      setShowPaywall(false);
+      try {
+        localStorage.removeItem(`dfp_paywall_${readingKey}`);
+      } catch {
+        // ignore
+      }
+    } else {
+      try {
+        setShowPaywall(localStorage.getItem(`dfp_paywall_${readingKey}`) === "1");
+      } catch {
         setShowPaywall(false);
-        // Strip the query params so a refresh doesn't re-show the banner.
+      }
+    }
+
+    // Clean the payment params off the URL so a refresh is tidy.
+    try {
+      if (new URLSearchParams(window.location.search).has("payment")) {
         window.history.replaceState({}, "", window.location.pathname);
       }
     } catch {
       // ignore
     }
-  }, []);
+
+    setReplyCreditsRemaining(null);
+  }, [reading, readingKey]);
 
   useEffect(() => {
     const fetchCredits = async () => {
@@ -362,9 +408,15 @@ export default function ReadingResultsPage() {
 
       const data = await response.json();
       if (!response.ok) {
-        // Out of replies → surface the paywall instead of a red error.
+        // Out of replies → surface the paywall instead of a red error, and
+        // persist it so a cancelled Stripe trip returns you to the paywall.
         if (response.status === 402 || data.code === "NO_REPLY_CREDITS") {
           setShowPaywall(true);
+          try {
+            if (readingKey) localStorage.setItem(`dfp_paywall_${readingKey}`, "1");
+          } catch {
+            // ignore
+          }
           return;
         }
         setFollowupError(data.error || "Something went wrong. Please try again.");
@@ -377,7 +429,7 @@ export default function ReadingResultsPage() {
         const nextUsed = freeRepliesUsed + 1;
         setFreeRepliesUsed(nextUsed);
         try {
-          localStorage.setItem("dfp_free_replies_used", String(nextUsed));
+          if (readingKey) localStorage.setItem(`dfp_free_used_${readingKey}`, String(nextUsed));
         } catch {
           // ignore
         }
@@ -386,11 +438,27 @@ export default function ReadingResultsPage() {
         setReplyCreditsRemaining(meta.replyCreditsRemaining);
       }
       setShowPaywall(false);
+      try {
+        if (readingKey) localStorage.removeItem(`dfp_paywall_${readingKey}`);
+      } catch {
+        // ignore
+      }
 
-      setFollowups((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), question, title: data.title, content: data.content },
-      ]);
+      // Persist the follow-up conversation so it survives the Stripe round-trip
+      // (and page refreshes) instead of living only in memory.
+      const newEntry: FollowupEntry = {
+        id: crypto.randomUUID(),
+        question,
+        title: data.title,
+        content: data.content,
+      };
+      const nextFollowups = [...followups, newEntry];
+      setFollowups(nextFollowups);
+      try {
+        if (readingKey) localStorage.setItem(`dfp_followups_${readingKey}`, JSON.stringify(nextFollowups));
+      } catch {
+        // ignore
+      }
       setFollowupQuestion("");
       setTimeout(() => {
         followupEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -766,7 +834,7 @@ export default function ReadingResultsPage() {
 
       {/* 🔥 FIX: Increased bottom padding to clear the fixed bar */}
       <div
-        className="relative z-10 mx-auto w-full max-w-[560px] px-5 pt-5"
+        className="relative z-10 mx-auto w-full max-w-[560px] px-5 pt-14"
         style={{ 
           paddingBottom: "calc(160px + env(safe-area-inset-bottom))",
           minHeight: "calc(100vh - 40px)",
