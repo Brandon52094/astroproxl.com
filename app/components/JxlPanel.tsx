@@ -134,7 +134,16 @@ function useTypewriter(full: string, active: boolean) {
   return shown;
 }
 
-type Phase = "idle" | "holding" | "tooShort" | "composing" | "thinking" | "answered";
+type Phase =
+  | "idle"
+  | "arming"       // asking the OS for mic permission
+  | "holding"      // actively recording
+  | "tooShort"
+  | "transcribing"
+  | "composing"    // typing fallback
+  | "thinking"
+  | "answered"
+  | "denied";      // mic blocked or unsupported
 
 export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -150,6 +159,15 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const composeRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Recording ────────────────────────────────────────────────────────
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  // Set when the user lets go before the recorder has finished flushing, so
+  // the onstop handler knows whether to transcribe or discard.
+  const wantsResultRef = useRef(false);
+  const [heard, setHeard] = useState<string | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -176,19 +194,70 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, [phase]);
 
-  /* ── Press and hold ────────────────────────────────────────────────── */
+  /* ── Press and hold ──────────────────────────────────────────────────
+   * Holding starts a real recording. The first hold triggers the OS
+   * permission prompt, which interrupts that hold — expected, and handled by
+   * telling the person to hold again once they've allowed it. */
   const startHold = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (phase === "thinking" || sessionOver) return;
+    async (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (phase === "thinking" || phase === "transcribing" || sessionOver) return;
       e.preventDefault();
       e.currentTarget.setPointerCapture?.(e.pointerId);
+      setError(null);
+      setHeard(null);
+
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        setPhase("denied");
+        setError("This browser can't reach the microphone. You can type instead.");
+        return;
+      }
+
+      setPhase("arming");
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        // Denied, dismissed, or no mic present.
+        setPhase("denied");
+        setError("Microphone access is off. Allow it in your browser settings, or type instead.");
+        return;
+      }
+
+      streamRef.current = stream;
       triggerHaptic();
+
+      // Safari records audio/mp4, Chrome audio/webm. Let the browser pick what
+      // it actually supports rather than forcing a type it will silently ignore.
+      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = preferred.find((t) => MediaRecorder.isTypeSupported?.(t));
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      wantsResultRef.current = false;
+
+      recorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
+      };
+
+      recorder.onstop = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        if (!wantsResultRef.current) return;
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        chunksRef.current = [];
+        void transcribeAndAsk(blob);
+      };
+
+      recorder.start();
       holdStart.current = Date.now();
       setHoldMs(0);
-      setError(null);
       setPhase("holding");
       holdTimer.current = setInterval(() => setHoldMs(Date.now() - holdStart.current), 100);
     },
+    // transcribeAndAsk is stable enough for this; defined below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [phase, sessionOver]
   );
 
@@ -201,27 +270,50 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     const elapsed = Date.now() - holdStart.current;
     triggerHaptic();
 
+    const recorder = recorderRef.current;
+
     if (elapsed < MIN_HOLD_MS) {
+      wantsResultRef.current = false;
+      try {
+        recorder?.stop();
+      } catch {
+        /* already stopped */
+      }
       setPhase("tooShort");
       setTimeout(() => setPhase((p) => (p === "tooShort" ? "idle" : p)), 1500);
       return;
     }
-    // ── VOICE BRIDGE — Step 5 replaces this with stop-recording + transcribe.
-    setPhase("composing");
+
+    wantsResultRef.current = true;
+    setPhase("transcribing");
+    try {
+      recorder?.stop(); // onstop fires transcribeAndAsk
+    } catch {
+      setPhase("idle");
+    }
   }, [phase]);
 
-  useEffect(() => () => {
-    if (holdTimer.current) clearInterval(holdTimer.current);
-  }, []);
+  // Release the mic if the component unmounts mid-recording.
+  useEffect(
+    () => () => {
+      if (holdTimer.current) clearInterval(holdTimer.current);
+      wantsResultRef.current = false;
+      try {
+        recorderRef.current?.stop();
+      } catch {
+        /* noop */
+      }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    },
+    []
+  );
 
   /* ── Ask ───────────────────────────────────────────────────────────── */
-  const submit = async () => {
-    const question = draft.trim();
-    if (!question || phase === "thinking") return;
-
+  const ask = async (question: string) => {
     const chart = loadChart();
     if (!chart?.chartData) {
       setError("Your chart isn't loaded yet. Run a reading first, then come back.");
+      setPhase("idle");
       return;
     }
 
@@ -253,6 +345,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Try again.");
+        setDraft(question); // don't lose what they said
         setPhase("composing");
         return;
       }
@@ -267,18 +360,54 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       setError("Something went wrong. Try again.");
+      setDraft(question);
       setPhase("composing");
     }
   };
 
+  /* Audio → text → answer. A failed transcription drops into the typing
+   * fallback rather than dead-ending, so a bad mic moment never costs a reply. */
+  const transcribeAndAsk = async (blob: Blob) => {
+    try {
+      const form = new FormData();
+      form.append("audio", blob, "speech");
+
+      const res = await fetch("/api/jxl/transcribe", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (!res.ok || !data.text) {
+        setError(data.error ?? "Couldn't hear that. Try again, or type it.");
+        setPhase("composing");
+        return;
+      }
+
+      setHeard(data.text as string);
+      await ask(data.text as string);
+    } catch {
+      setError("Couldn't hear that. Try again, or type it.");
+      setPhase("composing");
+    }
+  };
+
+  const submitTyped = () => {
+    const q = draft.trim();
+    if (!q || phase === "thinking") return;
+    setHeard(q);
+    void ask(q);
+  };
+
   const buttonLabel = sessionOver
     ? "That's all for now"
+    : phase === "arming"
+    ? "Allow the mic…"
     : isHolding
     ? "Listening…"
+    : phase === "transcribing"
+    ? "Hearing you…"
     : phase === "thinking"
     ? "Reading the sky…"
     : phase === "tooShort"
-    ? "Hold to speak"
+    ? "Hold a little longer"
     : "Press · Hold · Speak";
 
   /* Stop touch events reaching the pager so a hold never becomes a swipe. */
@@ -561,6 +690,25 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           margin-top: 8px; text-align: center;
           font-size: 10px; color: rgba(148,163,184,0.4);
         }
+        .type-instead {
+          display: block;
+          margin: 10px auto 0;
+          background: none; border: none;
+          color: rgba(148,163,184,0.55);
+          font-size: 12px; font-family: inherit;
+          text-decoration: underline; text-underline-offset: 3px;
+          cursor: pointer;
+        }
+        .type-instead:disabled { opacity: 0.35; cursor: default; }
+        .heard {
+          margin: -6px 0 18px;
+          text-align: center;
+          font-family: var(--font-display, Georgia, serif);
+          font-style: italic;
+          font-size: 13.5px;
+          line-height: 1.6;
+          color: rgba(148,163,184,0.65);
+        }
 
         .hold {
           position: relative; width: 100%; height: 76px;
@@ -727,12 +875,22 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
               <p className="ghost">
                 {phase === "thinking"
                   ? "Finding it…"
+                  : phase === "transcribing"
+                  ? "Hearing you…"
+                  : phase === "arming"
+                  ? "Allow the microphone to start."
+                  : phase === "denied"
+                  ? "No mic — you can type instead."
                   : phase === "composing"
                   ? "Say the messy version."
                   : "Hold the button and say what's actually going on."}
               </p>
             )}
           </div>
+
+          {/* What we heard. Shown so a mishearing is obvious rather than
+              mysterious — if the answer is odd, the reason is right here. */}
+          {phase === "answered" && heard && <p className="heard">“{heard}”</p>}
 
           {phase === "answered" && result && (
             <div>
@@ -791,13 +949,12 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             />
             <div className="compose-row">
               <button type="button" className="cancel" onClick={() => setPhase("idle")}>
-                Cancel
+                Back
               </button>
-              <button type="button" className="send" onClick={submit} disabled={!draft.trim()}>
+              <button type="button" className="send" onClick={submitTyped} disabled={!draft.trim()}>
                 Ask
               </button>
             </div>
-            <p className="bridge-note">Voice capture lands next — type it for now.</p>
           </>
         ) : (
           <>
@@ -809,11 +966,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             <button
               type="button"
               className={`hold ${isHolding ? "held" : phase === "idle" ? "idle" : ""}`}
-              disabled={phase === "thinking" || sessionOver}
+              disabled={phase === "thinking" || phase === "transcribing" || phase === "arming" || sessionOver}
               onPointerDown={startHold}
               onPointerUp={endHold}
               onPointerCancel={endHold}
-              onPointerLeave={endHold}
+              /* No onPointerLeave: setPointerCapture keeps events on this
+                 element, and treating leave as a release ended the hold on the
+                 smallest finger drift. */
               onContextMenu={(e) => e.preventDefault()}
             >
               <span className="ring" />
@@ -826,7 +985,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                     ))}
                   </span>
                 )}
-                {phase === "thinking" && (
+                {(phase === "thinking" || phase === "transcribing") && (
                   <span className="dots" aria-hidden="true">
                     <span />
                     <span />
@@ -836,6 +995,16 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                 <span>{buttonLabel}</span>
                 {isHolding && <span className="timer">{(holdMs / 1000).toFixed(1)}s</span>}
               </span>
+            </button>
+
+            {/* Always reachable — a denied mic must never be a dead end. */}
+            <button
+              type="button"
+              className="type-instead"
+              onClick={() => setPhase("composing")}
+              disabled={sessionOver || phase === "thinking" || phase === "transcribing"}
+            >
+              or type it instead
             </button>
           </>
         )}
