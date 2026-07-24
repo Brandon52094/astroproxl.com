@@ -147,6 +147,12 @@ type Phase =
 
 export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [phase, setPhase] = useState<Phase>("idle");
+  // Mirror of phase for async callbacks (getUserMedia resolves after a delay,
+  // by which point the closed-over `phase` is stale).
+  const phaseRef = useRef<Phase>("idle");
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
   const [holdMs, setHoldMs] = useState(0);
   const [draft, setDraft] = useState("");
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -168,6 +174,32 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   // the onstop handler knows whether to transcribe or discard.
   const wantsResultRef = useRef(false);
   const [heard, setHeard] = useState<string | null>(null);
+
+  /**
+   * Hard mic-off. Stops the recorder AND every track, unconditionally. This is
+   * the single source of truth for releasing the microphone — every exit path
+   * (release, too-short, error, permission denial, unmount) calls it, so the
+   * OS "mic in use" indicator can never stay lit after the button is released.
+   */
+  const releaseMic = useCallback(() => {
+    try {
+      const r = recorderRef.current;
+      if (r && r.state !== "inactive") r.stop();
+    } catch {
+      /* already stopped */
+    }
+    recorderRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          /* noop */
+        }
+      });
+      streamRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -219,8 +251,17 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch {
         // Denied, dismissed, or no mic present.
+        releaseMic();
         setPhase("denied");
         setError("Microphone access is off. Allow it in your browser settings, or type instead.");
+        return;
+      }
+
+      // If the user already let go (or navigated) during the permission
+      // prompt, the stream is arriving too late — shut it down immediately so
+      // the indicator doesn't linger.
+      if (phaseRef.current !== "arming") {
+        stream.getTracks().forEach((t) => t.stop());
         return;
       }
 
@@ -242,12 +283,11 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       };
 
       recorder.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        if (!wantsResultRef.current) return;
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         chunksRef.current = [];
-        void transcribeAndAsk(blob);
+        // Free the mic first, always — before any async work.
+        releaseMic();
+        if (wantsResultRef.current) void transcribeAndAsk(blob);
       };
 
       recorder.start();
@@ -270,43 +310,68 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     const elapsed = Date.now() - holdStart.current;
     triggerHaptic();
 
-    const recorder = recorderRef.current;
-
     if (elapsed < MIN_HOLD_MS) {
+      // Discard and free the mic immediately — no transcription.
       wantsResultRef.current = false;
-      try {
-        recorder?.stop();
-      } catch {
-        /* already stopped */
-      }
+      releaseMic();
       setPhase("tooShort");
       setTimeout(() => setPhase((p) => (p === "tooShort" ? "idle" : p)), 1500);
       return;
     }
 
+    // Keep the clip. Stopping the recorder fires onstop, which frees the mic
+    // via releaseMic and then transcribes.
     wantsResultRef.current = true;
     setPhase("transcribing");
     try {
-      recorder?.stop(); // onstop fires transcribeAndAsk
+      const r = recorderRef.current;
+      if (r && r.state !== "inactive") r.stop();
+      else {
+        releaseMic();
+        setPhase("idle");
+      }
     } catch {
+      releaseMic();
       setPhase("idle");
     }
-  }, [phase]);
+  }, [phase, releaseMic]);
 
-  // Release the mic if the component unmounts mid-recording.
+  // Free the mic if the component unmounts mid-recording.
   useEffect(
     () => () => {
       if (holdTimer.current) clearInterval(holdTimer.current);
       wantsResultRef.current = false;
-      try {
-        recorderRef.current?.stop();
-      } catch {
-        /* noop */
-      }
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      releaseMic();
     },
-    []
+    [releaseMic]
   );
+
+  // Backstop: if the tab is hidden (app switch, screen lock) or this panel
+  // swipes out of view while holding, the pointer never releases — so kill the
+  // mic on those events too. Nobody should see the indicator lit on a screen
+  // they've navigated away from.
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === "hidden" && phaseRef.current === "holding") {
+        if (holdTimer.current) clearInterval(holdTimer.current);
+        wantsResultRef.current = false;
+        releaseMic();
+        setPhase("idle");
+      }
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, [releaseMic]);
+
+  useEffect(() => {
+    // isActive flips false when the pager moves to another panel.
+    if (!isActive && phaseRef.current === "holding") {
+      if (holdTimer.current) clearInterval(holdTimer.current);
+      wantsResultRef.current = false;
+      releaseMic();
+      setPhase("idle");
+    }
+  }, [isActive, releaseMic]);
 
   /* ── Ask ───────────────────────────────────────────────────────────── */
   const ask = async (question: string) => {
