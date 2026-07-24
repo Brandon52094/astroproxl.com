@@ -990,39 +990,63 @@ export default function ReadingIntakeScreen({
             </div>
           </div>
 
-          {/* ── COMING SOON ── */}
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }} className="mt-4">
-            <div className="mb-2 flex items-center justify-center">
-              <span className="flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300/80">
-                <Lock className="h-2.5 w-2.5" />
-                In Development
-              </span>
-            </div>
-            <div className="relative overflow-hidden rounded-[28px] border border-indigo-400/20 bg-black/30 pointer-events-none select-none" style={{ overflow: "hidden" }} aria-hidden="true">
+                    {/* ── ASK JXL — live entry point ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
+            className="mt-4"
+          >
+            <button
+              type="button"
+              onClick={() => onSwipeLeft?.()}
+              className="tap-fix relative w-full overflow-hidden rounded-[28px] border border-indigo-400/30 bg-black/30 px-5 py-5 text-left"
+              style={{
+                boxShadow:
+                  "0 0 34px rgba(99,102,241,0.16), 0 18px 44px rgba(0,0,0,0.72)",
+              }}
+            >
+              {/* The sparkles were already here — they now sit on a live card
+                  instead of a blurred placeholder. */}
               {comingSoonSparkles.map((sparkle, i) => (
-                <span key={i} className={cn("jxl-sparkle", sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold")} style={{ left: sparkle.left, top: sparkle.top, width: `${sparkle.size}px`, height: `${sparkle.size}px`, animationDelay: `${sparkle.delay}s` }} />
+                <span
+                  key={i}
+                  className={cn(
+                    "jxl-sparkle",
+                    sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold"
+                  )}
+                  style={{
+                    left: sparkle.left,
+                    top: sparkle.top,
+                    width: `${sparkle.size}px`,
+                    height: `${sparkle.size}px`,
+                    animationDelay: `${sparkle.delay}s`,
+                  }}
+                />
               ))}
-              <div className="blur-[6px] px-5 py-5 opacity-60">
-                <div className="mb-3 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-indigo-300" />
-                  <span className="text-[14px] font-semibold text-indigo-200">Ask Jxl</span>
+
+              <div className="relative z-[1] flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-400/30 bg-indigo-400/10 text-indigo-200">
+                  <Sparkles className="h-5 w-5" />
                 </div>
-                <div className="space-y-2">
-                  <div className="h-3 w-3/4 rounded-full bg-slate-400/30" />
-                  <div className="h-3 w-1/2 rounded-full bg-slate-400/20" />
-                  <div className="mt-4 h-16 rounded-2xl border border-white/10 bg-white/5" />
-                </div>
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/10 via-transparent to-indigo-950/20 rounded-[28px]" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
-                    <Lock className="h-4 w-4 text-indigo-300/70" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[15px] font-semibold text-white">Ask Jxl</h2>
+                    <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-teal-200">
+                      New
+                    </span>
                   </div>
-                  <span className="text-[11px] tracking-wide text-indigo-300/60">Something Great is in Development for you</span>
+                  <p className="mt-1 text-[13px] leading-5 text-slate-400">
+                    Talk about the thing that's actually happening. One free session.
+                  </p>
                 </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-indigo-300/60" />
               </div>
-            </div>
+
+              <p className="relative z-[1] mt-3 text-[11px] text-indigo-300/45">
+                Swipe left to open
+              </p>
+            </button>
           </motion.div>
 
         </motion.div>
