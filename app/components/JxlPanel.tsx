@@ -173,6 +173,11 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   // Set when the user lets go before the recorder has finished flushing, so
   // the onstop handler knows whether to transcribe or discard.
   const wantsResultRef = useRef(false);
+  // True once the OS has granted mic access this session. The first hold only
+  // warms permission up (iOS suspends JS during the prompt, so the release can
+  // land before the stream arrives — recording on that first hold is what left
+  // the mic stuck on). Subsequent holds record normally.
+  const micReadyRef = useRef(false);
   const [heard, setHeard] = useState<string | null>(null);
 
   /**
@@ -244,13 +249,37 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         return;
       }
 
+      // ── First hold: request permission, then immediately release. ────────
+      // We do NOT record on the grant. iOS suspends JS while the prompt is up,
+      // so by the time the stream resolves the finger may already be up — which
+      // is exactly what left the mic stuck open. So the first hold's only job is
+      // to get permission; the person then holds again to actually speak.
+      if (!micReadyRef.current) {
+        setPhase("arming");
+        try {
+          const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+          probe.getTracks().forEach((t) => t.stop()); // release instantly
+          micReadyRef.current = true;
+          setPhase("idle");
+          setError(null);
+          // Gentle nudge — they need to hold once more, now that it's allowed.
+          setHeard(null);
+        } catch {
+          releaseMic();
+          setPhase("denied");
+          setError("Microphone access is off. Allow it in your browser settings, or type instead.");
+        }
+        return;
+      }
+
       setPhase("arming");
 
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch {
-        // Denied, dismissed, or no mic present.
+        // Permission was revoked between holds.
+        micReadyRef.current = false;
         releaseMic();
         setPhase("denied");
         setError("Microphone access is off. Allow it in your browser settings, or type instead.");
@@ -943,11 +972,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                   : phase === "transcribing"
                   ? "Hearing you…"
                   : phase === "arming"
-                  ? "Allow the microphone to start."
+                  ? "Allow the microphone…"
                   : phase === "denied"
                   ? "No mic — you can type instead."
                   : phase === "composing"
                   ? "Say the messy version."
+                  : micReadyRef.current
+                  ? "Hold and speak — let go when you're done."
                   : "Hold the button and say what's actually going on."}
               </p>
             )}
