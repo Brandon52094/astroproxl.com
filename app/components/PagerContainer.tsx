@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
+import JxlPanel from "./JxlPanel";
 import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
 import { migrateChartV2 } from "@/lib/chartStore";
@@ -17,19 +18,18 @@ interface UserStatus {
 }
 
 /**
- * PAGER — three panels:
+ * PAGER — four panels:
  *
- *   [0: Reading Intake (main)]  ⇄  [1: Your Birth Chart]  ⇄  [2: Today's Sky]
+ *   [0: Reading Intake (main)] ⇄ [1: Ask Jxl] ⇄ [2: Birth Chart] ⇄ [3: Today's Sky]
  *
- * Swipe left from the main screen to reach your birth chart (who you are),
- * then again to Today's Sky (what the sky is doing now). Swipe right to
- * come back. The loop wraps: from Today's Sky one more left returns to the
- * main screen.
+ * Jxl sits immediately left of the main screen so it is the first thing anyone
+ * finds when they swipe. Swipe right to come back. The loop wraps: one more
+ * left from Today's Sky returns to the main screen.
  *
- * The infinite-loop clone technique: a clone of the last panel sits before
- * the first, and a clone of the first sits after the last. When a transition
- * lands on a clone we disable the transition for one frame and snap to the
- * matching real panel, so the wraparound is seamless in both directions.
+ * The infinite-loop clone technique: a clone of the last panel sits before the
+ * first, and a clone of the first sits after the last. When a transition lands
+ * on a clone we disable the transition for one frame and snap to the matching
+ * real panel, so the wraparound is seamless in both directions.
  */
 
 const DIRECTION_LOCK_THRESHOLD = 12;
@@ -39,13 +39,16 @@ const HORIZONTAL_DOMINANCE_RATIO = 1.4;
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 export default function PagerContainer() {
-  const totalPanels = 3;
+  const totalPanels = 4;
 
   const [extendedIndex, setExtendedIndex] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [suppressTransition, setSuppressTransition] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Real panel currently on screen (0-indexed), used to pause off-screen work.
+  const activePanel = ((extendedIndex - 1) % totalPanels + totalPanels) % totalPanels;
 
   // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
@@ -186,6 +189,9 @@ export default function PagerContainer() {
   // ── Keyboard support ─────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't hijack arrows while someone is typing in Jxl's input.
+      const el = document.activeElement;
+      if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
       if (e.key === "ArrowRight") goToNext();
       else if (e.key === "ArrowLeft") goToPrevious();
     };
@@ -228,12 +234,19 @@ export default function PagerContainer() {
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
 
-          {/* ── PANEL 1: Your Birth Chart ── */}
+          {/* ── PANEL 1: Ask Jxl ──
+              overflow-hidden, not auto: JxlPanel manages its own inner
+              scroller so the sky and dock stay fixed to the panel. */}
+          <div className="min-w-full h-full overflow-hidden">
+            <JxlPanel isActive={activePanel === 1} />
+          </div>
+
+          {/* ── PANEL 2: Your Birth Chart ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <BirthChartPanel userStatus={userStatus} />
           </div>
 
-          {/* ── PANEL 2: Today's Sky ── */}
+          {/* ── PANEL 3: Today's Sky ── */}
           <div className="min-w-full h-full overflow-y-auto">
             <TodaySkyPanel userStatus={userStatus} />
           </div>
@@ -243,6 +256,28 @@ export default function PagerContainer() {
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
         </div>
+      </div>
+
+      {/* ── Page indicators ──
+          Swipe is an invisible affordance. Dots make the number of pages and
+          your position in them legible at a glance. */}
+      <div
+        className="pointer-events-none absolute left-0 right-0 flex items-center justify-center gap-1.5"
+        style={{ bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 50 }}
+        aria-hidden="true"
+      >
+        {Array.from({ length: totalPanels }).map((_, i) => (
+          <span
+            key={i}
+            style={{
+              width: i === activePanel ? 16 : 5,
+              height: 5,
+              borderRadius: 9999,
+              background: i === activePanel ? "rgba(94,234,212,0.85)" : "rgba(255,255,255,0.18)",
+              transition: "width 300ms ease, background 300ms ease",
+            }}
+          />
+        ))}
       </div>
     </div>
   );
