@@ -208,6 +208,113 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [liveTranscript, setLiveTranscript] = useState("");
   const [heard, setHeard] = useState<string | null>(null);
 
+  // ── Live audio meter (real waveform) ─────────────────────────────────
+  // A SECOND mic tap, separate from SpeechRecognition (which owns its own audio
+  // and only hands back text). This one exists purely to drive the bars from
+  // actual loudness. Because it's a raw MediaStream, it MUST be torn down on
+  // every exit — stopMeter is the single teardown path, called everywhere the
+  // hold can end, so the OS mic indicator can never linger.
+  const meterStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const barsRef = useRef<HTMLDivElement | null>(null);
+
+  const stopMeter = useCallback(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    try {
+      analyserRef.current?.disconnect();
+    } catch {
+      /* noop */
+    }
+    analyserRef.current = null;
+    if (audioCtxRef.current) {
+      // close() releases the graph; ignore if already closing.
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    if (meterStreamRef.current) {
+      meterStreamRef.current.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          /* noop */
+        }
+      });
+      meterStreamRef.current = null;
+    }
+    // Settle the bars back to rest so they don't freeze mid-spike.
+    const bars = barsRef.current;
+    if (bars) {
+      for (let i = 0; i < bars.children.length; i++) {
+        (bars.children[i] as HTMLElement).style.transform = "scaleY(0.08)";
+      }
+    }
+  }, []);
+
+  /**
+   * Opens the meter mic and starts the draw loop. Async because getUserMedia
+   * is — but if the hold already ended by the time it resolves (fast tap), it
+   * tears itself down immediately rather than leaving a stream open.
+   */
+  const startMeter = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      return; // recognition handles the permission messaging; the meter is optional
+    }
+
+    // Released during the getUserMedia await → don't open anything.
+    if (phaseRef.current !== "holding") {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+
+    meterStreamRef.current = stream;
+
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new Ctx();
+      audioCtxRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128; // resolution knob — higher = finer bars
+      source.connect(analyser);
+      // Note: analyser is NOT connected to ctx.destination — we don't want to
+      // play the mic back through the speakers, only read it.
+      analyserRef.current = analyser;
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const draw = () => {
+        analyser.getByteFrequencyData(data);
+        const bars = barsRef.current;
+        if (bars) {
+          const kids = bars.children;
+          const n = kids.length;
+          for (let i = 0; i < n; i++) {
+            // Sample the mid-band (vocals live in the middle of the spectrum)
+            // and spread across however many bars we have.
+            const idx = Math.floor((i / n) * (data.length * 0.6)) + 2;
+            const v = (data[idx] ?? 0) / 255; // 0–1 loudness
+            (kids[i] as HTMLElement).style.transform = `scaleY(${(0.08 + v * 0.92).toFixed(3)})`;
+          }
+        }
+        rafRef.current = requestAnimationFrame(draw);
+      };
+      draw();
+    } catch {
+      stopMeter();
+    }
+  }, [stopMeter]);
+
   // Feature-detect once. Undefined until mounted so SSR doesn't touch window.
   const [speechSupported, setSpeechSupported] = useState<boolean | null>(null);
   useEffect(() => {
@@ -314,6 +421,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         // "no-speech"/"aborted" = benign, handled on release.
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           stopRecognition();
+          stopMeter();
           if (holdTimer.current) clearInterval(holdTimer.current);
           setPhase("denied");
           setError("Microphone access is off. Allow it in your browser settings, or type instead.");
@@ -339,8 +447,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       setHoldMs(0);
       setPhase("holding");
       holdTimer.current = setInterval(() => setHoldMs(Date.now() - holdStart.current), 100);
+
+      // Real waveform: open the meter tap now that we're holding. It's
+      // best-effort — if it fails, recognition and the bars' rest state still
+      // work; only the live movement is lost.
+      void startMeter();
     },
-    [phase, sessionOver, stopRecognition]
+    [phase, sessionOver, stopRecognition, startMeter]
   );
 
   const endHold = useCallback(() => {
@@ -352,6 +465,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     const elapsed = Date.now() - holdStart.current;
     triggerHaptic();
     stopRecognition();
+    stopMeter();
 
     const said = transcriptRef.current.trim();
 
@@ -378,15 +492,16 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     transcriptRef.current = "";
     setHeard(said);
     void ask(said);
-  }, [phase, stopRecognition]);
+  }, [phase, stopRecognition, stopMeter]);
 
-  // Stop recognition if the component unmounts mid-listen.
+  // Stop everything if the component unmounts mid-listen.
   useEffect(
     () => () => {
       if (holdTimer.current) clearInterval(holdTimer.current);
       stopRecognition();
+      stopMeter();
     },
-    [stopRecognition]
+    [stopRecognition, stopMeter]
   );
 
   // Backstop: tab hidden (app switch, screen lock) while holding — pointer
@@ -396,6 +511,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       if (document.visibilityState === "hidden" && phaseRef.current === "holding") {
         if (holdTimer.current) clearInterval(holdTimer.current);
         stopRecognition();
+        stopMeter();
         setLiveTranscript("");
         transcriptRef.current = "";
         setPhase("idle");
@@ -403,18 +519,19 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     };
     document.addEventListener("visibilitychange", onHidden);
     return () => document.removeEventListener("visibilitychange", onHidden);
-  }, [stopRecognition]);
+  }, [stopRecognition, stopMeter]);
 
   useEffect(() => {
     // isActive flips false when the pager moves to another panel.
     if (!isActive && phaseRef.current === "holding") {
       if (holdTimer.current) clearInterval(holdTimer.current);
       stopRecognition();
+      stopMeter();
       setLiveTranscript("");
       transcriptRef.current = "";
       setPhase("idle");
     }
-  }, [isActive, stopRecognition]);
+  }, [isActive, stopRecognition, stopMeter]);
 
   /* ── Ask ───────────────────────────────────────────────────────────── */
   const ask = async (question: string) => {
@@ -851,14 +968,19 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           display: flex; flex-direction: column;
           align-items: center; justify-content: center; gap: 6px;
         }
-        .wave { display: flex; align-items: center; gap: 4px; height: 18px; }
+        .wave { display: flex; align-items: center; gap: 3px; height: 22px; }
         .wave span {
-          display: block; width: 3px; border-radius: 9999px; background: #5eead4;
-          animation: bar 900ms ease-in-out infinite;
-        }
-        @keyframes bar {
-          0%,100% { height: 5px; opacity: 0.55; }
-          50% { height: 18px; opacity: 1; }
+          display: block;
+          width: 3px;
+          height: 22px;
+          border-radius: 9999px;
+          background: #5eead4;
+          transform: scaleY(0.08);
+          transform-origin: center;
+          /* Short transition smooths the per-frame jumps into fluid motion
+             without lagging behind the voice. */
+          transition: transform 70ms linear;
+          will-change: transform;
         }
         .timer {
           font-size: 11px; letter-spacing: 0.14em;
@@ -1073,9 +1195,9 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
               <span className="ring d" />
               <span className="btn-inner">
                 {isHolding && (
-                  <span className="wave" aria-hidden="true">
-                    {Array.from({ length: 9 }).map((_, i) => (
-                      <span key={i} style={{ animationDelay: `${i * 90}ms` }} />
+                  <span className="wave" aria-hidden="true" ref={barsRef}>
+                    {Array.from({ length: 24 }).map((_, i) => (
+                      <span key={i} />
                     ))}
                   </span>
                 )}
