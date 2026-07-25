@@ -66,6 +66,7 @@ interface JxlResult {
   answer: string;
   windows: JxlWindow[];
   directives: JxlDirective[];
+  sources?: Array<{ factor: string; placements: string }>;
   confirmation: string;
   careNote?: string | null;
   isSafeResponse?: boolean;
@@ -207,6 +208,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const transcriptRef = useRef("");
   const [liveTranscript, setLiveTranscript] = useState("");
   const [heard, setHeard] = useState<string | null>(null);
+  const [showSources, setShowSources] = useState(false);
 
   // ── Live audio meter (real waveform) ─────────────────────────────────
   // A SECOND mic tap, separate from SpeechRecognition (which owns its own audio
@@ -581,6 +583,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         setHistory((prev) => [...prev, { question, answer: data.answer }]);
       }
       setDraft("");
+      setShowSources(false);
       setPhase("answered");
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
@@ -836,6 +839,50 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           background: rgba(20,29,28,0.7);
           border: 1px solid rgba(31,58,54,0.9);
           font-size: 13px; line-height: 1.65; color: #8fbfb6;
+        }
+
+        /* ── Sources dropdown — the astrologer's "show your work" ── */
+        .sources {
+          margin-top: 26px;
+          border-top: 1px solid rgba(255,255,255,0.07);
+          padding-top: 14px;
+        }
+        .sources-toggle {
+          display: flex; align-items: center; justify-content: space-between;
+          width: 100%;
+          background: none; border: none; cursor: pointer;
+          padding: 4px 0;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+          color: rgba(148,163,184,0.75);
+        }
+        .sources-toggle:hover { color: rgba(148,163,184,1); }
+        .chev {
+          font-size: 15px; line-height: 1;
+          transition: transform 240ms ease;
+          color: rgba(94,234,212,0.7);
+        }
+        .chev.open { transform: rotate(180deg); }
+        .sources-body {
+          margin-top: 12px;
+          display: flex; flex-direction: column; gap: 10px;
+          animation: rise 320ms ease both;
+        }
+        .source-row {
+          padding: 11px 14px;
+          border-radius: 12px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.06);
+        }
+        .source-factor {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px; font-weight: 600;
+          letter-spacing: 0.14em; text-transform: uppercase;
+          color: rgba(94,234,212,0.85);
+        }
+        .source-placements {
+          font-size: 13px; line-height: 1.6;
+          color: #aab2c5; margin-top: 4px;
         }
         @keyframes rise {
           from { opacity: 0; transform: translateY(8px); }
@@ -1141,6 +1188,30 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
               {typingDone && result.confirmation && (
                 <p className="confirmation">{result.confirmation}</p>
+              )}
+
+              {typingDone && result.sources && result.sources.length > 0 && (
+                <div className="sources">
+                  <button
+                    type="button"
+                    className="sources-toggle"
+                    onClick={() => setShowSources((s) => !s)}
+                    aria-expanded={showSources}
+                  >
+                    <span>What this reading is drawn from</span>
+                    <span className={`chev ${showSources ? "open" : ""}`}>⌄</span>
+                  </button>
+                  {showSources && (
+                    <div className="sources-body">
+                      {result.sources.map((s, i) => (
+                        <div key={i} className="source-row">
+                          <div className="source-factor">{s.factor}</div>
+                          <div className="source-placements">{s.placements}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
 
               {typingDone && result.careNote && <p className="care">{result.careNote}</p>}

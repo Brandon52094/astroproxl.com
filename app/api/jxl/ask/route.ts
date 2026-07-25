@@ -517,10 +517,32 @@ function buildJxlPrompt(body: JxlAskBody): string {
     '  "answer": "Three compact paragraphs separated by \\n\\n. Plain human language. No degrees, no orbs.",',
     '  "windows": [ { "date": "August 3", "body": "What activates and the concrete consequence." } ],',
     '  "directives": [ { "type": "DROP", "date": null, "body": "The behavior to stop, and why." } ],',
+    '  "sources": [ { "factor": "The core transit", "placements": "Transit Saturn in your 7th house opposite natal Sun" } ],',
     '  "confirmation": "One or two warm sentences naming what they already know."',
     "}",
     "",
     "windows and directives may each be an empty array. That is a correct answer, not a failed one.",
+    "",
+    "═══════════════════════════════════════════",
+    "SOURCES — SHOW YOUR WORK",
+    "═══════════════════════════════════════════",
+    "A real astrologer will read this and want to verify it against the chart. The sources array is where",
+    "they check your work, so it must be HONEST and COMPLETE about what actually drove THIS answer.",
+    "",
+    "Include EVERY chart factor your answer genuinely leaned on — the transit aspects, the natal placements",
+    "and aspects, the profection and Time Lord, progressions, solar arcs, stations, the solar return, the",
+    "moon phase, the sidereal confirmation — whichever ones actually shaped what you said. If a factor",
+    "changed your answer, name it. Leaving out something you used reads as hiding the working.",
+    "",
+    "But do NOT pad. Only list factors this specific answer actually rests on. Dumping the entire chart",
+    "when the answer turned on two aspects reads as filler and makes an astrologer trust you LESS. A tight",
+    "answer has few sources; a many-threaded answer has more. Match the sources to the reasoning.",
+    "",
+    "Each source: 'factor' is a short plain-language label (e.g. 'The timing', 'The root pattern',",
+    "'Why it's amplified this year'). 'placements' is the precise astrological detail an astrologer would",
+    "check — here you MAY name planets, signs, houses, and aspects technically, because this block is FOR",
+    "the astrologer, not the reader. This is the ONLY place technical language is allowed.",
+    "Order them to follow the answer: the factor behind paragraph one first.",
   ].join(NL);
 }
 
@@ -660,6 +682,7 @@ export async function POST(request: NextRequest) {
       answer: string;
       windows?: Array<{ date?: string | null; body?: string }>;
       directives?: Array<{ type?: string; date?: string | null; body?: string }>;
+      sources?: Array<{ factor?: string; placements?: string }>;
       confirmation: string;
     };
 
@@ -726,12 +749,26 @@ export async function POST(request: NextRequest) {
         };
       });
 
+    // Sources: each needs both a label and the placement detail. No cap — an
+    // honest answer lists everything it leaned on — but drop empties so the UI
+    // never shows a blank row.
+    const sources = (Array.isArray(parsed.sources) ? parsed.sources : [])
+      .filter(
+        (s) =>
+          typeof s?.factor === "string" &&
+          s.factor.trim() &&
+          typeof s?.placements === "string" &&
+          s.placements.trim()
+      )
+      .map((s) => ({ factor: (s.factor as string).trim(), placements: (s.placements as string).trim() }));
+
     return NextResponse.json(
       {
         title: parsed.title,
         answer: parsed.answer,
         windows,
         directives,
+        sources,
         confirmation: parsed.confirmation ?? "",
         // Present only on MEDIUM risk. The client renders it quietly beneath
         // the reading — never as a warning, never as an interruption.
