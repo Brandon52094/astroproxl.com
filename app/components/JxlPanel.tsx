@@ -21,6 +21,37 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft } from "lucide-react";
 import { loadChart } from "@/lib/chartStore";
 
+/* ── Minimal SpeechRecognition typings ────────────────────────────────────
+ * The Web Speech API isn't in TypeScript's default DOM lib, so we declare just
+ * the surface we use. Runtime access is still guarded by feature detection. */
+interface SpeechRecognitionAlternative { readonly transcript: string }
+interface SpeechRecognitionResult {
+  readonly isFinal: boolean;
+  readonly length: number;
+  [index: number]: SpeechRecognitionAlternative;
+}
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+interface SpeechRecognitionEvent extends Event {
+  readonly results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string;
+}
+interface SpeechRecognition extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((e: SpeechRecognitionEvent) => void) | null;
+  onerror: ((e: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+}
+
 interface JxlWindow {
   date: string;
   body: string;
@@ -136,19 +167,17 @@ function useTypewriter(full: string, active: boolean) {
 
 type Phase =
   | "idle"
-  | "arming"       // asking the OS for mic permission
-  | "holding"      // actively recording
+  | "holding"      // actively listening, live transcript streaming
   | "tooShort"
-  | "transcribing"
-  | "composing"    // typing fallback
+  | "composing"    // typing (fallback, or unsupported browser)
   | "thinking"
   | "answered"
   | "denied";      // mic blocked or unsupported
 
 export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [phase, setPhase] = useState<Phase>("idle");
-  // Mirror of phase for async callbacks (getUserMedia resolves after a delay,
-  // by which point the closed-over `phase` is stale).
+  // Mirror of phase for async callbacks (recognition events fire outside
+  // React's render, by which point the closed-over `phase` is stale).
   const phaseRef = useRef<Phase>("idle");
   useEffect(() => {
     phaseRef.current = phase;
@@ -166,43 +195,47 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const composeRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Recording ────────────────────────────────────────────────────────
-  const streamRef = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  // Set when the user lets go before the recorder has finished flushing, so
-  // the onstop handler knows whether to transcribe or discard.
-  const wantsResultRef = useRef(false);
-  // True once the OS has granted mic access this session. The first hold only
-  // warms permission up (iOS suspends JS during the prompt, so the release can
-  // land before the stream arrives — recording on that first hold is what left
-  // the mic stuck on). Subsequent holds record normally.
-  const micReadyRef = useRef(false);
+  // ── Live speech recognition ──────────────────────────────────────────
+  // On-device, free, no API key. Words stream in as you speak. Less accurate
+  // than Whisper and flaky on iOS Safari — so every failure path falls back to
+  // the typing box rather than dead-ending. (Whisper can slot back in later as
+  // an accuracy tier via /api/jxl/transcribe.)
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // What has been finalised plus the in-progress guess, kept in a ref so the
+  // recognition callbacks (which fire outside React's render) always see the
+  // latest value on release.
+  const transcriptRef = useRef("");
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [heard, setHeard] = useState<string | null>(null);
 
+  // Feature-detect once. Undefined until mounted so SSR doesn't touch window.
+  const [speechSupported, setSpeechSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    const SR =
+      (typeof window !== "undefined" &&
+        ((window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition ||
+          (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition)) ||
+      null;
+    setSpeechSupported(Boolean(SR));
+  }, []);
+
   /**
-   * Hard mic-off. Stops the recorder AND every track, unconditionally. This is
-   * the single source of truth for releasing the microphone — every exit path
-   * (release, too-short, error, permission denial, unmount) calls it, so the
-   * OS "mic in use" indicator can never stay lit after the button is released.
+   * Hard stop for recognition. The single source of truth for ending listening
+   * — every exit path calls it, so the OS mic indicator can't linger. Safe to
+   * call repeatedly.
    */
-  const releaseMic = useCallback(() => {
-    try {
-      const r = recorderRef.current;
-      if (r && r.state !== "inactive") r.stop();
-    } catch {
-      /* already stopped */
-    }
-    recorderRef.current = null;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => {
-        try {
-          t.stop();
-        } catch {
-          /* noop */
-        }
-      });
-      streamRef.current = null;
+  const stopRecognition = useCallback(() => {
+    const rec = recognitionRef.current;
+    if (rec) {
+      try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.stop();
+      } catch {
+        /* already stopped */
+      }
+      recognitionRef.current = null;
     }
   }, []);
 
@@ -232,102 +265,82 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   }, [phase]);
 
   /* ── Press and hold ──────────────────────────────────────────────────
-   * Holding starts a real recording. The first hold triggers the OS
-   * permission prompt, which interrupts that hold — expected, and handled by
-   * telling the person to hold again once they've allowed it. */
+   * Holding starts live recognition; words appear as you speak. The first
+   * hold triggers the OS permission prompt (which browsers tie to the first
+   * recognition start) — if that interrupts it, the person just holds again. */
   const startHold = useCallback(
-    async (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (phase === "thinking" || phase === "transcribing" || sessionOver) return;
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (phase === "thinking" || sessionOver) return;
       e.preventDefault();
       e.currentTarget.setPointerCapture?.(e.pointerId);
       setError(null);
       setHeard(null);
 
-      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-        setPhase("denied");
-        setError("This browser can't reach the microphone. You can type instead.");
+      const SR =
+        (window as unknown as { SpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition ||
+        (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition })
+          .webkitSpeechRecognition;
+
+      if (!SR) {
+        // No on-device recognition — go straight to typing.
+        setPhase("composing");
         return;
       }
 
-      // ── First hold: request permission, then immediately release. ────────
-      // We do NOT record on the grant. iOS suspends JS while the prompt is up,
-      // so by the time the stream resolves the finger may already be up — which
-      // is exactly what left the mic stuck open. So the first hold's only job is
-      // to get permission; the person then holds again to actually speak.
-      if (!micReadyRef.current) {
-        setPhase("arming");
-        try {
-          const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
-          probe.getTracks().forEach((t) => t.stop()); // release instantly
-          micReadyRef.current = true;
-          setPhase("idle");
-          setError(null);
-          // Gentle nudge — they need to hold once more, now that it's allowed.
-          setHeard(null);
-        } catch {
-          releaseMic();
+      transcriptRef.current = "";
+      setLiveTranscript("");
+
+      const rec = new SR();
+      rec.lang = "en-US";
+      rec.interimResults = true; // stream partial words as they're recognised
+      rec.continuous = true;
+      recognitionRef.current = rec;
+
+      rec.onresult = (event: SpeechRecognitionEvent) => {
+        let finalText = "";
+        let interim = "";
+        for (let i = 0; i < event.results.length; i++) {
+          const r = event.results[i];
+          if (r.isFinal) finalText += r[0].transcript;
+          else interim += r[0].transcript;
+        }
+        const combined = (finalText + " " + interim).replace(/\s+/g, " ").trim();
+        transcriptRef.current = combined;
+        setLiveTranscript(combined);
+      };
+
+      rec.onerror = (event: SpeechRecognitionErrorEvent) => {
+        // "not-allowed"/"service-not-allowed" = permission denied.
+        // "no-speech"/"aborted" = benign, handled on release.
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          stopRecognition();
+          if (holdTimer.current) clearInterval(holdTimer.current);
           setPhase("denied");
           setError("Microphone access is off. Allow it in your browser settings, or type instead.");
         }
-        return;
-      }
+      };
 
-      setPhase("arming");
+      rec.onend = () => {
+        // Recognition can auto-end (silence, iOS timeout) before release. If we
+        // were still holding, keep whatever we captured rather than losing it.
+        recognitionRef.current = null;
+      };
 
-      let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        rec.start();
       } catch {
-        // Permission was revoked between holds.
-        micReadyRef.current = false;
-        releaseMic();
-        setPhase("denied");
-        setError("Microphone access is off. Allow it in your browser settings, or type instead.");
+        // start() throws if called twice in quick succession — treat as a miss.
+        setPhase("composing");
         return;
       }
 
-      // If the user already let go (or navigated) during the permission
-      // prompt, the stream is arriving too late — shut it down immediately so
-      // the indicator doesn't linger.
-      if (phaseRef.current !== "arming") {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-
-      streamRef.current = stream;
       triggerHaptic();
-
-      // Safari records audio/mp4, Chrome audio/webm. Let the browser pick what
-      // it actually supports rather than forcing a type it will silently ignore.
-      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-      const mimeType = preferred.find((t) => MediaRecorder.isTypeSupported?.(t));
-
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      recorderRef.current = recorder;
-      chunksRef.current = [];
-      wantsResultRef.current = false;
-
-      recorder.ondataavailable = (ev) => {
-        if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        chunksRef.current = [];
-        // Free the mic first, always — before any async work.
-        releaseMic();
-        if (wantsResultRef.current) void transcribeAndAsk(blob);
-      };
-
-      recorder.start();
       holdStart.current = Date.now();
       setHoldMs(0);
       setPhase("holding");
       holdTimer.current = setInterval(() => setHoldMs(Date.now() - holdStart.current), 100);
     },
-    // transcribeAndAsk is stable enough for this; defined below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [phase, sessionOver]
+    [phase, sessionOver, stopRecognition]
   );
 
   const endHold = useCallback(() => {
@@ -338,69 +351,70 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
     const elapsed = Date.now() - holdStart.current;
     triggerHaptic();
+    stopRecognition();
+
+    const said = transcriptRef.current.trim();
 
     if (elapsed < MIN_HOLD_MS) {
-      // Discard and free the mic immediately — no transcription.
-      wantsResultRef.current = false;
-      releaseMic();
+      setLiveTranscript("");
+      transcriptRef.current = "";
       setPhase("tooShort");
       setTimeout(() => setPhase((p) => (p === "tooShort" ? "idle" : p)), 1500);
       return;
     }
 
-    // Keep the clip. Stopping the recorder fires onstop, which frees the mic
-    // via releaseMic and then transcribes.
-    wantsResultRef.current = true;
-    setPhase("transcribing");
-    try {
-      const r = recorderRef.current;
-      if (r && r.state !== "inactive") r.stop();
-      else {
-        releaseMic();
-        setPhase("idle");
-      }
-    } catch {
-      releaseMic();
-      setPhase("idle");
+    if (!said || said.length < 2) {
+      // Held long enough but nothing was heard — offer the typing path with
+      // whatever partial text exists prefilled, so the moment isn't wasted.
+      setDraft(said);
+      setLiveTranscript("");
+      transcriptRef.current = "";
+      setError("Didn't quite catch that — check it or type it.");
+      setPhase("composing");
+      return;
     }
-  }, [phase, releaseMic]);
 
-  // Free the mic if the component unmounts mid-recording.
+    setLiveTranscript("");
+    transcriptRef.current = "";
+    setHeard(said);
+    void ask(said);
+  }, [phase, stopRecognition]);
+
+  // Stop recognition if the component unmounts mid-listen.
   useEffect(
     () => () => {
       if (holdTimer.current) clearInterval(holdTimer.current);
-      wantsResultRef.current = false;
-      releaseMic();
+      stopRecognition();
     },
-    [releaseMic]
+    [stopRecognition]
   );
 
-  // Backstop: if the tab is hidden (app switch, screen lock) or this panel
-  // swipes out of view while holding, the pointer never releases — so kill the
-  // mic on those events too. Nobody should see the indicator lit on a screen
-  // they've navigated away from.
+  // Backstop: tab hidden (app switch, screen lock) while holding — pointer
+  // never releases, so stop the mic on those events too.
   useEffect(() => {
     const onHidden = () => {
       if (document.visibilityState === "hidden" && phaseRef.current === "holding") {
         if (holdTimer.current) clearInterval(holdTimer.current);
-        wantsResultRef.current = false;
-        releaseMic();
+        stopRecognition();
+        setLiveTranscript("");
+        transcriptRef.current = "";
         setPhase("idle");
       }
     };
     document.addEventListener("visibilitychange", onHidden);
     return () => document.removeEventListener("visibilitychange", onHidden);
-  }, [releaseMic]);
+  }, [stopRecognition]);
 
   useEffect(() => {
     // isActive flips false when the pager moves to another panel.
     if (!isActive && phaseRef.current === "holding") {
       if (holdTimer.current) clearInterval(holdTimer.current);
-      wantsResultRef.current = false;
-      releaseMic();
+      stopRecognition();
+      setLiveTranscript("");
+      transcriptRef.current = "";
       setPhase("idle");
     }
-  }, [isActive, releaseMic]);
+  }, [isActive, stopRecognition]);
 
   /* ── Ask ───────────────────────────────────────────────────────────── */
   const ask = async (question: string) => {
@@ -459,30 +473,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   };
 
-  /* Audio → text → answer. A failed transcription drops into the typing
-   * fallback rather than dead-ending, so a bad mic moment never costs a reply. */
-  const transcribeAndAsk = async (blob: Blob) => {
-    try {
-      const form = new FormData();
-      form.append("audio", blob, "speech");
-
-      const res = await fetch("/api/jxl/transcribe", { method: "POST", body: form });
-      const data = await res.json();
-
-      if (!res.ok || !data.text) {
-        setError(data.error ?? "Couldn't hear that. Try again, or type it.");
-        setPhase("composing");
-        return;
-      }
-
-      setHeard(data.text as string);
-      await ask(data.text as string);
-    } catch {
-      setError("Couldn't hear that. Try again, or type it.");
-      setPhase("composing");
-    }
-  };
-
   const submitTyped = () => {
     const q = draft.trim();
     if (!q || phase === "thinking") return;
@@ -492,12 +482,8 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
   const buttonLabel = sessionOver
     ? "That's all for now"
-    : phase === "arming"
-    ? "Allow the mic…"
     : isHolding
     ? "Listening…"
-    : phase === "transcribing"
-    ? "Hearing you…"
     : phase === "thinking"
     ? "Reading the sky…"
     : phase === "tooShort"
@@ -803,6 +789,20 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           line-height: 1.6;
           color: rgba(148,163,184,0.65);
         }
+        .live {
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 21px;
+          line-height: 1.5;
+          color: #eef2ff;
+          text-align: center;
+          max-width: 30ch;
+          transition: opacity 200ms ease;
+        }
+        .live-empty {
+          color: rgba(148,163,184,0.5);
+          font-size: 15px;
+          font-style: italic;
+        }
 
         .hold {
           position: relative; width: 100%; height: 76px;
@@ -965,27 +965,25 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           <div className="title-slot">
             {phase === "answered" && result ? (
               <h1 className="title">{result.title}</h1>
+            ) : isHolding ? (
+              // Live words as you speak — the proof it's hearing you.
+              <p className={`live ${liveTranscript ? "" : "live-empty"}`}>
+                {liveTranscript || "Listening…"}
+              </p>
             ) : (
               <p className="ghost">
                 {phase === "thinking"
                   ? "Finding it…"
-                  : phase === "transcribing"
-                  ? "Hearing you…"
-                  : phase === "arming"
-                  ? "Allow the microphone…"
                   : phase === "denied"
                   ? "No mic — you can type instead."
                   : phase === "composing"
-                  ? "Say the messy version."
-                  : micReadyRef.current
-                  ? "Hold and speak — let go when you're done."
+                  ? "Say the messy version, or type it."
                   : "Hold the button and say what's actually going on."}
               </p>
             )}
           </div>
 
-          {/* What we heard. Shown so a mishearing is obvious rather than
-              mysterious — if the answer is odd, the reason is right here. */}
+          {/* What we heard, once answered — so a mishearing is visible. */}
           {phase === "answered" && heard && <p className="heard">“{heard}”</p>}
 
           {phase === "answered" && result && (
@@ -1062,7 +1060,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             <button
               type="button"
               className={`hold ${isHolding ? "held" : phase === "idle" ? "idle" : ""}`}
-              disabled={phase === "thinking" || phase === "transcribing" || phase === "arming" || sessionOver}
+              disabled={phase === "thinking" || sessionOver}
               onPointerDown={startHold}
               onPointerUp={endHold}
               onPointerCancel={endHold}
@@ -1081,7 +1079,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                     ))}
                   </span>
                 )}
-                {(phase === "thinking" || phase === "transcribing") && (
+                {phase === "thinking" && (
                   <span className="dots" aria-hidden="true">
                     <span />
                     <span />
@@ -1093,14 +1091,15 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
               </span>
             </button>
 
-            {/* Always reachable — a denied mic must never be a dead end. */}
+            {/* Always reachable — a denied or unsupported mic must never be a
+                dead end. Also the whole path when speech isn't supported. */}
             <button
               type="button"
               className="type-instead"
               onClick={() => setPhase("composing")}
-              disabled={sessionOver || phase === "thinking" || phase === "transcribing"}
+              disabled={sessionOver || phase === "thinking"}
             >
-              or type it instead
+              {speechSupported === false ? "type your question" : "or type it instead"}
             </button>
           </>
         )}
