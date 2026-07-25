@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { SUBSCRIPTION_TIER, SUBSCRIBER_TOPUP, DOWNLOAD_PRICE, FOLLOWUP_PRICE, COOLDOWN_BYPASS_PRICE, BUNDLE_PACKS, isValidBundleTier } from "@/lib/paywallConfig";
@@ -6,8 +6,11 @@ import { JXL_SESSION } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-// Flat $4 per reading
-const ONE_TIME_READING_PRICE = 400; // cents
+// $4 per reading; the user's FIRST paid reading is discounted to $2 as a
+// low-friction entry point. One reading costs 4 credits, so a paid reading
+// grants exactly 4.
+const ONE_TIME_READING_PRICE = 400; // cents — every paid reading after the first
+const FIRST_PAID_READING_PRICE = 200; // cents — first paid reading only ($2)
 const ONE_TIME_READING_CREDITS = 4;
 
 export async function POST(request: NextRequest) {
@@ -28,8 +31,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "returnUrl is required" }, { status: 400 });
     }
 
-    // ── One-time reading — flat $4.00 ─────────────────────────────────────────
+    // ── One-time reading — $2 first paid reading, $4 after ────────────────────
+    // Price is driven by `firstPaidReadingUsed`, a per-user flag stamped by the
+    // webhook on the first successful one_time purchase. We deliberately do NOT
+    // key this off paywallsCompleted, which currently never advances.
     if (mode === "one_time") {
+      const client = await clerkClient();
+      const buyer = await client.users.getUser(userId);
+      const firstPaidReadingUsed = buyer.publicMetadata?.firstPaidReadingUsed === true;
+      const unitAmount = firstPaidReadingUsed ? ONE_TIME_READING_PRICE : FIRST_PAID_READING_PRICE;
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
@@ -38,9 +49,11 @@ export async function POST(request: NextRequest) {
             currency: "usd",
             product_data: {
               name: "Astrological Reading",
-              description: "One full personalized astrological reading",
+              description: firstPaidReadingUsed
+                ? "One full personalized astrological reading"
+                : "Your first full reading — $2 to begin",
             },
-            unit_amount: ONE_TIME_READING_PRICE,
+            unit_amount: unitAmount,
           },
           quantity: 1,
         }],
@@ -48,6 +61,8 @@ export async function POST(request: NextRequest) {
           userId,
           credits: ONE_TIME_READING_CREDITS,
           mode: "one_time",
+          // So the webhook can stamp the flag and log which price was charged.
+          isFirstPaidReading: firstPaidReadingUsed ? "false" : "true",
         },
         success_url: `${returnUrl}?payment=success&mode=one_time`,
         cancel_url: `${returnUrl}?payment=cancelled`,

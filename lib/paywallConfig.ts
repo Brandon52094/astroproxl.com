@@ -40,7 +40,7 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
     description: "Full 30-45 day reading with specific dates and directives",
     price: 400,
     displayPrice: "$4.00",
-    credits: 12,
+    credits: 4,
     jxlCredits: 0,
     creditsLabel: "Unlocks your next reading",
     pack: "paywall_1",
@@ -50,7 +50,7 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
     description: "Full 30-45 day reading with specific dates and directives",
     price: 400,
     displayPrice: "$4.00",
-    credits: 12,
+    credits: 4,
     jxlCredits: 0,
     creditsLabel: "Unlocks your next reading",
     pack: "paywall_2",
@@ -60,7 +60,7 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
     description: "Full 30-45 day reading with specific dates and directives",
     price: 400,
     displayPrice: "$4.00",
-    credits: 12,
+    credits: 4,
     jxlCredits: 0,
     creditsLabel: "Unlocks your next reading",
     pack: "paywall_3",
@@ -70,7 +70,7 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
     description: "Full 30-45 day reading",
     price: 400,
     displayPrice: "$4.00",
-    credits: 12,
+    credits: 4,
     jxlCredits: 0,
     creditsLabel: "Unlocks your next reading",
     pack: "paywall_4",
@@ -78,7 +78,7 @@ export const ONE_TIME_PACKS: Record<PaywallIndex, OneTimePack> = {
 };
 
 // ── Reading bundles ────────────────────────────────────────────────────────────
-// Credits = 12 per reading (matches ONE_TIME_PACKS credit value), so a bundle
+// Credits = 4 per reading (matches ONE_TIME_PACKS credit value), so a bundle
 // purchase grants the exact number of credits needed to complete that many
 // full readings. Prices give a flat $1 savings per additional tier.
 export interface BundlePack {
@@ -99,7 +99,7 @@ export const BUNDLE_PACKS: Record<"2" | "3" | "4", BundlePack> = {
     price: 700,
     displayPrice: "$7.00",
     readings: 2,
-    credits: 24,
+    credits: 8,
   },
   "3": {
     key: "3",
@@ -108,7 +108,7 @@ export const BUNDLE_PACKS: Record<"2" | "3" | "4", BundlePack> = {
     price: 1000,
     displayPrice: "$10.00",
     readings: 3,
-    credits: 36,
+    credits: 12,
   },
   "4": {
     key: "4",
@@ -117,7 +117,7 @@ export const BUNDLE_PACKS: Record<"2" | "3" | "4", BundlePack> = {
     price: 1300,
     displayPrice: "$13.00",
     readings: 4,
-    credits: 48,
+    credits: 16,
   },
 };
 
@@ -153,7 +153,7 @@ export const SUBSCRIBER_TOPUP = {
   description: "4 more readings added to your subscription this month",
   price: 400,
   displayPrice: "$4.00",
-  credits: 48,
+  credits: 16,
   pack: "subscriber_topup",
 };
 

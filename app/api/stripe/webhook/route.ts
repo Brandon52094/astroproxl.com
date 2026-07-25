@@ -82,6 +82,8 @@ export async function POST(request: NextRequest) {
             ...meta,
             credits: currentCredits + credits,
             firstReadingUsed: true,
+            // Once true, the $2 first-paid-reading price never applies again.
+            firstPaidReadingUsed: true,
             paywallsCompleted: paywallIndex,
             lastPurchaseAt: new Date().toISOString(),
             ...(jxlCredits > 0 ? { jxlCredits: currentJxlCredits + jxlCredits } : {}),
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest) {
 
         console.log(
           `[webhook] one_time — granted ${credits} reading credits` +
+          (session.metadata?.isFirstPaidReading === "true" ? " ($2 first-paid entry)" : " ($4)") +
           (jxlCredits > 0 ? ` + ${jxlCredits} Jxl credits` : "") +
           ` to ${userId}. Paywall ${paywallIndex} complete.`
         );
@@ -116,7 +119,7 @@ export async function POST(request: NextRequest) {
        } else if (mode === "subscription") {
         const stripeSubscriptionId = session.subscription as string;
         const tier = session.metadata?.tier ?? "sub_base";
-        const SUBSCRIPTION_READING_CREDITS = 96;
+        const SUBSCRIPTION_READING_CREDITS = 32;
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
@@ -141,7 +144,7 @@ export async function POST(request: NextRequest) {
 
       // ── Subscriber top-up ───────────────────────────────────────────────────
       } else if (mode === "subscriber_topup") {
-        const TOPUP_CREDITS = 48;
+        const TOPUP_CREDITS = 16;
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
