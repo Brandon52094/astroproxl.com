@@ -1,6 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
+import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
 
 interface PlanetPlacement {
@@ -442,6 +443,37 @@ export async function POST(request: NextRequest) {
     const replyCredits = Number(metadata?.replyCredits ?? 0);
     const freeRepliesUsed = Math.max(0, Number(body.freeRepliesUsed ?? 0));
 
+    // ── LAYER 1: crisis check ────────────────────────────────────────────────
+    // Before the reply gate and the model call, so a block never spends a reply
+    // and preempts the paywall — someone in crisis gets help, not a 402.
+    const risk = assessRisk(body?.question ?? "");
+    if (risk.action === "block_crisis" || risk.action === "block_emergency") {
+      const safe = getSafeResponse(risk);
+      console.warn(
+        `[followup] Layer 1 block — level=${risk.level} action=${risk.action} ` +
+        `conf=${risk.confidence} signals=${risk.signals.join("|")}`
+      );
+      return NextResponse.json(
+        {
+          title: safe.title,
+          content: safe.answer + "\n\n" + safe.confirmation,
+          // Nothing was spent — the client must not decrement its reply counter.
+          isSafeResponse: true,
+          riskLevel: risk.level,
+          replyMeta: {
+            accessTier: null,
+            usedFreeReply: false,
+            freeRepliesRemaining: Math.max(0, FREE_REPLIES_PER_READING - freeRepliesUsed),
+            replyCreditsRemaining: replyCredits,
+            isSubscribed,
+          },
+        },
+        { status: 200 }
+      );
+    }
+    // MEDIUM proceeds to the full answer; this rides along underneath it.
+    const careNote = getCareNote(risk);
+
     let accessTier: "subscribed" | "free" | "credit" | null;
     if (isSubscribed) {
       accessTier = "subscribed"; // unlimited, deduct nothing
@@ -567,6 +599,8 @@ export async function POST(request: NextRequest) {
       {
         title: parsed.title,
         content: parsed.content,
+        // null unless MEDIUM risk; client renders it quietly beneath the answer.
+        careNote,
         // The client uses this to update its free-reply counter and to know
         // whether to show "replies remaining" vs. the paywall next time.
         replyMeta: {

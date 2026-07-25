@@ -1,5 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks
 
@@ -72,44 +72,7 @@ export async function GET() {
   }
 }
 
-// ── POST /api/user/credits — deduct credits (admin can add via Clerk dashboard) ──
-export async function POST(request: NextRequest) {
-  try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const pageNumber = Number(body.pageNumber);
-
-    if (!pageNumber || pageNumber < 1 || pageNumber > 4) {
-      return NextResponse.json({ error: "Invalid pageNumber" }, { status: 400 });
-    }
-
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const metadata = user.publicMetadata;
-
-    const currentCredits = Number(metadata?.credits ?? 0);
-    const COST_PER_PAGE = 4;
-    const newCredits = Math.max(0, currentCredits - COST_PER_PAGE);
-
-    await client.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        ...metadata,
-        credits: newCredits,
-      },
-    });
-
-    console.log(
-      `[credits POST] page ${pageNumber} — deducted ${COST_PER_PAGE} credits from ${userId}. ` +
-      `${currentCredits} → ${newCredits}`
-    );
-
-    return NextResponse.json({ credits: newCredits });
-  } catch (error) {
-    console.error("[credits POST] Error:", error);
-    return NextResponse.json({ error: "Failed to deduct credits." }, { status: 500 });
-  }
-}
+// NOTE: The per-page POST deducter (COST_PER_PAGE) was removed. Reading credits
+// are spent in exactly one place — POST /api/user/reading-complete (−4 per
+// reading). Nothing in the client ever called this POST, and keeping it around
+// was a standing double-charge risk if anything were ever wired to it.

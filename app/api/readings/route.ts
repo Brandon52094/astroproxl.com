@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
+import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
 
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks — must match credits/route.ts
@@ -502,6 +503,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Parse first: the crisis check needs the question, and a block must run
+    // before the eligibility gate so someone in crisis gets help, not a paywall.
+    const body = (await request.json()) as ReadingRequestBody;
+
+    // ── LAYER 1: crisis check — before the gate and the model, so it costs nothing ──
+    const risk = assessRisk(body?.question ?? "");
+    if (risk.action === "block_crisis" || risk.action === "block_emergency") {
+      const safe = getSafeResponse(risk);
+      console.warn(
+        `[readings] Layer 1 block — level=${risk.level} action=${risk.action} ` +
+        `conf=${risk.confidence} signals=${risk.signals.join("|")}`
+      );
+      return NextResponse.json(
+        {
+          reading: {
+            id: crypto.randomUUID(),
+            pages: [
+              {
+                pageNumber: 1,
+                title: safe.title,
+                content: safe.answer + "\n\n" + safe.confirmation,
+                sources: [],
+              },
+            ],
+            topic: body?.topic ?? "general",
+            question: body?.question ?? "",
+            status: "complete",
+          },
+          // Client MUST check this and SKIP /api/user/reading-complete — a crisis
+          // intercept must never spend a credit or the weekly free reading.
+          isSafeResponse: true,
+          riskLevel: risk.level,
+        },
+        { status: 200 }
+      );
+    }
+    // MEDIUM proceeds to the full reading; this rides along underneath it.
+    const careNote = getCareNote(risk);
+
     // ── Server-side eligibility check — mirrors credits/route.ts logic ────────
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
@@ -534,8 +574,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "You don't have enough credits for a reading. Please purchase more or subscribe." }, { status: 403 });
     }
     // ── End eligibility check ──────────────────────────────────────────────────
-
-    const body = (await request.json()) as ReadingRequestBody;
 
     if (!body.topic || !body.question || !body.tropical || !body.transits || !body.profection) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
@@ -633,6 +671,8 @@ export async function POST(request: NextRequest) {
           question: body.question,
           status: "complete",
         },
+        // null unless MEDIUM risk; client renders it quietly beneath the reading.
+        careNote,
       },
       { status: 201 }
     );
