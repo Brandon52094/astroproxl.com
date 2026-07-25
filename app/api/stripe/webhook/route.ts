@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { clerkClient } from "@clerk/nextjs/server";
 import { trackServerPurchase } from "@/lib/tiktokEvents";
+import { JXL_REPLIES_PER_SESSION } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
       | "one_time"
       | "subscription"
       | "bypass"
-      | "jxl"
+      | "jxl_session"
       | "subscriber_topup"
       | "reading_download"
       | "followup"
@@ -57,7 +58,6 @@ export async function POST(request: NextRequest) {
       const currentCredits = Number(meta?.credits ?? 0);
       const currentReplyCredits = Number(meta?.replyCredits ?? 0);
       const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
-      const currentJxlSessionsPurchased = Number(meta?.jxlSessionsPurchased ?? 0);
       const paywallIndex = Number(session.metadata?.paywallIndex ?? 0);
 
       // ── Fire TikTok Purchase event for every revenue-generating mode ────────
@@ -197,29 +197,23 @@ export async function POST(request: NextRequest) {
         });
         console.log(`[webhook] reading_download — unlocked for ${userId}.`);
 
-      // ── JXL session purchase ────────────────────────────────────────────────
-      } else if (mode === "jxl") {
-        const jxlTier = session.metadata?.jxlTier ?? "";
-        const jxlReplies = Number(session.metadata?.jxlReplies ?? 6);
-        const isFirstSession = currentJxlSessionsPurchased === 0;
-        const cycleStartedAt = isFirstSession
-          ? new Date().toISOString()
-          : (meta?.jxlCycleStartedAt as string ?? new Date().toISOString());
+      // ── Ask JXL session — $6.00 → 3 replies ─────────────────────────────────
+      // One flat product now; the old 5-tier ladder is gone. Grants replies into
+      // jxlCredits; the ask route spends one per reply.
+      } else if (mode === "jxl_session") {
+        const replies = Number(session.metadata?.jxlReplies ?? JXL_REPLIES_PER_SESSION);
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
-            jxlCredits: currentJxlCredits + jxlReplies,
-            jxlSessionsPurchased: currentJxlSessionsPurchased + 1,
-            jxlCycleStartedAt: cycleStartedAt,
+            jxlCredits: currentJxlCredits + replies,
             lastPurchaseAt: new Date().toISOString(),
           },
         });
 
         console.log(
-          `[webhook] jxl — granted ${jxlReplies} replies (${jxlTier}) to ${userId}. ` +
-          `Sessions this cycle: ${currentJxlSessionsPurchased + 1}. ` +
-          `Total credits: ${currentJxlCredits + jxlReplies}`
+          `[webhook] jxl_session — granted ${replies} JXL replies to ${userId}. ` +
+          `Total JXL credits: ${currentJxlCredits + replies}`
         );
 
       // ── Reply pack — $2.00 for 2 follow-up replies ──────────────────────────

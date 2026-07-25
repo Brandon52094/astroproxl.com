@@ -3,6 +3,18 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
+import {
+  JXL_REPLIES_PER_SESSION,
+  JXL_FREE_SESSION_REPLIES,
+  JXL_MAX_REPLIES_PER_CONVERSATION,
+  JXL_SUB_MAX_PER_DAY,
+  JXL_SUB_MAX_PER_MONTH,
+  JXL_DAILY_CAP_MESSAGE,
+  JXL_MONTHLY_CAP_MESSAGE,
+  JXL_CONVERSATION_CAP_MESSAGE,
+  jxlDayKey,
+  jxlMonthKey,
+} from "@/lib/jxlConfig";
 
 /**
  * JXL — "ask anything" route.
@@ -21,7 +33,7 @@ import type { TransitAspect } from "@/lib/transitAspects";
  * deleted along with /api/jxl/session and the session-tier config.
  */
 
-const REPLIES_PER_SESSION = 3;
+const REPLIES_PER_SESSION = JXL_REPLIES_PER_SESSION;
 
 interface PlanetPlacement {
   name: string;
@@ -184,7 +196,7 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
   return lines.join(NL);
 }
 
-function buildJxlPrompt(body: JxlAskBody): string {
+function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string {
   const {
     question,
     conversationHistory,
@@ -209,7 +221,7 @@ function buildJxlPrompt(body: JxlAskBody): string {
   });
 
   const turnCount = (conversationHistory?.length ?? 0) + 1;
-  const isFinalTurn = turnCount >= REPLIES_PER_SESSION;
+  const isFinalTurn = isFinalTurnOverride ?? (turnCount >= REPLIES_PER_SESSION);
 
   const transitAspectBlock = fmtTransitAspects(transitAspects ?? []);
 
@@ -590,27 +602,95 @@ export async function POST(request: NextRequest) {
     // MEDIUM: reading proceeds in full; this rides along with the response.
     const careNote = getCareNote(risk);
 
-    // ── Provisional access gate ────────────────────────────────────────────
-    // Step 4 replaces this with the full model (one free session ever, $6 per
-    // session, daily + monthly caps for subscribers). This minimal version
-    // exists so the endpoint is never an unmetered Claude proxy while the
-    // rest is being built. It reads only — nothing is deducted here yet.
+    // ── JXL access model (Step 5) ──────────────────────────────────────────
+    // Assembles `metaUpdate` but writes NOTHING yet — the charge is applied
+    // only after a successful reading (see below), so a model/parse failure
+    // costs the person nothing.
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
     const isSubscribed = metadata?.isSubscribed === true;
     const jxlCredits = Number(metadata?.jxlCredits ?? 0);
+    const replyCredits = Number(metadata?.replyCredits ?? 0);
     const jxlFreeUsedAt = metadata?.jxlFreeUsedAt as string | undefined;
     const hasFreeSession = !jxlFreeUsedAt;
 
-    if (!isSubscribed && jxlCredits <= 0 && !hasFreeSession) {
+    const historyLen = earlyBody.conversationHistory?.length ?? 0;
+    const turnCount = historyLen + 1;
+    const isNewSession = historyLen === 0;
+
+    // Per-conversation ceiling — wellbeing, not billing. Everyone, subs included.
+    if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
       return NextResponse.json(
-        { error: "Your session is complete.", code: "NO_JXL_ACCESS" },
+        { error: JXL_CONVERSATION_CAP_MESSAGE, code: "JXL_CONVERSATION_CAP" },
         { status: 402 }
       );
     }
-    // ── End provisional gate ───────────────────────────────────────────────
+
+    let metaUpdate: Record<string, unknown> | null = null;
+    let repliesRemainingAfter = Infinity;
+
+    if (isSubscribed) {
+      // No credits burned. Capped by sessions/day + sessions/month, counted
+      // only when a fresh conversation (empty history) starts.
+      if (isNewSession) {
+        const today = jxlDayKey();
+        const month = jxlMonthKey();
+        const dayCount = metadata?.jxlDayKey === today ? Number(metadata?.jxlDayCount ?? 0) : 0;
+        const monthCount = metadata?.jxlMonthKey === month ? Number(metadata?.jxlMonthCount ?? 0) : 0;
+
+        if (dayCount >= JXL_SUB_MAX_PER_DAY) {
+          return NextResponse.json(
+            { error: JXL_DAILY_CAP_MESSAGE, code: "JXL_DAILY_CAP" },
+            { status: 402 }
+          );
+        }
+        if (monthCount >= JXL_SUB_MAX_PER_MONTH) {
+          return NextResponse.json(
+            { error: JXL_MONTHLY_CAP_MESSAGE, code: "JXL_MONTHLY_CAP" },
+            { status: 402 }
+          );
+        }
+
+        metaUpdate = {
+          jxlDayKey: today,
+          jxlDayCount: dayCount + 1,
+          jxlMonthKey: month,
+          jxlMonthCount: monthCount + 1,
+        };
+      }
+      repliesRemainingAfter = JXL_MAX_REPLIES_PER_CONVERSATION - turnCount;
+    } else {
+      // Non-subscribers spend one credit per reply.
+      const freeGrant = isNewSession && hasFreeSession ? JXL_FREE_SESSION_REPLIES : 0;
+      const availableBefore = freeGrant + jxlCredits + replyCredits;
+
+      if (availableBefore <= 0) {
+        return NextResponse.json(
+          { error: "Your session is complete.", code: "NO_JXL_ACCESS" },
+          { status: 402 }
+        );
+      }
+
+      if (freeGrant > 0) {
+        // First-ever free session: stamp it, bank the 3 replies, spend one now.
+        metaUpdate = {
+          jxlFreeUsedAt: new Date().toISOString(),
+          jxlCredits: jxlCredits + freeGrant - 1,
+        };
+      } else if (jxlCredits > 0) {
+        metaUpdate = { jxlCredits: jxlCredits - 1 };
+      } else {
+        metaUpdate = { replyCredits: replyCredits - 1 };
+      }
+
+      repliesRemainingAfter = availableBefore - 1;
+    }
+
+    const isFinalTurn =
+      repliesRemainingAfter <= 0 || turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;
+    // ── End access model ───────────────────────────────────────────────────
 
     // Already parsed above for the crisis check — the request stream can only
     // be read once, so reuse it rather than calling request.json() again.
@@ -632,7 +712,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
 
-    const prompt = buildJxlPrompt(body);
+    const prompt = buildJxlPrompt(body, isFinalTurn);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -761,6 +841,19 @@ export async function POST(request: NextRequest) {
           s.placements.trim()
       )
       .map((s) => ({ factor: (s.factor as string).trim(), placements: (s.placements as string).trim() }));
+
+    // Charge only now — the reading succeeded. Every failure path above already
+    // returned without touching metadata.
+    if (metaUpdate) {
+      try {
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: { ...metadata, ...metaUpdate },
+        });
+      } catch (writeErr) {
+        // They already have their answer; never fail the response on the write.
+        console.error("[jxl/ask] metadata write failed post-reading:", writeErr);
+      }
+    }
 
     return NextResponse.json(
       {

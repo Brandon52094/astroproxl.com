@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { SUBSCRIPTION_TIER, SUBSCRIBER_TOPUP, DOWNLOAD_PRICE, FOLLOWUP_PRICE, COOLDOWN_BYPASS_PRICE, BUNDLE_PACKS, isValidBundleTier } from "@/lib/paywallConfig";
+import { JXL_SESSION } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { returnUrl, mode, bundleTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "bypass" | "subscriber_topup" | "reading_download" | "followup" | "bundle" | "reply_pack" ;
+      mode: "one_time" | "subscription" | "bypass" | "subscriber_topup" | "reading_download" | "followup" | "bundle" | "reply_pack" | "jxl_session";
       bundleTier?: string;
     };
 
@@ -214,6 +215,26 @@ export async function POST(request: NextRequest) {
           replyCredits: 2,
         },
         success_url: `${returnUrl}?payment=success&mode=reply_pack`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Ask JXL — one session, $6.00 → 3 replies ──────────────────────────────
+    if (mode === "jxl_session") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: JXL_SESSION.name, description: JXL_SESSION.tagline },
+            unit_amount: JXL_SESSION.price,
+          },
+          quantity: 1,
+        }],
+        metadata: { userId, mode: "jxl_session", jxlReplies: JXL_SESSION.replies },
+        success_url: `${returnUrl}?payment=success&mode=jxl_session`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });
