@@ -1,91 +1,73 @@
 // lib/jxlConfig.ts
+//
+// JXL access model — rebuilt from the old 5-tier ($4.99 × 5) design.
+//
+//   • One FREE session, ever (the hook — experience the accuracy once).
+//   • $6 per session after that, 3 replies each.
+//   • Out of replies mid-session → $2 for 2 more (reuses the existing
+//     reply_pack checkout/webhook, so nothing new to build there).
+//   • Subscribers get JXL with CAPS, not "unlimited":
+//       ~10 sessions / month, max 2 / day, 8 replies max per conversation.
+//     Daily caps protect the person from spiralling; the monthly cap protects
+//     margin from the rare heavy tail. Nobody healthy hits these.
+//
+// The old JxlTier / JXL_PACKS session-ladder is gone. A JXL session is now a
+// single flat product, so there is only one pack.
 
-export type JxlTier = "session_1" | "session_2" | "session_3" | "session_4" | "session_5";
-
-export interface JxlPack {
-  tier: JxlTier;
-  name: string;
-  tagline: string;
-  price: number;       // in cents
-  displayPrice: string;
-  replies: number;     // 6 replies per session
-}
-
-// ── Session packs — flat $4.99 per session, 6 replies each ───────────────────
-// Subscribers get unlimited JXL — these packs are for non-subscribers only.
-// Flat pricing removes the crescendo friction for pay-per-session users.
-export const JXL_PACKS: Record<JxlTier, JxlPack> = {
-  session_1: {
-    tier: "session_1",
-    name: "1 Session",
-    tagline: "6 replies · continues where you left off",
-    price: 499,
-    displayPrice: "$4.99",
-    replies: 6,
-  },
-  session_2: {
-    tier: "session_2",
-    name: "2 Sessions",
-    tagline: "12 replies · nothing resets",
-    price: 899,
-    displayPrice: "$8.99",
-    replies: 12,
-  },
-  session_3: {
-    tier: "session_3",
-    name: "3 Sessions",
-    tagline: "18 replies · nothing resets",
-    price: 1199,
-    displayPrice: "$11.99",
-    replies: 18,
-  },
-  session_4: {
-    tier: "session_4",
-    name: "4 Sessions",
-    tagline: "24 replies · nothing resets",
-    price: 1499,
-    displayPrice: "$14.99",
-    replies: 24,
-  },
-  session_5: {
-    tier: "session_5",
-    name: "5 Sessions",
-    tagline: "30 replies · best value per session",
-    price: 1799,
-    displayPrice: "$17.99",
-    replies: 30,
-  },
+// ── The one paid session ─────────────────────────────────────────────────────
+export const JXL_SESSION = {
+  mode: "jxl_session" as const,
+  name: "Ask Jxl — 1 Session",
+  tagline: "3 replies · talk through what's actually happening",
+  price: 600, // cents
+  displayPrice: "$6",
+  replies: 3,
 };
 
-// ── Session limits ─────────────────────────────────────────────────────────────
-export const JXL_REPLIES_PER_SESSION = 6;
-export const JXL_MAX_SESSIONS_PER_CYCLE = 5;
-export const JXL_MAX_REPLIES_PER_CYCLE = 30;
+// ── Replies ──────────────────────────────────────────────────────────────────
+export const JXL_REPLIES_PER_SESSION = 3;
 
-// ── Freebie — 6 replies granted on first reading completion ──────────────────
-export const JXL_FREEBIE_REPLIES = 6;
-export const JXL_FREEBIE_COOLDOWN_MS = 28 * 24 * 60 * 60 * 1000; // 4 weeks
+// Mid-session top-up reuses the reply_pack you already built ($2 → 2 replies).
+export const JXL_REPLY_PACK_MODE = "reply_pack" as const;
 
-// ── Cycle cooldown — 2 weeks (shared with reading cooldown) ──────────────────
-export const JXL_CYCLE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
+// ── Free session (one, ever) ─────────────────────────────────────────────────
+// Presence of `jxlFreeUsedAt` in metadata means the free session is spent.
+// There is intentionally NO renewal window — this is a one-time hook.
+export const JXL_FREE_SESSION_REPLIES = 3;
 
-// ── Caring message — shown at session boundary ────────────────────────────────
-export const JXL_CARING_MESSAGE =
-  "You've done real work here. Give it two weeks to settle — the chart keeps moving even when you're not watching. We'll be here when the next window opens.";
+// ── Subscriber caps ──────────────────────────────────────────────────────────
+// Safety first, cost second. Daily cap is the one that matters for wellbeing:
+// a spiral happens in an evening, not across a month.
+export const JXL_SUB_MAX_PER_DAY = 2;
+export const JXL_SUB_MAX_PER_MONTH = 10;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Reply ceiling per conversation, for everyone. Past this it's re-asking, not
+// clarity — so it's a wellbeing limit, not just a paid one.
+export const JXL_MAX_REPLIES_PER_CONVERSATION = 8;
 
-export function isValidJxlTier(t: string): t is JxlTier {
-  return Object.keys(JXL_PACKS).includes(t);
+// ── Boundary message — shown when a cap is hit ───────────────────────────────
+export const JXL_DAILY_CAP_MESSAGE =
+  "You've had two sessions today. Sit with what came through — the chart keeps moving even when you're not watching. Come back tomorrow.";
+
+export const JXL_MONTHLY_CAP_MESSAGE =
+  "You've used your sessions for this month. That's not a limit on you — it's space to let the work land. The next window opens next month.";
+
+export const JXL_CONVERSATION_CAP_MESSAGE =
+  "This is a good place to stop. You have what you need — give it room before asking more.";
+
+// ── Marketing copy ───────────────────────────────────────────────────────────
+// Deliberately NOT "unlimited" — honest, and it doesn't set up the one person
+// who hits a cap to feel cheated.
+export const JXL_SUBSCRIBER_BLURB = "Included with your subscription — as much as you'll realistically need.";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Local-day key (YYYY-MM-DD) for daily-cap counting. */
+export function jxlDayKey(d: Date = new Date()): string {
+  return d.toISOString().slice(0, 10);
 }
 
-export function getNextJxlTier(sessionsPurchased: number): JxlTier | null {
-  const tiers: JxlTier[] = [
-    "session_1",
-    "session_2",
-    "session_3",
-    "session_4",
-    "session_5",
-  ];
-  return tiers[sessionsPurchased] ?? null;
+/** Month key (YYYY-MM) for monthly-cap counting. */
+export function jxlMonthKey(d: Date = new Date()): string {
+  return d.toISOString().slice(0, 7);
 }
