@@ -140,27 +140,6 @@ function useShootingStars(enabled: boolean) {
   return shooters;
 }
 
-/* ── Typewriter ─────────────────────────────────────────────────────────── */
-function useTypewriter(full: string, active: boolean) {
-  const [shown, setShown] = useState("");
-  useEffect(() => {
-    if (!active || !full) {
-      setShown("");
-      return;
-    }
-    const words = full.split(" ");
-    let i = 0;
-    setShown("");
-    const iv = setInterval(() => {
-      i += 2;
-      setShown(words.slice(0, i).join(" "));
-      if (i >= words.length) clearInterval(iv);
-    }, 55);
-    return () => clearInterval(iv);
-  }, [full, active]);
-  return shown;
-}
-
 type Phase =
   | "idle"
   | "holding"
@@ -173,55 +152,81 @@ type Phase =
 /* ── Loading Ring Component ────────────────────────────────────────────── */
 interface LoadingRingProps {
   isActive: boolean;
+  apiReady: boolean;
   onComplete?: () => void;
 }
 
-function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
+function LoadingRing({ isActive, apiReady, onComplete }: LoadingRingProps) {
   const [phase, setPhase] = useState<"idle" | "running" | "complete" | "fading">("idle");
   const [progress, setProgress] = useState(0);
   const startTimeRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
 
+  // Read apiReady live inside the RAF loop WITHOUT restarting the effect.
+  const apiReadyRef = useRef(apiReady);
+  useEffect(() => { apiReadyRef.current = apiReady; }, [apiReady]);
+
+  const completingRef = useRef(false);
+  const completeStartRef = useRef<number | null>(null);
+  const completeFromRef = useRef(0);
+
   useEffect(() => {
     if (!isActive) {
       setPhase("idle");
       setProgress(0);
+      completingRef.current = false;
+      completeStartRef.current = null;
+      startTimeRef.current = null;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       return;
     }
 
     setPhase("running");
     setProgress(0);
+    completingRef.current = false;
+    completeStartRef.current = null;
     startTimeRef.current = performance.now();
 
+    const CAP = 0.9;          // how far it crawls before the API lands
+    const FILL_MS = 3000;     // time to crawl toward the cap
+    const MIN_FILL_MS = 900;  // don't let a fast API make the ring blink
+    const SWEEP_MS = 550;     // final sweep to 100%
+
     const animate = (now: number) => {
-      if (!startTimeRef.current) {
-        startTimeRef.current = now;
+      if (startTimeRef.current == null) startTimeRef.current = now;
+      const elapsed = now - startTimeRef.current;
+
+      const t = Math.min(elapsed / FILL_MS, 1);
+      const easedFill = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+      // Once the API is ready (and we've filled a minimum), sweep to 100% and finish.
+      if (completingRef.current || (apiReadyRef.current && elapsed >= MIN_FILL_MS)) {
+        if (!completingRef.current) {
+          completingRef.current = true;
+          completeStartRef.current = now;
+          completeFromRef.current = easedFill * CAP; // snapshot where we were
+        }
+        const ct = Math.min((now - (completeStartRef.current ?? now)) / SWEEP_MS, 1);
+        const eased = 1 - Math.pow(1 - ct, 3); // easeOutCubic
+        setProgress(completeFromRef.current + (1 - completeFromRef.current) * eased);
+
+        if (ct >= 1) {
+          setPhase("complete");
+          setTimeout(() => setPhase("fading"), 300);
+          if (onComplete) setTimeout(onComplete, 380); // reading fades in as edge fades out
+          return; // stop the loop
+        }
         rafRef.current = requestAnimationFrame(animate);
         return;
       }
 
-      const elapsed = (now - startTimeRef.current) / 1000;
-      const t = Math.min(elapsed / 3.5, 1);
-      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-      setProgress(Math.min(eased, 1));
-
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(animate);
-      } else {
-        setPhase("complete");
-        setTimeout(() => setPhase("fading"), 500);
-        if (onComplete) {
-          setTimeout(onComplete, 800);
-        }
-      }
+      // Not ready yet: ease toward the cap and hold.
+      setProgress(easedFill * CAP);
+      rafRef.current = requestAnimationFrame(animate);
     };
 
     rafRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [isActive, onComplete]);
 
   if (phase === "idle") return null;
@@ -229,7 +234,6 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
   const isComplete = phase === "complete" || phase === "fading";
   const isFading = phase === "fading";
   const circumference = 289;
-
   const dashOffset = circumference * (1 - progress);
 
   return (
@@ -413,6 +417,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
   // ── Loading ring state ──
   const [isLoadingRingActive, setIsLoadingRingActive] = useState(false);
+  const [apiReady, setApiReady] = useState(false);
 
   const holdStart = useRef(0);
   const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -693,8 +698,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const animate = isActive && !reduceMotion;
   const shooters = useShootingStars(animate);
   const isHolding = phase === "holding";
-  const typed = useTypewriter(result?.answer ?? "", phase === "answered");
-  const typingDone = !result || typed.length >= result.answer.length;
   const repliesUsed = history.length;
   const repliesLeft = Math.max(0, REPLIES_PER_SESSION - repliesUsed);
   const sessionOver = repliesLeft <= 0;
@@ -708,6 +711,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   // ── Loading ring complete ──
   const handleLoadingComplete = useCallback(() => {
     setIsLoadingRingActive(false);
+    setApiReady(false);
     setPhase("answered");
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
@@ -723,6 +727,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
     setPhase("thinking");
     setError(null);
+    setApiReady(false);
     setIsLoadingRingActive(true);
 
     try {
@@ -756,14 +761,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         return;
       }
 
-      // Store the result — the loading ring will complete and call handleLoadingComplete
       setResult(data as JxlResult);
       if (!data.isSafeResponse) {
         setHistory((prev) => [...prev, { question, answer: data.answer }]);
       }
       setDraft("");
       setShowSources(false);
-      // The loading ring's onComplete will set phase to "answered"
+      setApiReady(true);
     } catch {
       setError("Something went wrong. Try again.");
       setDraft(question);
@@ -952,7 +956,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       <input id="jxl-haptic" type="checkbox" switch="" aria-hidden="true" tabIndex={-1} className="haptic-proxy" />
 
       {/* ── Loading Ring ── */}
-      <LoadingRing isActive={isLoadingRingActive} onComplete={handleLoadingComplete} />
+      <LoadingRing isActive={isLoadingRingActive} apiReady={apiReady} onComplete={handleLoadingComplete} />
 
       <style jsx>{`
         .jxl-panel {
@@ -1112,15 +1116,14 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         .answer {
           font-family: var(--font-display, Georgia, serif);
           font-size: 17px; line-height: 1.85;
-          color: #d7dcea; white-space: pre-wrap;
+          color: #d7dcea;
+          white-space: pre-wrap;
+          animation: fadeIn 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
         }
-        .caret {
-          display: inline-block; width: 2px; height: 1.05em;
-          margin-left: 3px; background: rgba(94,234,212,0.9);
-          vertical-align: text-bottom;
-          animation: blink 1s steps(1) infinite;
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+          to { opacity: 1; transform: translateY(0); filter: blur(0); }
         }
-        @keyframes blink { 50% { opacity: 0; } }
 
         .window {
           margin-top: 14px; padding: 13px 16px;
@@ -1372,7 +1375,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
         @media (prefers-reduced-motion: reduce) {
           .band, .star, .hold.idle, .ring, .dots span,
-          .caret, .title, .window, .directive, .confirmation {
+          .title, .window, .directive, .confirmation {
             animation: none !important;
           }
         }
@@ -1487,40 +1490,33 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
           {phase === "answered" && result && (
             <div>
-              <div className="answer">
-                {typed}
-                {!typingDone && <span className="caret" />}
-              </div>
+              <div className="answer">{result.answer}</div>
 
-              {typingDone &&
-                result.windows?.map((w, i) => (
-                  <div key={i} className="window" style={{ animationDelay: `${i * 90}ms` }}>
-                    <div className="window-date">{w.date}</div>
-                    <div className="window-body">{w.body}</div>
-                  </div>
-                ))}
+              {result.windows?.map((w, i) => (
+                <div key={i} className="window" style={{ animationDelay: `${240 + i * 90}ms` }}>
+                  <div className="window-date">{w.date}</div>
+                  <div className="window-body">{w.body}</div>
+                </div>
+              ))}
 
-              {typingDone &&
-                result.directives?.map((d, i) => {
-                  const cls = d.type === "DROP" ? "drop" : d.type === "LOCK" ? "lock" : "execute";
-                  const label =
-                    d.type === "DROP" ? "Drop" : d.type === "LOCK" ? "Lock in by" : "Execute by";
-                  return (
-                    <div key={i} className={`directive ${cls}`} style={{ animationDelay: `${i * 90}ms` }}>
-                      <div className="directive-label">
-                        {label}
-                        {d.date ? ` · ${d.date}` : ""}
-                      </div>
-                      <div className="directive-body">{d.body}</div>
+              {result.directives?.map((d, i) => {
+                const cls = d.type === "DROP" ? "drop" : d.type === "LOCK" ? "lock" : "execute";
+                const label =
+                  d.type === "DROP" ? "Drop" : d.type === "LOCK" ? "Lock in by" : "Execute by";
+                return (
+                  <div key={i} className={`directive ${cls}`} style={{ animationDelay: `${240 + i * 90}ms` }}>
+                    <div className="directive-label">
+                      {label}
+                      {d.date ? ` · ${d.date}` : ""}
                     </div>
-                  );
-                })}
+                    <div className="directive-body">{d.body}</div>
+                  </div>
+                );
+              })}
 
-              {typingDone && result.confirmation && (
-                <p className="confirmation">{result.confirmation}</p>
-              )}
+              {result.confirmation && <p className="confirmation">{result.confirmation}</p>}
 
-              {typingDone && result.sources && result.sources.length > 0 && (
+              {result.sources && result.sources.length > 0 && (
                 <div className="sources">
                   <button
                     type="button"
@@ -1544,7 +1540,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                 </div>
               )}
 
-              {typingDone && result.careNote && <p className="care">{result.careNote}</p>}
+              {result.careNote && <p className="care">{result.careNote}</p>}
             </div>
           )}
         </div>
