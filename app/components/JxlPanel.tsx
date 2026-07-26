@@ -211,7 +211,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   }, [micPermission]);
 
   // ── Persistent permission memory ────────────────────────────────────
-  // Check if we've previously stored that they granted permission
   const [hasStoredPermission, setHasStoredPermission] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem(MIC_GRANTED_KEY) === "true";
@@ -236,14 +235,12 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     if (!hasStoredPermission) return;
     if (micPermission === "granted") return;
     if (micPermission === "denied") {
-      // They revoked it — clear our stored flag
       localStorage.removeItem(MIC_GRANTED_KEY);
       setHasStoredPermission(false);
       console.log("[jxl/mic] Permission was revoked — clearing stored flag");
       return;
     }
 
-    // micPermission === "prompt" or "unknown" — try a silent re-acquire
     if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then((stream) => {
@@ -253,7 +250,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         })
         .catch(() => {
           console.log("[jxl/mic] Pre-flight: silent re-acquire failed, will prompt on hold");
-          // Don't clear the flag — they granted before, browser just forgot
         });
     }
   }, [hasStoredPermission, micPermission]);
@@ -280,6 +276,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       });
       meterStreamRef.current = null;
     }
+    // Clear the canvas so it doesn't freeze mid-wave
     const canvas = canvasRef.current;
     const c2d = canvas?.getContext("2d");
     if (canvas && c2d) {
@@ -289,16 +286,16 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   }, []);
 
   // ── Start meter ─────────────────────────────────────────────────────
+  // The meter is decorative — it never triggers the permission prompt.
+  // If getUserMedia fails, the canvas stays idle (which is fine).
   const startMeter = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
-
-    const perm = micPermissionRef.current;
-    if (perm === "prompt" || perm === "denied") return;
 
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
+      // Silent fail — meter is optional, canvas stays idle
       return;
     }
 
@@ -379,6 +376,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             c2d.shadowColor = "rgba(129,140,248,0.5)";
             c2d.stroke();
           }
+          // Hot near-white core
           const coreAmp = (WAVE.idle * 0.5 + smooth * WAVE.sensitivity * 1.15) * (ch * 0.44);
           c2d.beginPath();
           for (let x = 0; x <= cw; x += 2) {
@@ -620,6 +618,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       setPhase("holding");
       holdTimer.current = setInterval(() => setHoldMs(Date.now() - holdStart.current), 100);
 
+      // Start the waveform meter — decorative, silent fail if mic unavailable
       void startMeter();
     },
     [phase, sessionOver, stopRecognition, stopMeter, startMeter]
