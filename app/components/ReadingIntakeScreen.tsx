@@ -11,12 +11,6 @@ import {
   Timer,
   ChevronRight,
   ChevronLeft,
-  Download,
-  X,
-  Share2,
-  MoreHorizontal,
-  Check,
-  ArrowUpRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -228,19 +222,6 @@ function formatTimeRemaining(expiresAt: string): string {
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const CARD_TITLES = ["Unlimited Access"];
 
-// ── PWA Install Helpers ──────────────────────────────────────────────────────
-
-function isPWAInstalled(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(display-mode: standalone)").matches ||
-         window.matchMedia("(display-mode: minimal-ui)").matches;
-}
-
-function isIOS(): boolean {
-  if (typeof window === "undefined") return false;
-  return /iPad|iPhone|iPod/.test(navigator.userAgent);
-}
-
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -255,14 +236,6 @@ export default function ReadingIntakeScreen({
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
-
-  // ── PWA Install State ──────────────────────────────────────────────────────
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [isInstalling, setIsInstalling] = useState(false);
-  const [hasShownGuide, setHasShownGuide] = useState(false);
-  const [isIOSDevice, setIsIOSDevice] = useState(false);
-  const [isPWA, setIsPWA] = useState(false);
 
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
@@ -407,78 +380,6 @@ export default function ReadingIntakeScreen({
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [fetchStatus]);
-
-  // ── PWA Install Detection ──────────────────────────────────────────────────
-
-  useEffect(() => {
-    setIsIOSDevice(isIOS());
-    setIsPWA(isPWAInstalled());
-
-    // Android: listen for beforeinstallprompt
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", () => {
-      setIsPWA(true);
-      setShowInstallGuide(false);
-    });
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-    };
-  }, []);
-
-  // ── Install Handlers ──────────────────────────────────────────────────────
-
-  const handleInstallTap = async () => {
-    // Android: use beforeinstallprompt
-    if (deferredPrompt) {
-      setIsInstalling(true);
-      try {
-        deferredPrompt.prompt();
-        const result = await deferredPrompt.userChoice;
-        if (result.outcome === "accepted") {
-          setIsPWA(true);
-          setShowInstallGuide(false);
-        }
-        setDeferredPrompt(null);
-      } catch {
-        // Fallback to iOS guide for Android if prompt fails
-        setShowInstallGuide(true);
-      } finally {
-        setIsInstalling(false);
-      }
-      return;
-    }
-
-    // iOS: show the guide overlay
-    if (isIOSDevice) {
-      // Try to open the share sheet via Web Share API first
-      try {
-        await navigator.share({
-          title: "Add AstroProXL to your Home Screen",
-          text: "Tap the ••• menu, then Share, then Add to Home Screen.",
-          url: window.location.href,
-        });
-        // After share, show the guide to help with the rest
-        setTimeout(() => setShowInstallGuide(true), 500);
-      } catch {
-        // Share was canceled or failed — show the guide
-        setShowInstallGuide(true);
-      }
-    } else {
-      // Generic fallback: show the guide
-      setShowInstallGuide(true);
-    }
-  };
-
-  const dismissInstallGuide = () => {
-    setShowInstallGuide(false);
-    setHasShownGuide(true);
-  };
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
@@ -722,43 +623,13 @@ export default function ReadingIntakeScreen({
         .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
         .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
 
-        /* ── Install Guide Overlay ── */
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(20px) scale(0.96); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .install-overlay {
-          animation: fadeSlideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-        }
-        .step-circle {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          border-radius: 9999px;
-          background: rgba(99, 102, 241, 0.2);
-          border: 1px solid rgba(99, 102, 241, 0.3);
-          color: #a5b4fc;
-          font-size: 12px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-        .step-arrow {
-          color: rgba(148, 163, 184, 0.3);
-          font-size: 18px;
-          line-height: 1;
-          padding-left: 28px;
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .carousel-container::after,
-          .hero-shine::after,
-          .install-overlay { animation: none !important; opacity: 0; }
+          .hero-shine::after { animation: none !important; opacity: 0; }
         }
       `}</style>
 
@@ -797,35 +668,6 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── INSTALL PILL ── */}
-          {!isPWA && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
-              className="mb-4 flex justify-center"
-            >
-              <button
-                type="button"
-                onClick={handleInstallTap}
-                disabled={isInstalling}
-                className="tap-fix flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-400/10 px-4 py-2 text-[12px] font-medium text-indigo-200 transition-all hover:bg-indigo-400/20 hover:border-indigo-400/50 active:scale-[0.97] disabled:opacity-50"
-              >
-                {isInstalling ? (
-                  <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-300/30 border-t-indigo-300" />
-                    Installing...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-3.5 w-3.5" />
-                    Tap to Install as App
-                  </>
-                )}
-              </button>
-            </motion.div>
-          )}
-
           {/* ── HERO ── */}
           <section className="mb-5 pt-1">
             <div
@@ -1156,110 +998,6 @@ export default function ReadingIntakeScreen({
 
         </motion.div>
       </div>
-
-      {/* ── iOS / Generic Install Guide Overlay ── */}
-      <AnimatePresence>
-        {showInstallGuide && !isPWA && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm px-4"
-            onClick={dismissInstallGuide}
-          >
-            <motion.div
-              initial={{ y: 40, opacity: 0, scale: 0.96 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: 40, opacity: 0, scale: 0.96 }}
-              transition={{ type: "spring", damping: 28, stiffness: 400 }}
-              className="install-overlay w-full max-w-[400px] rounded-2xl border border-white/10 bg-[#0d1235] p-6 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-400/20 text-indigo-300">
-                    <Download className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-[16px] font-semibold text-white">Install as App</h3>
-                    <p className="text-[12px] text-slate-400">5 simple steps</p>
-                  </div>
-                </div>
-                <button
-                  onClick={dismissInstallGuide}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:text-slate-300 transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Steps */}
-              <div className="space-y-3">
-                {/* Step 1 */}
-                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
-                  <span className="step-circle">1</span>
-                  <div>
-                    <p className="text-sm font-medium text-white">Tap the ••• menu</p>
-                    <p className="text-xs text-slate-500">Bottom right corner of Safari</p>
-                  </div>
-                  <MoreHorizontal className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
-                </div>
-
-                {/* Step 2 */}
-                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
-                  <span className="step-circle">2</span>
-                  <div>
-                    <p className="text-sm font-medium text-white">Tap "Share"</p>
-                    <p className="text-xs text-slate-500">At the top of the menu</p>
-                  </div>
-                  <Share2 className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
-                </div>
-
-                {/* Step 3 */}
-                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
-                  <span className="step-circle">3</span>
-                  <div>
-                    <p className="text-sm font-medium text-white">Tap "View More"</p>
-                    <p className="text-xs text-slate-500">Bottom left of the share sheet</p>
-                  </div>
-                  <ArrowUpRight className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
-                </div>
-
-                {/* Step 4 */}
-                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
-                  <span className="step-circle">4</span>
-                  <div>
-                    <p className="text-sm font-medium text-white">Tap "Add to Home Screen"</p>
-                    <p className="text-xs text-slate-500">In the expanded list</p>
-                  </div>
-                  <Check className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
-                </div>
-
-                {/* Step 5 */}
-                <div className="flex items-start gap-3 rounded-xl border border-indigo-400/20 bg-indigo-400/5 p-3">
-                  <span className="step-circle" style={{ background: "rgba(99,102,241,0.3)", borderColor: "rgba(99,102,241,0.4)" }}>5</span>
-                  <div>
-                    <p className="text-sm font-medium text-indigo-200">Tap "Add"</p>
-                    <p className="text-xs text-slate-400">Top right corner to confirm</p>
-                  </div>
-                  <Check className="h-4 w-4 text-indigo-300 ml-auto shrink-0" />
-                </div>
-              </div>
-
-              {/* Dismiss */}
-              <button
-                onClick={dismissInstallGuide}
-                className="mt-5 w-full rounded-xl bg-white/10 border border-white/10 py-3 text-sm font-semibold text-white transition hover:bg-white/15 active:scale-[0.98]"
-              >
-                Got it
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
