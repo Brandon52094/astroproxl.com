@@ -84,7 +84,7 @@ const AREAS = [
   },
 ];
 
-// ── Simplified UserStatus — free reading fields removed ──────────────────────
+// ── Simplified UserStatus ──────────────────────────────────────────────────
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
@@ -540,6 +540,7 @@ export default function ReadingIntakeScreen({
   }, []);
 
   // ── Install Handlers ──────────────────────────────────────────────────────
+  // FIXED: Direct tap sequence — no share sheet, no extra menus
 
   const handleInstallTap = async () => {
     // Android: use beforeinstallprompt
@@ -561,58 +562,39 @@ export default function ReadingIntakeScreen({
       return;
     }
 
-    // iOS: run the tap sequence
+    // iOS: run the tap sequence DIRECTLY — no share sheet, no extra menus
     if (isIOSDevice) {
       setIsInstalling(true);
       setShowInstallGuide(false);
       setInstallProgress(0);
       setInstallStep("Starting installation...");
 
-      try {
-        // First, try to open the share sheet via Web Share API
-        try {
-          await navigator.share({
-            title: "AstroProXL",
-            text: "Add AstroProXL to your Home Screen for the best experience.",
-            url: window.location.href,
-          });
-        } catch {
-          // Share was canceled — but we still want to show the guide
-          setShowInstallGuide(true);
+      // Small delay to let the UI settle
+      await new Promise(r => setTimeout(r, 300));
+
+      // Run the tap sequence immediately — the ••• menu is always there
+      const result = await runInstallTapSequence((step, index, total) => {
+        const stepNames: Record<string, string> = {
+          menu: "Opening menu...",
+          share: "Tapping Share...",
+          viewMore: "Showing more options...",
+          addToHome: "Finding Add to Home Screen...",
+          confirmAdd: "Confirming installation...",
+        };
+        setInstallStep(stepNames[step] || step);
+        setInstallProgress(((index + 1) / total) * 100);
+      });
+
+      if (result.success) {
+        setInstallProgress(100);
+        setInstallStep("Installation started!");
+        setTimeout(() => {
+          setIsPWA(isPWAInstalled());
           setIsInstalling(false);
-          return;
-        }
-
-        // Wait for share sheet to fully appear
-        await new Promise(r => setTimeout(r, 600));
-
-        // Run the tap sequence
-        const result = await runInstallTapSequence((step, index, total) => {
-          const stepNames: Record<string, string> = {
-            menu: "Opening menu...",
-            share: "Tapping Share...",
-            viewMore: "Showing more options...",
-            addToHome: "Finding Add to Home Screen...",
-            confirmAdd: "Confirming installation...",
-          };
-          setInstallStep(stepNames[step] || step);
-          setInstallProgress(((index + 1) / total) * 100);
-        });
-
-        if (result.success) {
-          setInstallProgress(100);
-          setInstallStep("Installation started!");
-          setTimeout(() => {
-            setIsPWA(isPWAInstalled());
-            setIsInstalling(false);
-            setShowInstallGuide(false);
-          }, 1500);
-        } else {
-          setShowInstallGuide(true);
-          setIsInstalling(false);
-        }
-      } catch (error) {
-        console.warn('[install] Share API failed:', error);
+          setShowInstallGuide(false);
+        }, 1500);
+      } else {
+        // If the tap sequence failed, show the guide overlay
         setShowInstallGuide(true);
         setIsInstalling(false);
       }
@@ -991,7 +973,7 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Reading cycle — kept for cooldown tracking ── */}
+          {/* ── Reading cycle ── */}
           {((userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
             <div className="mb-1 flex w-full justify-center">
               <div className="w-full max-w-[280px] space-y-2">
@@ -1234,7 +1216,7 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── CAROUSEL — subscription sale only, no swiping ── */}
+          {/* ── CAROUSEL ── */}
           <div className="mt-4">
             <div className="carousel-container">
               <button type="button" onClick={() => setIsCarouselOpen(!isCarouselOpen)} className="carousel-header" aria-expanded={isCarouselOpen}>
@@ -1377,7 +1359,6 @@ export default function ReadingIntakeScreen({
 
               {/* Steps */}
               <div className="space-y-3">
-                {/* Step 1 */}
                 <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
                   <span className="step-circle">1</span>
                   <div>
@@ -1386,8 +1367,6 @@ export default function ReadingIntakeScreen({
                   </div>
                   <MoreHorizontal className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
                 </div>
-
-                {/* Step 2 */}
                 <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
                   <span className="step-circle">2</span>
                   <div>
@@ -1396,8 +1375,6 @@ export default function ReadingIntakeScreen({
                   </div>
                   <Share2 className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
                 </div>
-
-                {/* Step 3 */}
                 <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
                   <span className="step-circle">3</span>
                   <div>
@@ -1406,8 +1383,6 @@ export default function ReadingIntakeScreen({
                   </div>
                   <ArrowUpRight className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
                 </div>
-
-                {/* Step 4 */}
                 <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
                   <span className="step-circle">4</span>
                   <div>
@@ -1416,8 +1391,6 @@ export default function ReadingIntakeScreen({
                   </div>
                   <Check className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
                 </div>
-
-                {/* Step 5 */}
                 <div className="flex items-start gap-3 rounded-xl border border-indigo-400/20 bg-indigo-400/5 p-3">
                   <span className="step-circle" style={{ background: "rgba(99,102,241,0.3)", borderColor: "rgba(99,102,241,0.4)" }}>5</span>
                   <div>
@@ -1428,7 +1401,6 @@ export default function ReadingIntakeScreen({
                 </div>
               </div>
 
-              {/* Dismiss */}
               <button
                 onClick={dismissInstallGuide}
                 className="mt-5 w-full rounded-xl bg-white/10 border border-white/10 py-3 text-sm font-semibold text-white transition hover:bg-white/15 active:scale-[0.98]"
