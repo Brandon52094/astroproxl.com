@@ -10,20 +10,13 @@
  * instead of the screen. Everything is therefore `absolute` inside a
  * `relative` root, and the content area is its own scroll container so the
  * sky and dock stay put while the answer scrolls.
- *
- * VOICE BRIDGE: press-and-hold runs its full animation, but there is no mic
- * yet, so on release it opens a text field to type what you'd have said. The
- * API call is real. Step 5 replaces the field with actual recording and
- * transcription — nothing else in this file needs to change.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft } from "lucide-react";
 import { loadChart } from "@/lib/chartStore";
 
-/* ── Minimal SpeechRecognition typings ────────────────────────────────────
- * The Web Speech API isn't in TypeScript's default DOM lib, so we declare just
- * the surface we use. Runtime access is still guarded by feature detection. */
+/* ── Minimal SpeechRecognition typings ──────────────────────────────────── */
 interface SpeechRecognitionAlternative { readonly transcript: string }
 interface SpeechRecognitionResult {
   readonly isFinal: boolean;
@@ -74,16 +67,15 @@ interface JxlResult {
 }
 
 interface JxlPanelProps {
-  /** Pager tells us when this panel is on screen so animations can pause. */
   isActive?: boolean;
-  /** Standalone route passes this to show a back button. */
   onBack?: () => void;
 }
 
 const REPLIES_PER_SESSION = 3;
 const MIN_HOLD_MS = 450;
+const MIC_TOGGLE_KEY = "jxl_mic_toggle";
 
-// Waveform look — tuned in the standalone preview tool.
+// Waveform look
 const WAVE = {
   sensitivity: 1.1,
   idle: 0.19,
@@ -91,14 +83,10 @@ const WAVE = {
   speed: 1.8,
   glow: 16,
   thickness: 2.3,
-  colors: ["#22c55e", "#3b82f6", "#a855f7", "#ef4444", "#f59e0b"], // Spectrum
+  colors: ["#22c55e", "#3b82f6", "#a855f7", "#ef4444", "#f59e0b"],
 };
 
-/* ── Haptics ──────────────────────────────────────────────────────────────
- * iOS Safari has no navigator.vibrate. The only real system haptic available
- * to mobile Safari is a programmatic click on an <input type="checkbox" switch>
- * (iOS 17.4+). Isolated here so swapping in Capacitor's Haptics plugin later
- * is a one-function change. */
+/* ── Haptics ────────────────────────────────────────────────────────────── */
 function triggerHaptic() {
   try {
     if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
@@ -111,9 +99,7 @@ function triggerHaptic() {
   }
 }
 
-/* ── Shooting stars ───────────────────────────────────────────────────────
- * Rarity is what makes a sky read as real. One at a time, irregular 9–17s
- * gaps, falling DOWN and ACROSS. */
+/* ── Shooting stars ─────────────────────────────────────────────────────── */
 interface Shooter {
   id: number;
   top: number;
@@ -154,9 +140,7 @@ function useShootingStars(enabled: boolean) {
   return shooters;
 }
 
-/* ── Typewriter ───────────────────────────────────────────────────────────
- * Reveals by word, not character — per-letter on a long answer reads slow and
- * costs a render per keystroke. */
+/* ── Typewriter ─────────────────────────────────────────────────────────── */
 function useTypewriter(full: string, active: boolean) {
   const [shown, setShown] = useState("");
   useEffect(() => {
@@ -179,26 +163,24 @@ function useTypewriter(full: string, active: boolean) {
 
 type Phase =
   | "idle"
-  | "holding"      // actively listening, live transcript streaming
+  | "holding"
   | "tooShort"
-  | "composing"    // typing (fallback, or unsupported browser)
+  | "composing"
   | "thinking"
   | "answered"
-  | "denied";      // mic blocked or unsupported
+  | "denied";
 
 export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [phase, setPhase] = useState<Phase>("idle");
-  // Mirror of phase for async callbacks (recognition events fire outside
-  // React's render, by which point the closed-over `phase` is stale).
   const phaseRef = useRef<Phase>("idle");
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
   const [holdMs, setHoldMs] = useState(0);
   const [draft, setDraft] = useState("");
   const [reduceMotion, setReduceMotion] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [history, setHistory] = useState<Array<{ question: string; answer: string }>>([]);
   const [result, setResult] = useState<JxlResult | null>(null);
 
@@ -207,32 +189,67 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const composeRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Live speech recognition ──────────────────────────────────────────
-  // On-device, free, no API key. Words stream in as you speak. Less accurate
-  // than Whisper and flaky on iOS Safari — so every failure path falls back to
-  // the typing box rather than dead-ending. (Whisper can slot back in later as
-  // an accuracy tier via /api/jxl/transcribe.)
+  // ── Speech recognition ──────────────────────────────────────────────
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  // What has been finalised plus the in-progress guess, kept in a ref so the
-  // recognition callbacks (which fire outside React's render) always see the
-  // latest value on release.
   const transcriptRef = useRef("");
   const [liveTranscript, setLiveTranscript] = useState("");
   const [heard, setHeard] = useState<string | null>(null);
   const [showSources, setShowSources] = useState(false);
 
-  // ── Live audio meter (real waveform) ─────────────────────────────────
-  // A SECOND mic tap, separate from SpeechRecognition (which owns its own audio
-  // and only hands back text). This one exists purely to drive the bars from
-  // actual loudness. Because it's a raw MediaStream, it MUST be torn down on
-  // every exit — stopMeter is the single teardown path, called everywhere the
-  // hold can end, so the OS mic indicator can never linger.
+  // ── Audio meter ─────────────────────────────────────────────────────
   const meterStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // ── Mic permission state ────────────────────────────────────────────
+  const [micPermission, setMicPermission] = useState<PermissionState | "unknown">("unknown");
+  const micPermissionRef = useRef<PermissionState | "unknown">("unknown");
+  useEffect(() => {
+    micPermissionRef.current = micPermission;
+  }, [micPermission]);
+
+  // ── Persistent mic toggle ───────────────────────────────────────────
+  const [micEnabled, setMicEnabled] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(MIC_TOGGLE_KEY);
+      if (stored !== null) return stored === "true";
+    }
+    return false;
+  });
+
+  const handleMicToggle = useCallback((enabled: boolean) => {
+    setMicEnabled(enabled);
+    try {
+      localStorage.setItem(MIC_TOGGLE_KEY, String(enabled));
+    } catch {}
+
+    if (enabled && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+      // Pre-flight: check if mic is actually accessible
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          stream.getTracks().forEach(t => t.stop());
+          setMicPermission("granted");
+          console.log("[jxl/mic] Toggle ON — mic accessible");
+        })
+        .catch(() => {
+          console.log("[jxl/mic] Toggle ON — mic not accessible, will prompt on hold");
+          setMicPermission("prompt");
+        });
+    }
+  }, []);
+
+  // When toggle is turned OFF, stop any active mic streams
+  useEffect(() => {
+    if (!micEnabled && phaseRef.current === "holding") {
+      stopRecognition();
+      stopMeter();
+      setPhase("idle");
+    }
+  }, [micEnabled]);
+
+  // ── Stop meter ──────────────────────────────────────────────────────
   const stopMeter = useCallback(() => {
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
@@ -245,21 +262,15 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
     analyserRef.current = null;
     if (audioCtxRef.current) {
-      // close() releases the graph; ignore if already closing.
       audioCtxRef.current.close().catch(() => {});
       audioCtxRef.current = null;
     }
     if (meterStreamRef.current) {
       meterStreamRef.current.getTracks().forEach((t) => {
-        try {
-          t.stop();
-        } catch {
-          /* noop */
-        }
+        try { t.stop(); } catch { /* noop */ }
       });
       meterStreamRef.current = null;
     }
-    // Clear the canvas so it doesn't freeze mid-wave.
     const canvas = canvasRef.current;
     const c2d = canvas?.getContext("2d");
     if (canvas && c2d) {
@@ -268,21 +279,21 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, []);
 
-  /**
-   * Opens the meter mic and starts the draw loop. Async because getUserMedia
-   * is — but if the hold already ended by the time it resolves (fast tap), it
-   * tears itself down immediately rather than leaving a stream open.
-   */
+  // ── Start meter ─────────────────────────────────────────────────────
   const startMeter = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    if (!micEnabled) return;
+
+    const perm = micPermissionRef.current;
+    if (perm === "prompt" || perm === "denied") return;
+
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      return; // recognition handles the permission messaging; the meter is optional
+      return;
     }
 
-    // Released during the getUserMedia await → don't open anything.
     if (phaseRef.current !== "holding") {
       stream.getTracks().forEach((t) => t.stop());
       return;
@@ -291,9 +302,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     meterStreamRef.current = stream;
 
     try {
-      const Ctx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new Ctx();
       audioCtxRef.current = ctx;
 
@@ -302,14 +311,12 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.78;
       source.connect(analyser);
-      // Note: analyser is NOT connected to ctx.destination — we read the mic,
-      // we don't play it back.
       analyserRef.current = analyser;
 
       const freq = new Uint8Array(analyser.frequencyBinCount);
       const canvas = canvasRef.current;
       const c2d = canvas?.getContext("2d") ?? null;
-      let smooth = 0; // eased 0..1 loudness
+      let smooth = 0;
       let time = 0;
       let cw = 0, ch = 0, dpr = 1;
 
@@ -325,7 +332,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       fit();
 
       const draw = () => {
-        if (!cw || !ch) fit(); // canvas may not be laid out on the first frame
+        if (!cw || !ch) fit();
         time += 0.016 * WAVE.speed;
         analyser.getByteFrequencyData(freq);
         let sum = 0, cnt = 0;
@@ -341,7 +348,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           WAVE.colors.forEach((col, i) => grad.addColorStop(i / (WAVE.colors.length - 1), col));
           c2d.lineCap = "round";
           c2d.lineJoin = "round";
-          c2d.globalCompositeOperation = "lighter"; // overlapping ribbons glow
+          c2d.globalCompositeOperation = "lighter";
           const amp = (WAVE.idle + smooth * WAVE.sensitivity) * (ch * 0.44);
           for (let l = 0; l < WAVE.lines; l++) {
             const lf = WAVE.lines > 1 ? l / (WAVE.lines - 1) : 0;
@@ -350,7 +357,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             c2d.beginPath();
             for (let x = 0; x <= cw; x += 3) {
               const tx = x / cw;
-              const env = Math.pow(Math.sin(tx * Math.PI), 0.85); // taper at edges
+              const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
               const y = cy + env * la * (
                 Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
                 Math.sin(tx * Math.PI * 7 - phase * 0.7 + l) * 0.4
@@ -364,7 +371,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             c2d.shadowColor = "rgba(129,140,248,0.5)";
             c2d.stroke();
           }
-          // Hot near-white core — the voice pulse.
           const coreAmp = (WAVE.idle * 0.5 + smooth * WAVE.sensitivity * 1.15) * (ch * 0.44);
           c2d.beginPath();
           for (let x = 0; x <= cw; x += 2) {
@@ -389,9 +395,9 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     } catch {
       stopMeter();
     }
-  }, [stopMeter]);
+  }, [micEnabled, stopMeter]);
 
-  // Feature-detect once. Undefined until mounted so SSR doesn't touch window.
+  // ── Feature detect ──────────────────────────────────────────────────
   const [speechSupported, setSpeechSupported] = useState<boolean | null>(null);
   useEffect(() => {
     const SR =
@@ -402,11 +408,50 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     setSpeechSupported(Boolean(SR));
   }, []);
 
-  /**
-   * Hard stop for recognition. The single source of truth for ending listening
-   * — every exit path calls it, so the OS mic indicator can't linger. Safe to
-   * call repeatedly.
-   */
+  // ── Permission query ────────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) {
+      if (typeof window !== "undefined") {
+        console.log(`[jxl/mic] Permissions API unavailable — secureContext=${window.isSecureContext} protocol=${location.protocol}`);
+      }
+      return;
+    }
+    let status: PermissionStatus | null = null;
+    navigator.permissions
+      .query({ name: "microphone" as PermissionName })
+      .then((s) => {
+        status = s;
+        setMicPermission(s.state);
+        console.log(`[jxl/mic] secureContext=${window.isSecureContext} protocol=${location.protocol} host=${location.host} permission=${s.state}`);
+        s.onchange = () => {
+          console.log(`[jxl/mic] permission changed -> ${s.state}`);
+          setMicPermission(s.state);
+        };
+      })
+      .catch(() => setMicPermission("unknown"));
+    return () => { if (status) status.onchange = null; };
+  }, []);
+
+  // ── Pre-flight: if toggle was ON from previous session, check permission ──
+  useEffect(() => {
+    if (!micEnabled) return;
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+
+    // If we already have permission, no need to pre-flight
+    if (micPermission === "granted") return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => {
+        stream.getTracks().forEach(t => t.stop());
+        setMicPermission("granted");
+        console.log("[jxl/mic] Pre-flight: mic accessible (permission restored)");
+      })
+      .catch(() => {
+        console.log("[jxl/mic] Pre-flight: mic not accessible, will prompt on first hold");
+      });
+  }, [micEnabled, micPermission]);
+
+  // ── Stop recognition ────────────────────────────────────────────────
   const stopRecognition = useCallback(() => {
     const rec = recognitionRef.current;
     if (rec) {
@@ -422,26 +467,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, []);
 
-  // ── DIAGNOSTIC: why does the mic re-prompt? Remove once the cause is known ──
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.permissions?.query) {
-      console.log(`[jxl/mic] Permissions API unavailable — secureContext=${typeof window !== "undefined" ? window.isSecureContext : "n/a"}`);
-      return;
-    }
-    let status: PermissionStatus | null = null;
-    navigator.permissions
-      .query({ name: "microphone" as PermissionName })
-      .then((s) => {
-        status = s;
-        console.log(
-          `[jxl/mic] secureContext=${window.isSecureContext} protocol=${location.protocol} host=${location.host} permission=${s.state}`
-        );
-        s.onchange = () => console.log(`[jxl/mic] permission changed -> ${s.state}`);
-      })
-      .catch(() => console.log("[jxl/mic] cannot query microphone permission (older Safari)"));
-    return () => { if (status) status.onchange = null; };
-  }, []);
-
+  // ── Reduced motion ──────────────────────────────────────────────────
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     setReduceMotion(mq.matches);
@@ -452,11 +478,9 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
   const animate = isActive && !reduceMotion;
   const shooters = useShootingStars(animate);
-
   const isHolding = phase === "holding";
   const typed = useTypewriter(result?.answer ?? "", phase === "answered");
   const typingDone = !result || typed.length >= result.answer.length;
-
   const repliesUsed = history.length;
   const repliesLeft = Math.max(0, REPLIES_PER_SESSION - repliesUsed);
   const sessionOver = repliesLeft <= 0;
@@ -467,169 +491,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, [phase]);
 
-  /* ── Press and hold ──────────────────────────────────────────────────
-   * Holding starts live recognition; words appear as you speak. The first
-   * hold triggers the OS permission prompt (which browsers tie to the first
-   * recognition start) — if that interrupts it, the person just holds again. */
-  const startHold = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (phase === "thinking" || sessionOver) return;
-      e.preventDefault();
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-      setError(null);
-      setHeard(null);
-
-      const SR =
-        (window as unknown as { SpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition })
-          .webkitSpeechRecognition;
-
-      if (!SR) {
-        // No on-device recognition — go straight to typing.
-        setPhase("composing");
-        return;
-      }
-
-      transcriptRef.current = "";
-      setLiveTranscript("");
-
-      const rec = new SR();
-      rec.lang = "en-US";
-      rec.interimResults = true; // stream partial words as they're recognised
-      rec.continuous = true;
-      recognitionRef.current = rec;
-
-      rec.onresult = (event: SpeechRecognitionEvent) => {
-        let finalText = "";
-        let interim = "";
-        for (let i = 0; i < event.results.length; i++) {
-          const r = event.results[i];
-          if (r.isFinal) finalText += r[0].transcript;
-          else interim += r[0].transcript;
-        }
-        const combined = (finalText + " " + interim).replace(/\s+/g, " ").trim();
-        transcriptRef.current = combined;
-        setLiveTranscript(combined);
-      };
-
-      rec.onerror = (event: SpeechRecognitionErrorEvent) => {
-        // "not-allowed"/"service-not-allowed" = permission denied.
-        // "no-speech"/"aborted" = benign, handled on release.
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          stopRecognition();
-          stopMeter();
-          if (holdTimer.current) clearInterval(holdTimer.current);
-          setPhase("denied");
-          setError("Microphone access is off. Allow it in your browser settings, or type instead.");
-        }
-      };
-
-      rec.onend = () => {
-        // Recognition can auto-end (silence, iOS timeout) before release. If we
-        // were still holding, keep whatever we captured rather than losing it.
-        recognitionRef.current = null;
-      };
-
-      try {
-        rec.start();
-      } catch {
-        // start() throws if called twice in quick succession — treat as a miss.
-        setPhase("composing");
-        return;
-      }
-
-      triggerHaptic();
-      holdStart.current = Date.now();
-      setHoldMs(0);
-      setPhase("holding");
-      holdTimer.current = setInterval(() => setHoldMs(Date.now() - holdStart.current), 100);
-
-      // Real waveform: open the meter tap now that we're holding. It's
-      // best-effort — if it fails, recognition and the bars' rest state still
-      // work; only the live movement is lost.
-      void startMeter();
-    },
-    [phase, sessionOver, stopRecognition, startMeter]
-  );
-
-  const endHold = useCallback(() => {
-    if (phase !== "holding") return;
-    if (holdTimer.current) {
-      clearInterval(holdTimer.current);
-      holdTimer.current = null;
-    }
-    const elapsed = Date.now() - holdStart.current;
-    triggerHaptic();
-    stopRecognition();
-    stopMeter();
-
-    const said = transcriptRef.current.trim();
-
-    if (elapsed < MIN_HOLD_MS) {
-      setLiveTranscript("");
-      transcriptRef.current = "";
-      setPhase("tooShort");
-      setTimeout(() => setPhase((p) => (p === "tooShort" ? "idle" : p)), 1500);
-      return;
-    }
-
-    if (!said || said.length < 2) {
-      // Held long enough but nothing was heard — offer the typing path with
-      // whatever partial text exists prefilled, so the moment isn't wasted.
-      setDraft(said);
-      setLiveTranscript("");
-      transcriptRef.current = "";
-      setError("Didn't quite catch that — check it or type it.");
-      setPhase("composing");
-      return;
-    }
-
-    setLiveTranscript("");
-    transcriptRef.current = "";
-    setHeard(said);
-    void ask(said);
-  }, [phase, stopRecognition, stopMeter]);
-
-  // Stop everything if the component unmounts mid-listen.
-  useEffect(
-    () => () => {
-      if (holdTimer.current) clearInterval(holdTimer.current);
-      stopRecognition();
-      stopMeter();
-    },
-    [stopRecognition, stopMeter]
-  );
-
-  // Backstop: tab hidden (app switch, screen lock) while holding — pointer
-  // never releases, so stop the mic on those events too.
-  useEffect(() => {
-    const onHidden = () => {
-      if (document.visibilityState === "hidden" && phaseRef.current === "holding") {
-        if (holdTimer.current) clearInterval(holdTimer.current);
-        stopRecognition();
-        stopMeter();
-        setLiveTranscript("");
-        transcriptRef.current = "";
-        setPhase("idle");
-      }
-    };
-    document.addEventListener("visibilitychange", onHidden);
-    return () => document.removeEventListener("visibilitychange", onHidden);
-  }, [stopRecognition, stopMeter]);
-
-  useEffect(() => {
-    // isActive flips false when the pager moves to another panel.
-    if (!isActive && phaseRef.current === "holding") {
-      if (holdTimer.current) clearInterval(holdTimer.current);
-      stopRecognition();
-      stopMeter();
-      setLiveTranscript("");
-      transcriptRef.current = "";
-      setPhase("idle");
-    }
-  }, [isActive, stopRecognition, stopMeter]);
-
-  /* ── Ask ───────────────────────────────────────────────────────────── */
+  // ── Ask ─────────────────────────────────────────────────────────────
   const ask = async (question: string) => {
     const chart = loadChart();
     if (!chart?.chartData) {
@@ -666,13 +528,12 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Try again.");
-        setDraft(question); // don't lose what they said
+        setDraft(question);
         setPhase("composing");
         return;
       }
 
       setResult(data as JxlResult);
-      // A safe response is not a turn — it never costs a reply.
       if (!data.isSafeResponse) {
         setHistory((prev) => [...prev, { question, answer: data.answer }]);
       }
@@ -694,6 +555,166 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     void ask(q);
   };
 
+  // ── Press and hold ──────────────────────────────────────────────────
+  const startHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (phase === "thinking" || sessionOver) return;
+
+      // ── MIC TOGGLE GUARD ──
+      if (!micEnabled) {
+        setError("Mic is off. Toggle it on above to use voice.");
+        return;
+      }
+
+      e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      setError(null);
+      setHeard(null);
+
+      // Known-denied mic → go straight to typing
+      if (micPermissionRef.current === "denied") {
+        setError("Microphone access is off. Allow it in your settings, or type instead.");
+        setPhase("composing");
+        return;
+      }
+
+      const SR =
+        (window as unknown as { SpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition ||
+        (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition })
+          .webkitSpeechRecognition;
+
+      if (!SR) {
+        setPhase("composing");
+        return;
+      }
+
+      transcriptRef.current = "";
+      setLiveTranscript("");
+
+      const rec = new SR();
+      rec.lang = "en-US";
+      rec.interimResults = true;
+      rec.continuous = true;
+      recognitionRef.current = rec;
+
+      rec.onresult = (event: SpeechRecognitionEvent) => {
+        let finalText = "";
+        let interim = "";
+        for (let i = 0; i < event.results.length; i++) {
+          const r = event.results[i];
+          if (r.isFinal) finalText += r[0].transcript;
+          else interim += r[0].transcript;
+        }
+        const combined = (finalText + " " + interim).replace(/\s+/g, " ").trim();
+        transcriptRef.current = combined;
+        setLiveTranscript(combined);
+      };
+
+      rec.onerror = (event: SpeechRecognitionErrorEvent) => {
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          stopRecognition();
+          stopMeter();
+          if (holdTimer.current) clearInterval(holdTimer.current);
+          setPhase("denied");
+          setError("Microphone access is off. Allow it in your browser settings, or type instead.");
+        }
+      };
+
+      rec.onend = () => {
+        recognitionRef.current = null;
+      };
+
+      try {
+        rec.start();
+      } catch {
+        setPhase("composing");
+        return;
+      }
+
+      triggerHaptic();
+      holdStart.current = Date.now();
+      setHoldMs(0);
+      setPhase("holding");
+      holdTimer.current = setInterval(() => setHoldMs(Date.now() - holdStart.current), 100);
+
+      void startMeter();
+    },
+    [phase, sessionOver, micEnabled, stopRecognition, stopMeter, startMeter]
+  );
+
+  const endHold = useCallback(() => {
+    if (phase !== "holding") return;
+    if (holdTimer.current) {
+      clearInterval(holdTimer.current);
+      holdTimer.current = null;
+    }
+    const elapsed = Date.now() - holdStart.current;
+    triggerHaptic();
+    stopRecognition();
+    stopMeter();
+
+    const said = transcriptRef.current.trim();
+
+    if (elapsed < MIN_HOLD_MS) {
+      setLiveTranscript("");
+      transcriptRef.current = "";
+      setPhase("tooShort");
+      setTimeout(() => setPhase((p) => (p === "tooShort" ? "idle" : p)), 1500);
+      return;
+    }
+
+    if (!said || said.length < 2) {
+      setDraft(said);
+      setLiveTranscript("");
+      transcriptRef.current = "";
+      setError("Didn't quite catch that — check it or type it.");
+      setPhase("composing");
+      return;
+    }
+
+    setLiveTranscript("");
+    transcriptRef.current = "";
+    setHeard(said);
+    void ask(said);
+  }, [phase, stopRecognition, stopMeter]);
+
+  // ── Cleanup on unmount ──────────────────────────────────────────────
+  useEffect(
+    () => () => {
+      if (holdTimer.current) clearInterval(holdTimer.current);
+      stopRecognition();
+      stopMeter();
+    },
+    [stopRecognition, stopMeter]
+  );
+
+  // ── Tab hidden backstop ─────────────────────────────────────────────
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === "hidden" && phaseRef.current === "holding") {
+        if (holdTimer.current) clearInterval(holdTimer.current);
+        stopRecognition();
+        stopMeter();
+        setLiveTranscript("");
+        transcriptRef.current = "";
+        setPhase("idle");
+      }
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, [stopRecognition, stopMeter]);
+
+  useEffect(() => {
+    if (!isActive && phaseRef.current === "holding") {
+      if (holdTimer.current) clearInterval(holdTimer.current);
+      stopRecognition();
+      stopMeter();
+      setLiveTranscript("");
+      transcriptRef.current = "";
+      setPhase("idle");
+    }
+  }, [isActive, stopRecognition, stopMeter]);
+
   const buttonLabel = sessionOver
     ? "That's all for now"
     : isHolding
@@ -702,15 +723,14 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     ? "Reading the sky…"
     : phase === "tooShort"
     ? "Hold a little longer"
-    : "Press · Hold · Speak";
+    : micEnabled
+    ? "Press · Hold · Speak"
+    : "Mic off — toggle on above";
 
-  /* Stop touch events reaching the pager so a hold never becomes a swipe. */
   const swallowTouch = (e: React.TouchEvent) => e.stopPropagation();
 
   return (
     <div className="jxl-panel">
-      {/* Hidden control that fires a real system haptic on iOS 17.4+ */}
-      {/* @ts-expect-error — `switch` is valid in iOS Safari, absent from React's types */}
       <input id="jxl-haptic" type="checkbox" switch="" aria-hidden="true" tabIndex={-1} className="haptic-proxy" />
 
       <style jsx>{`
@@ -732,7 +752,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           pointer-events: none;
         }
 
-        /* ── SKY — absolute, not fixed. See file header. ── */
+        /* ── SKY ── */
         .sky {
           position: absolute;
           inset: 0;
@@ -757,8 +777,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           mix-blend-mode: screen;
           transition: filter 1200ms ease;
         }
-        /* Pre-softened gradients instead of filter: blur() — blur is what
-           destroys framerate on phones. */
         .band.a {
           top: 2%; left: -10%;
           background: radial-gradient(closest-side, rgba(45,212,191,0.30) 0%, rgba(45,212,191,0.14) 42%, rgba(45,212,191,0) 72%);
@@ -795,8 +813,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           0%,100% { transform: translate3d(0,3%,0) scale(1.05); opacity: 0.5; }
           50% { transform: translate3d(10%,-4%,0) scale(1.15); opacity: 0.8; }
         }
-
-        /* The sky leans in while you speak. */
         .sky.listening .band { filter: saturate(1.4); }
 
         .star { position: absolute; border-radius: 9999px; background: #fff; }
@@ -824,7 +840,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           background: linear-gradient(to left, rgba(255,255,255,0.75), rgba(255,255,255,0));
         }
 
-        /* ── CONTENT — its own scroller so sky and dock stay put ── */
+        /* ── CONTENT ── */
         .scroller {
           position: absolute;
           inset: 0;
@@ -935,7 +951,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           font-size: 13px; line-height: 1.65; color: #8fbfb6;
         }
 
-        /* ── Sources dropdown — the astrologer's "show your work" ── */
         .sources {
           margin-top: 26px;
           border-top: 1px solid rgba(255,255,255,0.07);
@@ -999,16 +1014,100 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           text-align: center; font-size: 12px; color: #f0a8a8; margin-bottom: 8px;
         }
 
+        /* ── Mic Toggle ── */
+        .mic-toggle-row {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          margin-bottom: 8px;
+        }
+
+        .mic-toggle {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 4px 0;
+          font-family: var(--font-sans, ui-sans-serif);
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .mic-toggle:disabled {
+          opacity: 0.4;
+          cursor: default;
+        }
+
+        .toggle-track {
+          position: relative;
+          width: 44px;
+          height: 26px;
+          border-radius: 9999px;
+          background: rgba(148, 163, 184, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          transition: background 220ms ease;
+          flex-shrink: 0;
+        }
+
+        .mic-toggle.on .toggle-track {
+          background: rgba(94, 234, 212, 0.35);
+          border-color: rgba(94, 234, 212, 0.4);
+        }
+
+        .toggle-thumb {
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 20px;
+          height: 20px;
+          border-radius: 9999px;
+          background: rgba(148, 163, 184, 0.6);
+          transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background 220ms ease;
+        }
+
+        .mic-toggle.on .toggle-thumb {
+          transform: translateX(18px);
+          background: #5eead4;
+          box-shadow: 0 0 16px rgba(94, 234, 212, 0.3);
+        }
+
+        .toggle-label {
+          font-size: 12px;
+          font-weight: 500;
+          letter-spacing: 0.06em;
+          color: rgba(148, 163, 184, 0.8);
+          min-width: 48px;
+          text-align: left;
+        }
+
+        .mic-toggle.on .toggle-label {
+          color: rgba(94, 234, 212, 0.9);
+        }
+
+        .toggle-hint {
+          font-size: 10px;
+          letter-spacing: 0.04em;
+          color: rgba(239, 68, 68, 0.6);
+        }
+
+        .toggle-hint.warning {
+          color: rgba(251, 191, 36, 0.6);
+        }
+
         .compose {
           width: 100%;
           background: rgba(10,14,30,0.85);
           border: 1px solid rgba(94,234,212,0.28);
           border-radius: 18px;
           color: #e6e9f5;
-          font-size: 16px; /* >=16px stops iOS zooming on focus */
+          font-size: 16px;
           font-family: inherit;
           padding: 13px 15px;
-          outline: none; resize: none;
+          outline: none;
+          resize: none;
         }
         .compose:focus { border-color: rgba(94,234,212,0.6); }
         .compose-row { display: flex; gap: 10px; margin-top: 10px; }
@@ -1023,10 +1122,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           border: 1px solid rgba(255,255,255,0.12);
           background: transparent; color: #8b93a7;
           font-size: 14px; cursor: pointer;
-        }
-        .bridge-note {
-          margin-top: 8px; text-align: center;
-          font-size: 10px; color: rgba(148,163,184,0.4);
         }
         .type-instead {
           display: block;
@@ -1069,7 +1164,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding-bottom: 14vh; /* bias above dead-center, under the transcript */
+          padding-bottom: 14vh;
           pointer-events: none;
         }
         .wave-canvas { width: 86%; max-width: 460px; height: 160px; display: block; }
@@ -1185,8 +1280,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           />
         ))}
 
-        {/* Per-meteor distance varies, which a shared @keyframes can't express,
-            so these are driven by the Web Animations API. */}
         {shooters.map((s) => (
           <span
             key={s.id}
@@ -1208,7 +1301,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         ))}
       </div>
 
-      {/* ── Waveform — centered, canvas, driven by the meter mic ── */}
+      {/* ── Waveform ── */}
       {isHolding && (
         <div className="wave-stage" aria-hidden="true">
           <canvas ref={canvasRef} className="wave-canvas" />
@@ -1234,7 +1327,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             {phase === "answered" && result ? (
               <h1 className="title">{result.title}</h1>
             ) : isHolding ? (
-              // Live words as you speak — the proof it's hearing you.
               <p className={`live ${liveTranscript ? "" : "live-empty"}`}>
                 {liveTranscript || "Listening…"}
               </p>
@@ -1246,12 +1338,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                   ? "No mic — you can type instead."
                   : phase === "composing"
                   ? "Say the messy version, or type it."
-                  : "Hold the button and say what's actually going on."}
+                  : micEnabled
+                  ? "Hold the button and say what's actually going on."
+                  : "Toggle the mic on above to speak."}
               </p>
             )}
           </div>
 
-          {/* What we heard, once answered — so a mishearing is visible. */}
           {phase === "answered" && heard && <p className="heard">“{heard}”</p>}
 
           {phase === "answered" && result && (
@@ -1344,11 +1437,34 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           </>
         ) : (
           <>
+            {/* ── MIC TOGGLE ── */}
+            <div className="mic-toggle-row">
+              <button
+                type="button"
+                onClick={() => handleMicToggle(!micEnabled)}
+                className={`mic-toggle ${micEnabled ? "on" : "off"}`}
+                disabled={phase === "thinking" || sessionOver}
+                aria-label={micEnabled ? "Microphone on" : "Microphone off"}
+              >
+                <span className="toggle-track">
+                  <span className="toggle-thumb" />
+                </span>
+                <span className="toggle-label">{micEnabled ? "Mic On" : "Mic Off"}</span>
+              </button>
+              {micEnabled && micPermission === "denied" && (
+                <span className="toggle-hint">Permission blocked — check settings</span>
+              )}
+              {micEnabled && micPermission === "prompt" && (
+                <span className="toggle-hint warning">Will prompt on first use</span>
+              )}
+            </div>
+
             <p className="replies">
               {sessionOver
                 ? "That's all for this session"
                 : `${repliesLeft} ${repliesLeft === 1 ? "reply" : "replies"} left`}
             </p>
+
             <button
               type="button"
               className={`hold ${isHolding ? "held" : phase === "idle" ? "idle" : ""}`}
@@ -1356,9 +1472,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
               onPointerDown={startHold}
               onPointerUp={endHold}
               onPointerCancel={endHold}
-              /* No onPointerLeave: setPointerCapture keeps events on this
-                 element, and treating leave as a release ended the hold on the
-                 smallest finger drift. */
               onContextMenu={(e) => e.preventDefault()}
             >
               <span className="ring" />
@@ -1376,8 +1489,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
               </span>
             </button>
 
-            {/* Always reachable — a denied or unsupported mic must never be a
-                dead end. Also the whole path when speech isn't supported. */}
             <button
               type="button"
               className="type-instead"
