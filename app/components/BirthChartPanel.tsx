@@ -263,7 +263,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-5"
+        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-16"
         style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
       >
         {/* ── HERO — the Big 3, elementally outlined ── */}
