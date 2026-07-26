@@ -227,18 +227,26 @@ function LoadingRing({ isActive, apiReady, onComplete }: LoadingRingProps) {
 
     rafRef.current = requestAnimationFrame(animate);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [isActive, onComplete]);
+  }, [isActive, onComplete]); // apiReady intentionally excluded — read via ref so the loop doesn't restart
 
   if (phase === "idle") return null;
 
   const isComplete = phase === "complete" || phase === "fading";
   const isFading = phase === "fading";
   const circumference = 289;
+
   const dashOffset = circumference * (1 - progress);
 
   return (
     <div
-      className={`fixed inset-0 pointer-events-none z-[80] ${isFading ? 'opacity-0 transition-opacity duration-600' : ''}`}
+      style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        zIndex: 80,
+        opacity: isFading ? 0 : 1,
+        transition: "opacity 0.6s ease",
+      }}
       aria-hidden="true"
     >
       <style jsx>{`
@@ -318,21 +326,20 @@ function LoadingRing({ isActive, apiReady, onComplete }: LoadingRingProps) {
             animation: none !important;
           }
         }
-        .transition-opacity {
-          transition: opacity 0.6s ease;
-        }
-        .duration-600 {
-          transition-duration: 600ms;
-        }
       `}</style>
 
       <div className={`ring-glow ${isComplete ? 'complete' : ''}`} />
 
       <svg
-        className="absolute inset-0 w-full h-full"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          filter: "drop-shadow(0 0 12px rgba(94, 234, 212, 0.2))",
+        }}
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
-        style={{ filter: 'drop-shadow(0 0 12px rgba(94, 234, 212, 0.2))' }}
       >
         <defs>
           <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -767,7 +774,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       }
       setDraft("");
       setShowSources(false);
-      setApiReady(true);
+      setApiReady(true); // reading is ready: let the ring sweep to full and complete
     } catch {
       setError("Something went wrong. Try again.");
       setDraft(question);
@@ -1375,7 +1382,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
         @media (prefers-reduced-motion: reduce) {
           .band, .star, .hold.idle, .ring, .dots span,
-          .title, .window, .directive, .confirmation {
+          .title, .window, .directive, .confirmation, .answer {
             animation: none !important;
           }
         }
