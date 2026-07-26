@@ -348,6 +348,26 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, []);
 
+  // ── DIAGNOSTIC: why does the mic re-prompt? Remove once the cause is known ──
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) {
+      console.log(`[jxl/mic] Permissions API unavailable — secureContext=${typeof window !== "undefined" ? window.isSecureContext : "n/a"}`);
+      return;
+    }
+    let status: PermissionStatus | null = null;
+    navigator.permissions
+      .query({ name: "microphone" as PermissionName })
+      .then((s) => {
+        status = s;
+        console.log(
+          `[jxl/mic] secureContext=${window.isSecureContext} protocol=${location.protocol} host=${location.host} permission=${s.state}`
+        );
+        s.onchange = () => console.log(`[jxl/mic] permission changed -> ${s.state}`);
+      })
+      .catch(() => console.log("[jxl/mic] cannot query microphone permission (older Safari)"));
+    return () => { if (status) status.onchange = null; };
+  }, []);
+
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     setReduceMotion(mq.matches);
