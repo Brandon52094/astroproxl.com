@@ -15,6 +15,7 @@ interface UserStatus {
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
+  firstPaidReadingUsed: boolean;
 }
 
 /**
@@ -65,6 +66,7 @@ export default function PagerContainer() {
           onCooldown: data.onCooldown === true,
           cooldownExpiresAt: data.cooldownExpiresAt ?? null,
           canBypass: data.canBypass === true,
+          firstPaidReadingUsed: data.firstPaidReadingUsed === true,
         });
       } catch {
         // silent
