@@ -241,6 +241,113 @@ function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent);
 }
 
+// ── Tap Simulator ────────────────────────────────────────────────────────────
+
+interface TapStep {
+  id: string;
+  x: number;
+  y: number;
+  waitAfter: number;
+  fallbackY?: number;
+}
+
+const INSTALL_TAP_SEQUENCE: TapStep[] = [
+  { id: "menu", x: 0.92, y: 0.94, waitAfter: 350 },
+  { id: "share", x: 0.50, y: 0.32, waitAfter: 450 },
+  { id: "viewMore", x: 0.50, y: 0.85, waitAfter: 500 },
+  { id: "addToHome", x: 0.50, y: 0.50, waitAfter: 500, fallbackY: 0.45 },
+  { id: "confirmAdd", x: 0.88, y: 0.08, waitAfter: 0 },
+];
+
+function simulateTap(x: number, y: number): boolean {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const px = x * vw;
+  const py = y * vh;
+
+  const element = document.elementFromPoint(px, py);
+  if (!element) {
+    console.warn(`[tapSimulator] No element found at (${x.toFixed(2)}, ${y.toFixed(2)})`);
+    return false;
+  }
+
+  try {
+    const touch = new Touch({
+      identifier: Date.now(),
+      target: element,
+      clientX: px,
+      clientY: py,
+      pageX: px,
+      pageY: py,
+      radiusX: 8,
+      radiusY: 8,
+      rotationAngle: 0,
+      force: 1,
+    });
+
+    const touchStart = new TouchEvent('touchstart', {
+      touches: [touch],
+      changedTouches: [touch],
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+
+    const touchEnd = new TouchEvent('touchend', {
+      touches: [],
+      changedTouches: [touch],
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+
+    element.dispatchEvent(touchStart);
+    setTimeout(() => element.dispatchEvent(touchEnd), 30);
+
+    console.log(`[tapSimulator] Tapped (${x.toFixed(2)}, ${y.toFixed(2)}) → (${Math.round(px)}, ${Math.round(py)})`);
+    return true;
+  } catch (err) {
+    console.warn(`[tapSimulator] Tap failed:`, err);
+    return false;
+  }
+}
+
+async function runInstallTapSequence(
+  onStep?: (step: string, index: number, total: number) => void
+): Promise<{ success: boolean; failedStep?: string }> {
+  const isIOSDevice = isIOS();
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+  if (!isIOSDevice || !isSafari) {
+    console.warn('[installTap] Not on iOS Safari — falling back to guide');
+    return { success: false, failedStep: 'platform' };
+  }
+
+  for (let i = 0; i < INSTALL_TAP_SEQUENCE.length; i++) {
+    const step = INSTALL_TAP_SEQUENCE[i];
+    onStep?.(step.id, i, INSTALL_TAP_SEQUENCE.length);
+
+    let tapSuccess = simulateTap(step.x, step.y);
+
+    if (!tapSuccess && step.fallbackY !== undefined) {
+      console.log(`[installTap] Fallback to Y=${step.fallbackY} for "${step.id}"`);
+      tapSuccess = simulateTap(step.x, step.fallbackY);
+    }
+
+    if (!tapSuccess) {
+      console.error(`[installTap] Failed at step "${step.id}"`);
+      return { success: false, failedStep: step.id };
+    }
+
+    if (step.waitAfter > 0) {
+      await new Promise(r => setTimeout(r, step.waitAfter));
+    }
+  }
+
+  return { success: true };
+}
+
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -260,9 +367,10 @@ export default function ReadingIntakeScreen({
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
-  const [hasShownGuide, setHasShownGuide] = useState(false);
   const [isIOSDevice, setIsIOSDevice] = useState(false);
   const [isPWA, setIsPWA] = useState(false);
+  const [installProgress, setInstallProgress] = useState(0);
+  const [installStep, setInstallStep] = useState("");
 
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
@@ -414,7 +522,6 @@ export default function ReadingIntakeScreen({
     setIsIOSDevice(isIOS());
     setIsPWA(isPWAInstalled());
 
-    // Android: listen for beforeinstallprompt
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -424,6 +531,7 @@ export default function ReadingIntakeScreen({
     window.addEventListener("appinstalled", () => {
       setIsPWA(true);
       setShowInstallGuide(false);
+      setIsInstalling(false);
     });
 
     return () => {
@@ -446,7 +554,6 @@ export default function ReadingIntakeScreen({
         }
         setDeferredPrompt(null);
       } catch {
-        // Fallback to iOS guide for Android if prompt fails
         setShowInstallGuide(true);
       } finally {
         setIsInstalling(false);
@@ -454,30 +561,69 @@ export default function ReadingIntakeScreen({
       return;
     }
 
-    // iOS: show the guide overlay
+    // iOS: run the tap sequence
     if (isIOSDevice) {
-      // Try to open the share sheet via Web Share API first
+      setIsInstalling(true);
+      setShowInstallGuide(false);
+      setInstallProgress(0);
+      setInstallStep("Starting installation...");
+
       try {
-        await navigator.share({
-          title: "Add AstroProXL to your Home Screen",
-          text: "Tap the ••• menu, then Share, then Add to Home Screen.",
-          url: window.location.href,
+        // First, try to open the share sheet via Web Share API
+        try {
+          await navigator.share({
+            title: "AstroProXL",
+            text: "Add AstroProXL to your Home Screen for the best experience.",
+            url: window.location.href,
+          });
+        } catch {
+          // Share was canceled — but we still want to show the guide
+          setShowInstallGuide(true);
+          setIsInstalling(false);
+          return;
+        }
+
+        // Wait for share sheet to fully appear
+        await new Promise(r => setTimeout(r, 600));
+
+        // Run the tap sequence
+        const result = await runInstallTapSequence((step, index, total) => {
+          const stepNames: Record<string, string> = {
+            menu: "Opening menu...",
+            share: "Tapping Share...",
+            viewMore: "Showing more options...",
+            addToHome: "Finding Add to Home Screen...",
+            confirmAdd: "Confirming installation...",
+          };
+          setInstallStep(stepNames[step] || step);
+          setInstallProgress(((index + 1) / total) * 100);
         });
-        // After share, show the guide to help with the rest
-        setTimeout(() => setShowInstallGuide(true), 500);
-      } catch {
-        // Share was canceled or failed — show the guide
+
+        if (result.success) {
+          setInstallProgress(100);
+          setInstallStep("Installation started!");
+          setTimeout(() => {
+            setIsPWA(isPWAInstalled());
+            setIsInstalling(false);
+            setShowInstallGuide(false);
+          }, 1500);
+        } else {
+          setShowInstallGuide(true);
+          setIsInstalling(false);
+        }
+      } catch (error) {
+        console.warn('[install] Share API failed:', error);
         setShowInstallGuide(true);
+        setIsInstalling(false);
       }
     } else {
-      // Generic fallback: show the guide
+      // Generic fallback
       setShowInstallGuide(true);
     }
   };
 
   const dismissInstallGuide = () => {
     setShowInstallGuide(false);
-    setHasShownGuide(true);
   };
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
@@ -744,12 +890,6 @@ export default function ReadingIntakeScreen({
           font-weight: 700;
           flex-shrink: 0;
         }
-        .step-arrow {
-          color: rgba(148, 163, 184, 0.3);
-          font-size: 18px;
-          line-height: 1;
-          padding-left: 28px;
-        }
 
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
@@ -811,7 +951,7 @@ export default function ReadingIntakeScreen({
                 disabled={isInstalling}
                 className="tap-fix flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-400/10 px-4 py-2 text-[12px] font-medium text-indigo-200 transition-all hover:bg-indigo-400/20 hover:border-indigo-400/50 active:scale-[0.97] disabled:opacity-50"
               >
-                {isInstalling ? (
+                {isInstalling && isIOSDevice ? (
                   <>
                     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-300/30 border-t-indigo-300" />
                     Installing...
@@ -1157,9 +1297,48 @@ export default function ReadingIntakeScreen({
         </motion.div>
       </div>
 
+      {/* ── Installation Progress Overlay (iOS Auto-Install) ── */}
+      <AnimatePresence>
+        {isInstalling && isIOSDevice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
+          >
+            <div className="w-full max-w-[340px] rounded-2xl bg-[#0d1235] border border-white/10 p-6 text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="h-14 w-14 rounded-full border-2 border-indigo-400/30 bg-indigo-400/10 flex items-center justify-center">
+                  <Download className="h-6 w-6 text-indigo-300 animate-pulse" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-white">Installing App</h3>
+              <p className="mt-1 text-sm text-slate-400">{installStep || "Starting installation..."}</p>
+              <div className="mt-4">
+                <div className="flex justify-between text-xs text-slate-500 mb-1">
+                  <span>Progress</span>
+                  <span>{Math.round(installProgress)}%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-teal-400"
+                    style={{ width: `${installProgress}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              </div>
+              <p className="mt-3 text-[11px] text-slate-500">
+                ⚡ Automatically tapping the screens for you
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── iOS / Generic Install Guide Overlay ── */}
       <AnimatePresence>
-        {showInstallGuide && !isPWA && (
+        {showInstallGuide && !isPWA && !isInstalling && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
