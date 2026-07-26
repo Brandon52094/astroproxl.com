@@ -11,6 +11,12 @@ import {
   Timer,
   ChevronRight,
   ChevronLeft,
+  Download,
+  X,
+  Share2,
+  MoreHorizontal,
+  Check,
+  ArrowUpRight,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -222,6 +228,19 @@ function formatTimeRemaining(expiresAt: string): string {
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const CARD_TITLES = ["Unlimited Access"];
 
+// ── PWA Install Helpers ──────────────────────────────────────────────────────
+
+function isPWAInstalled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.matchMedia("(display-mode: minimal-ui)").matches;
+}
+
+function isIOS(): boolean {
+  if (typeof window === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -236,6 +255,14 @@ export default function ReadingIntakeScreen({
   const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
+
+  // ── PWA Install State ──────────────────────────────────────────────────────
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [hasShownGuide, setHasShownGuide] = useState(false);
+  const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const [isPWA, setIsPWA] = useState(false);
 
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
@@ -264,18 +291,6 @@ export default function ReadingIntakeScreen({
         const delay = (i * 0.37) % 4;
         return { left, top, size, opacity, delay, id: i };
       }),
-    []
-  );
-
-  const comingSoonSparkles = useMemo(
-    () => [
-      { left: "12%", top: "22%", size: 7, delay: 0.1, color: "indigo" as const },
-      { left: "28%", top: "62%", size: 5, delay: 0.7, color: "gold" as const },
-      { left: "46%", top: "30%", size: 6, delay: 1.5, color: "indigo" as const },
-      { left: "62%", top: "70%", size: 5, delay: 2.3, color: "gold" as const },
-      { left: "78%", top: "38%", size: 7, delay: 3.1, color: "indigo" as const },
-      { left: "90%", top: "58%", size: 5, delay: 3.9, color: "gold" as const },
-    ],
     []
   );
 
@@ -392,6 +407,78 @@ export default function ReadingIntakeScreen({
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [fetchStatus]);
+
+  // ── PWA Install Detection ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    setIsIOSDevice(isIOS());
+    setIsPWA(isPWAInstalled());
+
+    // Android: listen for beforeinstallprompt
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", () => {
+      setIsPWA(true);
+      setShowInstallGuide(false);
+    });
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+    };
+  }, []);
+
+  // ── Install Handlers ──────────────────────────────────────────────────────
+
+  const handleInstallTap = async () => {
+    // Android: use beforeinstallprompt
+    if (deferredPrompt) {
+      setIsInstalling(true);
+      try {
+        deferredPrompt.prompt();
+        const result = await deferredPrompt.userChoice;
+        if (result.outcome === "accepted") {
+          setIsPWA(true);
+          setShowInstallGuide(false);
+        }
+        setDeferredPrompt(null);
+      } catch {
+        // Fallback to iOS guide for Android if prompt fails
+        setShowInstallGuide(true);
+      } finally {
+        setIsInstalling(false);
+      }
+      return;
+    }
+
+    // iOS: show the guide overlay
+    if (isIOSDevice) {
+      // Try to open the share sheet via Web Share API first
+      try {
+        await navigator.share({
+          title: "Add AstroProXL to your Home Screen",
+          text: "Tap the ••• menu, then Share, then Add to Home Screen.",
+          url: window.location.href,
+        });
+        // After share, show the guide to help with the rest
+        setTimeout(() => setShowInstallGuide(true), 500);
+      } catch {
+        // Share was canceled or failed — show the guide
+        setShowInstallGuide(true);
+      }
+    } else {
+      // Generic fallback: show the guide
+      setShowInstallGuide(true);
+    }
+  };
+
+  const dismissInstallGuide = () => {
+    setShowInstallGuide(false);
+    setHasShownGuide(true);
+  };
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
@@ -578,11 +665,6 @@ export default function ReadingIntakeScreen({
           50% { transform: translateX(40%); }
           100% { transform: translateX(120%); }
         }
-        @keyframes jxlGlint {
-          0%, 76%, 100% { opacity: 0; transform: scale(0.35); }
-          86% { opacity: 1; transform: scale(1.5); }
-          94% { opacity: 0.78; transform: scale(1); }
-        }
 
         @keyframes heroShine {
           0% { transform: translateX(-140%) skewX(-18deg); }
@@ -602,10 +684,6 @@ export default function ReadingIntakeScreen({
           z-index: 1;
         }
         .hero-shine > * { position: relative; z-index: 2; }
-
-        .jxl-sparkle { position: absolute; border-radius: 9999px; pointer-events: none; z-index: 5; opacity: 0; animation: jxlGlint 5s ease-in-out infinite; }
-        .jxl-sparkle--indigo { background: rgb(199,210,254); box-shadow: 0 0 8px 2px rgba(129,140,248,0.9), 0 0 16px 4px rgba(129,140,248,0.5); }
-        .jxl-sparkle--gold { background: rgb(253,230,138); box-shadow: 0 0 8px 2px rgba(250,204,21,0.9), 0 0 16px 4px rgba(250,204,21,0.5); }
 
         .cooldown-glow { animation: cooldownPulse 3s ease-in-out infinite; }
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
@@ -644,14 +722,43 @@ export default function ReadingIntakeScreen({
         .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
         .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
 
+        /* ── Install Guide Overlay ── */
+        @keyframes fadeSlideUp {
+          from { opacity: 0; transform: translateY(20px) scale(0.96); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .install-overlay {
+          animation: fadeSlideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .step-circle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border-radius: 9999px;
+          background: rgba(99, 102, 241, 0.2);
+          border: 1px solid rgba(99, 102, 241, 0.3);
+          color: #a5b4fc;
+          font-size: 12px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+        .step-arrow {
+          color: rgba(148, 163, 184, 0.3);
+          font-size: 18px;
+          line-height: 1;
+          padding-left: 28px;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
-          .jxl-sparkle, .gold-shimmer::before,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .carousel-container::after,
-          .hero-shine::after { animation: none !important; opacity: 0; }
+          .hero-shine::after,
+          .install-overlay { animation: none !important; opacity: 0; }
         }
       `}</style>
 
@@ -681,7 +788,7 @@ export default function ReadingIntakeScreen({
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-16"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
         style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -690,6 +797,35 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
+          {/* ── INSTALL PILL ── */}
+          {!isPWA && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+              className="mb-4 flex justify-center"
+            >
+              <button
+                type="button"
+                onClick={handleInstallTap}
+                disabled={isInstalling}
+                className="tap-fix flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-400/10 px-4 py-2 text-[12px] font-medium text-indigo-200 transition-all hover:bg-indigo-400/20 hover:border-indigo-400/50 active:scale-[0.97] disabled:opacity-50"
+              >
+                {isInstalling ? (
+                  <>
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-300/30 border-t-indigo-300" />
+                    Installing...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-3.5 w-3.5" />
+                    Tap to Install as App
+                  </>
+                )}
+              </button>
+            </motion.div>
+          )}
+
           {/* ── HERO ── */}
           <section className="mb-5 pt-1">
             <div
@@ -952,65 +1088,6 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-          {/* ── ASK JXL — live entry point ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-            className="mt-4"
-          >
-            <button
-              type="button"
-              onClick={() => onSwipeLeft?.()}
-              className="tap-fix relative w-full overflow-hidden rounded-[28px] border border-indigo-400/30 bg-black/30 px-5 py-5 text-left"
-              style={{
-                boxShadow:
-                  "0 0 34px rgba(99,102,241,0.16), 0 18px 44px rgba(0,0,0,0.72)",
-              }}
-            >
-              {/* The sparkles were already here — they now sit on a live card
-                  instead of a blurred placeholder. */}
-              {comingSoonSparkles.map((sparkle, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "jxl-sparkle",
-                    sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold"
-                  )}
-                  style={{
-                    left: sparkle.left,
-                    top: sparkle.top,
-                    width: `${sparkle.size}px`,
-                    height: `${sparkle.size}px`,
-                    animationDelay: `${sparkle.delay}s`,
-                  }}
-                />
-              ))}
-
-              <div className="relative z-[1] flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-400/30 bg-indigo-400/10 text-indigo-200">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-[15px] font-semibold text-white">Ask Jxl</h2>
-                    <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-teal-200">
-                      New
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[13px] leading-5 text-slate-400">
-                    Talk about the thing that's actually happening. One free session.
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-indigo-300/60" />
-              </div>
-
-              <p className="relative z-[1] mt-3 text-[11px] text-indigo-300/45">
-                Swipe left to open
-              </p>
-            </button>
-          </motion.div>
-
           <div className="mt-4 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Unlimited Access</span>
@@ -1079,6 +1156,110 @@ export default function ReadingIntakeScreen({
 
         </motion.div>
       </div>
+
+      {/* ── iOS / Generic Install Guide Overlay ── */}
+      <AnimatePresence>
+        {showInstallGuide && !isPWA && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm px-4"
+            onClick={dismissInstallGuide}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0, scale: 0.96 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 40, opacity: 0, scale: 0.96 }}
+              transition={{ type: "spring", damping: 28, stiffness: 400 }}
+              className="install-overlay w-full max-w-[400px] rounded-2xl border border-white/10 bg-[#0d1235] p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-400/20 text-indigo-300">
+                    <Download className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-[16px] font-semibold text-white">Install as App</h3>
+                    <p className="text-[12px] text-slate-400">5 simple steps</p>
+                  </div>
+                </div>
+                <button
+                  onClick={dismissInstallGuide}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:text-slate-300 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Steps */}
+              <div className="space-y-3">
+                {/* Step 1 */}
+                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
+                  <span className="step-circle">1</span>
+                  <div>
+                    <p className="text-sm font-medium text-white">Tap the ••• menu</p>
+                    <p className="text-xs text-slate-500">Bottom right corner of Safari</p>
+                  </div>
+                  <MoreHorizontal className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
+                  <span className="step-circle">2</span>
+                  <div>
+                    <p className="text-sm font-medium text-white">Tap "Share"</p>
+                    <p className="text-xs text-slate-500">At the top of the menu</p>
+                  </div>
+                  <Share2 className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
+                </div>
+
+                {/* Step 3 */}
+                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
+                  <span className="step-circle">3</span>
+                  <div>
+                    <p className="text-sm font-medium text-white">Tap "View More"</p>
+                    <p className="text-xs text-slate-500">Bottom left of the share sheet</p>
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
+                </div>
+
+                {/* Step 4 */}
+                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.03] p-3">
+                  <span className="step-circle">4</span>
+                  <div>
+                    <p className="text-sm font-medium text-white">Tap "Add to Home Screen"</p>
+                    <p className="text-xs text-slate-500">In the expanded list</p>
+                  </div>
+                  <Check className="h-4 w-4 text-slate-500 ml-auto shrink-0" />
+                </div>
+
+                {/* Step 5 */}
+                <div className="flex items-start gap-3 rounded-xl border border-indigo-400/20 bg-indigo-400/5 p-3">
+                  <span className="step-circle" style={{ background: "rgba(99,102,241,0.3)", borderColor: "rgba(99,102,241,0.4)" }}>5</span>
+                  <div>
+                    <p className="text-sm font-medium text-indigo-200">Tap "Add"</p>
+                    <p className="text-xs text-slate-400">Top right corner to confirm</p>
+                  </div>
+                  <Check className="h-4 w-4 text-indigo-300 ml-auto shrink-0" />
+                </div>
+              </div>
+
+              {/* Dismiss */}
+              <button
+                onClick={dismissInstallGuide}
+                className="mt-5 w-full rounded-xl bg-white/10 border border-white/10 py-3 text-sm font-semibold text-white transition hover:bg-white/15 active:scale-[0.98]"
+              >
+                Got it
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
