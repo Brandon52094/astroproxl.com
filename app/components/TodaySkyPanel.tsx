@@ -261,7 +261,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-5"
+        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-16"
         style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
       >
         {/* ── HERO — Sun + Moon, borderless, data-first ── */}
