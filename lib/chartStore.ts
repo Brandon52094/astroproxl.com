@@ -46,6 +46,10 @@ export interface StoredReading {
   topic: string;
   question: string;
   generatedAt: string;
+  // Set when the reading is a crisis safe-response, not a real reading. The
+  // results page reads this to skip reading-complete (never bill a crisis).
+  isSafeResponse?: boolean;
+  riskLevel?: string | null;
 }
 
 const KEYS = {
