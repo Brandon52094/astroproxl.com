@@ -170,6 +170,242 @@ type Phase =
   | "answered"
   | "denied";
 
+/* ── Loading Ring Component ────────────────────────────────────────────── */
+interface LoadingRingProps {
+  isActive: boolean;
+  onComplete?: () => void;
+}
+
+function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
+  const [phase, setPhase] = useState<"idle" | "running" | "complete" | "fading">("idle");
+  const [progress, setProgress] = useState(0);
+  const startTimeRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      setPhase("idle");
+      setProgress(0);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      return;
+    }
+
+    setPhase("running");
+    setProgress(0);
+    startTimeRef.current = performance.now();
+
+    // Smoothly animate progress from 0 to 1 over ~3-4 seconds
+    const animate = (now: number) => {
+      if (!startTimeRef.current) {
+        startTimeRef.current = now;
+        rafRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      const elapsed = (now - startTimeRef.current) / 1000;
+      // Ease in-out for natural feel
+      const t = Math.min(elapsed / 3.5, 1);
+      // Smooth step easing
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      setProgress(Math.min(eased, 1));
+
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      } else {
+        setPhase("complete");
+        setTimeout(() => setPhase("fading"), 500);
+        setTimeout(onComplete, 800);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [isActive, onComplete]);
+
+  if (phase === "idle") return null;
+
+  const isComplete = phase === "complete" || phase === "fading";
+  const isFading = phase === "fading";
+  const circumference = 289; // 2 * PI * 46
+
+  // Start from bottom center: -90deg + 90deg = 0deg offset
+  // The dash offset moves clockwise from bottom center
+  const dashOffset = circumference * (1 - progress);
+
+  return (
+    <div
+      className={`fixed inset-0 pointer-events-none z-[80] ${isFading ? 'opacity-0 transition-opacity duration-600' : ''}`}
+      aria-hidden="true"
+    >
+      <style jsx>{`
+        @keyframes ringPulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; }
+        }
+        @keyframes dotPulse {
+          0%, 100% { opacity: 0.2; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes flashOut {
+          0% { opacity: 0.6; }
+          100% { opacity: 0; }
+        }
+        .ring-glow {
+          position: absolute;
+          inset: -8px;
+          border-radius: 50%;
+          filter: blur(30px);
+          opacity: 0.12;
+          background: conic-gradient(
+            from 0deg,
+            transparent 0%,
+            rgba(94, 234, 212, 0.6) 25%,
+            rgba(129, 90, 240, 0.6) 50%,
+            rgba(251, 191, 36, 0.6) 75%,
+            transparent 100%
+          );
+          animation: ringPulse 2.4s ease-in-out infinite;
+        }
+        .ring-glow.complete {
+          animation: none;
+          opacity: 0.2;
+        }
+        .ring-label {
+          position: absolute;
+          bottom: max(env(safe-area-inset-bottom, 20px), 100px);
+          left: 50%;
+          transform: translateX(-50%);
+          color: rgba(148, 163, 184, 0.7);
+          font-size: 13px;
+          font-family: var(--font-sans, ui-sans-serif);
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          animation: ringPulse 1.6s ease-in-out infinite;
+          text-align: center;
+          transition: opacity 0.5s ease;
+        }
+        .ring-label.complete {
+          animation: none;
+          color: rgba(94, 234, 212, 0.9);
+        }
+        .ring-label .dots span {
+          display: inline-block;
+          width: 5px;
+          height: 5px;
+          margin: 0 2px;
+          border-radius: 50%;
+          background: rgba(94, 234, 212, 0.6);
+          animation: dotPulse 1.2s ease-in-out infinite;
+        }
+        .ring-label .dots span:nth-child(2) { animation-delay: 0.2s; }
+        .ring-label .dots span:nth-child(3) { animation-delay: 0.4s; }
+        .ring-flash {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(circle at center, rgba(94, 234, 212, 0.15), transparent 60%);
+          opacity: 0;
+          animation: flashOut 0.7s ease forwards;
+          pointer-events: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .ring-glow,
+          .ring-label,
+          .ring-label .dots span {
+            animation: none !important;
+          }
+        }
+        .transition-opacity {
+          transition: opacity 0.6s ease;
+        }
+        .duration-600 {
+          transition-duration: 600ms;
+        }
+      `}</style>
+
+      {/* Glow behind the ring */}
+      <div className={`ring-glow ${isComplete ? 'complete' : ''}`} />
+
+      {/* SVG Ring — traces the edge of the screen */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{ filter: 'drop-shadow(0 0 12px rgba(94, 234, 212, 0.2))' }}
+      >
+        <defs>
+          <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#5eead4" />
+            <stop offset="33%" stopColor="#818cf8" />
+            <stop offset="66%" stopColor="#fbbf24" />
+            <stop offset="100%" stopColor="#5eead4" />
+          </linearGradient>
+          <filter id="ringGlowFilter">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Track — subtle background line */}
+        <circle
+          cx="50"
+          cy="50"
+          r="47"
+          fill="none"
+          stroke="rgba(255,255,255,0.04)"
+          strokeWidth="2"
+        />
+
+        {/* Progress ring — starts at bottom center (90deg offset) */}
+        <circle
+          cx="50"
+          cy="50"
+          r="47"
+          fill="none"
+          stroke="url(#ringGradient)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          style={{
+            transition: isComplete ? 'stroke-dashoffset 0.6s ease' : 'stroke-dashoffset 0.05s linear',
+            transform: 'rotate(-90deg)',
+            transformOrigin: 'center',
+            filter: 'url(#ringGlowFilter)',
+            stroke: isComplete ? 'rgba(94, 234, 212, 0.8)' : 'url(#ringGradient)',
+          }}
+        />
+      </svg>
+
+      {/* Loading text */}
+      <div className={`ring-label ${isComplete ? 'complete' : ''}`}>
+        {isComplete ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>✦</span> Ready
+          </span>
+        ) : (
+          <>
+            Reading the sky
+            <span className="dots">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Completion flash */}
+      {isComplete && <div className="ring-flash" />}
+    </div>
+  );
+}
+
 export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const phaseRef = useRef<Phase>("idle");
@@ -183,6 +419,10 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{ question: string; answer: string }>>([]);
   const [result, setResult] = useState<JxlResult | null>(null);
+
+  // ── Loading ring state ──
+  const [isLoadingRingActive, setIsLoadingRingActive] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
   const holdStart = useRef(0);
   const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -276,7 +516,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       });
       meterStreamRef.current = null;
     }
-    // Clear the canvas so it doesn't freeze mid-wave
     const canvas = canvasRef.current;
     const c2d = canvas?.getContext("2d");
     if (canvas && c2d) {
@@ -286,8 +525,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   }, []);
 
   // ── Start meter ─────────────────────────────────────────────────────
-  // The meter is decorative — it never triggers the permission prompt.
-  // If getUserMedia fails, the canvas stays idle (which is fine).
   const startMeter = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
 
@@ -295,7 +532,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      // Silent fail — meter is optional, canvas stays idle
       return;
     }
 
@@ -376,7 +612,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             c2d.shadowColor = "rgba(129,140,248,0.5)";
             c2d.stroke();
           }
-          // Hot near-white core
           const coreAmp = (WAVE.idle * 0.5 + smooth * WAVE.sensitivity * 1.15) * (ch * 0.44);
           c2d.beginPath();
           for (let x = 0; x <= cw; x += 2) {
@@ -489,6 +724,8 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
     setPhase("thinking");
     setError(null);
+    setIsLoadingRingActive(true);
+    setPendingQuestion(question);
 
     try {
       const res = await fetch("/api/jxl/ask", {
@@ -517,23 +754,33 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         setError(data.error ?? "Something went wrong. Try again.");
         setDraft(question);
         setPhase("composing");
+        setIsLoadingRingActive(false);
         return;
       }
 
+      // The loading ring will complete naturally and trigger handleLoadingComplete
       setResult(data as JxlResult);
+      // A safe response is not a turn — it never costs a reply.
       if (!data.isSafeResponse) {
         setHistory((prev) => [...prev, { question, answer: data.answer }]);
       }
       setDraft("");
       setShowSources(false);
-      setPhase("answered");
-      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       setError("Something went wrong. Try again.");
       setDraft(question);
       setPhase("composing");
+      setIsLoadingRingActive(false);
     }
   };
+
+  // ── Loading ring complete callback ──
+  const handleLoadingComplete = useCallback(() => {
+    setIsLoadingRingActive(false);
+    setPhase("answered");
+    setPendingQuestion(null);
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const submitTyped = () => {
     const q = draft.trim();
@@ -552,7 +799,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       setError(null);
       setHeard(null);
 
-      // Known-denied mic → go straight to typing
       if (micPermissionRef.current === "denied") {
         setError("Microphone access is off. Allow it in your settings, or type instead.");
         setPhase("composing");
@@ -618,7 +864,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       setPhase("holding");
       holdTimer.current = setInterval(() => setHoldMs(Date.now() - holdStart.current), 100);
 
-      // Start the waveform meter — decorative, silent fail if mic unavailable
       void startMeter();
     },
     [phase, sessionOver, stopRecognition, stopMeter, startMeter]
@@ -711,9 +956,12 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
   return (
     <div className="jxl-panel">
-      {/* Hidden control that fires a real system haptic on iOS 17.4+ */}
+      {/* Hidden haptic control */}
       {/* @ts-expect-error — `switch` is valid in iOS Safari, absent from React's types */}
       <input id="jxl-haptic" type="checkbox" switch="" aria-hidden="true" tabIndex={-1} className="haptic-proxy" />
+
+      {/* ── Loading Ring ── */}
+      <LoadingRing isActive={isLoadingRingActive} onComplete={handleLoadingComplete} />
 
       <style jsx>{`
         .jxl-panel {
@@ -1229,11 +1477,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
               <p className={`live ${liveTranscript ? "" : "live-empty"}`}>
                 {liveTranscript || "Listening…"}
               </p>
+            ) : phase === "thinking" ? (
+              <p className="ghost" style={{ color: 'rgba(148,163,184,0.6)' }}>
+                Reading the sky...
+              </p>
             ) : (
               <p className="ghost">
-                {phase === "thinking"
-                  ? "Finding it…"
-                  : phase === "denied"
+                {phase === "denied"
                   ? "No mic — you can type instead."
                   : phase === "composing"
                   ? "Say the messy version, or type it."
