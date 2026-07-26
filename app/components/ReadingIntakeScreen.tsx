@@ -746,7 +746,7 @@ export default function ReadingIntakeScreen({
           <button
             type="button"
             onClick={() => onSwipeLeft?.()}
-            className="swipe-cue tap-fix mx-auto mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
+            className="swipe-cue tap-fix mx-auto mt-1 mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
             Swipe Left to Explore
@@ -929,6 +929,29 @@ export default function ReadingIntakeScreen({
             </>
           )}
 
+          {/* ── SUBMIT ── */}
+          <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
+            {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
+            {!onCooldown && selectedArea && (
+              <Button
+                type="button"
+                onClick={handleStartReading}
+                disabled={!canSubmit || isCreatingReading}
+                className="standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  background: "transparent",
+                  border: "2px solid rgba(94,234,212,0.65)",
+                  color: "rgba(94,234,212,0.95)",
+                  boxShadow: canSubmit && !isCreatingReading
+                    ? "0 0 18px rgba(45,212,191,0.22), 0 18px 44px rgba(0,0,0,0.72)"
+                    : "0 18px 44px rgba(0,0,0,0.72)",
+                }}
+              >
+                {buttonCopy}
+              </Button>
+            )}
+          </div>
+
           {/* ── ASK JXL — live entry point ── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -987,29 +1010,6 @@ export default function ReadingIntakeScreen({
               </p>
             </button>
           </motion.div>
-
-          {/* ── SUBMIT ── */}
-          <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
-            {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
-            {!onCooldown && selectedArea && (
-              <Button
-                type="button"
-                onClick={handleStartReading}
-                disabled={!canSubmit || isCreatingReading}
-                className="standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                style={{
-                  background: "transparent",
-                  border: "2px solid rgba(94,234,212,0.65)",
-                  color: "rgba(94,234,212,0.95)",
-                  boxShadow: canSubmit && !isCreatingReading
-                    ? "0 0 18px rgba(45,212,191,0.22), 0 18px 44px rgba(0,0,0,0.72)"
-                    : "0 18px 44px rgba(0,0,0,0.72)",
-                }}
-              >
-                {buttonCopy}
-              </Button>
-            )}
-          </div>
 
           <div className="mt-4 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
