@@ -194,7 +194,6 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
     setProgress(0);
     startTimeRef.current = performance.now();
 
-    // Smoothly animate progress from 0 to 1 over ~3-4 seconds
     const animate = (now: number) => {
       if (!startTimeRef.current) {
         startTimeRef.current = now;
@@ -203,9 +202,7 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
       }
 
       const elapsed = (now - startTimeRef.current) / 1000;
-      // Ease in-out for natural feel
       const t = Math.min(elapsed / 3.5, 1);
-      // Smooth step easing
       const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
       setProgress(Math.min(eased, 1));
 
@@ -215,8 +212,8 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
         setPhase("complete");
         setTimeout(() => setPhase("fading"), 500);
         if (onComplete) {
-  setTimeout(onComplete, 800);
-}
+          setTimeout(onComplete, 800);
+        }
       }
     };
 
@@ -231,10 +228,8 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
 
   const isComplete = phase === "complete" || phase === "fading";
   const isFading = phase === "fading";
-  const circumference = 289; // 2 * PI * 46
+  const circumference = 289;
 
-  // Start from bottom center: -90deg + 90deg = 0deg offset
-  // The dash offset moves clockwise from bottom center
   const dashOffset = circumference * (1 - progress);
 
   return (
@@ -327,10 +322,8 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
         }
       `}</style>
 
-      {/* Glow behind the ring */}
       <div className={`ring-glow ${isComplete ? 'complete' : ''}`} />
 
-      {/* SVG Ring — traces the edge of the screen */}
       <svg
         className="absolute inset-0 w-full h-full"
         viewBox="0 0 100 100"
@@ -353,7 +346,6 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
           </filter>
         </defs>
 
-        {/* Track — subtle background line */}
         <circle
           cx="50"
           cy="50"
@@ -363,7 +355,6 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
           strokeWidth="2"
         />
 
-        {/* Progress ring — starts at bottom center (90deg offset) */}
         <circle
           cx="50"
           cy="50"
@@ -384,7 +375,6 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
         />
       </svg>
 
-      {/* Loading text */}
       <div className={`ring-label ${isComplete ? 'complete' : ''}`}>
         {isComplete ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -402,7 +392,6 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
         )}
       </div>
 
-      {/* Completion flash */}
       {isComplete && <div className="ring-flash" />}
     </div>
   );
@@ -424,7 +413,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
   // ── Loading ring state ──
   const [isLoadingRingActive, setIsLoadingRingActive] = useState(false);
-  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
   const holdStart = useRef(0);
   const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -518,6 +506,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       });
       meterStreamRef.current = null;
     }
+    // Clear the canvas so it doesn't freeze mid-wave
     const canvas = canvasRef.current;
     const c2d = canvas?.getContext("2d");
     if (canvas && c2d) {
@@ -614,6 +603,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
             c2d.shadowColor = "rgba(129,140,248,0.5)";
             c2d.stroke();
           }
+          // Hot near-white core
           const coreAmp = (WAVE.idle * 0.5 + smooth * WAVE.sensitivity * 1.15) * (ch * 0.44);
           c2d.beginPath();
           for (let x = 0; x <= cw; x += 2) {
@@ -715,6 +705,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, [phase]);
 
+  // ── Loading ring complete ──
+  const handleLoadingComplete = useCallback(() => {
+    setIsLoadingRingActive(false);
+    setPhase("answered");
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   // ── Ask ─────────────────────────────────────────────────────────────
   const ask = async (question: string) => {
     const chart = loadChart();
@@ -727,7 +724,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     setPhase("thinking");
     setError(null);
     setIsLoadingRingActive(true);
-    setPendingQuestion(question);
 
     try {
       const res = await fetch("/api/jxl/ask", {
@@ -760,14 +756,14 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         return;
       }
 
-      // The loading ring will complete naturally and trigger handleLoadingComplete
+      // Store the result — the loading ring will complete and call handleLoadingComplete
       setResult(data as JxlResult);
-      // A safe response is not a turn — it never costs a reply.
       if (!data.isSafeResponse) {
         setHistory((prev) => [...prev, { question, answer: data.answer }]);
       }
       setDraft("");
       setShowSources(false);
+      // The loading ring's onComplete will set phase to "answered"
     } catch {
       setError("Something went wrong. Try again.");
       setDraft(question);
@@ -775,14 +771,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       setIsLoadingRingActive(false);
     }
   };
-
-  // ── Loading ring complete callback ──
-  const handleLoadingComplete = useCallback(() => {
-    setIsLoadingRingActive(false);
-    setPhase("answered");
-    setPendingQuestion(null);
-    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
 
   const submitTyped = () => {
     const q = draft.trim();
@@ -801,6 +789,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       setError(null);
       setHeard(null);
 
+      // Known-denied mic → go straight to typing
       if (micPermissionRef.current === "denied") {
         setError("Microphone access is off. Allow it in your settings, or type instead.");
         setPhase("composing");
@@ -958,7 +947,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
   return (
     <div className="jxl-panel">
-      {/* Hidden haptic control */}
+      {/* Hidden control that fires a real system haptic on iOS 17.4+ */}
       {/* @ts-expect-error — `switch` is valid in iOS Safari, absent from React's types */}
       <input id="jxl-haptic" type="checkbox" switch="" aria-hidden="true" tabIndex={-1} className="haptic-proxy" />
 
@@ -1480,8 +1469,8 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                 {liveTranscript || "Listening…"}
               </p>
             ) : phase === "thinking" ? (
-              <p className="ghost" style={{ color: 'rgba(148,163,184,0.6)' }}>
-                Reading the sky...
+              <p className="ghost" style={{ color: 'rgba(148,163,184,0.5)' }}>
+                Finding it…
               </p>
             ) : (
               <p className="ghost">
