@@ -83,6 +83,17 @@ interface JxlPanelProps {
 const REPLIES_PER_SESSION = 3;
 const MIN_HOLD_MS = 450;
 
+// Waveform look — tuned in the standalone preview tool.
+const WAVE = {
+  sensitivity: 1.1,
+  idle: 0.19,
+  lines: 3,
+  speed: 1.8,
+  glow: 16,
+  thickness: 2.3,
+  colors: ["#22c55e", "#3b82f6", "#a855f7", "#ef4444", "#f59e0b"], // Spectrum
+};
+
 /* ── Haptics ──────────────────────────────────────────────────────────────
  * iOS Safari has no navigator.vibrate. The only real system haptic available
  * to mobile Safari is a programmatic click on an <input type="checkbox" switch>
@@ -220,7 +231,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
-  const barsRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const stopMeter = useCallback(() => {
     if (rafRef.current != null) {
@@ -248,12 +259,12 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       });
       meterStreamRef.current = null;
     }
-    // Settle the bars back to rest so they don't freeze mid-spike.
-    const bars = barsRef.current;
-    if (bars) {
-      for (let i = 0; i < bars.children.length; i++) {
-        (bars.children[i] as HTMLElement).style.transform = "scaleY(0.08)";
-      }
+    // Clear the canvas so it doesn't freeze mid-wave.
+    const canvas = canvasRef.current;
+    const c2d = canvas?.getContext("2d");
+    if (canvas && c2d) {
+      c2d.setTransform(1, 0, 0, 1, 0, 0);
+      c2d.clearRect(0, 0, canvas.width, canvas.height);
     }
   }, []);
 
@@ -288,26 +299,89 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 128; // resolution knob — higher = finer bars
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.78;
       source.connect(analyser);
-      // Note: analyser is NOT connected to ctx.destination — we don't want to
-      // play the mic back through the speakers, only read it.
+      // Note: analyser is NOT connected to ctx.destination — we read the mic,
+      // we don't play it back.
       analyserRef.current = analyser;
 
-      const data = new Uint8Array(analyser.frequencyBinCount);
+      const freq = new Uint8Array(analyser.frequencyBinCount);
+      const canvas = canvasRef.current;
+      const c2d = canvas?.getContext("2d") ?? null;
+      let smooth = 0; // eased 0..1 loudness
+      let time = 0;
+      let cw = 0, ch = 0, dpr = 1;
+
+      const fit = () => {
+        if (!canvas || !c2d) return;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const r = canvas.getBoundingClientRect();
+        cw = r.width; ch = r.height;
+        canvas.width = Math.round(cw * dpr);
+        canvas.height = Math.round(ch * dpr);
+        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+      fit();
+
       const draw = () => {
-        analyser.getByteFrequencyData(data);
-        const bars = barsRef.current;
-        if (bars) {
-          const kids = bars.children;
-          const n = kids.length;
-          for (let i = 0; i < n; i++) {
-            // Sample the mid-band (vocals live in the middle of the spectrum)
-            // and spread across however many bars we have.
-            const idx = Math.floor((i / n) * (data.length * 0.6)) + 2;
-            const v = (data[idx] ?? 0) / 255; // 0–1 loudness
-            (kids[i] as HTMLElement).style.transform = `scaleY(${(0.08 + v * 0.92).toFixed(3)})`;
+        if (!cw || !ch) fit(); // canvas may not be laid out on the first frame
+        time += 0.016 * WAVE.speed;
+        analyser.getByteFrequencyData(freq);
+        let sum = 0, cnt = 0;
+        const lo = 2, hi = Math.max(lo + 1, Math.floor(freq.length * 0.5));
+        for (let i = lo; i < hi; i++) { sum += freq[i]; cnt++; }
+        const energy = cnt ? (sum / cnt) / 255 : 0;
+        smooth += (energy - smooth) * 0.18;
+
+        if (c2d && cw && ch) {
+          const cy = ch / 2;
+          c2d.clearRect(0, 0, cw, ch);
+          const grad = c2d.createLinearGradient(0, 0, cw, 0);
+          WAVE.colors.forEach((col, i) => grad.addColorStop(i / (WAVE.colors.length - 1), col));
+          c2d.lineCap = "round";
+          c2d.lineJoin = "round";
+          c2d.globalCompositeOperation = "lighter"; // overlapping ribbons glow
+          const amp = (WAVE.idle + smooth * WAVE.sensitivity) * (ch * 0.44);
+          for (let l = 0; l < WAVE.lines; l++) {
+            const lf = WAVE.lines > 1 ? l / (WAVE.lines - 1) : 0;
+            const phase = time * (1 + lf * 0.45) + l * 0.7;
+            const la = amp * (1 - lf * 0.14);
+            c2d.beginPath();
+            for (let x = 0; x <= cw; x += 3) {
+              const tx = x / cw;
+              const env = Math.pow(Math.sin(tx * Math.PI), 0.85); // taper at edges
+              const y = cy + env * la * (
+                Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
+                Math.sin(tx * Math.PI * 7 - phase * 0.7 + l) * 0.4
+              );
+              x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+            }
+            c2d.strokeStyle = grad;
+            c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
+            c2d.lineWidth = WAVE.thickness * (0.7 + (1 - lf) * 0.8);
+            c2d.shadowBlur = WAVE.glow;
+            c2d.shadowColor = "rgba(129,140,248,0.5)";
+            c2d.stroke();
           }
+          // Hot near-white core — the voice pulse.
+          const coreAmp = (WAVE.idle * 0.5 + smooth * WAVE.sensitivity * 1.15) * (ch * 0.44);
+          c2d.beginPath();
+          for (let x = 0; x <= cw; x += 2) {
+            const tx = x / cw;
+            const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
+            const y = cy + env * coreAmp * Math.sin(tx * Math.PI * 5 + time * 1.4) * 0.9;
+            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+          }
+          c2d.globalAlpha = 0.3 + smooth * 0.5;
+          c2d.strokeStyle = "rgba(255,255,255,0.92)";
+          c2d.lineWidth = Math.max(1, WAVE.thickness * 0.6);
+          c2d.shadowBlur = WAVE.glow * 1.3;
+          c2d.shadowColor = "rgba(255,255,255,0.7)";
+          c2d.stroke();
+          c2d.globalCompositeOperation = "source-over";
+          c2d.globalAlpha = 1;
+          c2d.shadowBlur = 0;
         }
         rafRef.current = requestAnimationFrame(draw);
       };
@@ -988,8 +1062,20 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           font-style: italic;
         }
 
+        .wave-stage {
+          position: absolute;
+          inset: 0;
+          z-index: 5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding-bottom: 14vh; /* bias above dead-center, under the transcript */
+          pointer-events: none;
+        }
+        .wave-canvas { width: 86%; max-width: 460px; height: 160px; display: block; }
+
         .hold {
-          position: relative; width: 100%; height: 76px;
+          position: relative; width: 100%; height: 92px;
           border-radius: 24px;
           border: 1px solid rgba(94,234,212,0.26);
           background: rgba(13,20,44,0.72);
@@ -1035,20 +1121,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           display: flex; flex-direction: column;
           align-items: center; justify-content: center; gap: 6px;
         }
-        .wave { display: flex; align-items: center; gap: 3px; height: 22px; }
-        .wave span {
-          display: block;
-          width: 3px;
-          height: 22px;
-          border-radius: 9999px;
-          background: #5eead4;
-          transform: scaleY(0.08);
-          transform-origin: center;
-          /* Short transition smooths the per-frame jumps into fluid motion
-             without lagging behind the voice. */
-          transition: transform 70ms linear;
-          will-change: transform;
-        }
         .timer {
           font-size: 11px; letter-spacing: 0.14em;
           color: rgba(94,234,212,0.85); font-variant-numeric: tabular-nums;
@@ -1066,7 +1138,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .band, .star, .hold.idle, .ring, .wave span, .dots span,
+          .band, .star, .hold.idle, .ring, .dots span,
           .caret, .title, .window, .directive, .confirmation {
             animation: none !important;
           }
@@ -1135,6 +1207,13 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           />
         ))}
       </div>
+
+      {/* ── Waveform — centered, canvas, driven by the meter mic ── */}
+      {isHolding && (
+        <div className="wave-stage" aria-hidden="true">
+          <canvas ref={canvasRef} className="wave-canvas" />
+        </div>
+      )}
 
       {/* ── Content ── */}
       <div className="scroller" ref={scrollRef}>
@@ -1285,13 +1364,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
               <span className="ring" />
               <span className="ring d" />
               <span className="btn-inner">
-                {isHolding && (
-                  <span className="wave" aria-hidden="true" ref={barsRef}>
-                    {Array.from({ length: 24 }).map((_, i) => (
-                      <span key={i} />
-                    ))}
-                  </span>
-                )}
                 {phase === "thinking" && (
                   <span className="dots" aria-hidden="true">
                     <span />
