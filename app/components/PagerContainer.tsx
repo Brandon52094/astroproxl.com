@@ -85,10 +85,13 @@ export default function PagerContainer() {
 
   // ── Clone snap-back after each transition ────────────────────────────
   const handleTrackTransitionEnd = useCallback(() => {
+    // When we've swiped to the last clone (index totalPanels + 1), snap to the real first panel (index 1)
     if (extendedIndex === totalPanels + 1) {
       setSuppressTransition(true);
       setExtendedIndex(1);
-    } else if (extendedIndex === 0) {
+    } 
+    // When we've swiped to the first clone (index 0), snap to the real last panel (index totalPanels)
+    else if (extendedIndex === 0) {
       setSuppressTransition(true);
       setExtendedIndex(totalPanels);
     }
@@ -224,37 +227,40 @@ export default function PagerContainer() {
               ? "none"
               : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
             cursor: isDragging ? "grabbing" : "grab",
+            // FIX: Set the track height to 100% of the container
+            height: "100%",
           }}
         >
           {/* ── CLONE: Today's Sky (before the real first panel) ── */}
-          <div className="min-w-full h-full overflow-y-auto" aria-hidden="true">
+          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
             <TodaySkyPanel userStatus={userStatus} />
           </div>
 
-          {/* ── PANEL 0: Reading Intake (main) ── */}
-          <div className="min-w-full h-full overflow-y-auto">
+          {/* ── PANEL 0: Reading Intake (main) ── 
+              Use h-full flex-shrink-0 to prevent height collapse */}
+          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
 
           {/* ── PANEL 1: Ask Jxl ──
               overflow-hidden, not auto: JxlPanel manages its own inner
               scroller so the sky and dock stay fixed to the panel. */}
-          <div className="min-w-full h-full overflow-hidden">
+          <div className="min-w-full h-full flex-shrink-0 overflow-hidden">
             <JxlPanel isActive={activePanel === 1} />
           </div>
 
           {/* ── PANEL 2: Your Birth Chart ── */}
-          <div className="min-w-full h-full overflow-y-auto">
+          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
             <BirthChartPanel userStatus={userStatus} />
           </div>
 
           {/* ── PANEL 3: Today's Sky ── */}
-          <div className="min-w-full h-full overflow-y-auto">
+          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
             <TodaySkyPanel userStatus={userStatus} />
           </div>
 
           {/* ── CLONE: Reading Intake (after the real last panel) ── */}
-          <div className="min-w-full h-full overflow-y-auto" aria-hidden="true">
+          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
         </div>
