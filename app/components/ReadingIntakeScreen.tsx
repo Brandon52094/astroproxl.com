@@ -10,6 +10,7 @@ import {
   Lock,
   Timer,
   ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -85,6 +86,7 @@ interface UserStatus {
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
+  firstPaidReadingUsed: boolean;
 }
 
 interface ReadingIntakeScreenProps {
@@ -370,6 +372,7 @@ export default function ReadingIntakeScreen({
         onCooldown: data.onCooldown === true,
         cooldownExpiresAt: data.cooldownExpiresAt ?? null,
         canBypass: data.canBypass === true,
+        firstPaidReadingUsed: data.firstPaidReadingUsed === true,
       });
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
@@ -398,7 +401,10 @@ export default function ReadingIntakeScreen({
     if (!selectedAreaConfig) return "Choose a reading type";
     const hasCredits = Number(userStatus?.credits ?? 0) > 0;
     const isSubscribed = userStatus?.isSubscribed === true;
-    if (!hasCredits && !isSubscribed) return `${selectedAreaConfig.cta} — $4.00`;
+    if (!hasCredits && !isSubscribed) {
+      const price = userStatus?.firstPaidReadingUsed ? "$4.00" : "$2.00";
+      return `${selectedAreaConfig.cta} — ${price}`;
+    }
     return selectedAreaConfig.cta;
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
 
@@ -627,7 +633,19 @@ export default function ReadingIntakeScreen({
         .carousel-header:hover { background: rgba(255,255,255,0.02); }
         .carousel-content { border-top: 1px solid rgba(251,191,36,0.1); padding: 0; display: flex; flex-direction: column; }
 
+        @keyframes swipeCuePulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; text-shadow: 0 0 14px rgba(255,255,255,0.55); }
+        }
+        @keyframes swipeCueNudge {
+          0%, 100% { transform: translateX(0); }
+          50% { transform: translateX(-4px); }
+        }
+        .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
+        .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
+
         @media (prefers-reduced-motion: reduce) {
+          .swipe-cue, .swipe-cue svg,
           .jxl-sparkle, .gold-shimmer::before,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
@@ -723,6 +741,16 @@ export default function ReadingIntakeScreen({
               </div>
             </div>
           )}
+
+          {/* ── Swipe-left discovery cue ── */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="swipe-cue tap-fix mx-auto mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Swipe Left to Explore
+          </button>
 
           {onCooldown ? (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative">
@@ -901,10 +929,69 @@ export default function ReadingIntakeScreen({
             </>
           )}
 
+          {/* ── ASK JXL — live entry point ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
+            className="mt-4"
+          >
+            <button
+              type="button"
+              onClick={() => onSwipeLeft?.()}
+              className="tap-fix relative w-full overflow-hidden rounded-[28px] border border-indigo-400/30 bg-black/30 px-5 py-5 text-left"
+              style={{
+                boxShadow:
+                  "0 0 34px rgba(99,102,241,0.16), 0 18px 44px rgba(0,0,0,0.72)",
+              }}
+            >
+              {/* The sparkles were already here — they now sit on a live card
+                  instead of a blurred placeholder. */}
+              {comingSoonSparkles.map((sparkle, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "jxl-sparkle",
+                    sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold"
+                  )}
+                  style={{
+                    left: sparkle.left,
+                    top: sparkle.top,
+                    width: `${sparkle.size}px`,
+                    height: `${sparkle.size}px`,
+                    animationDelay: `${sparkle.delay}s`,
+                  }}
+                />
+              ))}
+
+              <div className="relative z-[1] flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-400/30 bg-indigo-400/10 text-indigo-200">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[15px] font-semibold text-white">Ask Jxl</h2>
+                    <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-teal-200">
+                      New
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[13px] leading-5 text-slate-400">
+                    Talk about the thing that's actually happening. One free session.
+                  </p>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-indigo-300/60" />
+              </div>
+
+              <p className="relative z-[1] mt-3 text-[11px] text-indigo-300/45">
+                Swipe left to open
+              </p>
+            </button>
+          </motion.div>
+
           {/* ── SUBMIT ── */}
           <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
-            {!onCooldown && (
+            {!onCooldown && selectedArea && (
               <Button
                 type="button"
                 onClick={handleStartReading}
@@ -989,65 +1076,6 @@ export default function ReadingIntakeScreen({
               </AnimatePresence>
             </div>
           </div>
-
-                    {/* ── ASK JXL — live entry point ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15, ease: "easeOut" }}
-            className="mt-4"
-          >
-            <button
-              type="button"
-              onClick={() => onSwipeLeft?.()}
-              className="tap-fix relative w-full overflow-hidden rounded-[28px] border border-indigo-400/30 bg-black/30 px-5 py-5 text-left"
-              style={{
-                boxShadow:
-                  "0 0 34px rgba(99,102,241,0.16), 0 18px 44px rgba(0,0,0,0.72)",
-              }}
-            >
-              {/* The sparkles were already here — they now sit on a live card
-                  instead of a blurred placeholder. */}
-              {comingSoonSparkles.map((sparkle, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "jxl-sparkle",
-                    sparkle.color === "indigo" ? "jxl-sparkle--indigo" : "jxl-sparkle--gold"
-                  )}
-                  style={{
-                    left: sparkle.left,
-                    top: sparkle.top,
-                    width: `${sparkle.size}px`,
-                    height: `${sparkle.size}px`,
-                    animationDelay: `${sparkle.delay}s`,
-                  }}
-                />
-              ))}
-
-              <div className="relative z-[1] flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-indigo-400/30 bg-indigo-400/10 text-indigo-200">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-[15px] font-semibold text-white">Ask Jxl</h2>
-                    <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-teal-200">
-                      New
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[13px] leading-5 text-slate-400">
-                    Talk about the thing that's actually happening. One free session.
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-indigo-300/60" />
-              </div>
-
-              <p className="relative z-[1] mt-3 text-[11px] text-indigo-300/45">
-                Swipe left to open
-              </p>
-            </button>
-          </motion.div>
 
         </motion.div>
       </div>
