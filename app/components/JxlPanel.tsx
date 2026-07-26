@@ -214,7 +214,9 @@ function LoadingRing({ isActive, onComplete }: LoadingRingProps) {
       } else {
         setPhase("complete");
         setTimeout(() => setPhase("fading"), 500);
-        setTimeout(onComplete, 800);
+        if (onComplete) {
+  setTimeout(onComplete, 800);
+}
       }
     };
 
