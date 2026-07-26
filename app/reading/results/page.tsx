@@ -197,6 +197,15 @@ export default function ReadingResultsPage() {
   // still retry.
   useEffect(() => {
     if (!reading || !readingKey) return;
+
+    // Crisis safe-responses are NOT real readings. Never mark one complete —
+    // that would advance readingsCompleted and burn a credit / the weekly free
+    // reading for someone who came here in crisis. Bail before the API call.
+    if ((reading as { isSafeResponse?: boolean }).isSafeResponse) {
+      hasMarkedComplete.current = true;
+      return;
+    }
+
     const completedFlag = "dfp_reading_done_" + readingKey;
 
     try {

@@ -530,6 +530,8 @@ export async function POST(request: NextRequest) {
             topic: body?.topic ?? "general",
             question: body?.question ?? "",
             status: "complete",
+            isSafeResponse: true,
+            riskLevel: risk.level,
           },
           // Client MUST check this and SKIP /api/user/reading-complete — a crisis
           // intercept must never spend a credit or the weekly free reading.
