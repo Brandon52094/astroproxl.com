@@ -73,7 +73,7 @@ interface JxlPanelProps {
 
 const REPLIES_PER_SESSION = 3;
 const MIN_HOLD_MS = 450;
-const MIC_TOGGLE_KEY = "jxl_mic_toggle";
+const MIC_GRANTED_KEY = "jxl_mic_permission_granted";
 
 // Waveform look
 const WAVE = {
@@ -210,44 +210,53 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     micPermissionRef.current = micPermission;
   }, [micPermission]);
 
-  // ── Persistent mic toggle ───────────────────────────────────────────
-  const [micEnabled, setMicEnabled] = useState<boolean>(() => {
+  // ── Persistent permission memory ────────────────────────────────────
+  // Check if we've previously stored that they granted permission
+  const [hasStoredPermission, setHasStoredPermission] = useState(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(MIC_TOGGLE_KEY);
-      if (stored !== null) return stored === "true";
+      return localStorage.getItem(MIC_GRANTED_KEY) === "true";
     }
     return false;
   });
 
-  const handleMicToggle = useCallback((enabled: boolean) => {
-    setMicEnabled(enabled);
-    try {
-      localStorage.setItem(MIC_TOGGLE_KEY, String(enabled));
-    } catch {}
+  // When permission is granted, store it
+  useEffect(() => {
+    if (micPermission === "granted") {
+      try {
+        localStorage.setItem(MIC_GRANTED_KEY, "true");
+        setHasStoredPermission(true);
+        console.log("[jxl/mic] Stored permission grant in localStorage");
+      } catch {}
+    }
+  }, [micPermission]);
 
-    if (enabled && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
-      // Pre-flight: check if mic is actually accessible
+  // Pre-flight: if we have stored permission but the browser is "prompt" status,
+  // silently try to re-acquire the mic without showing the prompt.
+  useEffect(() => {
+    if (!hasStoredPermission) return;
+    if (micPermission === "granted") return;
+    if (micPermission === "denied") {
+      // They revoked it — clear our stored flag
+      localStorage.removeItem(MIC_GRANTED_KEY);
+      setHasStoredPermission(false);
+      console.log("[jxl/mic] Permission was revoked — clearing stored flag");
+      return;
+    }
+
+    // micPermission === "prompt" or "unknown" — try a silent re-acquire
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then((stream) => {
           stream.getTracks().forEach(t => t.stop());
           setMicPermission("granted");
-          console.log("[jxl/mic] Toggle ON — mic accessible");
+          console.log("[jxl/mic] Pre-flight: silently re-acquired mic permission");
         })
         .catch(() => {
-          console.log("[jxl/mic] Toggle ON — mic not accessible, will prompt on hold");
-          setMicPermission("prompt");
+          console.log("[jxl/mic] Pre-flight: silent re-acquire failed, will prompt on hold");
+          // Don't clear the flag — they granted before, browser just forgot
         });
     }
-  }, []);
-
-  // When toggle is turned OFF, stop any active mic streams
-  useEffect(() => {
-    if (!micEnabled && phaseRef.current === "holding") {
-      stopRecognition();
-      stopMeter();
-      setPhase("idle");
-    }
-  }, [micEnabled]);
+  }, [hasStoredPermission, micPermission]);
 
   // ── Stop meter ──────────────────────────────────────────────────────
   const stopMeter = useCallback(() => {
@@ -282,7 +291,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   // ── Start meter ─────────────────────────────────────────────────────
   const startMeter = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
-    if (!micEnabled) return;
 
     const perm = micPermissionRef.current;
     if (perm === "prompt" || perm === "denied") return;
@@ -395,7 +403,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     } catch {
       stopMeter();
     }
-  }, [micEnabled, stopMeter]);
+  }, [stopMeter]);
 
   // ── Feature detect ──────────────────────────────────────────────────
   const [speechSupported, setSpeechSupported] = useState<boolean | null>(null);
@@ -431,25 +439,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       .catch(() => setMicPermission("unknown"));
     return () => { if (status) status.onchange = null; };
   }, []);
-
-  // ── Pre-flight: if toggle was ON from previous session, check permission ──
-  useEffect(() => {
-    if (!micEnabled) return;
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
-
-    // If we already have permission, no need to pre-flight
-    if (micPermission === "granted") return;
-
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then((stream) => {
-        stream.getTracks().forEach(t => t.stop());
-        setMicPermission("granted");
-        console.log("[jxl/mic] Pre-flight: mic accessible (permission restored)");
-      })
-      .catch(() => {
-        console.log("[jxl/mic] Pre-flight: mic not accessible, will prompt on first hold");
-      });
-  }, [micEnabled, micPermission]);
 
   // ── Stop recognition ────────────────────────────────────────────────
   const stopRecognition = useCallback(() => {
@@ -560,12 +549,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     (e: React.PointerEvent<HTMLButtonElement>) => {
       if (phase === "thinking" || sessionOver) return;
 
-      // ── MIC TOGGLE GUARD ──
-      if (!micEnabled) {
-        setError("Mic is off. Toggle it on above to use voice.");
-        return;
-      }
-
       e.preventDefault();
       e.currentTarget.setPointerCapture?.(e.pointerId);
       setError(null);
@@ -639,7 +622,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
       void startMeter();
     },
-    [phase, sessionOver, micEnabled, stopRecognition, stopMeter, startMeter]
+    [phase, sessionOver, stopRecognition, stopMeter, startMeter]
   );
 
   const endHold = useCallback(() => {
@@ -723,14 +706,14 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     ? "Reading the sky…"
     : phase === "tooShort"
     ? "Hold a little longer"
-    : micEnabled
-    ? "Press · Hold · Speak"
-    : "Mic off — toggle on above";
+    : "Press · Hold · Speak";
 
   const swallowTouch = (e: React.TouchEvent) => e.stopPropagation();
 
   return (
     <div className="jxl-panel">
+      {/* Hidden control that fires a real system haptic on iOS 17.4+ */}
+      {/* @ts-expect-error — `switch` is valid in iOS Safari, absent from React's types */}
       <input id="jxl-haptic" type="checkbox" switch="" aria-hidden="true" tabIndex={-1} className="haptic-proxy" />
 
       <style jsx>{`
@@ -1014,89 +997,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           text-align: center; font-size: 12px; color: #f0a8a8; margin-bottom: 8px;
         }
 
-        /* ── Mic Toggle ── */
-        .mic-toggle-row {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          margin-bottom: 8px;
-        }
-
-        .mic-toggle {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 4px 0;
-          font-family: var(--font-sans, ui-sans-serif);
-          touch-action: manipulation;
-          -webkit-tap-highlight-color: transparent;
-        }
-
-        .mic-toggle:disabled {
-          opacity: 0.4;
-          cursor: default;
-        }
-
-        .toggle-track {
-          position: relative;
-          width: 44px;
-          height: 26px;
-          border-radius: 9999px;
-          background: rgba(148, 163, 184, 0.25);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          transition: background 220ms ease;
-          flex-shrink: 0;
-        }
-
-        .mic-toggle.on .toggle-track {
-          background: rgba(94, 234, 212, 0.35);
-          border-color: rgba(94, 234, 212, 0.4);
-        }
-
-        .toggle-thumb {
-          position: absolute;
-          top: 2px;
-          left: 2px;
-          width: 20px;
-          height: 20px;
-          border-radius: 9999px;
-          background: rgba(148, 163, 184, 0.6);
-          transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background 220ms ease;
-        }
-
-        .mic-toggle.on .toggle-thumb {
-          transform: translateX(18px);
-          background: #5eead4;
-          box-shadow: 0 0 16px rgba(94, 234, 212, 0.3);
-        }
-
-        .toggle-label {
-          font-size: 12px;
-          font-weight: 500;
-          letter-spacing: 0.06em;
-          color: rgba(148, 163, 184, 0.8);
-          min-width: 48px;
-          text-align: left;
-        }
-
-        .mic-toggle.on .toggle-label {
-          color: rgba(94, 234, 212, 0.9);
-        }
-
-        .toggle-hint {
-          font-size: 10px;
-          letter-spacing: 0.04em;
-          color: rgba(239, 68, 68, 0.6);
-        }
-
-        .toggle-hint.warning {
-          color: rgba(251, 191, 36, 0.6);
-        }
-
         .compose {
           width: 100%;
           background: rgba(10,14,30,0.85);
@@ -1338,9 +1238,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                   ? "No mic — you can type instead."
                   : phase === "composing"
                   ? "Say the messy version, or type it."
-                  : micEnabled
-                  ? "Hold the button and say what's actually going on."
-                  : "Toggle the mic on above to speak."}
+                  : "Hold the button and say what's actually going on."}
               </p>
             )}
           </div>
@@ -1437,28 +1335,6 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           </>
         ) : (
           <>
-            {/* ── MIC TOGGLE ── */}
-            <div className="mic-toggle-row">
-              <button
-                type="button"
-                onClick={() => handleMicToggle(!micEnabled)}
-                className={`mic-toggle ${micEnabled ? "on" : "off"}`}
-                disabled={phase === "thinking" || sessionOver}
-                aria-label={micEnabled ? "Microphone on" : "Microphone off"}
-              >
-                <span className="toggle-track">
-                  <span className="toggle-thumb" />
-                </span>
-                <span className="toggle-label">{micEnabled ? "Mic On" : "Mic Off"}</span>
-              </button>
-              {micEnabled && micPermission === "denied" && (
-                <span className="toggle-hint">Permission blocked — check settings</span>
-              )}
-              {micEnabled && micPermission === "prompt" && (
-                <span className="toggle-hint warning">Will prompt on first use</span>
-              )}
-            </div>
-
             <p className="replies">
               {sessionOver
                 ? "That's all for this session"
