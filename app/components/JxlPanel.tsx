@@ -171,12 +171,13 @@ interface EdgeTraceProps {
   onComplete?: () => void;
 }
 
-const EDGE_INSET = 7;        // px in from the panel edge (avoids corner clip)
+const EDGE_STROKE = 5;                  // stroke thickness (raise to thicken)
+const EDGE_INSET = EDGE_STROKE / 2;     // centerline ON the edge → growth spills OUTWARD (clipped)
 const EDGE_FILL_MS = 25000;  // tuned to measured ~25s responses
 const EDGE_CAP = 0.9;        // eased crawl ceiling before the answer lands
 const EDGE_CREEP_TO = 0.97;  // asymptotic creep while waiting past FILL_MS
 const EDGE_MIN_FILL_MS = 900;// floor so a fast reply still shows a beat
-const EDGE_SWEEP_MS = 650;   // final sweep to 100%
+const EDGE_SWEEP_MS = 780;   // final sweep to 100% (calmer close)
 
 function EdgeTrace({ isActive, apiReady, onComplete }: EdgeTraceProps) {
   const [visible, setVisible] = useState(false);
@@ -185,11 +186,9 @@ function EdgeTrace({ isActive, apiReady, onComplete }: EdgeTraceProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const fillRef = useRef<SVGPathElement | null>(null);
-  const headRef = useRef<SVGCircleElement | null>(null);
 
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number | null>(null);
-  const totalLenRef = useRef(0);
   const completingRef = useRef(false);
   const completeStartRef = useRef<number | null>(null);
   const completeFromRef = useRef(0);
@@ -244,23 +243,12 @@ function EdgeTrace({ isActive, apiReady, onComplete }: EdgeTraceProps) {
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     fill.setAttribute("d", d);
     fill.setAttribute("pathLength", "1"); // normalize dash math to [0,1]
-    totalLenRef.current = fill.getTotalLength(); // real length drives the head dot
   }, []);
 
   const draw = useCallback((p: number) => {
-    const fill = fillRef.current, head = headRef.current;
+    const fill = fillRef.current;
     if (!fill) return;
     fill.setAttribute("stroke-dashoffset", String(1 - p));
-    if (head) {
-      if (p > 0.001 && p < 0.999 && totalLenRef.current) {
-        const pt = fill.getPointAtLength(p * totalLenRef.current);
-        head.setAttribute("cx", String(pt.x));
-        head.setAttribute("cy", String(pt.y));
-        head.style.opacity = "1";
-      } else {
-        head.style.opacity = "0";
-      }
-    }
   }, []);
 
   // Activation: mount/unmount the overlay. Never yank it mid-fade.
@@ -325,7 +313,7 @@ function EdgeTrace({ isActive, apiReady, onComplete }: EdgeTraceProps) {
       let p: number;
       if (elapsed <= EDGE_FILL_MS) {
         const t = elapsed / EDGE_FILL_MS;
-        const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOutQuad
+        const eased = t * t * (3 - 2 * t); // smoothstep — gentler ramp
         p = eased * EDGE_CAP;
       } else {
         const over = (elapsed - EDGE_FILL_MS) / 1000;
@@ -385,17 +373,11 @@ function EdgeTrace({ isActive, apiReady, onComplete }: EdgeTraceProps) {
           ref={fillRef}
           fill="none"
           stroke="url(#edgeTraceGrad)"
-          strokeWidth={3}
+          strokeWidth={EDGE_STROKE}
           strokeLinecap="round"
           strokeDasharray="1"
           strokeDashoffset="1"
           style={{ filter: "url(#edgeTraceGlow)" }}
-        />
-        <circle
-          ref={headRef}
-          r={3.2}
-          fill="#eafffb"
-          style={{ opacity: 0, filter: "url(#edgeTraceGlow)" }}
         />
       </svg>
     </div>
