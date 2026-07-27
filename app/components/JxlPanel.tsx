@@ -10,6 +10,10 @@
  * instead of the screen. Everything is therefore `absolute` inside a
  * `relative` root, and the content area is its own scroll container so the
  * sky and dock stay put while the answer scrolls.
+ *
+ * The EdgeTrace loading indicator follows the same rule: it is `absolute`
+ * inset:0 inside this relative root, so it hugs the visible panel edge (which
+ * IS the screen edge when this panel is active) rather than the pager track.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -149,261 +153,251 @@ type Phase =
   | "answered"
   | "denied";
 
-/* ── Loading Ring Component ────────────────────────────────────────────── */
-interface LoadingRingProps {
+/* ── Edge Trace (loading) ───────────────────────────────────────────────
+ * A single glowing stroke that draws around the very edge of the panel while
+ * a request is in flight, then sweeps shut and fades OUTWARD the instant the
+ * answer is ready. Key properties:
+ *   • No idle track — when inactive it renders nothing at all.
+ *   • Measures its own container each run, so the path fits any device and
+ *     squares its corners in a browser tab / rounds them in an installed PWA.
+ *   • Progress is a tuned estimate (there's no real signal from a single
+ *     awaited fetch): it eases toward CAP over FILL_MS, creeps if the API
+ *     runs long, and sweeps to 100% on the real completion.
+ * Start & finish meet at bottom-center; one clockwise lap.
+ */
+interface EdgeTraceProps {
   isActive: boolean;
   apiReady: boolean;
   onComplete?: () => void;
 }
 
-function LoadingRing({ isActive, apiReady, onComplete }: LoadingRingProps) {
-  const [phase, setPhase] = useState<"idle" | "running" | "complete" | "fading">("idle");
-  const [progress, setProgress] = useState(0);
-  const startTimeRef = useRef<number | null>(null);
+const EDGE_INSET = 7;        // px in from the panel edge (avoids corner clip)
+const EDGE_FILL_MS = 25000;  // tuned to measured ~25s responses
+const EDGE_CAP = 0.9;        // eased crawl ceiling before the answer lands
+const EDGE_CREEP_TO = 0.97;  // asymptotic creep while waiting past FILL_MS
+const EDGE_MIN_FILL_MS = 900;// floor so a fast reply still shows a beat
+const EDGE_SWEEP_MS = 650;   // final sweep to 100%
+
+function EdgeTrace({ isActive, apiReady, onComplete }: EdgeTraceProps) {
+  const [visible, setVisible] = useState(false);
+  const [fading, setFading] = useState(false);
+
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const fillRef = useRef<SVGPathElement | null>(null);
+  const headRef = useRef<SVGCircleElement | null>(null);
+
   const rafRef = useRef<number | null>(null);
-
-  // Read apiReady live inside the RAF loop WITHOUT restarting the effect.
-  const apiReadyRef = useRef(apiReady);
-  useEffect(() => { apiReadyRef.current = apiReady; }, [apiReady]);
-
+  const startRef = useRef<number | null>(null);
+  const totalLenRef = useRef(0);
   const completingRef = useRef(false);
   const completeStartRef = useRef<number | null>(null);
   const completeFromRef = useRef(0);
+  const progressRef = useRef(0);
 
+  const fadingRef = useRef(false);
+  useEffect(() => { fadingRef.current = fading; }, [fading]);
+
+  const apiReadyRef = useRef(apiReady);
+  useEffect(() => { apiReadyRef.current = apiReady; }, [apiReady]);
+
+  // Corner radius: rounded on an installed PWA, near-square in a browser tab.
+  const radiusRef = useRef(44);
   useEffect(() => {
-    if (!isActive) {
-      setPhase("idle");
-      setProgress(0);
-      completingRef.current = false;
-      completeStartRef.current = null;
-      startTimeRef.current = null;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      return;
+    if (typeof window === "undefined") return;
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    radiusRef.current = standalone ? 44 : 6;
+  }, []);
+
+  // Build the perimeter path from the measured container.
+  const buildPath = useCallback(() => {
+    const wrap = wrapRef.current, svg = svgRef.current, fill = fillRef.current;
+    if (!wrap || !svg || !fill) return;
+    const rect = wrap.getBoundingClientRect();
+    const w = rect.width, h = rect.height;
+    if (!w || !h) return;
+
+    const x0 = EDGE_INSET, y0 = EDGE_INSET, x1 = w - EDGE_INSET, y1 = h - EDGE_INSET, cx = w / 2;
+    const rad = Math.min(radiusRef.current, (x1 - x0) / 2, (y1 - y0) / 2);
+
+    let d: string;
+    if (rad <= 0.5) {
+      // Squared (browser): sharp corners. Bottom-center → left → top → right → back.
+      d = `M ${cx} ${y1} L ${x0} ${y1} L ${x0} ${y0} L ${x1} ${y0} L ${x1} ${y1} L ${cx} ${y1}`;
+    } else {
+      d = [
+        `M ${cx} ${y1}`,
+        `L ${x0 + rad} ${y1}`,
+        `Q ${x0} ${y1} ${x0} ${y1 - rad}`,   // bottom-left corner
+        `L ${x0} ${y0 + rad}`,
+        `Q ${x0} ${y0} ${x0 + rad} ${y0}`,   // top-left
+        `L ${x1 - rad} ${y0}`,
+        `Q ${x1} ${y0} ${x1} ${y0 + rad}`,   // top-right
+        `L ${x1} ${y1 - rad}`,
+        `Q ${x1} ${y1} ${x1 - rad} ${y1}`,   // bottom-right
+        `L ${cx} ${y1}`,
+      ].join(" ");
     }
 
-    setPhase("running");
-    setProgress(0);
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    fill.setAttribute("d", d);
+    fill.setAttribute("pathLength", "1"); // normalize dash math to [0,1]
+    totalLenRef.current = fill.getTotalLength(); // real length drives the head dot
+  }, []);
+
+  const draw = useCallback((p: number) => {
+    const fill = fillRef.current, head = headRef.current;
+    if (!fill) return;
+    fill.setAttribute("stroke-dashoffset", String(1 - p));
+    if (head) {
+      if (p > 0.001 && p < 0.999 && totalLenRef.current) {
+        const pt = fill.getPointAtLength(p * totalLenRef.current);
+        head.setAttribute("cx", String(pt.x));
+        head.setAttribute("cy", String(pt.y));
+        head.style.opacity = "1";
+      } else {
+        head.style.opacity = "0";
+      }
+    }
+  }, []);
+
+  // Activation: mount/unmount the overlay. Never yank it mid-fade.
+  useEffect(() => {
+    if (isActive) {
+      setVisible(true);
+      return;
+    }
+    if (fadingRef.current) return; // let the outward fade finish on its own
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    setVisible(false);
+    setFading(false);
+    progressRef.current = 0;
+  }, [isActive]);
+
+  // Run: fires whenever the overlay becomes visible (a fresh request).
+  useEffect(() => {
+    if (!visible) return;
+
     completingRef.current = false;
     completeStartRef.current = null;
-    startTimeRef.current = performance.now();
+    completeFromRef.current = 0;
+    progressRef.current = 0;
+    startRef.current = null;
+    setFading(false);
 
-    const CAP = 0.9;          // how far it crawls before the API lands
-    const FILL_MS = 3000;     // time to crawl toward the cap
-    const MIN_FILL_MS = 900;  // don't let a fast API make the ring blink
-    const SWEEP_MS = 550;     // final sweep to 100%
+    buildPath();
+    draw(0);
 
-    const animate = (now: number) => {
-      if (startTimeRef.current == null) startTimeRef.current = now;
-      const elapsed = now - startTimeRef.current;
+    const ro = new ResizeObserver(() => buildPath());
+    if (wrapRef.current) ro.observe(wrapRef.current);
 
-      const t = Math.min(elapsed / FILL_MS, 1);
-      const easedFill = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    const loop = (now: number) => {
+      if (startRef.current == null) startRef.current = now;
+      const elapsed = now - startRef.current;
 
-      // Once the API is ready (and we've filled a minimum), sweep to 100% and finish.
-      if (completingRef.current || (apiReadyRef.current && elapsed >= MIN_FILL_MS)) {
+      // Sweep to full once the answer is ready (and a minimum beat has passed).
+      if (completingRef.current || (apiReadyRef.current && elapsed >= EDGE_MIN_FILL_MS)) {
         if (!completingRef.current) {
           completingRef.current = true;
           completeStartRef.current = now;
-          completeFromRef.current = easedFill * CAP; // snapshot where we were
+          completeFromRef.current = progressRef.current;
         }
-        const ct = Math.min((now - (completeStartRef.current ?? now)) / SWEEP_MS, 1);
-        const eased = 1 - Math.pow(1 - ct, 3); // easeOutCubic
-        setProgress(completeFromRef.current + (1 - completeFromRef.current) * eased);
+        const ct = Math.min((now - (completeStartRef.current ?? now)) / EDGE_SWEEP_MS, 1);
+        const e = 1 - Math.pow(1 - ct, 3); // easeOutCubic
+        const p = completeFromRef.current + (1 - completeFromRef.current) * e;
+        progressRef.current = p;
+        draw(p);
 
         if (ct >= 1) {
-          setPhase("complete");
-          setTimeout(() => setPhase("fading"), 300);
-          if (onComplete) setTimeout(onComplete, 380); // reading fades in as edge fades out
+          // Fade the edge outward; hand off so the answer appears mid-fade.
+          setFading(true);
+          if (onComplete) window.setTimeout(onComplete, 220);
+          window.setTimeout(() => { setVisible(false); setFading(false); }, 680);
           return; // stop the loop
         }
-        rafRef.current = requestAnimationFrame(animate);
+        rafRef.current = requestAnimationFrame(loop);
         return;
       }
 
-      // Not ready yet: ease toward the cap and hold.
-      setProgress(easedFill * CAP);
-      rafRef.current = requestAnimationFrame(animate);
+      // Estimate crawl toward CAP; creep asymptotically if it runs long.
+      let p: number;
+      if (elapsed <= EDGE_FILL_MS) {
+        const t = elapsed / EDGE_FILL_MS;
+        const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOutQuad
+        p = eased * EDGE_CAP;
+      } else {
+        const over = (elapsed - EDGE_FILL_MS) / 1000;
+        p = EDGE_CAP + (EDGE_CREEP_TO - EDGE_CAP) * (1 - Math.exp(-0.35 * over));
+      }
+      progressRef.current = p;
+      draw(p);
+      rafRef.current = requestAnimationFrame(loop);
     };
 
-    rafRef.current = requestAnimationFrame(animate);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [isActive, onComplete]); // apiReady intentionally excluded — read via ref so the loop doesn't restart
+    rafRef.current = requestAnimationFrame(loop);
 
-  if (phase === "idle") return null;
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      ro.disconnect();
+    };
+  }, [visible, buildPath, draw, onComplete]);
 
-  const isComplete = phase === "complete" || phase === "fading";
-  const isFading = phase === "fading";
-  const circumference = 289;
-
-  const dashOffset = circumference * (1 - progress);
+  if (!visible) return null;
 
   return (
     <div
+      ref={wrapRef}
+      aria-hidden="true"
       style={{
         position: "absolute",
         inset: 0,
-        pointerEvents: "none",
         zIndex: 80,
-        opacity: isFading ? 0 : 1,
-        transition: "opacity 0.6s ease",
+        pointerEvents: "none",
+        opacity: fading ? 0 : 1,
+        transform: fading ? "scale(1.05)" : "scale(1)",
+        transformOrigin: "center",
+        transition: "opacity 0.62s ease, transform 0.62s ease",
       }}
-      aria-hidden="true"
     >
-      <style jsx>{`
-        @keyframes ringPulse {
-          0%, 100% { opacity: 0.5; }
-          50% { opacity: 1; }
-        }
-        @keyframes dotPulse {
-          0%, 100% { opacity: 0.2; transform: scale(0.8); }
-          50% { opacity: 1; transform: scale(1); }
-        }
-        @keyframes flashOut {
-          0% { opacity: 0.6; }
-          100% { opacity: 0; }
-        }
-        .ring-glow {
-          position: absolute;
-          inset: -8px;
-          border-radius: 50%;
-          filter: blur(30px);
-          opacity: 0.12;
-          background: conic-gradient(
-            from 0deg,
-            transparent 0%,
-            rgba(94, 234, 212, 0.6) 25%,
-            rgba(129, 90, 240, 0.6) 50%,
-            rgba(251, 191, 36, 0.6) 75%,
-            transparent 100%
-          );
-          animation: ringPulse 2.4s ease-in-out infinite;
-        }
-        .ring-glow.complete {
-          animation: none;
-          opacity: 0.2;
-        }
-        .ring-label {
-          position: absolute;
-          bottom: max(env(safe-area-inset-bottom, 20px), 100px);
-          left: 50%;
-          transform: translateX(-50%);
-          color: rgba(148, 163, 184, 0.7);
-          font-size: 13px;
-          font-family: var(--font-sans, ui-sans-serif);
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          animation: ringPulse 1.6s ease-in-out infinite;
-          text-align: center;
-          transition: opacity 0.5s ease;
-        }
-        .ring-label.complete {
-          animation: none;
-          color: rgba(94, 234, 212, 0.9);
-        }
-        .ring-label .dots span {
-          display: inline-block;
-          width: 5px;
-          height: 5px;
-          margin: 0 2px;
-          border-radius: 50%;
-          background: rgba(94, 234, 212, 0.6);
-          animation: dotPulse 1.2s ease-in-out infinite;
-        }
-        .ring-label .dots span:nth-child(2) { animation-delay: 0.2s; }
-        .ring-label .dots span:nth-child(3) { animation-delay: 0.4s; }
-        .ring-flash {
-          position: absolute;
-          inset: 0;
-          background: radial-gradient(circle at center, rgba(94, 234, 212, 0.15), transparent 60%);
-          opacity: 0;
-          animation: flashOut 0.7s ease forwards;
-          pointer-events: none;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .ring-glow,
-          .ring-label,
-          .ring-label .dots span {
-            animation: none !important;
-          }
-        }
-      `}</style>
-
-      <div className={`ring-glow ${isComplete ? 'complete' : ''}`} />
-
       <svg
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          filter: "drop-shadow(0 0 12px rgba(94, 234, 212, 0.2))",
-        }}
-        viewBox="0 0 100 100"
+        ref={svgRef}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }}
         preserveAspectRatio="none"
       >
         <defs>
-          <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="edgeTraceGrad" x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#5eead4" />
-            <stop offset="33%" stopColor="#818cf8" />
-            <stop offset="66%" stopColor="#fbbf24" />
-            <stop offset="100%" stopColor="#5eead4" />
+            <stop offset="45%" stopColor="#818cf8" />
+            <stop offset="100%" stopColor="#fbbf24" />
           </linearGradient>
-          <filter id="ringGlowFilter">
-            <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <filter id="edgeTraceGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.6" result="b" />
             <feMerge>
-              <feMergeNode in="blur" />
+              <feMergeNode in="b" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
 
-        <circle
-          cx="50"
-          cy="50"
-          r="47"
+        <path
+          ref={fillRef}
           fill="none"
-          stroke="rgba(255,255,255,0.04)"
-          strokeWidth="2"
-        />
-
-        <circle
-          cx="50"
-          cy="50"
-          r="47"
-          fill="none"
-          stroke="url(#ringGradient)"
-          strokeWidth="3"
+          stroke="url(#edgeTraceGrad)"
+          strokeWidth={3}
           strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          style={{
-            transition: isComplete ? 'stroke-dashoffset 0.6s ease' : 'stroke-dashoffset 0.05s linear',
-            transform: 'rotate(-90deg)',
-            transformOrigin: 'center',
-            filter: 'url(#ringGlowFilter)',
-            stroke: isComplete ? 'rgba(94, 234, 212, 0.8)' : 'url(#ringGradient)',
-          }}
+          strokeDasharray="1"
+          strokeDashoffset="1"
+          style={{ filter: "url(#edgeTraceGlow)" }}
+        />
+        <circle
+          ref={headRef}
+          r={3.2}
+          fill="#eafffb"
+          style={{ opacity: 0, filter: "url(#edgeTraceGlow)" }}
         />
       </svg>
-
-      <div className={`ring-label ${isComplete ? 'complete' : ''}`}>
-        {isComplete ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>✦</span> Ready
-          </span>
-        ) : (
-          <>
-            Reading the sky
-            <span className="dots">
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
-          </>
-        )}
-      </div>
-
-      {isComplete && <div className="ring-flash" />}
     </div>
   );
 }
@@ -422,7 +416,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const [history, setHistory] = useState<Array<{ question: string; answer: string }>>([]);
   const [result, setResult] = useState<JxlResult | null>(null);
 
-  // ── Loading ring state ──
+  // ── Edge trace loading state ──
   const [isLoadingRingActive, setIsLoadingRingActive] = useState(false);
   const [apiReady, setApiReady] = useState(false);
 
@@ -715,7 +709,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, [phase]);
 
-  // ── Loading ring complete ──
+  // ── Edge trace complete → reveal the answer ──
   const handleLoadingComplete = useCallback(() => {
     setIsLoadingRingActive(false);
     setApiReady(false);
@@ -774,7 +768,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       }
       setDraft("");
       setShowSources(false);
-      setApiReady(true); // reading is ready: let the ring sweep to full and complete
+      setApiReady(true); // answer is ready: let the edge sweep to full and complete
     } catch {
       setError("Something went wrong. Try again.");
       setDraft(question);
@@ -962,8 +956,8 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
       {/* @ts-expect-error — `switch` is valid in iOS Safari, absent from React's types */}
       <input id="jxl-haptic" type="checkbox" switch="" aria-hidden="true" tabIndex={-1} className="haptic-proxy" />
 
-      {/* ── Loading Ring ── */}
-      <LoadingRing isActive={isLoadingRingActive} apiReady={apiReady} onComplete={handleLoadingComplete} />
+      {/* ── Edge Trace loading ── */}
+      <EdgeTrace isActive={isLoadingRingActive} apiReady={apiReady} onComplete={handleLoadingComplete} />
 
       <style jsx>{`
         .jxl-panel {
