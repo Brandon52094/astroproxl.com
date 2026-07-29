@@ -4,26 +4,39 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Lock, Check, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { PaywallConfig } from "@/lib/paywallConfig";
+import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE } from "@/lib/paywallConfig";
+
+type CheckoutChoice =
+  | { mode: "one_time" }
+  | { mode: "subscription"; tier: "sub_base" | "sub_plus" };
 
 interface PaywallScreenProps {
-  config: PaywallConfig;
   readingTitle: string;
   readingTeaser: string;
-  onCheckout: (mode: "one_time" | "subscription") => Promise<void>;
+  firstReadingUsed?: boolean; // controls the $4 vs $2 first-reading price
+  onCheckout: (choice: CheckoutChoice) => Promise<void>;
   onDismiss: () => void;
 }
 
 export default function PaywallScreen({
-  config,
   readingTitle,
   readingTeaser,
+  firstReadingUsed = false,
   onCheckout,
   onDismiss,
 }: PaywallScreenProps) {
-  const [selected, setSelected] = useState<"one_time" | "subscription">("one_time");
+  const [selected, setSelected] = useState<CheckoutChoice>({ mode: "one_time" });
   const [loading, setLoading] = useState(false);
-  const { oneTime, subscription, isJourneyComplete, paywallIndex } = config;
+
+  const readingPrice = firstReadingUsed ? READING_PRICE : READING_FIRST_PRICE;
+  const readingPriceLabel = `$${(readingPrice / 100).toFixed(0)}`;
+  const base = SUB_TIERS.sub_base;
+  const plus = SUB_TIERS.sub_plus;
+
+  const isSelected = (c: CheckoutChoice) =>
+    c.mode === selected.mode &&
+    (c.mode !== "subscription" ||
+      (selected.mode === "subscription" && c.tier === selected.tier));
 
   const handleContinue = async () => {
     setLoading(true);
@@ -34,14 +47,6 @@ export default function PaywallScreen({
     }
   };
 
-  const headlineText = isJourneyComplete
-    ? "Your final reading this cycle"
-    : "Your next reading is ready";
-
-  const subText = isJourneyComplete
-    ? "This is your 4th reading — the most direct prediction of the cycle. After this, a 2-week reset begins."
-    : "A full 30-45 day reading with specific dates, root patterns, and direct directives.";
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -50,26 +55,22 @@ export default function PaywallScreen({
       transition={{ duration: 0.4 }}
       className="flex flex-col"
     >
-      {/* Lock badge */}
       <div className="mb-5 flex items-center gap-2">
         <Lock className="h-4 w-4 text-teal-300" />
         <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-teal-300">
           Next Reading
         </span>
-        {isJourneyComplete && (
-          <span className="ml-auto rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-300">
-            Final in Cycle
-          </span>
-        )}
       </div>
 
-      {/* Framing copy */}
       <div className="mb-5 space-y-1">
-        <p className="text-[22px] font-semibold leading-tight text-white">{headlineText}</p>
-        <p className="text-[13px] leading-5 text-slate-400">{subText}</p>
+        <p className="text-[22px] font-semibold leading-tight text-white">
+          Your next reading is ready
+        </p>
+        <p className="text-[13px] leading-5 text-slate-400">
+          A full 30-45 day reading with specific dates, root patterns, and direct directives.
+        </p>
       </div>
 
-      {/* What's included */}
       <div className="mb-6 rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-4 space-y-2">
         <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">What you get</p>
         <ul className="space-y-2">
@@ -87,20 +88,19 @@ export default function PaywallScreen({
           </li>
           <li className="flex items-center gap-2 text-[13px] text-slate-300">
             <Check className="h-3.5 w-3.5 text-teal-300 shrink-0" />
-            2 free follow-up questions on this reading
+            1 free follow-up question on this reading
           </li>
         </ul>
       </div>
 
-      {/* Option selector */}
       <div className="mb-4 space-y-3">
-        {/* One-time option */}
+        {/* One-time */}
         <button
           type="button"
-          onClick={() => setSelected("one_time")}
+          onClick={() => setSelected({ mode: "one_time" })}
           className={cn(
             "w-full rounded-[20px] border p-4 text-left transition-all duration-200",
-            selected === "one_time"
+            isSelected({ mode: "one_time" })
               ? "border-teal-300/60 bg-teal-400/[0.07] shadow-[0_0_0_1px_rgba(94,234,212,0.12)]"
               : "border-white/10 bg-white/[0.03] hover:border-white/20"
           )}
@@ -110,37 +110,83 @@ export default function PaywallScreen({
               <span
                 className={cn(
                   "h-4 w-4 rounded-full border-2 transition-all shrink-0",
-                  selected === "one_time"
+                  isSelected({ mode: "one_time" })
                     ? "border-teal-300 bg-teal-300"
                     : "border-slate-500 bg-transparent"
                 )}
               />
               <div>
                 <p className="text-[14px] font-semibold text-white">This reading only</p>
-                <p className="text-[11px] text-slate-400">One-time · no commitment</p>
+                <p className="text-[11px] text-slate-400">
+                  {firstReadingUsed ? "One-time · no commitment" : "First reading · 50% off"}
+                </p>
               </div>
             </div>
             <span className={cn(
               "shrink-0 text-lg font-bold",
-              selected === "one_time" ? "text-teal-300" : "text-slate-300"
+              isSelected({ mode: "one_time" }) ? "text-teal-300" : "text-slate-300"
             )}>
-              {oneTime.displayPrice}
+              {readingPriceLabel}
             </span>
           </div>
         </button>
 
-        {/* Subscription option */}
+        {/* $12 base subscription */}
         <button
           type="button"
-          onClick={() => setSelected("subscription")}
+          onClick={() => setSelected({ mode: "subscription", tier: "sub_base" })}
           className={cn(
-            "relative w-full rounded-[20px] border p-4 text-left transition-all duration-200",
-            selected === "subscription"
+            "w-full rounded-[20px] border p-4 text-left transition-all duration-200",
+            isSelected({ mode: "subscription", tier: "sub_base" })
               ? "border-amber-300/50 bg-amber-400/[0.06] shadow-[0_0_0_1px_rgba(251,191,36,0.1)]"
               : "border-white/10 bg-white/[0.03] hover:border-white/20"
           )}
         >
-          {subscription.isBestOffer && (
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <span
+                className={cn(
+                  "mt-0.5 h-4 w-4 rounded-full border-2 transition-all shrink-0",
+                  isSelected({ mode: "subscription", tier: "sub_base" })
+                    ? "border-amber-300 bg-amber-300"
+                    : "border-slate-500 bg-transparent"
+                )}
+              />
+              <div className="space-y-1">
+                <p className="text-[14px] font-semibold text-white">{base.name}</p>
+                <ul className="space-y-1 pt-1">
+                  <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Check className="h-3 w-3 text-amber-300 shrink-0" />
+                    {base.readings} readings + {base.jxl} JXL every month
+                  </li>
+                  <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Check className="h-3 w-3 text-amber-300 shrink-0" />
+                    50% off extras · no cooldowns · free downloads
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <span className={cn(
+              "shrink-0 text-lg font-bold",
+              isSelected({ mode: "subscription", tier: "sub_base" }) ? "text-amber-300" : "text-slate-300"
+            )}>
+              {base.displayPrice}
+            </span>
+          </div>
+        </button>
+
+        {/* $16 plus subscription */}
+        <button
+          type="button"
+          onClick={() => setSelected({ mode: "subscription", tier: "sub_plus" })}
+          className={cn(
+            "relative w-full rounded-[20px] border p-4 text-left transition-all duration-200",
+            isSelected({ mode: "subscription", tier: "sub_plus" })
+              ? "border-amber-300/50 bg-amber-400/[0.06] shadow-[0_0_0_1px_rgba(251,191,36,0.1)]"
+              : "border-white/10 bg-white/[0.03] hover:border-white/20"
+          )}
+        >
+          {plus.isBestOffer && (
             <div className="absolute -top-2.5 left-4">
               <span className="flex items-center gap-1 rounded-full border border-amber-300/40 bg-[#050816] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-300">
                 <Star className="h-2.5 w-2.5 fill-amber-300" />
@@ -153,53 +199,42 @@ export default function PaywallScreen({
               <span
                 className={cn(
                   "mt-0.5 h-4 w-4 rounded-full border-2 transition-all shrink-0",
-                  selected === "subscription"
+                  isSelected({ mode: "subscription", tier: "sub_plus" })
                     ? "border-amber-300 bg-amber-300"
                     : "border-slate-500 bg-transparent"
                 )}
               />
               <div className="space-y-1">
-                <p className="text-[14px] font-semibold text-white">{subscription.name}</p>
-                <p className="text-[11px] text-slate-400">{subscription.tagline}</p>
+                <p className="text-[14px] font-semibold text-white">{plus.name}</p>
                 <ul className="space-y-1 pt-1">
                   <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
                     <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                    8 readings/month — no per-reading paywalls
+                    {plus.readings} readings + {plus.jxl} JXL every month
                   </li>
                   <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
                     <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                    2 free follow-ups per reading
-                  </li>
-                  <li className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                    <Check className="h-3 w-3 text-amber-300 shrink-0" />
-                    No cooldown periods, downloads included
+                    50% off extras · no cooldowns · free downloads
                   </li>
                 </ul>
               </div>
             </div>
             <span className={cn(
               "shrink-0 text-lg font-bold",
-              selected === "subscription" ? "text-amber-300" : "text-slate-300"
+              isSelected({ mode: "subscription", tier: "sub_plus" }) ? "text-amber-300" : "text-slate-300"
             )}>
-              {subscription.displayPrice}
+              {plus.displayPrice}
             </span>
           </div>
         </button>
       </div>
 
-      {/* Cycle indicator */}
-      <p className="mb-4 text-center text-[11px] text-slate-600">
-        Reading {paywallIndex} of 4 in your cycle · resets every 2 weeks
-      </p>
-
-      {/* CTA */}
       <button
         type="button"
         onClick={handleContinue}
         disabled={loading}
         className={cn(
           "h-14 w-full rounded-2xl text-sm font-semibold transition-all",
-          selected === "subscription"
+          selected.mode === "subscription"
             ? "bg-amber-300 text-slate-950 hover:bg-amber-200 shadow-lg shadow-amber-500/20"
             : "bg-teal-300 text-slate-950 hover:bg-teal-200 shadow-lg shadow-teal-500/20",
           "disabled:opacity-60 disabled:cursor-not-allowed"
@@ -207,9 +242,9 @@ export default function PaywallScreen({
       >
         {loading
           ? "Loading checkout…"
-          : selected === "subscription"
-            ? "Subscribe — " + subscription.displayPrice
-            : "Get This Reading — " + oneTime.displayPrice}
+          : selected.mode === "subscription"
+            ? `Subscribe — ${selected.tier === "sub_plus" ? plus.displayPrice : base.displayPrice}`
+            : `Get This Reading — ${readingPriceLabel}`}
       </button>
 
       <button
