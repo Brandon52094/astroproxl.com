@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
             currency: "usd",
             product_data: { 
               name: JXL_REPLY_PACK.name, 
-              description: JXL_REPLY_PACK.tagline 
+              description: JXL_REPLY_PACK.description
             },
             unit_amount: JXL_REPLY_PACK.price,
           },
