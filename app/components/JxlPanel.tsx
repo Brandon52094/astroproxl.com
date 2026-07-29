@@ -447,30 +447,42 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     }
   }, [micPermission]);
 
-  // Pre-flight: if we have stored permission but the browser is "prompt" status,
-  // silently try to re-acquire the mic without showing the prompt.
+  // Ask for the mic as soon as the user swipes to this panel.
+  // - First-time visitors: the browser prompt appears automatically here,
+  //   not mid-hold, so the press-and-hold gesture is never interrupted.
+  // - Returning visitors (browser already granted): resolves silently, no prompt.
+  // - We ask at most once per mount, and never when already granted/denied.
+  const autoRequestedRef = useRef(false);
+
   useEffect(() => {
-    if (!hasStoredPermission) return;
-    if (micPermission === "granted") return;
+    if (!isActive) return;                    // only the visible panel, not the 4 offscreen ones
+    if (autoRequestedRef.current) return;     // ask once per mount
+    if (micPermission === "granted") return;  // already have it
+
     if (micPermission === "denied") {
-      localStorage.removeItem(MIC_GRANTED_KEY);
-      setHasStoredPermission(false);
-      console.log("[jxl/mic] Permission was revoked — clearing stored flag");
+      // Previously refused — don't nag, and clear any stale stored flag.
+      if (hasStoredPermission) {
+        try { localStorage.removeItem(MIC_GRANTED_KEY); } catch {}
+        setHasStoredPermission(false);
+      }
       return;
     }
 
-    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then((stream) => {
-          stream.getTracks().forEach(t => t.stop());
-          setMicPermission("granted");
-          console.log("[jxl/mic] Pre-flight: silently re-acquired mic permission");
-        })
-        .catch(() => {
-          console.log("[jxl/mic] Pre-flight: silent re-acquire failed, will prompt on hold");
-        });
-    }
-  }, [hasStoredPermission, micPermission]);
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+
+    autoRequestedRef.current = true;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        stream.getTracks().forEach((t) => t.stop()); // we only wanted the grant, not the stream yet
+        setMicPermission("granted");                  // cascades into the localStorage store effect
+        console.log("[jxl/mic] Permission granted on panel open");
+      })
+      .catch(() => {
+        // Dismissed or blocked. The permissions-query listener catches a hard denial.
+        console.log("[jxl/mic] Permission not granted on panel open");
+      });
+  }, [isActive, micPermission, hasStoredPermission]);
 
   // ── Stop meter ──────────────────────────────────────────────────────
   const stopMeter = useCallback(() => {
