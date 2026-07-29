@@ -595,10 +595,6 @@ export async function POST(request: NextRequest) {
     const careNote = getCareNote(risk);
 
     // ── JXL access model ───────────────────────────────────────────────────
-    // 1 credit opens a CONVERSATION. Turns inside it are free, gated only by the
-    // per-conversation wall. The debit happens once, on the first turn.
-    // Assembles `metaUpdate` but writes NOTHING yet — the charge lands only after
-    // a successful reading, so a model/parse failure costs the person nothing.
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
@@ -613,9 +609,10 @@ export async function POST(request: NextRequest) {
     const turnCount = historyLen + 1;
     const isNewSession = historyLen === 0;
 
-    // ── Per-conversation safety wall — unpurchasable, everyone, incl. subs ──
-    // COUNTED turns. The included replies live under this ceiling; past it, no
-    // purchase is accepted. Wellbeing, not billing. Resets on a fresh conversation.
+    // Free band: subscribers 4, non-subscribers 2 (their included replies).
+    const freeReplies = isSubscribed ? 4 : 2;
+
+    // ── The 8-reply safety wall — absolute, counts every turn, fresh per convo ──
     if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
       return NextResponse.json(
         { error: JXL_CONVERSATION_CAP_MESSAGE, code: "JXL_CONVERSATION_CAP" },
@@ -626,9 +623,7 @@ export async function POST(request: NextRequest) {
     let metaUpdate: Record<string, unknown> | null = null;
 
     if (isNewSession) {
-      // OPENING a conversation costs exactly one credit, in priority order:
-      // free session (once ever) → JXL credit → JXL reply-pack credit.
-      // Subscribers spend a jxlCredit like everyone else (no separate caps).
+      // OPENING the conversation costs one credit (free session → JXL credit → pool).
       if (hasFreeSession) {
         metaUpdate = { jxlFreeUsedAt: new Date().toISOString() };
       } else if (jxlCredits > 0) {
@@ -641,10 +636,26 @@ export async function POST(request: NextRequest) {
           { status: 402 }
         );
       }
-    } else {
-      // CONTINUING an open conversation. Turns 2-8 are free — already paid for
-      // when it opened. No debit, just the wall (above).
+    } else if (turnCount <= freeReplies) {
+      // CONTINUING within the free band — no charge.
       metaUpdate = null;
+    } else {
+      // CONTINUING past the free band — spend from the paid pool.
+      if (jxlReplyCredits > 0) {
+        metaUpdate = { jxlReplyCredits: jxlReplyCredits - 1 };
+      } else {
+        // Pool empty — client should prompt to buy the right pack.
+        // Subscribers get the discounted tail; non-subscribers buy the normal JXL pack.
+        return NextResponse.json(
+          {
+            error: "You've used your free replies.",
+            code: "NEEDS_REPLY_PACK",
+            isSubscribed,
+            tailMode: isSubscribed ? "sub_reply_tail_jxl" : "jxl_reply_pack",
+          },
+          { status: 402 }
+        );
+      }
     }
 
     const isFinalTurn = turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;

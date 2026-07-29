@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
       | "followup"
       | "reply_pack"
       | "jxl_reply_pack"
+      | "sub_reply_tail_regular"
+      | "sub_reply_tail_jxl"
       | undefined;
 
     if (!userId || !mode) {
@@ -143,6 +145,26 @@ export async function POST(request: NextRequest) {
           },
         });
         console.log(`[webhook] jxl_reply_pack — +${grant} JXL reply credits to ${userId}`);
+
+      // ── Subscriber discounted reply tail — grants into the persistent pool ──
+      // Reuses the same pools as the regular packs. The metadata carries the
+      // amount for exactly one pool (the other is 0), so we add both safely.
+      } else if (mode === "sub_reply_tail_regular" || mode === "sub_reply_tail_jxl") {
+        const regularGrant = Number(session.metadata?.replyCredits ?? 0);
+        const jxlGrant = Number(session.metadata?.jxlReplyCredits ?? 0);
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            replyCredits: currentReplyCredits + regularGrant,
+            jxlReplyCredits: currentJxlReplyCredits + jxlGrant,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] ${mode} — granted ${regularGrant || jxlGrant} discounted tail replies to ${userId}`
+        );
 
       } else if (mode === "followup") {
         console.log(`[webhook] followup — charged ${userId}.`);

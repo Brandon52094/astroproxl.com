@@ -1,7 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE } from "@/lib/paywallConfig";
+import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE, SUBSCRIBER_TAIL } from "@/lib/paywallConfig";
 import { JXL_SESSION, JXL_REPLY_PACK } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { returnUrl, mode, bundleTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "jxl_session";
+      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "sub_reply_tail_regular" | "sub_reply_tail_jxl" | "jxl_session";
       bundleTier?: string;
     };
 
@@ -169,6 +169,51 @@ export async function POST(request: NextRequest) {
           jxlReplyCredits: JXL_REPLY_PACK.replies,
         },
         success_url: `${returnUrl}?payment=success&mode=jxl_reply_pack`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Subscriber discounted reply tail — $2 regular / $3 JXL ──────────────
+    // CRITICAL: the 50% price is ONLY for verified subscribers. We check
+    // server-side against Clerk metadata — NEVER trust a client claim of
+    // subscriber status. A non-subscriber hitting this mode is rejected.
+    if (mode === "sub_reply_tail_regular" || mode === "sub_reply_tail_jxl") {
+      const client = await clerkClient();
+      const buyer = await client.users.getUser(userId);
+      const isSubscribed = buyer.publicMetadata?.isSubscribed === true;
+
+      if (!isSubscribed) {
+        return NextResponse.json(
+          { error: "This discounted pack is for subscribers only." },
+          { status: 403 }
+        );
+      }
+
+      const tail = mode === "sub_reply_tail_jxl" ? SUBSCRIBER_TAIL.jxl : SUBSCRIBER_TAIL.regular;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "4 More Replies — Subscriber Price",
+              description: "Half-price follow-up replies to keep this conversation going",
+            },
+            unit_amount: tail.price,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode,
+          // which pool the webhook credits, and how many
+          replyCredits: mode === "sub_reply_tail_regular" ? tail.replies : 0,
+          jxlReplyCredits: mode === "sub_reply_tail_jxl" ? tail.replies : 0,
+        },
+        success_url: `${returnUrl}?payment=success&mode=${mode}`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });

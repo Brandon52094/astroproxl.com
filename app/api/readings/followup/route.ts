@@ -428,12 +428,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Reply-access gating ─────────────────────────────────────────────────
-    // Priority: subscribed (unlimited) → free replies → paid replyCredits → block.
-    //
+    // Non-subscribers: 1 free reply per reading, then spend from replyCredits.
+    // Subscribers: 4 free replies per reading, then spend from replyCredits.
     // HARD RULE: this route only ever reads/writes `replyCredits`. It never
     // touches `credits` (readings) or `readingsCompleted`. Sending a reply must
     // never advance the reading cycle or spend a reading credit.
-    const FREE_REPLIES_PER_READING = 2;
+    const NONSUB_FREE_REPLIES = 1;   // regular reading includes 1 reply
+    const SUB_FREE_REPLIES = 4;      // subscriber free band
 
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
@@ -463,7 +464,7 @@ export async function POST(request: NextRequest) {
           replyMeta: {
             accessTier: null,
             usedFreeReply: false,
-            freeRepliesRemaining: Math.max(0, FREE_REPLIES_PER_READING - freeRepliesUsed),
+            freeRepliesRemaining: Math.max(0, (isSubscribed ? SUB_FREE_REPLIES : NONSUB_FREE_REPLIES) - freeRepliesUsed),
             replyCreditsRemaining: replyCredits,
             isSubscribed,
           },
@@ -474,22 +475,26 @@ export async function POST(request: NextRequest) {
     // MEDIUM proceeds to the full answer; this rides along underneath it.
     const careNote = getCareNote(risk);
 
-    let accessTier: "subscribed" | "free" | "credit" | null;
-    if (isSubscribed) {
-      accessTier = "subscribed"; // unlimited, deduct nothing
-    } else if (freeRepliesUsed < FREE_REPLIES_PER_READING) {
-      accessTier = "free"; // client-tracked free reply
+    // Free band depends on subscriber status; past it, everyone spends replyCredits.
+    const freeBand = isSubscribed ? SUB_FREE_REPLIES : NONSUB_FREE_REPLIES;
+
+    let accessTier: "free" | "credit" | null;
+    if (freeRepliesUsed < freeBand) {
+      accessTier = "free"; // within the free band (client-tracked)
     } else if (replyCredits > 0) {
-      accessTier = "credit"; // paid reply, deduct after success
+      accessTier = "credit"; // paid reply from the pool
     } else {
-      accessTier = null; // out of everything → paywall
+      accessTier = null; // out → prompt to buy
     }
 
     if (accessTier === null) {
       return NextResponse.json(
         {
-          error: "You've used your free replies. Get 2 more for $2 to keep the conversation going.",
-          code: "NO_REPLY_CREDITS",
+          error: "You've used your free replies.",
+          code: "NEEDS_REPLY_PACK",
+          isSubscribed,
+          // Subscribers get the $2 discounted tail; non-subs buy the normal $2 pack.
+          tailMode: isSubscribed ? "sub_reply_tail_regular" : "reply_pack",
         },
         { status: 402 }
       );
@@ -592,7 +597,7 @@ export async function POST(request: NextRequest) {
     const usedFreeReply = accessTier === "free";
     const freeRepliesRemaining = Math.max(
       0,
-      FREE_REPLIES_PER_READING - (freeRepliesUsed + (usedFreeReply ? 1 : 0))
+      freeBand - (freeRepliesUsed + (usedFreeReply ? 1 : 0))
     );
 
     return NextResponse.json(

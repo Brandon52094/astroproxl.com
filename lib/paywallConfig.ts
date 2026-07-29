@@ -136,3 +136,30 @@ export function subscriberExtraPrice(basePrice: number): number {
   // Once a subscriber's included credits are gone, everything is 50% off.
   return Math.round(basePrice * (1 - SHARED.discountAfterIncluded));
 }
+
+// ── Reply bands & discounted tail ─────────────────────────────────────────────
+// The per-conversation reply model. Applies to BOTH regular readings and JXL.
+//
+//   Non-subscriber: included replies free (1 regular / 2 JXL), then buys
+//     reply-packs up to the wall.
+//   Subscriber: FLAT 4 free per conversation (replaces the 1/2 included), then
+//     replies 5–8 come from the paid pool, sold as a one-time discounted tail.
+//   Everyone: hard wall at 8 counted replies (free + paid), fresh each convo.
+
+export const SUBSCRIBER_FREE_REPLIES = 4;   // subscriber free band, both features
+
+// The discounted tail — bought once at reply 5, grants 4 replies into the
+// PERSISTENT pool (jxlReplyCredits / replyCredits). Carries across conversations.
+// Prices are already 50% off the à la carte rate (2 packs' worth for one).
+export const SUBSCRIBER_TAIL = {
+  regular: {
+    mode: "sub_reply_tail_regular" as const,
+    price: 200,        // $2.00 — normally 2×$2=$4, 50% off
+    replies: 4,        // unlocks replies 5–8
+  },
+  jxl: {
+    mode: "sub_reply_tail_jxl" as const,
+    price: 300,        // $3.00 — normally 2×$3=$6, 50% off
+    replies: 4,
+  },
+} as const;
