@@ -1,8 +1,8 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { SUBSCRIPTION_TIER, SUBSCRIBER_TOPUP, DOWNLOAD_PRICE, FOLLOWUP_PRICE, COOLDOWN_BYPASS_PRICE, BUNDLE_PACKS, isValidBundleTier } from "@/lib/paywallConfig";
-import { JXL_SESSION } from "@/lib/jxlConfig";
+import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE } from "@/lib/paywallConfig";
+import { JXL_SESSION, JXL_REPLY_PACK } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { returnUrl, mode, bundleTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "bypass" | "subscriber_topup" | "reading_download" | "followup" | "bundle" | "reply_pack" | "jxl_session";
+      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "jxl_session";
       bundleTier?: string;
     };
 
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       const client = await clerkClient();
       const buyer = await client.users.getUser(userId);
       const firstPaidReadingUsed = buyer.publicMetadata?.firstPaidReadingUsed === true;
-      const unitAmount = firstPaidReadingUsed ? ONE_TIME_READING_PRICE : FIRST_PAID_READING_PRICE;
+      const unitAmount = firstPaidReadingUsed ? READING_PRICE : READING_FIRST_PRICE;
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
               name: "Astrological Reading",
               description: firstPaidReadingUsed
                 ? "One full personalized astrological reading"
-                : "Your first full reading — $2 to begin",
+                : "Your first full reading — 50% off to begin",
             },
             unit_amount: unitAmount,
           },
@@ -70,8 +70,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Subscription — $12.99/mo ──────────────────────────────────────────────
+    // ── Subscription — $12.99/mo or $16/mo ────────────────────────────────────
     if (mode === "subscription") {
+      // tier comes in from the client: "sub_base" or "sub_plus"
+      const tier = SUB_TIERS[bundleTier === "sub_plus" ? "sub_plus" : "sub_base"];
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "subscription",
@@ -79,82 +82,17 @@ export async function POST(request: NextRequest) {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: SUBSCRIPTION_TIER.name, description: SUBSCRIPTION_TIER.tagline },
-            unit_amount: SUBSCRIPTION_TIER.price,
+            product_data: { name: tier.name, description: tier.tagline },
+            unit_amount: tier.price,
             recurring: { interval: "month" },
           },
           quantity: 1,
         }],
-        metadata: { userId, tier: SUBSCRIPTION_TIER.tier, mode: "subscription" },
+        // CRITICAL: userId must live on the SUBSCRIPTION, not just the session —
+        // renewals have no session, so the renewal webhook reads it from here.
+        subscription_data: { metadata: { userId, tier: tier.key } },
+        metadata: { userId, tier: tier.key, mode: "subscription" },
         success_url: `${returnUrl}?payment=success&mode=subscription`,
-        cancel_url: `${returnUrl}?payment=cancelled`,
-      });
-      return NextResponse.json({ url: session.url });
-    }
-
-    // ── Cooldown bypass — $6.00 ───────────────────────────────────────────────
-    if (mode === "bypass") {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "Cooldown Bypass",
-              description: "Skip your cooldown period and start a fresh cycle immediately",
-            },
-            unit_amount: COOLDOWN_BYPASS_PRICE,
-          },
-          quantity: 1,
-        }],
-        metadata: { userId, mode: "bypass" },
-        success_url: `${returnUrl}?payment=success&mode=bypass`,
-        cancel_url: `${returnUrl}?payment=cancelled`,
-      });
-      return NextResponse.json({ url: session.url });
-    }
-
-    // ── Subscriber top-up ─────────────────────────────────────────────────────
-    if (mode === "subscriber_topup") {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: { name: SUBSCRIBER_TOPUP.name, description: SUBSCRIBER_TOPUP.description },
-            unit_amount: SUBSCRIBER_TOPUP.price,
-          },
-          quantity: 1,
-        }],
-        metadata: {
-          userId,
-          mode: "subscriber_topup",
-          credits: SUBSCRIBER_TOPUP.credits,
-          pack: SUBSCRIBER_TOPUP.pack,
-        },
-        success_url: `${returnUrl}?payment=success&mode=subscriber_topup`,
-        cancel_url: `${returnUrl}?payment=cancelled`,
-      });
-      return NextResponse.json({ url: session.url });
-    }
-
-    // ── Reading download ──────────────────────────────────────────────────────
-    if (mode === "reading_download") {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: { name: "Download Your Reading", description: "Save your full reading as a PDF" },
-            unit_amount: DOWNLOAD_PRICE,
-          },
-          quantity: 1,
-        }],
-        metadata: { userId, mode: "reading_download" },
-        success_url: `${returnUrl}?payment=success&mode=reading_download`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });
@@ -162,6 +100,8 @@ export async function POST(request: NextRequest) {
 
     // ── Follow-up question ────────────────────────────────────────────────────
     if (mode === "followup") {
+      // Follow-up pricing from paywallConfig
+      const followupPrice = 200; // $2.00
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
@@ -169,7 +109,7 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: { name: "Ask a Follow-Up", description: "Get a deeper answer on your reading" },
-            unit_amount: FOLLOWUP_PRICE,
+            unit_amount: followupPrice,
           },
           quantity: 1,
         }],
@@ -180,36 +120,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Reading bundle ────────────────────────────────────────────────────────
-    if (mode === "bundle") {
-      if (!bundleTier || !isValidBundleTier(bundleTier)) {
-        return NextResponse.json({ error: "Invalid bundleTier" }, { status: 400 });
-      }
-      const bundle = BUNDLE_PACKS[bundleTier];
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: { name: bundle.name, description: bundle.description },
-            unit_amount: bundle.price,
-          },
-          quantity: 1,
-        }],
-        metadata: {
-          userId,
-          mode: "bundle",
-          bundleTier: bundle.key,
-          credits: bundle.credits,
-        },
-        success_url: `${returnUrl}?payment=success&mode=bundle`,
-        cancel_url: `${returnUrl}?payment=cancelled`,
-      });
-      return NextResponse.json({ url: session.url });
-    }
-
-     if (mode === "reply_pack") {
+    // ── Reply pack (legacy — kept for backward compatibility) ────────────────
+    if (mode === "reply_pack") {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
@@ -230,6 +142,33 @@ export async function POST(request: NextRequest) {
           replyCredits: 2,
         },
         success_url: `${returnUrl}?payment=success&mode=reply_pack`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── JXL reply pack — $6.00 for 3 replies ──────────────────────────────────
+    if (mode === "jxl_reply_pack") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { 
+              name: JXL_REPLY_PACK.name, 
+              description: JXL_REPLY_PACK.tagline 
+            },
+            unit_amount: JXL_REPLY_PACK.price,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "jxl_reply_pack",
+          jxlReplyCredits: JXL_REPLY_PACK.replies,
+        },
+        success_url: `${returnUrl}?payment=success&mode=jxl_reply_pack`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });

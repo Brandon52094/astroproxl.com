@@ -4,16 +4,8 @@ import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
 import {
-  JXL_REPLIES_PER_SESSION,
-  JXL_FREE_SESSION_REPLIES,
   JXL_MAX_REPLIES_PER_CONVERSATION,
-  JXL_SUB_MAX_PER_DAY,
-  JXL_SUB_MAX_PER_MONTH,
-  JXL_DAILY_CAP_MESSAGE,
-  JXL_MONTHLY_CAP_MESSAGE,
   JXL_CONVERSATION_CAP_MESSAGE,
-  jxlDayKey,
-  jxlMonthKey,
 } from "@/lib/jxlConfig";
 
 /**
@@ -33,7 +25,7 @@ import {
  * deleted along with /api/jxl/session and the session-tier config.
  */
 
-const REPLIES_PER_SESSION = JXL_REPLIES_PER_SESSION;
+const REPLIES_PER_SESSION = JXL_MAX_REPLIES_PER_CONVERSATION;
 
 interface PlanetPlacement {
   name: string;
@@ -602,17 +594,18 @@ export async function POST(request: NextRequest) {
     // MEDIUM: reading proceeds in full; this rides along with the response.
     const careNote = getCareNote(risk);
 
-    // ── JXL access model (Step 5) ──────────────────────────────────────────
-    // Assembles `metaUpdate` but writes NOTHING yet — the charge is applied
-    // only after a successful reading (see below), so a model/parse failure
-    // costs the person nothing.
+    // ── JXL access model ───────────────────────────────────────────────────
+    // 1 credit opens a CONVERSATION. Turns inside it are free, gated only by the
+    // per-conversation wall. The debit happens once, on the first turn.
+    // Assembles `metaUpdate` but writes NOTHING yet — the charge lands only after
+    // a successful reading, so a model/parse failure costs the person nothing.
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
     const isSubscribed = metadata?.isSubscribed === true;
     const jxlCredits = Number(metadata?.jxlCredits ?? 0);
-    const replyCredits = Number(metadata?.replyCredits ?? 0);
+    const jxlReplyCredits = Number(metadata?.jxlReplyCredits ?? 0);
     const jxlFreeUsedAt = metadata?.jxlFreeUsedAt as string | undefined;
     const hasFreeSession = !jxlFreeUsedAt;
 
@@ -620,7 +613,9 @@ export async function POST(request: NextRequest) {
     const turnCount = historyLen + 1;
     const isNewSession = historyLen === 0;
 
-    // Per-conversation ceiling — wellbeing, not billing. Everyone, subs included.
+    // ── Per-conversation safety wall — unpurchasable, everyone, incl. subs ──
+    // COUNTED turns. The included replies live under this ceiling; past it, no
+    // purchase is accepted. Wellbeing, not billing. Resets on a fresh conversation.
     if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
       return NextResponse.json(
         { error: JXL_CONVERSATION_CAP_MESSAGE, code: "JXL_CONVERSATION_CAP" },
@@ -629,67 +624,30 @@ export async function POST(request: NextRequest) {
     }
 
     let metaUpdate: Record<string, unknown> | null = null;
-    let repliesRemainingAfter = Infinity;
 
-    if (isSubscribed) {
-      // No credits burned. Capped by sessions/day + sessions/month, counted
-      // only when a fresh conversation (empty history) starts.
-      if (isNewSession) {
-        const today = jxlDayKey();
-        const month = jxlMonthKey();
-        const dayCount = metadata?.jxlDayKey === today ? Number(metadata?.jxlDayCount ?? 0) : 0;
-        const monthCount = metadata?.jxlMonthKey === month ? Number(metadata?.jxlMonthCount ?? 0) : 0;
-
-        if (dayCount >= JXL_SUB_MAX_PER_DAY) {
-          return NextResponse.json(
-            { error: JXL_DAILY_CAP_MESSAGE, code: "JXL_DAILY_CAP" },
-            { status: 402 }
-          );
-        }
-        if (monthCount >= JXL_SUB_MAX_PER_MONTH) {
-          return NextResponse.json(
-            { error: JXL_MONTHLY_CAP_MESSAGE, code: "JXL_MONTHLY_CAP" },
-            { status: 402 }
-          );
-        }
-
-        metaUpdate = {
-          jxlDayKey: today,
-          jxlDayCount: dayCount + 1,
-          jxlMonthKey: month,
-          jxlMonthCount: monthCount + 1,
-        };
-      }
-      repliesRemainingAfter = JXL_MAX_REPLIES_PER_CONVERSATION - turnCount;
-    } else {
-      // Non-subscribers spend one credit per reply.
-      const freeGrant = isNewSession && hasFreeSession ? JXL_FREE_SESSION_REPLIES : 0;
-      const availableBefore = freeGrant + jxlCredits + replyCredits;
-
-      if (availableBefore <= 0) {
+    if (isNewSession) {
+      // OPENING a conversation costs exactly one credit, in priority order:
+      // free session (once ever) → JXL credit → JXL reply-pack credit.
+      // Subscribers spend a jxlCredit like everyone else (no separate caps).
+      if (hasFreeSession) {
+        metaUpdate = { jxlFreeUsedAt: new Date().toISOString() };
+      } else if (jxlCredits > 0) {
+        metaUpdate = { jxlCredits: jxlCredits - 1 };
+      } else if (jxlReplyCredits > 0) {
+        metaUpdate = { jxlReplyCredits: jxlReplyCredits - 1 };
+      } else {
         return NextResponse.json(
           { error: "Your session is complete.", code: "NO_JXL_ACCESS" },
           { status: 402 }
         );
       }
-
-      if (freeGrant > 0) {
-        // First-ever free session: stamp it, bank the 3 replies, spend one now.
-        metaUpdate = {
-          jxlFreeUsedAt: new Date().toISOString(),
-          jxlCredits: jxlCredits + freeGrant - 1,
-        };
-      } else if (jxlCredits > 0) {
-        metaUpdate = { jxlCredits: jxlCredits - 1 };
-      } else {
-        metaUpdate = { replyCredits: replyCredits - 1 };
-      }
-
-      repliesRemainingAfter = availableBefore - 1;
+    } else {
+      // CONTINUING an open conversation. Turns 2-8 are free — already paid for
+      // when it opened. No debit, just the wall (above).
+      metaUpdate = null;
     }
 
-    const isFinalTurn =
-      repliesRemainingAfter <= 0 || turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;
+    const isFinalTurn = turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;
     // ── End access model ───────────────────────────────────────────────────
 
     // Already parsed above for the crisis check — the request stream can only

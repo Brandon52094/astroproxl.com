@@ -2,7 +2,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 const JXL_FIRST_READING_CREDITS = 6;
-const CREDITS_PER_READING = 4; // must match readings/route.ts eligibility gate
+const CREDITS_PER_READING = 1; // 1 credit = 1 reading (was 4)
 const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000; // 1 week — must match readings/route.ts
 
 export async function POST() {
@@ -17,22 +17,14 @@ export async function POST() {
     const metadata = user.publicMetadata;
 
     const current = Number(metadata?.readingsCompleted ?? 0);
-    const next = Math.min(current + 1, 4);
-    const hitCooldown = next === 4;
+    const next = current + 1; // no cap — cooldowns removed, counter just tracks
     const isFirstReading = current === 0;
     const isSubscribed = metadata?.isSubscribed === true;
 
     // ── Was THIS reading free, or paid with credits? ──────────────────────────
-    // Mirror the EXACT eligibility logic in /api/readings so the gate and the
-    // accounting never drift. A reading is "free" when the weekly free slot is
-    // available; otherwise it was paid for out of the credit balance.
-    //
-    // This is the fix for the leak: the old code only stamped freeReadingUsedAt
-    // when isFirstReading was true. After the first reading, readingsCompleted
-    // was no longer 0, so the weekly free reading NEVER re-stamped — which left
-    // the reset gate permanently open (now >= a fixed old date is always true),
-    // handing out unlimited free readings from week two onward. We now re-stamp
-    // on every free reading, first or weekly.
+    // Mirror the eligibility logic in /api/readings so the gate and accounting
+    // never drift. A reading is "free" when the weekly free slot is available;
+    // otherwise it was paid for out of the credit balance.
     const firstReadingUsed = metadata?.firstReadingUsed === true;
     const freeReadingUsedAt = metadata?.freeReadingUsedAt
       ? new Date(metadata.freeReadingUsedAt as string)
@@ -58,16 +50,13 @@ export async function POST() {
         readingsCompleted: next,
         firstReadingUsed: true,
         credits: newCredits,
-        freeRepliesRemaining: 2,
+        freeRepliesRemaining: 1, // regular readings include 1 free reply
         jxlCredits: isFirstReading
           ? currentJxlCredits + jxlCreditsToGrant
           : currentJxlCredits,
-        // Re-stamp on EVERY free reading (first OR weekly), not just the first.
-        // This is what keeps the weekly reset from staying permanently open.
+        // Re-stamp on EVERY free reading (first OR weekly), keeping the weekly
+        // reset from staying permanently open.
         ...(tookFreeReading ? { freeReadingUsedAt: new Date().toISOString() } : {}),
-        ...(hitCooldown && !metadata?.cooldownStartedAt
-          ? { cooldownStartedAt: new Date().toISOString() }
-          : {}),
       },
     });
 
@@ -75,14 +64,12 @@ export async function POST() {
       `[reading-complete] ${userId} — readingsCompleted: ${current} → ${next}` +
         (isFirstReading ? ` — granted ${jxlCreditsToGrant} JXL credits` : "") +
         (tookFreeReading ? " — free reading, re-stamped freeReadingUsedAt" : "") +
-        (paidWithCredits ? ` — deducted ${CREDITS_PER_READING} credits (${currentCredits} → ${newCredits})` : "") +
-        (isSubscribed ? " — subscriber, no charge" : "") +
-        (hitCooldown ? " — cooldown started" : "")
+        (paidWithCredits ? ` — deducted ${CREDITS_PER_READING} credit (${currentCredits} → ${newCredits})` : "") +
+        (isSubscribed ? " — subscriber, no charge" : "")
     );
 
     return NextResponse.json({
       readingsCompleted: next,
-      cooldownStarted: hitCooldown,
       jxlCreditsGranted: jxlCreditsToGrant,
       wasFree: tookFreeReading,
       creditsRemaining: newCredits,
