@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Crown, Zap, Infinity, Check } from "lucide-react";
+import { SUB_TIERS } from "@/lib/paywallConfig";
 
 interface UserStatus {
   firstReadingUsed: boolean;
@@ -21,7 +22,7 @@ interface AccessUnlimitedPanelProps {
 }
 
 const FEATURES = [
-  { icon: Crown, label: "8 Readings, not 1", desc: "Get a full week of insights" },
+  { icon: Crown, label: "4 or 8 Readings/mo", desc: "Get a full week of insights" },
   { icon: Zap, label: "Ask Follow Ups Free", desc: "No extra charges for clarity" },
   { icon: Infinity, label: "No 2-week wait", desc: "Read when you need it" },
   { icon: Sparkles, label: "Full Chart Access", desc: "Birth chart, transits, cycles" },
@@ -29,12 +30,14 @@ const FEATURES = [
 
 const EXTRA_FEATURES = [
   "Downloads Always Free",
-  "No $6 to skip the wait",
+  "No cooldowns, ever",
   "Unlimited Access Features",
 ];
 
 export default function AccessUnlimitedPanel({ userStatus }: AccessUnlimitedPanelProps) {
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
+  const [tier, setTier] = useState<"sub_base" | "sub_plus">("sub_base");
+  const activeTier = SUB_TIERS[tier];
   const isSubscribed = userStatus?.isSubscribed || false;
 
   const handleSubscribe = async () => {
@@ -46,7 +49,7 @@ export default function AccessUnlimitedPanel({ userStatus }: AccessUnlimitedPane
         body: JSON.stringify({
           returnUrl: `${window.location.origin}/reading/intake`,
           mode: "subscription",
-          paywallIndex: 1,
+          bundleTier: tier, // "sub_base" or "sub_plus" — checkout reads this to pick the tier
         }),
       });
       const data = await res.json();
@@ -144,6 +147,39 @@ export default function AccessUnlimitedPanel({ userStatus }: AccessUnlimitedPane
           ))}
         </motion.div>
 
+        {/* ── Tier toggle ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.18 }}
+          className="w-full mb-4"
+        >
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+            {(["sub_base", "sub_plus"] as const).map((k) => {
+              const t = SUB_TIERS[k];
+              const on = tier === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setTier(k)}
+                  className={
+                    "rounded-xl px-3 py-3 text-center transition-all " +
+                    (on ? "bg-amber-300/20 border border-amber-300/40" : "border border-transparent")
+                  }
+                >
+                  <p className={"text-sm font-semibold " + (on ? "text-amber-200" : "text-slate-300")}>
+                    {t.readings} readings + {t.jxl} JXL
+                  </p>
+                  <p className={"text-[11px] " + (on ? "text-amber-300/80" : "text-slate-500")}>
+                    {t.displayPrice}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+
         <motion.button
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -153,11 +189,11 @@ export default function AccessUnlimitedPanel({ userStatus }: AccessUnlimitedPane
           disabled={isSubscribeLoading}
           className="w-full h-14 rounded-2xl bg-gradient-to-r from-amber-300/20 to-amber-400/10 border border-amber-300/30 text-amber-200 text-base font-semibold transition hover:bg-amber-300/30 disabled:opacity-60"
         >
-          {isSubscribeLoading ? "Loading…" : "Unlock All — $12.99/mo"}
+          {isSubscribeLoading ? "Loading…" : `Unlock All — ${activeTier.displayPrice}`}
         </motion.button>
 
         <p className="text-center text-xs text-slate-500 mt-4">
-          Cancel anytime · 7-day free trial
+          Cancel anytime
         </p>
 
         {/* Swipe back hint */}

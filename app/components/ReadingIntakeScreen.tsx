@@ -8,7 +8,6 @@ import {
   Wallet,
   Sparkles,
   Lock,
-  Timer,
   ChevronRight,
   ChevronLeft,
 } from "lucide-react";
@@ -210,15 +209,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
   },
 };
 
-function formatTimeRemaining(expiresAt: string): string {
-  const ms = new Date(expiresAt).getTime() - Date.now();
-  if (ms <= 0) return "soon";
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  if (days > 0) return `${days}d ${hours}h`;
-  return `${hours}h`;
-}
-
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 const CARD_TITLES = ["Unlimited Access"];
 
@@ -233,7 +223,6 @@ export default function ReadingIntakeScreen({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
-  const [isBypassLoading, setIsBypassLoading] = useState(false);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
 
@@ -399,10 +388,9 @@ export default function ReadingIntakeScreen({
   const canSubmit = useMemo(() => {
     if (!selectedArea) return false;
     if (chartStatus !== "ready") return false;
-    if (userStatus?.onCooldown) return false;
     if (selectedArea === "other") return true;
     return question.trim().length > 0;
-  }, [question, selectedArea, chartStatus, userStatus]);
+  }, [question, selectedArea, chartStatus]);
 
   const scrollClusterIntoViewThenFocus = useCallback(() => {
     if (scrollFocusTimeoutRef.current) clearTimeout(scrollFocusTimeoutRef.current);
@@ -441,7 +429,8 @@ export default function ReadingIntakeScreen({
       const isSubscribed = userStatus?.isSubscribed === true;
 
       if (!hasCredits && !isSubscribed) {
-        trackTtq("InitiateCheckout", { content_id: selectedArea, value: 4.00, currency: "USD" });
+        const readingValue = userStatus?.firstPaidReadingUsed ? 4.00 : 2.00;
+        trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
         const checkoutRes = await fetch("/api/stripe/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -461,25 +450,6 @@ export default function ReadingIntakeScreen({
       setIsCreatingReading(false);
     }
   };
-
-  const handleBypass = async () => {
-    setIsBypassLoading(true);
-    trackTtq("InitiateCheckout", { content_id: "bypass", value: 6.00, currency: "USD" });
-    try {
-      await fetch("/api/user/bypass-reset", { method: "POST" });
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnUrl: `${window.location.origin}/reading/intake`, mode: "bypass" }),
-      });
-      const data = await response.json();
-      if (data.url) window.location.href = data.url;
-    } catch { }
-    finally { setIsBypassLoading(false); }
-  };
-
-  const onCooldown = userStatus?.onCooldown ?? false;
-  const readingsCompleted = userStatus?.readingsCompleted ?? 0;
 
   const getAreaColors = useCallback((areaId: string) => {
     const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
@@ -511,14 +481,14 @@ export default function ReadingIntakeScreen({
       {!userStatus?.isSubscribed ? (
         <>
           <div className="space-y-2">
-            {["Unlimited Readings", "Unlimited Replies", "Daily Transits & Moon Cycles", "Free Reading Downloads.", "New Premium Feature in Development", "Lock in a Low Price Now"].map(perk => (
+            {["4 or 8 readings every month", "Follow-up replies included", "Daily Transits & Moon Cycles", "Free Reading Downloads", "New Premium Feature in Development", "Lock in a Low Price Now"].map(perk => (
               <div key={perk} className="flex items-center gap-2.5">
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">✓</span>
                 <span className="text-[12px] text-slate-300">{perk}</span>
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-amber-300/60">Savings: $41.01 — about 76% off.</p>
+          <p className="text-[11px] text-amber-300/60">Less than two single readings a month.</p>
         </>
       ) : (
         <div className="flex flex-col items-center justify-center py-4 flex-1">
@@ -680,7 +650,7 @@ export default function ReadingIntakeScreen({
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    AstroProXL
+                    AstroXL
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
@@ -693,224 +663,130 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Reading cycle — kept for cooldown tracking ── */}
-          {((userStatus?.readingsCompleted ?? 0) > 0 || onCooldown) && (
-            <div className="mb-1 flex w-full justify-center">
-              <div className="w-full max-w-[280px] space-y-2">
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-white/90">Reading cycle</span>
-                  <span className="text-[10px] text-white/90">{onCooldown ? 4 : readingsCompleted} / 4</span>
-                </div>
-                <div className="flex gap-1.5">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
-                      {(onCooldown || i < readingsCompleted) && (
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: "100%" }}
-                          transition={{ duration: 0.6, delay: i * 0.1, ease: "easeOut" }}
-                          className="absolute inset-y-0 left-0 rounded-full"
-                          style={{ backgroundColor: "#2DD4BF" }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* ── AREA BUTTONS ── */}
+          <section className="space-y-3">
+            {AREAS.map((area) => {
+              const Icon = area.icon;
+              const isSelected = selectedArea === area.id;
+              const areaColors = getAreaColors(area.id);
 
-          {/* ── Swipe-left discovery cue ── */}
-          <button
-            type="button"
-            onClick={() => onSwipeLeft?.()}
-            className="swipe-cue tap-fix mx-auto mt-1 mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Swipe Left to Explore
-          </button>
-
-          {onCooldown ? (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="relative">
-              <div className="pointer-events-none select-none space-y-3 blur-[5px] opacity-30">
-                {AREAS.map((area) => {
-                  const Icon = area.icon;
-                  return (
-                    <div key={area.id} className="standard-shadow w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4">
-                      <div className="flex items-start gap-3">
-                        <motion.div
-                          animate={getIconPulseAnimation(false)}
-                          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-slate-300"
-                        >
-                          <Icon className="h-4 w-4" />
-                        </motion.div>
-                        <div>
-                          <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
-                          <p className="mt-1 text-sm text-slate-400">{area.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center px-2">
-                <div className="cooldown-glow w-full rounded-[28px] border border-indigo-400/20 bg-[#050816]/95 px-6 py-6 text-center backdrop-blur-sm">
-                  <div className="mb-3 flex justify-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-400/10">
-                      <Timer className="h-5 w-5 text-indigo-300" />
-                    </div>
-                  </div>
-                  <h2 className="mb-2 text-[16px] font-semibold text-white">Cooldown period active</h2>
-                  <p className="mb-1 text-[13px] leading-5 text-slate-400">
-                    We care about your wellbeing — we've implemented a cooldown period between reading cycles.
-                  </p>
-                  {userStatus?.cooldownExpiresAt && (
-                    <p className="mt-2 text-[12px] text-indigo-300/80">Resets in {formatTimeRemaining(userStatus.cooldownExpiresAt)}</p>
+              return (
+                <motion.button
+                  key={area.id}
+                  ref={isSelected ? clusterTopRef : undefined}
+                  transition={{ duration: 0.12 }}
+                  type="button"
+                  onClick={() => {
+                    const isFirstSelection = selectedArea !== area.id;
+                    setSelectedArea(area.id);
+                    setQuestion("");
+                    trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
+                    if (isFirstSelection && area.id !== "other") scrollClusterIntoViewThenFocus();
+                  }}
+                  data-selected={isSelected ? "true" : "false"}
+                  className={cn(
+                    "tap-fix selected-card-shell standard-shadow w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
+                    isSelected && "selected-card-glow",
+                    !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
                   )}
-                  <div className="mt-5 border-t border-white/10 pt-8">
-                    <p className="mb-3 text-[12px] leading-5 text-slate-400">Once per cycle.</p>
-                    <motion.button
-                      whileTap={{ scale: 0.97 }}
-                      transition={{ duration: 0.12 }}
-                      type="button"
-                      onClick={handleBypass}
-                      disabled={isBypassLoading}
-                      className="rounded-2xl bg-indigo-400 px-6 py-2.5 text-[13px] font-semibold text-slate-950 transition hover:bg-indigo-300 disabled:opacity-60"
-                    >
-                      {isBypassLoading ? "Loading…" : "Skip cooldown — $6.00"}
-                    </motion.button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ) : (
-            <>
-              {/* ── AREA BUTTONS ── */}
-              <section className="space-y-3">
-                {AREAS.map((area) => {
-                  const Icon = area.icon;
-                  const isSelected = selectedArea === area.id;
-                  const areaColors = getAreaColors(area.id);
-
-                  return (
-                    <motion.button
-                      key={area.id}
-                      ref={isSelected ? clusterTopRef : undefined}
-                      transition={{ duration: 0.12 }}
-                      type="button"
-                      onClick={() => {
-                        const isFirstSelection = selectedArea !== area.id;
-                        setSelectedArea(area.id);
-                        setQuestion("");
-                        trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
-                        if (isFirstSelection && area.id !== "other") scrollClusterIntoViewThenFocus();
-                      }}
-                      data-selected={isSelected ? "true" : "false"}
+                  style={{
+                    willChange: "transform, opacity",
+                    ["--selected-wash" as string]: areaColors.gradient,
+                    ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 40px ${areaColors.glow}`,
+                    backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
+                    borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
+                  } as React.CSSProperties}
+                >
+                  {isSelected && (
+                    <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
+                  )}
+                  <div className="relative z-[1] flex items-start gap-3">
+                    <motion.div
+                      animate={getIconPulseAnimation(isSelected)}
                       className={cn(
-                        "tap-fix selected-card-shell standard-shadow w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
-                        isSelected && "selected-card-glow",
-                        !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
+                        "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
+                        isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
                       )}
                       style={{
-                        willChange: "transform, opacity",
-                        ["--selected-wash" as string]: areaColors.gradient,
-                        ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 40px ${areaColors.glow}`,
-                        backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
-                        borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
-                      } as React.CSSProperties}
+                        borderColor: isSelected ? areaColors.border : undefined,
+                        background: isSelected ? areaColors.gradient : undefined,
+                        color: isSelected ? areaColors.text : undefined,
+                        boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
+                      }}
                     >
-                      {isSelected && (
-                        <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
-                      )}
-                      <div className="relative z-[1] flex items-start gap-3">
-                        <motion.div
-                          animate={getIconPulseAnimation(isSelected)}
-                          className={cn(
-                            "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
-                            isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
+                      <Icon className="h-4 w-4" />
+                    </motion.div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
+                        <AnimatePresence>
+                          {isSelected && (
+                            <motion.span
+                              initial={{ opacity: 0, scale: 0.92, y: 4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.92, y: 4 }}
+                              transition={{ duration: 0.18, ease: "easeOut" }}
+                              className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
+                              style={{ borderColor: "rgba(255,255,255,0.3)", backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderStyle: "solid", boxShadow: "0 0 20px rgba(255,255,255,0.08)" }}
+                            >
+                              <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)", transform: "translateX(-155%)" }} />
+                              <span className="relative z-[1]">Selected</span>
+                            </motion.span>
                           )}
-                          style={{
-                            borderColor: isSelected ? areaColors.border : undefined,
-                            background: isSelected ? areaColors.gradient : undefined,
-                            color: isSelected ? areaColors.text : undefined,
-                            boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
-                          }}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </motion.div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
-                            <AnimatePresence>
-                              {isSelected && (
-                                <motion.span
-                                  initial={{ opacity: 0, scale: 0.92, y: 4 }}
-                                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                                  exit={{ opacity: 0, scale: 0.92, y: 4 }}
-                                  transition={{ duration: 0.18, ease: "easeOut" }}
-                                  className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
-                                  style={{ borderColor: "rgba(255,255,255,0.3)", backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderStyle: "solid", boxShadow: "0 0 20px rgba(255,255,255,0.08)" }}
-                                >
-                                  <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)", transform: "translateX(-155%)" }} />
-                                  <span className="relative z-[1]">Selected</span>
-                                </motion.span>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                          <motion.p
-                            className="mt-1 text-sm leading-5"
-                            animate={{ color: isSelected ? "rgba(241, 245, 249, 0.92)" : "rgba(148, 163, 184, 1)" }}
-                            transition={{ duration: 0.24, ease: "easeOut" }}
-                          >
-                            {area.description}
-                          </motion.p>
-                        </div>
+                        </AnimatePresence>
                       </div>
-                    </motion.button>
-                  );
-                })}
-              </section>
-
-              {/* ── TEXTAREA ── */}
-              <AnimatePresence>
-                {selectedArea && selectedArea !== "other" && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                    className="mt-6 space-y-2"
-                  >
-                    <div
-                      className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px] standard-shadow"
-                      style={{ transition: "box-shadow 0.3s ease, border-color 0.3s ease" }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)"; e.currentTarget.style.boxShadow = "0 0 50px rgba(255,255,255,0.15), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
-                    >
-                      <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
-                        <Textarea
-                          id="question"
-                          ref={textareaRef}
-                          rows={5}
-                          value={question}
-                          onChange={(e) => setQuestion(e.target.value)}
-                          placeholder={AREAS.find(a => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
-                          className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
-                          style={{ backgroundColor: "transparent" }}
-                        />
-                      </div>
+                      <motion.p
+                        className="mt-1 text-sm leading-5"
+                        animate={{ color: isSelected ? "rgba(241, 245, 249, 0.92)" : "rgba(148, 163, 184, 1)" }}
+                        transition={{ duration: 0.24, ease: "easeOut" }}
+                      >
+                        {area.description}
+                      </motion.p>
                     </div>
-                    <p className="text-xs leading-5 text-slate-300/80">Be specific. The clearer your question, the sharper the reading.</p>
-                  </motion.section>
-                )}
-              </AnimatePresence>
-            </>
-          )}
+                  </div>
+                </motion.button>
+              );
+            })}
+          </section>
+
+          {/* ── TEXTAREA ── */}
+          <AnimatePresence>
+            {selectedArea && selectedArea !== "other" && (
+              <motion.section
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="mt-6 space-y-2"
+              >
+                <div
+                  className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px] standard-shadow"
+                  style={{ transition: "box-shadow 0.3s ease, border-color 0.3s ease" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)"; e.currentTarget.style.boxShadow = "0 0 50px rgba(255,255,255,0.15), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+                >
+                  <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
+                    <Textarea
+                      id="question"
+                      ref={textareaRef}
+                      rows={5}
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      placeholder={AREAS.find(a => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
+                      className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
+                      style={{ backgroundColor: "transparent" }}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs leading-5 text-slate-300/80">Be specific. The clearer your question, the sharper the reading.</p>
+              </motion.section>
+            )}
+          </AnimatePresence>
 
           {/* ── SUBMIT ── */}
           <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
-            {!onCooldown && selectedArea && (
+            {selectedArea && (
               <Button
                 type="button"
                 onClick={handleStartReading}
@@ -970,13 +846,17 @@ export default function ReadingIntakeScreen({
                             type="button"
                             onClick={() => {
                               setIsSubscribeLoading(true);
-                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12.99, currency: "USD" });
+                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12, currency: "USD" });
                               (async () => {
                                 try {
                                   const res = await fetch("/api/stripe/checkout", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ returnUrl: `${window.location.origin}/reading/intake`, mode: "subscription" }),
+                                    body: JSON.stringify({
+                                      returnUrl: `${window.location.origin}/reading/intake`,
+                                      mode: "subscription",
+                                      bundleTier: "sub_base",
+                                    }),
                                   });
                                   const data = await res.json();
                                   if (data.url) window.location.href = data.url;
@@ -985,7 +865,7 @@ export default function ReadingIntakeScreen({
                             }}
                             className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
                           >
-                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — $12.99/mo"}
+                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — from $12/mo"}
                           </motion.button>
                         </div>
                       )}
