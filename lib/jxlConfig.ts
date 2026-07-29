@@ -1,73 +1,55 @@
 // lib/jxlConfig.ts
 //
-// JXL access model — rebuilt from the old 5-tier ($4.99 × 5) design.
+// JXL access model — aligned to the unified pricing model in paywallConfig.ts.
 //
 //   • One FREE session, ever (the hook — experience the accuracy once).
-//   • $6 per session after that, 3 replies each.
-//   • Out of replies mid-session → $2 for 2 more (reuses the existing
-//     reply_pack checkout/webhook, so nothing new to build there).
-//   • Subscribers get JXL with CAPS, not "unlimited":
-//       ~10 sessions / month, max 2 / day, 8 replies max per conversation.
-//     Daily caps protect the person from spiralling; the monthly cap protects
-//     margin from the rare heavy tail. Nobody healthy hits these.
+//     The free session includes 2 replies, same as a paid one.
+//   • $6 per session after that, 2 replies included.
+//   • Out of replies mid-conversation → $3 for 2 more (a JXL-ONLY reply pack —
+//     distinct from the $2 regular-reading reply pack; the two pools never mix).
+//   • Subscribers spend fixed JXL credits (4 on base / 8 on plus), exactly like
+//     every other credit in the system — NO separate day/month cap system.
 //
-// The old JxlTier / JXL_PACKS session-ladder is gone. A JXL session is now a
-// single flat product, so there is only one pack.
+//   SAFETY WALL (unpurchasable, per-conversation, resets on a fresh conversation):
+//     Hard stop at 8 COUNTED replies. The 2 included replies are free and do NOT
+//     count toward this. Past 8 counted, no purchase is accepted — the concern is
+//     spiralling on one subject, not revenue. Matches the regular-reading wall.
+//
+// A JXL session is a single flat product; there is only one pack.
 
 // ── The one paid session ─────────────────────────────────────────────────────
 export const JXL_SESSION = {
   mode: "jxl_session" as const,
   name: "Ask Jxl — 1 Session",
-  tagline: "3 replies · talk through what's actually happening",
-  price: 600, // cents
+  tagline: "Talk through what's actually happening",
+  price: 600,        // cents ($6)
   displayPrice: "$6",
-  replies: 3,
+  firstPrice: 300,   // cents ($3) — first ever JXL, 50% off
+  replies: 2,        // included replies per session
 };
 
 // ── Replies ──────────────────────────────────────────────────────────────────
-export const JXL_REPLIES_PER_SESSION = 3;
+export const JXL_REPLIES_PER_SESSION = 2;      // included, free, uncounted
+export const JXL_FREE_SESSION_REPLIES = 2;     // the one-time free session, same shape
 
-// Mid-session top-up reuses the reply_pack you already built ($2 → 2 replies).
-export const JXL_REPLY_PACK_MODE = "reply_pack" as const;
+// Mid-conversation top-up — JXL-ONLY. Separate mode + pool from the regular
+// reading reply_pack ($2). Grants jxlReplyCredits, never replyCredits.
+export const JXL_REPLY_PACK = {
+  mode: "jxl_reply_pack" as const,
+  name: "2 More JXL Replies",
+  description: "Two more replies to go deeper on what you're working through",
+  price: 300,        // $3.00
+  replies: 2,
+};
 
-// ── Free session (one, ever) ─────────────────────────────────────────────────
-// Presence of `jxlFreeUsedAt` in metadata means the free session is spent.
-// There is intentionally NO renewal window — this is a one-time hook.
-export const JXL_FREE_SESSION_REPLIES = 3;
-
-// ── Subscriber caps ──────────────────────────────────────────────────────────
-// Safety first, cost second. Daily cap is the one that matters for wellbeing:
-// a spiral happens in an evening, not across a month.
-export const JXL_SUB_MAX_PER_DAY = 2;
-export const JXL_SUB_MAX_PER_MONTH = 10;
-
-// Reply ceiling per conversation, for everyone. Past this it's re-asking, not
-// clarity — so it's a wellbeing limit, not just a paid one.
+// ── Per-conversation safety wall (unpurchasable hard stop) ────────────────────
+// COUNTED replies only; the 2 included replies are not counted. Identical to the
+// regular-reading wall. Resets when a new conversation starts.
 export const JXL_MAX_REPLIES_PER_CONVERSATION = 8;
 
-// ── Boundary message — shown when a cap is hit ───────────────────────────────
-export const JXL_DAILY_CAP_MESSAGE =
-  "You've had two sessions today. Sit with what came through — the chart keeps moving even when you're not watching. Come back tomorrow.";
-
-export const JXL_MONTHLY_CAP_MESSAGE =
-  "You've used your sessions for this month. That's not a limit on you — it's space to let the work land. The next window opens next month.";
-
+// ── Boundary message — shown when the wall is hit ────────────────────────────
 export const JXL_CONVERSATION_CAP_MESSAGE =
-  "This is a good place to stop. You have what you need — give it room before asking more.";
+  "This is a good place to stop. You have what you need on this — give it room before asking more. Come back to it fresh.";
 
 // ── Marketing copy ───────────────────────────────────────────────────────────
-// Deliberately NOT "unlimited" — honest, and it doesn't set up the one person
-// who hits a cap to feel cheated.
-export const JXL_SUBSCRIBER_BLURB = "Included with your subscription — as much as you'll realistically need.";
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Local-day key (YYYY-MM-DD) for daily-cap counting. */
-export function jxlDayKey(d: Date = new Date()): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Month key (YYYY-MM) for monthly-cap counting. */
-export function jxlMonthKey(d: Date = new Date()): string {
-  return d.toISOString().slice(0, 7);
-}
+export const JXL_SUBSCRIBER_BLURB = "Included with your subscription.";
