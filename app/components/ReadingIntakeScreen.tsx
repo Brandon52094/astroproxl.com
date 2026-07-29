@@ -23,6 +23,7 @@ import {
   clearIntake,
   clearReading,
 } from "@/lib/chartStore";
+import { SUB_TIERS } from "@/lib/paywallConfig";
 
 declare global {
   interface Window {
@@ -663,6 +664,16 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
+          {/* ── Swipe-left discovery cue ── */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="swipe-cue tap-fix mx-auto mt-1 mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Swipe Left to Explore
+          </button>
+
           {/* ── AREA BUTTONS ── */}
           <section className="space-y-3">
             {AREAS.map((area) => {
@@ -840,33 +851,51 @@ export default function ReadingIntakeScreen({
                       </div>
                       {!userStatus?.isSubscribed && (
                         <div className="p-4 pt-3 border-t border-amber-300/10">
-                          <motion.button
-                            whileTap={{ scale: 0.985 }}
-                            transition={{ duration: 0.12 }}
-                            type="button"
-                            onClick={() => {
-                              setIsSubscribeLoading(true);
-                              trackTtq("InitiateCheckout", { content_id: "subscription", value: 12, currency: "USD" });
-                              (async () => {
-                                try {
-                                  const res = await fetch("/api/stripe/checkout", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      returnUrl: `${window.location.origin}/reading/intake`,
-                                      mode: "subscription",
-                                      bundleTier: "sub_base",
-                                    }),
-                                  });
-                                  const data = await res.json();
-                                  if (data.url) window.location.href = data.url;
-                                } finally { setIsSubscribeLoading(false); }
-                              })();
-                            }}
-                            className="h-10 w-full rounded-xl bg-amber-300/20 border border-amber-300/30 text-amber-200 text-[13px] font-semibold transition hover:bg-amber-300/30"
-                          >
-                            {isSubscribeLoading ? "Loading…" : "Unlock All Features — from $12/mo"}
-                          </motion.button>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(["sub_base", "sub_plus"] as const).map((tierKey) => {
+                              const t = SUB_TIERS[tierKey];
+                              return (
+                                <button
+                                  key={tierKey}
+                                  type="button"
+                                  disabled={isSubscribeLoading}
+                                  onClick={() => {
+                                    setIsSubscribeLoading(true);
+                                    trackTtq("InitiateCheckout", {
+                                      content_id: "subscription",
+                                      value: tierKey === "sub_plus" ? 16 : 12,
+                                      currency: "USD",
+                                    });
+                                    (async () => {
+                                      try {
+                                        const res = await fetch("/api/stripe/checkout", {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({
+                                            returnUrl: `${window.location.origin}/reading/intake`,
+                                            mode: "subscription",
+                                            bundleTier: tierKey,
+                                          }),
+                                        });
+                                        const data = await res.json();
+                                        if (data.url) window.location.href = data.url;
+                                      } finally {
+                                        setIsSubscribeLoading(false);
+                                      }
+                                    })();
+                                  }}
+                                  className="flex flex-col items-center rounded-xl border border-amber-300/30 bg-amber-300/10 px-3 py-3 text-center transition hover:bg-amber-300/20 disabled:opacity-60"
+                                >
+                                  <span className="text-[15px] font-bold text-amber-200">{t.displayPrice}</span>
+                                  <span className="mt-1 text-[11px] leading-4 text-slate-300">
+                                    {t.readings} readings + {t.jxl} JXL
+                                  </span>
+                                  <span className="text-[10px] text-slate-500">every month</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="mt-2 text-center text-[10px] text-slate-500">Cancel anytime</p>
                         </div>
                       )}
                     </div>
