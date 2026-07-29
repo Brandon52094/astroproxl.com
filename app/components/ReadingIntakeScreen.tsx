@@ -211,7 +211,7 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 };
 
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
-const CARD_TITLES = ["Unlimited Access"];
+const CARD_TITLES = ["Choose Your Access"];
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
@@ -471,18 +471,18 @@ export default function ReadingIntakeScreen({
     <div className="space-y-4 flex-1">
       <div>
         <h3 className="text-[15px] font-semibold leading-snug text-white">
-          {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Readings, No Waiting."}
+          {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Clarity. No Waiting."}
         </h3>
         {!userStatus?.isSubscribed && (
           <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-            Need more than one reading a week? This is the best route. Financially & mathematically.
+            Monthly access to deeper readings, JXL follow-ups, and no cooldowns.
           </p>
         )}
       </div>
       {!userStatus?.isSubscribed ? (
         <>
           <div className="space-y-2">
-            {["4 or 8 readings every month", "Follow-up replies included", "Daily Transits & Moon Cycles", "Free Reading Downloads", "New Premium Feature in Development", "Lock in a Low Price Now"].map(perk => (
+            {["Reading credits every month", "JXL follow-up credits every month", "Free reading downloads", "50% off extras after you run out", "No cooldowns, ever"].map(perk => (
               <div key={perk} className="flex items-center gap-2.5">
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">✓</span>
                 <span className="text-[12px] text-slate-300">{perk}</span>
@@ -819,7 +819,7 @@ export default function ReadingIntakeScreen({
 
           <div className="mt-4 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Unlimited Access</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Membership</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
@@ -832,8 +832,8 @@ export default function ReadingIntakeScreen({
                     <Sparkles className="h-4 w-4" />
                   </div>
                   <div className="text-left">
-                    <h2 className="text-[15px] font-semibold text-amber-200">Unlimited Access Dashboard</h2>
-                    <p className="text-[11px] text-slate-400">The Astrological Data, in your hands</p>
+                    <h2 className="text-[15px] font-semibold text-amber-200">Choose Your Access</h2>
+                    <p className="text-[11px] text-slate-400">More readings, more follow-up, no waiting</p>
                   </div>
                 </div>
                 <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-black/20 text-amber-300/70 transition-transform duration-200", isCarouselOpen && "rotate-180")}>
@@ -854,6 +854,7 @@ export default function ReadingIntakeScreen({
                           <div className="grid grid-cols-2 gap-2">
                             {(["sub_base", "sub_plus"] as const).map((tierKey) => {
                               const t = SUB_TIERS[tierKey];
+                              const isHero = tierKey === "sub_plus";
                               return (
                                 <button
                                   key={tierKey}
@@ -863,7 +864,7 @@ export default function ReadingIntakeScreen({
                                     setIsSubscribeLoading(true);
                                     trackTtq("InitiateCheckout", {
                                       content_id: "subscription",
-                                      value: tierKey === "sub_plus" ? 16 : 12,
+                                      value: isHero ? 16 : 12,
                                       currency: "USD",
                                     });
                                     (async () => {
@@ -884,10 +885,22 @@ export default function ReadingIntakeScreen({
                                       }
                                     })();
                                   }}
-                                  className="flex flex-col items-center rounded-xl border border-amber-300/30 bg-amber-300/10 px-3 py-3 text-center transition hover:bg-amber-300/20 disabled:opacity-60"
+                                  className={cn(
+                                    "relative flex flex-col items-center rounded-xl border px-3 py-3 text-center transition disabled:opacity-60",
+                                    isHero
+                                      ? "border-amber-300/60 bg-amber-300/20 hover:bg-amber-300/30"
+                                      : "border-amber-300/25 bg-amber-300/[0.06] hover:bg-amber-300/15"
+                                  )}
                                 >
-                                  <span className="text-[15px] font-bold text-amber-200">{t.displayPrice}</span>
-                                  <span className="mt-1 text-[11px] leading-4 text-slate-300">
+                                  {isHero && (
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-300/50 bg-[#050816] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-300">
+                                      Best Value
+                                    </span>
+                                  )}
+                                  <span className={cn("text-[16px] font-bold", isHero ? "text-amber-100" : "text-amber-200")}>
+                                    {t.displayPrice}
+                                  </span>
+                                  <span className="mt-1 text-[11px] leading-4 text-slate-200">
                                     {t.readings} readings + {t.jxl} JXL
                                   </span>
                                   <span className="text-[10px] text-slate-500">every month</span>
@@ -895,7 +908,12 @@ export default function ReadingIntakeScreen({
                               );
                             })}
                           </div>
-                          <p className="mt-2 text-center text-[10px] text-slate-500">Cancel anytime</p>
+
+                          {/* The strongest honest line in the whole offer */}
+                          <p className="mt-3 text-center text-[11px] font-medium text-amber-300/90">
+                            Double the access for only $4 more
+                          </p>
+                          <p className="mt-1 text-center text-[10px] text-slate-500">Cancel anytime</p>
                         </div>
                       )}
                     </div>
