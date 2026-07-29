@@ -790,7 +790,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
 
       // Known-denied mic → go straight to typing
       if (micPermissionRef.current === "denied") {
-        setError("Microphone access is off. Allow it in your settings, or type instead.");
+        setError("Microphone is blocked. Tap the lock (or aA) icon in your address bar → Microphone → Allow, then reload — or type below.");
         setPhase("composing");
         return;
       }
@@ -833,7 +833,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           stopMeter();
           if (holdTimer.current) clearInterval(holdTimer.current);
           setPhase("denied");
-          setError("Microphone access is off. Allow it in your browser settings, or type instead.");
+          setError("Microphone is blocked. Tap the lock (or aA) icon in your address bar → Microphone → Allow, then reload — or type below.");
         }
       };
 
@@ -894,6 +894,35 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
     setHeard(said);
     void ask(said);
   }, [phase, stopRecognition, stopMeter]);
+
+  // ── Re-ask for the mic ──────────────────────────────────────────────
+  // A soft "no" (dismissed prompt) leaves permission at "prompt" — this
+  // brings the OS dialog right back. A hard Block is sticky at the browser
+  // level and can't be re-summoned, so we point them to unblock instead.
+  const retryMic = useCallback(() => {
+    if (micPermissionRef.current === "denied") {
+      setError(
+        "Microphone is blocked for this site. Tap the lock (or aA) icon in your address bar → Microphone → Allow, then reload."
+      );
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError("Voice input isn't available on this browser — you can type instead.");
+      return;
+    }
+    autoRequestedRef.current = true;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        stream.getTracks().forEach((t) => t.stop());
+        setMicPermission("granted");
+        setError(null);
+        setPhase("idle"); // back to the hold button, ready to speak
+      })
+      .catch(() => {
+        setError("Still no mic access — you can type instead.");
+      });
+  }, []);
 
   // ── Cleanup on unmount ──────────────────────────────────────────────
   useEffect(
@@ -1269,6 +1298,22 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           cursor: pointer;
         }
         .type-instead:disabled { opacity: 0.35; cursor: default; }
+        
+        .mic-retry {
+          display: block;
+          margin: 12px auto 0;
+          padding: 9px 18px;
+          border-radius: 12px;
+          border: 1px solid rgba(94,234,212,0.4);
+          background: rgba(94,234,212,0.08);
+          color: #5eead4;
+          font-size: 13px;
+          font-family: inherit;
+          cursor: pointer;
+          transition: background 200ms ease;
+        }
+        .mic-retry:hover { background: rgba(94,234,212,0.14); }
+
         .heard {
           margin: -6px 0 18px;
           text-align: center;
@@ -1563,6 +1608,11 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
                 Ask
               </button>
             </div>
+            {speechSupported !== false && (
+              <button type="button" className="mic-retry" onClick={retryMic}>
+                🎤 {micPermission === "denied" ? "How to enable mic" : "Use voice instead"}
+              </button>
+            )}
           </>
         ) : (
           <>
