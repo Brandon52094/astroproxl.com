@@ -639,24 +639,37 @@ export default function ReadingIntakeScreen({
         .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
         .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
 
+        /* ── Install teaser — pill button ── */
         .install-teaser {
-          display: block;
-          margin: 32px auto 0;
-          background: none;
-          border: none;
+          display: inline-block;
+          margin: 0 auto 8px;
+          padding: 6px 18px;
+          border-radius: 9999px;
+          border: 1.5px solid rgba(96,165,250,0.5);
+          background: rgba(96,165,250,0.10);
+          backdrop-filter: blur(8px);
           font-size: 11px;
           font-weight: 600;
-          letter-spacing: 0.2em;
+          letter-spacing: 0.15em;
           text-transform: uppercase;
-          color: #60a5fa;
-          text-shadow: 0 0 12px rgba(96,165,250,0.7), 0 0 4px rgba(96,165,250,0.9);
+          color: #93c5fd;
+          text-shadow: 0 0 12px rgba(96,165,250,0.5), 0 0 4px rgba(96,165,250,0.7);
+          box-shadow: 0 0 20px rgba(96,165,250,0.15), inset 0 0 20px rgba(96,165,250,0.05);
           cursor: pointer;
           animation: install-pulse 2.4s ease-in-out infinite;
+          transition: background 0.2s ease, border-color 0.2s ease;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .install-teaser:hover {
+          background: rgba(96,165,250,0.18);
+          border-color: rgba(96,165,250,0.7);
         }
         @keyframes install-pulse {
-          0%, 100% { opacity: 0.75; text-shadow: 0 0 8px rgba(96,165,250,0.5); }
-          50% { opacity: 1; text-shadow: 0 0 16px rgba(96,165,250,0.9), 0 0 6px rgba(96,165,250,1); }
+          0%, 100% { opacity: 0.8; box-shadow: 0 0 16px rgba(96,165,250,0.10), inset 0 0 16px rgba(96,165,250,0.02); }
+          50% { opacity: 1; box-shadow: 0 0 28px rgba(96,165,250,0.25), inset 0 0 28px rgba(96,165,250,0.06); }
         }
+
         .install-modal-backdrop {
           position: fixed; inset: 0; z-index: 50;
           background: rgba(3,7,18,0.72);
@@ -689,6 +702,12 @@ export default function ReadingIntakeScreen({
           font-size: 12px; color: #64748b; cursor: pointer;
         }
 
+        .install-teaser-wrapper {
+          display: flex;
+          justify-content: center;
+          margin: 8px 0 4px;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
@@ -696,7 +715,7 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .carousel-container::after,
           .hero-shine::after,
-          .install-teaser { animation: none !important; opacity: 0.8; text-shadow: none; }
+          .install-teaser { animation: none !important; opacity: 0.8; box-shadow: none; }
         }
       `}</style>
 
@@ -760,15 +779,17 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Install teaser ── */}
+          {/* ── Install teaser — pill button ── */}
           {showInstallTeaser && (
-            <button
-              type="button"
-              onClick={() => setShowInstallModal(true)}
-              className="install-teaser tap-fix"
-            >
-              Tap for a FREE reading!
-            </button>
+            <div className="install-teaser-wrapper">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
+                className="install-teaser tap-fix"
+              >
+                🎁 Tap for a FREE reading!
+              </button>
+            </div>
           )}
 
           {/* ── Swipe-left discovery cue ── */}
