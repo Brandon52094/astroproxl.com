@@ -26,6 +26,7 @@ export async function GET() {
       readingsCompleted: Number(metadata?.readingsCompleted ?? 0),
       downloadUnlocked: true, // free for everyone now
       freeRepliesRemaining: Number(metadata?.freeRepliesRemaining ?? 0),
+      pwaFreeReadingUsed: metadata?.pwaFreeReadingUsed === true,
     });
   } catch (error) {
     console.error("[credits GET] Error:", error);

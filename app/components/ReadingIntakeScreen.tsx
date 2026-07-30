@@ -87,6 +87,7 @@ interface UserStatus {
   cooldownExpiresAt: string | null;
   canBypass: boolean;
   firstPaidReadingUsed: boolean;
+  pwaFreeReadingUsed?: boolean;
 }
 
 interface ReadingIntakeScreenProps {
@@ -244,6 +245,13 @@ export default function ReadingIntakeScreen({
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Install modal state ──────────────────────────────────────────────────
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [installDismissed, setInstallDismissed] = useState(false); // session-only
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null); // Android one-tap
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
   const stars = useMemo(
     () =>
       Array.from({ length: 68 }).map((_, i) => {
@@ -256,6 +264,42 @@ export default function ReadingIntakeScreen({
       }),
     []
   );
+
+  // ── Platform/install detection ─────────────────────────────────────────
+  useEffect(() => {
+    // Detect platform + install state
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setIsStandalone(standalone);
+
+    const ios = /iphone|ipad|ipod/i.test(window.navigator.userAgent) &&
+      !(window.navigator as unknown as { standalone?: boolean }).standalone;
+    setIsIOS(ios);
+
+    // Android/Chrome: capture the install event for one-tap
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  // Should the teaser show at all?
+  const showInstallTeaser =
+    !isStandalone &&
+    !installDismissed &&
+    userStatus?.pwaFreeReadingUsed !== true;
+
+  // Android one-tap trigger
+  const triggerAndroidInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+    setShowInstallModal(false);
+  };
 
   const getIconPulseAnimation = useCallback((isSelected = false) => {
     if (shouldReduceMotion) return {};
@@ -351,6 +395,7 @@ export default function ReadingIntakeScreen({
         cooldownExpiresAt: data.cooldownExpiresAt ?? null,
         canBypass: data.canBypass === true,
         firstPaidReadingUsed: data.firstPaidReadingUsed === true,
+        pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
       });
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
@@ -594,13 +639,64 @@ export default function ReadingIntakeScreen({
         .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
         .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
 
+        .install-teaser {
+          display: block;
+          margin: 32px auto 0;
+          background: none;
+          border: none;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: #60a5fa;
+          text-shadow: 0 0 12px rgba(96,165,250,0.7), 0 0 4px rgba(96,165,250,0.9);
+          cursor: pointer;
+          animation: install-pulse 2.4s ease-in-out infinite;
+        }
+        @keyframes install-pulse {
+          0%, 100% { opacity: 0.75; text-shadow: 0 0 8px rgba(96,165,250,0.5); }
+          50% { opacity: 1; text-shadow: 0 0 16px rgba(96,165,250,0.9), 0 0 6px rgba(96,165,250,1); }
+        }
+        .install-modal-backdrop {
+          position: fixed; inset: 0; z-index: 50;
+          background: rgba(3,7,18,0.72);
+          backdrop-filter: blur(8px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 24px;
+        }
+        .install-modal {
+          width: 100%; max-width: 340px;
+          border-radius: 24px;
+          border: 1px solid rgba(96,165,250,0.3);
+          background: #0b1020;
+          padding: 24px;
+          box-shadow: 0 0 40px rgba(96,165,250,0.15);
+        }
+        .install-modal-title { font-size: 18px; font-weight: 700; color: #93c5fd; text-align: center; }
+        .install-modal-sub { margin-top: 6px; font-size: 13px; color: #94a3b8; text-align: center; line-height: 1.4; }
+        .install-steps { margin: 18px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
+        .install-steps li { font-size: 13px; color: #cbd5e1; line-height: 1.4; }
+        .ios-share { display: inline-block; padding: 0 4px; color: #60a5fa; }
+        .install-oneclick {
+          width: 100%; margin-top: 18px; height: 48px;
+          border-radius: 14px; border: none;
+          background: #60a5fa; color: #050816; font-weight: 700; font-size: 14px;
+          cursor: pointer;
+        }
+        .install-dismiss {
+          width: 100%; margin-top: 12px;
+          background: none; border: none;
+          font-size: 12px; color: #64748b; cursor: pointer;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .carousel-container::after,
-          .hero-shine::after { animation: none !important; opacity: 0; }
+          .hero-shine::after,
+          .install-teaser { animation: none !important; opacity: 0.8; text-shadow: none; }
         }
       `}</style>
 
@@ -663,6 +759,17 @@ export default function ReadingIntakeScreen({
               </div>
             </div>
           </section>
+
+          {/* ── Install teaser ── */}
+          {showInstallTeaser && (
+            <button
+              type="button"
+              onClick={() => setShowInstallModal(true)}
+              className="install-teaser tap-fix"
+            >
+              Tap for a FREE reading!
+            </button>
+          )}
 
           {/* ── Swipe-left discovery cue ── */}
           <button
@@ -925,6 +1032,42 @@ export default function ReadingIntakeScreen({
 
         </motion.div>
       </div>
+
+      {/* ── Install modal overlay ── */}
+      {showInstallModal && (
+        <div className="install-modal-backdrop" onClick={() => setShowInstallModal(false)}>
+          <div className="install-modal" onClick={(e) => e.stopPropagation()}>
+            <p className="install-modal-title">Get a FREE reading</p>
+            <p className="install-modal-sub">Add this app to your home screen and your first reading is on us.</p>
+
+            {isIOS ? (
+              <ol className="install-steps">
+                <li>Tap the Share icon <span className="ios-share">⎋</span> at the bottom of your screen</li>
+                <li>Scroll and tap <strong>Add to Home Screen</strong></li>
+                <li>Open the app from your home screen — your free reading will be waiting</li>
+              </ol>
+            ) : deferredPrompt ? (
+              <button type="button" className="install-oneclick" onClick={triggerAndroidInstall}>
+                Add to Home Screen
+              </button>
+            ) : (
+              <ol className="install-steps">
+                <li>Open your browser menu (⋮)</li>
+                <li>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong></li>
+                <li>Open the app from your home screen — your free reading will be waiting</li>
+              </ol>
+            )}
+
+            <button
+              type="button"
+              className="install-dismiss"
+              onClick={() => { setShowInstallModal(false); setInstallDismissed(true); }}
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
