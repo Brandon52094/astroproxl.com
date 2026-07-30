@@ -88,7 +88,6 @@ interface UserStatus {
   canBypass: boolean;
   firstPaidReadingUsed: boolean;
   pwaFreeReadingUsed?: boolean;
-  pwaReadingToken?: boolean; // <-- add this
 }
 
 interface ReadingIntakeScreenProps {
@@ -397,7 +396,6 @@ export default function ReadingIntakeScreen({
   canBypass: data.canBypass === true,
   firstPaidReadingUsed: data.firstPaidReadingUsed === true,
   pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
-  pwaReadingToken: data.pwaReadingToken === true, // <-- add this
 });
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
