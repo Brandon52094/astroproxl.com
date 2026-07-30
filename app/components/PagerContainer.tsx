@@ -75,6 +75,41 @@ export default function PagerContainer() {
     fetchStatus();
   }, []);
 
+  // ── PWA install grant ──────────────────────────────────────────────────────
+  // Fires only in standalone (installed) mode. Server guards double-claims, so
+  // firing every load is safe. On grant, refetch status so the token shows now.
+  useEffect(() => {
+    const isStandalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+
+    if (!isStandalone) return;
+
+    fetch("/api/user/claim-pwa-reading", { method: "POST" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.granted) {
+          console.log("[pwa] free reading token granted");
+          // Refetch user status so the new token appears without a reload:
+          return fetch("/api/user/credits").then((r) => r.json());
+        }
+      })
+      .then((status) => {
+        if (status) {
+          setUserStatus({
+            credits: Number(status.credits ?? 0),
+            isSubscribed: status.isSubscribed === true,
+            readingsCompleted: Number(status.readingsCompleted ?? 0),
+            onCooldown: status.onCooldown === true,
+            cooldownExpiresAt: status.cooldownExpiresAt ?? null,
+            canBypass: status.canBypass === true,
+            firstPaidReadingUsed: status.firstPaidReadingUsed === true,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const goToNext = useCallback(() => {
     setExtendedIndex((prev) => prev + 1);
   }, []);

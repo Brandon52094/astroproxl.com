@@ -544,7 +544,7 @@ export async function POST(request: NextRequest) {
     // MEDIUM proceeds to the full reading; this rides along underneath it.
     const careNote = getCareNote(risk);
 
-    // ── Server-side eligibility check — mirrors credits/route.ts logic ────────
+    // ── Server-side eligibility check ────────────────────────────────────────
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
@@ -563,17 +563,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "You're on cooldown. Please wait before starting a new reading." }, { status: 403 });
     }
 
-    const freeReadingUsedAt = metadata?.freeReadingUsedAt
-      ? new Date(metadata.freeReadingUsedAt as string)
-      : null;
-    let freeReadingAvailable = !firstReadingUsed;
-    if (freeReadingUsedAt && !isSubscribed) {
-      freeReadingAvailable = Date.now() >= freeReadingUsedAt.getTime() + FREE_READING_RESET_MS;
-    }
+    // ── PWA free-reading token — highest-priority "already paid" path ──────────
+    // If they hold a token (from installing the app), it covers this reading.
+    // Consume it atomically here; charge nothing else. Works for any reading type.
+    const hasPwaToken = metadata?.pwaReadingToken === true;
 
-    const eligible = isSubscribed || freeReadingAvailable || credits >= CREDITS_PER_READING;
-    if (!eligible) {
-      return NextResponse.json({ error: "You don't have enough credits for a reading. Please purchase more or subscribe." }, { status: 403 });
+    if (hasPwaToken) {
+  await client.users.updateUserMetadata(userId, {
+    publicMetadata: {
+      ...metadata,
+      pwaReadingToken: false, // consume it
+      pwaRedeemedType: "regular",
+      pwaRedeemedAt: new Date().toISOString(),
+      pwaCoversNextComplete: true, // flag for reading-complete to skip charges
+    },
+  });
+  console.log(`[readings] ${userId} — reading covered by PWA token`);
+  // Skip all credit/free-reading logic; proceed straight to generating.
+} else {
+      // ── Existing access logic: free reading / credits check ──
+      const freeReadingUsedAt = metadata?.freeReadingUsedAt
+        ? new Date(metadata.freeReadingUsedAt as string)
+        : null;
+      let freeReadingAvailable = !firstReadingUsed;
+      if (freeReadingUsedAt && !isSubscribed) {
+        freeReadingAvailable = Date.now() >= freeReadingUsedAt.getTime() + FREE_READING_RESET_MS;
+      }
+
+      const eligible = isSubscribed || freeReadingAvailable || credits >= CREDITS_PER_READING;
+      if (!eligible) {
+        return NextResponse.json({ error: "You don't have enough credits for a reading. Please purchase more or subscribe." }, { status: 403 });
+      }
     }
     // ── End eligibility check ──────────────────────────────────────────────────
 

@@ -21,6 +21,9 @@ export async function POST() {
     const isFirstReading = current === 0;
     const isSubscribed = metadata?.isSubscribed === true;
 
+    // Did a PWA token cover this reading? Set by the readings route, one-shot.
+    const pwaCovered = metadata?.pwaCoversNextComplete === true;
+
     // ── Was THIS reading free, or paid with credits? ──────────────────────────
     // Mirror the eligibility logic in /api/readings so the gate and accounting
     // never drift. A reading is "free" when the weekly free slot is available;
@@ -34,7 +37,7 @@ export async function POST() {
       freeReadingAvailable = Date.now() >= freeReadingUsedAt.getTime() + FREE_READING_RESET_MS;
     }
     const tookFreeReading = !isSubscribed && freeReadingAvailable;
-    const paidWithCredits = !isSubscribed && !freeReadingAvailable;
+    const paidWithCredits = !pwaCovered && !isSubscribed && !freeReadingAvailable;
 
     const currentJxlCredits = Number(metadata?.jxlCredits ?? 0);
     const jxlCreditsToGrant = isFirstReading ? JXL_FIRST_READING_CREDITS : 0;
@@ -55,23 +58,27 @@ export async function POST() {
           ? currentJxlCredits + jxlCreditsToGrant
           : currentJxlCredits,
         // Re-stamp on EVERY free reading (first OR weekly), keeping the weekly
-        // reset from staying permanently open.
-        ...(tookFreeReading ? { freeReadingUsedAt: new Date().toISOString() } : {}),
+        // reset from staying permanently open. PWA-covered readings don't consume
+        // the weekly free slot.
+        ...(tookFreeReading && !pwaCovered ? { freeReadingUsedAt: new Date().toISOString() } : {}),
+        // Consume the one-shot marker so it only applies once.
+        pwaCoversNextComplete: false,
       },
     });
 
     console.log(
       `[reading-complete] ${userId} — readingsCompleted: ${current} → ${next}` +
         (isFirstReading ? ` — granted ${jxlCreditsToGrant} JXL credits` : "") +
-        (tookFreeReading ? " — free reading, re-stamped freeReadingUsedAt" : "") +
+        (tookFreeReading && !pwaCovered ? " — free reading, re-stamped freeReadingUsedAt" : "") +
         (paidWithCredits ? ` — deducted ${CREDITS_PER_READING} credit (${currentCredits} → ${newCredits})` : "") +
-        (isSubscribed ? " — subscriber, no charge" : "")
+        (isSubscribed ? " — subscriber, no charge" : "") +
+        (pwaCovered ? " — PWA token covered this reading" : "")
     );
 
     return NextResponse.json({
       readingsCompleted: next,
       jxlCreditsGranted: jxlCreditsToGrant,
-      wasFree: tookFreeReading,
+      wasFree: tookFreeReading && !pwaCovered,
       creditsRemaining: newCredits,
     });
   } catch (error) {
