@@ -79,7 +79,7 @@ const AREAS = [
   },
 ];
 
-// ── Simplified UserStatus — free reading fields removed ──────────────────────
+// ── Simplified UserStatus ──────────────────────────────────────────────
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
@@ -549,42 +549,6 @@ export default function ReadingIntakeScreen({
     </div>
   ), [userStatus]);
 
-  // ── Modal content to portal ────────────────────────────────────────────
-  const modalContent = showInstallModal && (
-    <div className="install-modal-backdrop" onClick={() => setShowInstallModal(false)}>
-      <div className="install-modal" onClick={(e) => e.stopPropagation()}>
-        <p className="install-modal-title">Get a FREE reading</p>
-        <p className="install-modal-sub">Add this app to your home screen and your first reading is on us.</p>
-
-        {isIOS ? (
-          <ol className="install-steps">
-            <li>Tap the Share icon <span className="ios-share">⎋</span> at the bottom of your screen</li>
-            <li>Scroll and tap <strong>Add to Home Screen</strong></li>
-            <li>Open the app from your home screen — your free reading will be waiting</li>
-          </ol>
-        ) : deferredPrompt ? (
-          <button type="button" className="install-oneclick" onClick={triggerAndroidInstall}>
-            Add to Home Screen
-          </button>
-        ) : (
-          <ol className="install-steps">
-            <li>Open your browser menu (⋮)</li>
-            <li>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong></li>
-            <li>Open the app from your home screen — your free reading will be waiting</li>
-          </ol>
-        )}
-
-        <button
-          type="button"
-          className="install-dismiss"
-          onClick={() => { setShowInstallModal(false); setInstallDismissed(true); }}
-        >
-          Maybe later
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div
       className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
@@ -708,14 +672,19 @@ export default function ReadingIntakeScreen({
         }
 
         .install-modal-backdrop {
-          position: fixed; inset: 0; z-index: 9999;
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
           background: rgba(3,7,18,0.72);
           backdrop-filter: blur(8px);
-          display: flex; align-items: center; justify-content: center;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           padding: 24px;
         }
         .install-modal {
-          width: 100%; max-width: 340px;
+          width: 100%;
+          max-width: 340px;
           border-radius: 24px;
           border: 1px solid rgba(96,165,250,0.3);
           background: #0b1020;
@@ -816,7 +785,7 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Install teaser — pill button ── */}
+          {/* ── Install teaser ── */}
           {showInstallTeaser && (
             <div className="install-teaser-wrapper">
               <button
@@ -830,7 +799,7 @@ export default function ReadingIntakeScreen({
             </div>
           )}
 
-          {/* ── Swipe-left discovery cue ── */}
+          {/* ── Swipe cue ── */}
           <button
             type="button"
             onClick={() => onSwipeLeft?.()}
@@ -989,7 +958,7 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── CAROUSEL — subscription sale only, no swiping ── */}
+          {/* ── CAROUSEL ── */}
           <div className="mt-4">
             <div className="carousel-container">
               <button type="button" onClick={() => setIsCarouselOpen(!isCarouselOpen)} className="carousel-header" aria-expanded={isCarouselOpen}>
@@ -1074,8 +1043,6 @@ export default function ReadingIntakeScreen({
                               );
                             })}
                           </div>
-
-                          {/* The strongest honest line in the whole offer */}
                           <p className="mt-3 text-center text-[11px] font-medium text-amber-300/90">
                             Double the access for only $4 more
                           </p>
@@ -1092,8 +1059,48 @@ export default function ReadingIntakeScreen({
         </motion.div>
       </div>
 
-      {/* ── Install modal overlay — portaled to body ── */}
-      {typeof document !== "undefined" && modalContent && createPortal(modalContent, document.body)}
+      {/* ── Install modal (portaled to body) ── */}
+      {showInstallModal && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="install-modal-backdrop"
+            onClick={() => setShowInstallModal(false)}
+          >
+            <div className="install-modal" onClick={(e) => e.stopPropagation()}>
+              <p className="install-modal-title">Get a FREE reading</p>
+              <p className="install-modal-sub">
+                Add this app to your home screen and your first reading is on us.
+              </p>
+
+              {isIOS ? (
+                <ol className="install-steps">
+                  <li>Tap the Share icon <span className="ios-share">⎋</span> at the bottom of your screen</li>
+                  <li>Scroll and tap <strong>Add to Home Screen</strong></li>
+                  <li>Open the app from your home screen — your free reading will be waiting</li>
+                </ol>
+              ) : deferredPrompt ? (
+                <button type="button" className="install-oneclick" onClick={triggerAndroidInstall}>
+                  Add to Home Screen
+                </button>
+              ) : (
+                <ol className="install-steps">
+                  <li>Open your browser menu (⋮)</li>
+                  <li>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong></li>
+                  <li>Open the app from your home screen — your free reading will be waiting</li>
+                </ol>
+              )}
+
+              <button
+                type="button"
+                className="install-dismiss"
+                onClick={() => { setShowInstallModal(false); setInstallDismissed(true); }}
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
