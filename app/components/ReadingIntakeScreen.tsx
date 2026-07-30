@@ -780,21 +780,18 @@ export default function ReadingIntakeScreen({
           </section>
 
           {/* ── Install teaser — pill button ── */}
-          {showInstallTeaser && (
-            <div className="install-teaser-wrapper">
-              <button
-                type="button"
-                onClick={(e) => {
-  e.stopPropagation();
-  console.log("[teaser] tapped, opening modal");
-  setShowInstallModal(true);
-}}
-                className="install-teaser tap-fix"
-              >
-                🎁 Tap for a FREE reading!
-              </button>
-            </div>
-          )}
+{showInstallTeaser && (
+  <div className="install-teaser-wrapper">
+    <button
+      type="button"
+      className="install-teaser tap-fix"
+      data-no-swipe
+      onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
+    >
+      🎁 Tap for a FREE reading!
+    </button>
+  </div>
+)}
 
           {/* ── Swipe-left discovery cue ── */}
           <button

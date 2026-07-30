@@ -146,12 +146,16 @@ export default function PagerContainer() {
   const gestureAxis = useRef<GestureAxis>("undecided");
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-    touchDeltaX.current = 0;
-    gestureAxis.current = "undecided";
-    setIsDragging(true);
-  };
+  // Let taps on interactive opt-out elements (like the install teaser) through
+  // to their own handlers instead of the swipe logic.
+  if ((e.target as HTMLElement).closest?.('[data-no-swipe]')) return;
+
+  touchStartX.current = e.touches[0].clientX;
+  touchStartY.current = e.touches[0].clientY;
+  touchDeltaX.current = 0;
+  gestureAxis.current = "undecided";
+  setIsDragging(true);
+};
 
   const handleTouchMove = (e: React.TouchEvent) => {
     const deltaX = e.touches[0].clientX - touchStartX.current;
