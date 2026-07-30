@@ -786,7 +786,7 @@ export default function ReadingIntakeScreen({
       type="button"
       className="install-teaser tap-fix"
       data-no-swipe
-      onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
+      onClick={(e) => { e.stopPropagation(); alert("teaser tapped!"); setShowInstallModal(true); }} 
     >
       🎁 Tap for a FREE reading!
     </button>
