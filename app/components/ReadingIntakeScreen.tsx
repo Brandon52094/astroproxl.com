@@ -784,7 +784,11 @@ export default function ReadingIntakeScreen({
             <div className="install-teaser-wrapper">
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
+                onClick={(e) => {
+  e.stopPropagation();
+  console.log("[teaser] tapped, opening modal");
+  setShowInstallModal(true);
+}}
                 className="install-teaser tap-fix"
               >
                 🎁 Tap for a FREE reading!
