@@ -89,6 +89,7 @@ interface UserStatus {
   canBypass: boolean;
   firstPaidReadingUsed: boolean;
   pwaFreeReadingUsed?: boolean;
+  pwaReadingToken?: boolean;
 }
 
 interface ReadingIntakeScreenProps {
