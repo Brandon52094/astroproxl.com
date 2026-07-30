@@ -79,7 +79,6 @@ const AREAS = [
   },
 ];
 
-// ── Simplified UserStatus ──────────────────────────────────────────────
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
@@ -89,7 +88,7 @@ interface UserStatus {
   canBypass: boolean;
   firstPaidReadingUsed: boolean;
   pwaFreeReadingUsed?: boolean;
-  pwaReadingToken?: boolean;
+  pwaReadingToken?: boolean; // <-- add this
 }
 
 interface ReadingIntakeScreenProps {
@@ -390,15 +389,16 @@ export default function ReadingIntakeScreen({
       const response = await fetch("/api/user/credits");
       const data = await response.json();
       setUserStatus({
-        credits: Number(data.credits ?? 0),
-        isSubscribed: data.isSubscribed === true,
-        readingsCompleted: Number(data.readingsCompleted ?? 0),
-        onCooldown: data.onCooldown === true,
-        cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-        canBypass: data.canBypass === true,
-        firstPaidReadingUsed: data.firstPaidReadingUsed === true,
-        pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
-      });
+  credits: Number(data.credits ?? 0),
+  isSubscribed: data.isSubscribed === true,
+  readingsCompleted: Number(data.readingsCompleted ?? 0),
+  onCooldown: data.onCooldown === true,
+  cooldownExpiresAt: data.cooldownExpiresAt ?? null,
+  canBypass: data.canBypass === true,
+  firstPaidReadingUsed: data.firstPaidReadingUsed === true,
+  pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
+  pwaReadingToken: data.pwaReadingToken === true, // <-- add this
+});
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
   }, []);
@@ -421,17 +421,17 @@ export default function ReadingIntakeScreen({
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
   const buttonCopy = useMemo(() => {
-    if (chartStatus === "recalculating") return "Loading your chart…";
-    if (isCreatingReading) return "Preparing reading...";
-    if (!selectedAreaConfig) return "Choose a reading type";
-    const hasCredits = Number(userStatus?.credits ?? 0) > 0;
-    const isSubscribed = userStatus?.isSubscribed === true;
-    if (!hasCredits && !isSubscribed) {
-      const price = userStatus?.firstPaidReadingUsed ? "$4.00" : "$2.00";
-      return `${selectedAreaConfig.cta} — ${price}`;
-    }
-    return selectedAreaConfig.cta;
-  }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
+  if (chartStatus === "recalculating") return "Loading your chart…";
+  if (isCreatingReading) return "Preparing reading...";
+  if (!selectedAreaConfig) return "Choose a reading type";
+  const hasCredits = Number(userStatus?.credits ?? 0) > 0;
+  const isSubscribed = userStatus?.isSubscribed === true;
+  if (!hasCredits && !isSubscribed) {
+    const price = userStatus?.firstPaidReadingUsed ? "$4.00" : "$2.00";
+    return `${selectedAreaConfig.cta} — ${price}`;
+  }
+  return selectedAreaConfig.cta;
+}, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
 
   const canSubmit = useMemo(() => {
     if (!selectedArea) return false;

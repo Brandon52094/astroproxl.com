@@ -623,16 +623,7 @@ export async function POST(request: NextRequest) {
     let metaUpdate: Record<string, unknown> | null = null;
 
     if (isNewSession) {
-      const hasPwaToken = metadata?.pwaReadingToken === true;
-
-      if (hasPwaToken) {
-        // PWA token covers opening this JXL conversation. Consume it, charge nothing.
-        metaUpdate = { 
-          pwaReadingToken: false, 
-          pwaRedeemedType: "jxl", 
-          pwaRedeemedAt: new Date().toISOString() 
-        };
-      } else if (hasFreeSession) {
+      if (hasFreeSession) {
         metaUpdate = { jxlFreeUsedAt: new Date().toISOString() };
       } else if (jxlCredits > 0) {
         metaUpdate = { jxlCredits: jxlCredits - 1 };

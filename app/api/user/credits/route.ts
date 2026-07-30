@@ -27,7 +27,6 @@ export async function GET() {
       downloadUnlocked: true, // free for everyone now
       freeRepliesRemaining: Number(metadata?.freeRepliesRemaining ?? 0),
       pwaFreeReadingUsed: metadata?.pwaFreeReadingUsed === true,
-      pwaReadingToken: metadata?.pwaReadingToken === true,
     });
   } catch (error) {
     console.error("[credits GET] Error:", error);
