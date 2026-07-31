@@ -132,23 +132,37 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const chart = loadChart();
-    if (!chart?.chartData) {
+    let cancelled = false;
+    const tryLoad = () => {
+      const chart = loadChart();
+      if (!chart?.chartData) return false; // not ready yet
+      const data = chart.chartData as unknown as {
+        profection?: ProfectionData;
+        tropical?: { planets?: NatalPlacement[] };
+      };
+      if (data.profection) setProfection(data.profection);
+      const planets = data.tropical?.planets ?? [];
+      setNatal(
+        planets
+          .filter((p) => NATAL_ORDER.includes(p.name))
+          .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
+      );
       setIsLoading(false);
-      return;
-    }
-    const data = chart.chartData as unknown as {
-      profection?: ProfectionData;
-      tropical?: { planets?: NatalPlacement[] };
+      return true; // loaded
     };
-    if (data.profection) setProfection(data.profection);
-    const planets = data.tropical?.planets ?? [];
-    setNatal(
-      planets
-        .filter((p) => NATAL_ORDER.includes(p.name))
-        .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
-    );
-    setIsLoading(false);
+
+    if (tryLoad()) return;
+
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (cancelled || tryLoad() || attempts > 20) {
+        clearInterval(interval);
+        if (attempts > 20) setIsLoading(false);
+      }
+    }, 250);
+
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   // Same star recipe as the other panels — continuous sky across swipes.
