@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, Compass, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
+import { TransitPlanet, MoonPhaseData } from "../api/chart-calculate/route";
 
 /**
  * YOUR BIRTH CHART — sibling panel to Today's Sky.
@@ -132,23 +133,41 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const chart = loadChart();
-    if (!chart?.chartData) {
+    let cancelled = false;
+
+    const tryLoad = () => {
+      const chart = loadChart();
+      if (!chart?.chartData) return false; // not ready yet
+      const data = chart.chartData as unknown as {
+        transits?: TransitPlanet[];
+        moonPhase?: MoonPhaseData;
+        profection?: ProfectionData;
+      };
+      if (data.transits) {
+        setTransits(
+          [...data.transits].sort(
+            (a, b) => TRANSIT_ORDER.indexOf(a.name) - TRANSIT_ORDER.indexOf(b.name)
+          )
+        );
+      }
+      if (data.moonPhase) setMoonPhase(data.moonPhase);
+      if (data.profection) setProfection(data.profection);
       setIsLoading(false);
-      return;
-    }
-    const data = chart.chartData as unknown as {
-      profection?: ProfectionData;
-      tropical?: { planets?: NatalPlacement[] };
+      return true; // loaded
     };
-    if (data.profection) setProfection(data.profection);
-    const planets = data.tropical?.planets ?? [];
-    setNatal(
-      planets
-        .filter((p) => NATAL_ORDER.includes(p.name))
-        .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
-    );
-    setIsLoading(false);
+
+    if (tryLoad()) return;
+
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (cancelled || tryLoad() || attempts > 20) {
+        clearInterval(interval);
+        if (attempts > 20) setIsLoading(false);
+      }
+    }, 250);
+
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   // Same star recipe as the other panels — continuous sky across swipes.
@@ -466,4 +485,13 @@ function SIGN_RULER_GLYPH(sign: string): string {
     Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
   };
   return rulers[sign] ?? "Sun";
+}
+
+function setTransits(arg0: TransitPlanet[]) {
+  throw new Error("Function not implemented.");
+}
+
+
+function setMoonPhase(moonPhase: any) {
+  throw new Error("Function not implemented.");
 }
