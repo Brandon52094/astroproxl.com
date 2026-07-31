@@ -32,11 +32,11 @@ export default function StarfieldBackground() {
     }
 
     // Twinkling stars
-    const twink = [];
+    const twink: { x: number; y: number; r: number; ph: number; sp: number }[] = [];
     for (let i = 0; i < 34; i++) twink.push({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.4, ph: Math.random() * 6.28, sp: Math.random() * 0.025 + 0.008 });
 
     // Drifting constellation stars
-    const con = [];
+    const con: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
     for (let i = 0; i < 12; i++) con.push({ x: Math.random(), y: Math.random(), vx: (Math.random() - 0.5) * 0.0002, vy: (Math.random() - 0.5) * 0.0002, r: Math.random() * 1.2 + 0.7 });
 
     let raf = 0;
