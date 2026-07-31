@@ -11,6 +11,7 @@ import {
   Lock,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -227,6 +228,7 @@ export default function ReadingIntakeScreen({
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
+  const [showMission, setShowMission] = useState(false);
 
   const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
   const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
@@ -713,6 +715,54 @@ export default function ReadingIntakeScreen({
           margin: 8px 0 4px;
         }
 
+        /* ── Mission section ── */
+        .mission-section {
+          margin: 28px auto 40px;
+          max-width: 420px;
+          padding: 0 20px;
+        }
+        .mission-toggle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          width: 100%;
+          background: none;
+          border: none;
+          color: #94a3b8;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          cursor: pointer;
+          padding: 10px;
+        }
+        .mission-chevron {
+          transition: transform 250ms ease;
+        }
+        .mission-chevron.open {
+          transform: rotate(180deg);
+        }
+        .mission-body {
+          margin-top: 12px;
+          animation: mission-fade 300ms ease;
+        }
+        .mission-body p {
+          font-size: 13px;
+          line-height: 1.6;
+          color: #cbd5e1;
+          margin-bottom: 12px;
+        }
+        .mission-signoff {
+          margin-top: 16px;
+          color: #93c5fd;
+          font-style: italic;
+        }
+        @keyframes mission-fade {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
@@ -720,7 +770,8 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .carousel-container::after,
           .hero-shine::after,
-          .install-teaser { animation: none !important; opacity: 0.8; box-shadow: none; }
+          .install-teaser,
+          .mission-body { animation: none !important; opacity: 0.8; box-shadow: none; }
         }
       `}</style>
 
@@ -1056,6 +1107,43 @@ export default function ReadingIntakeScreen({
           </div>
 
         </motion.div>
+      </div>
+
+      {/* ── Mission section ── */}
+      <div className="mission-section">
+        <button
+          type="button"
+          className="mission-toggle tap-fix"
+          data-no-swipe
+          onClick={() => setShowMission((v) => !v)}
+        >
+          Why AstroProXL exists
+          <ChevronDown
+            className={`mission-chevron ${showMission ? "open" : ""}`}
+            size={14}
+          />
+        </button>
+
+        {showMission && (
+          <div className="mission-body">
+            <p>
+              Most people look for a reading when they're going through something hard —
+              a heartbreak, a money fear, a crossroads they can't see past. That's exactly
+              when clarity matters most, and exactly when it's usually least affordable.
+            </p>
+            <p>
+              Readings elsewhere run $60 to $120, often from someone working off intuition
+              alone — and even the most well-meaning human carries bias they may not notice.
+            </p>
+            <p>
+              I built AstroProXL to be different: a full calculation of your actual chart —
+              placements, transits, timing — with no agenda and no guesswork, at a price
+              that doesn't add to your stress. Affordable, honest clarity, for the moments
+              you need it most.
+            </p>
+            <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
+          </div>
+        )}
       </div>
 
       {/* ── Install modal (portaled to body) ── */}
