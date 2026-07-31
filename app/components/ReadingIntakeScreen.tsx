@@ -8,7 +8,6 @@ import {
   Briefcase,
   Wallet,
   Sparkles,
-  Lock,
   ChevronRight,
   ChevronLeft,
   ChevronDown,
@@ -95,28 +94,6 @@ interface UserStatus {
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
   onSwipeLeft?: () => void;
-}
-
-interface NatalPlacement {
-  name: string;
-  sign: string;
-  degree: string;
-}
-
-interface MoonPhaseData {
-  phaseName: string;
-  illuminationPercent: number;
-  nextEventName: "New Moon" | "Full Moon";
-  daysUntilNextEvent: number;
-  moonSign: string;
-  moonDegree: string;
-}
-
-interface TodayTransitPlanet {
-  name: string;
-  sign: string;
-  degree: string;
-  isRetrograde: boolean;
 }
 
 type ThemeName = "cosmic";
@@ -231,15 +208,6 @@ export default function ReadingIntakeScreen({
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
   const [showMission, setShowMission] = useState(false);
 
-  const [natalSun, setNatalSun] = useState<NatalPlacement | null>(null);
-  const [natalMoon, setNatalMoon] = useState<NatalPlacement | null>(null);
-  const [natalRising, setNatalRising] = useState<NatalPlacement | null>(null);
-  const [allPlanets, setAllPlanets] = useState<NatalPlacement[]>([]);
-
-  const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
-  const [todaySun, setTodaySun] = useState<TodayTransitPlanet | null>(null);
-  const [todayPlanets, setTodayPlanets] = useState<TodayTransitPlanet[]>([]);
-
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
 
@@ -254,7 +222,6 @@ export default function ReadingIntakeScreen({
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null); // Android one-tap
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-
 
   // ── Platform/install detection ─────────────────────────────────────────
   useEffect(() => {
@@ -338,39 +305,6 @@ export default function ReadingIntakeScreen({
     ensureChart();
   }, [router]);
 
-  useEffect(() => {
-    if (chartStatus !== "ready") return;
-    const chart = loadChart();
-    if (!chart?.chartData) return;
-    const data = chart.chartData as unknown as {
-      tropical?: { planets?: Array<{ name: string; sign: string; degree: string }> };
-      moonPhase?: MoonPhaseData;
-      transits?: TodayTransitPlanet[];
-    };
-    const planets = data.tropical?.planets ?? [];
-    const allPlanetsData: NatalPlacement[] = [];
-    PLANET_ORDER.forEach(name => {
-      const found = planets.find(p => p.name === name);
-      if (found) allPlanetsData.push(found);
-    });
-    const rising = planets.find(p => p.name === "Ascendant");
-    if (rising) allPlanetsData.push({ ...rising, name: "Rising" });
-    setAllPlanets(allPlanetsData);
-    setNatalSun(planets.find(p => p.name === "Sun") ?? null);
-    setNatalMoon(planets.find(p => p.name === "Moon") ?? null);
-    setNatalRising(planets.find(p => p.name === "Ascendant") ?? null);
-    if (data.moonPhase) setMoonPhase(data.moonPhase);
-    if (data.transits) {
-      setTodaySun(data.transits.find(p => p.name === "Sun") ?? null);
-      const allTransits: TodayTransitPlanet[] = [];
-      PLANET_ORDER.forEach(name => {
-        const found = data.transits?.find(p => p.name === name);
-        if (found) allTransits.push(found);
-      });
-      setTodayPlanets(allTransits);
-    }
-  }, [chartStatus]);
-
   const fetchInFlight = useRef(false);
   const fetchStatus = useCallback(async () => {
     if (fetchInFlight.current) return;
@@ -379,15 +313,15 @@ export default function ReadingIntakeScreen({
       const response = await fetch("/api/user/credits");
       const data = await response.json();
       setUserStatus({
-  credits: Number(data.credits ?? 0),
-  isSubscribed: data.isSubscribed === true,
-  readingsCompleted: Number(data.readingsCompleted ?? 0),
-  onCooldown: data.onCooldown === true,
-  cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-  canBypass: data.canBypass === true,
-  firstPaidReadingUsed: data.firstPaidReadingUsed === true,
-  pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
-});
+        credits: Number(data.credits ?? 0),
+        isSubscribed: data.isSubscribed === true,
+        readingsCompleted: Number(data.readingsCompleted ?? 0),
+        onCooldown: data.onCooldown === true,
+        cooldownExpiresAt: data.cooldownExpiresAt ?? null,
+        canBypass: data.canBypass === true,
+        firstPaidReadingUsed: data.firstPaidReadingUsed === true,
+        pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
+      });
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
   }, []);
@@ -410,17 +344,17 @@ export default function ReadingIntakeScreen({
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
   const buttonCopy = useMemo(() => {
-  if (chartStatus === "recalculating") return "Loading your chart…";
-  if (isCreatingReading) return "Preparing reading...";
-  if (!selectedAreaConfig) return "Choose a reading type";
-  const hasCredits = Number(userStatus?.credits ?? 0) > 0;
-  const isSubscribed = userStatus?.isSubscribed === true;
-  if (!hasCredits && !isSubscribed) {
-    const price = userStatus?.firstPaidReadingUsed ? "$4.00" : "$2.00";
-    return `${selectedAreaConfig.cta} — ${price}`;
-  }
-  return selectedAreaConfig.cta;
-}, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
+    if (chartStatus === "recalculating") return "Loading your chart…";
+    if (isCreatingReading) return "Preparing reading...";
+    if (!selectedAreaConfig) return "Choose a reading type";
+    const hasCredits = Number(userStatus?.credits ?? 0) > 0;
+    const isSubscribed = userStatus?.isSubscribed === true;
+    if (!hasCredits && !isSubscribed) {
+      const price = userStatus?.firstPaidReadingUsed ? "$4.00" : "$2.00";
+      return `${selectedAreaConfig.cta} — ${price}`;
+    }
+    return selectedAreaConfig.cta;
+  }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
 
   const canSubmit = useMemo(() => {
     if (!selectedArea) return false;
@@ -554,11 +488,7 @@ export default function ReadingIntakeScreen({
 
         @keyframes jxlAmberPulse {
           0%, 100% { box-shadow: 0 0 0 1px rgba(245,158,11,0.26), 0 14px 28px rgba(0,0,0,0.64), 0 0 22px rgba(245,158,11,0.10); }
-          50% { box-shadow: 0 0 0 1px rgba(26, 25, 24, 0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251,191,36,0.18); }
-        }
-        @keyframes cooldownPulse {
-          0%, 100% { box-shadow: 0 0 0 1px rgba(99,102,241,0.2), 0 0 20px rgba(99,102,241,0.08); }
-          50% { box-shadow: 0 0 0 1px rgba(99,102,241,0.4), 0 0 28px rgba(99,102,241,0.16); }
+          50% { box-shadow: 0 0 0 1px rgba(251,191,36,0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251,191,36,0.18); }
         }
         @keyframes whiteGlowPulse {
           0%, 100% { box-shadow: 0 0 30px rgba(255,255,255,0.08), 0 18px 34px rgba(0,0,0,0.55); }
@@ -608,7 +538,6 @@ export default function ReadingIntakeScreen({
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        .cooldown-glow { animation: cooldownPulse 3s ease-in-out infinite; }
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
         .selected-card-glow { animation: selectedWhiteGlow 2.8s ease-in-out infinite; }
 
