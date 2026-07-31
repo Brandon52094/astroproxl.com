@@ -376,7 +376,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                 <>
                   <p className="text-[26px] font-light leading-tight text-slate-500">—</p>
                   <p className="mt-4 text-[12px] leading-5 text-slate-500">
-                    This page may take time to load as the code is being updated.
+                    Exit and re-enter if it's not populating.
                   </p>
                 </>
               )}
