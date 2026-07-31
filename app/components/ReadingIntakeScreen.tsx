@@ -554,7 +554,7 @@ export default function ReadingIntakeScreen({
 
         @keyframes jxlAmberPulse {
           0%, 100% { box-shadow: 0 0 0 1px rgba(245,158,11,0.26), 0 14px 28px rgba(0,0,0,0.64), 0 0 22px rgba(245,158,11,0.10); }
-          50% { box-shadow: 0 0 0 1px rgba(251,191,36,0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251,191,36,0.18); }
+          50% { box-shadow: 0 0 0 1px rgba(26, 25, 24, 0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251,191,36,0.18); }
         }
         @keyframes cooldownPulse {
           0%, 100% { box-shadow: 0 0 0 1px rgba(99,102,241,0.2), 0 0 20px rgba(99,102,241,0.08); }
@@ -572,6 +572,21 @@ export default function ReadingIntakeScreen({
           0% { transform: translateX(-60%); }
           50% { transform: translateX(40%); }
           100% { transform: translateX(120%); }
+        }
+        .nebula {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 0;
+          background:
+            radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%),
+            radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%),
+            radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%);
+          animation: nebula-drift 24s ease-in-out infinite alternate;
+        }
+        @keyframes nebula-drift {
+          0% { transform: translate(0, 0) scale(1); opacity: 0.85; }
+          100% { transform: translate(-3%, 2%) scale(1.08); opacity: 1; }
         }
 
         @keyframes heroShine {
@@ -764,7 +779,8 @@ export default function ReadingIntakeScreen({
         }
       `}</style>
 
-   <StarfieldBackground />
+      <div className="nebula" aria-hidden="true" />
+      <StarfieldBackground />
 
       <div
         className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
