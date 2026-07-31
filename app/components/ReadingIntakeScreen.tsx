@@ -771,7 +771,7 @@ export default function ReadingIntakeScreen({
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    AstroXL
+                    AstroProXL
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
@@ -1077,7 +1077,7 @@ export default function ReadingIntakeScreen({
                   <li>Tap the <strong>Share</strong> icon <span className="ios-share">⎋</span> — the square with an arrow, at the bottom of the screen</li>
                   <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
                   <li>Tap <strong>Add</strong> in the top corner</li>
-                  <li>Open AstroXL from your home screen — your free reading will be waiting</li>
+                  <li>Open AstroProXL from your home screen — your free reading will be waiting</li>
                 </ol>
               ) : deferredPrompt ? (
                 <>
@@ -1091,7 +1091,7 @@ export default function ReadingIntakeScreen({
                   <li>Tap the <strong>⋮</strong> menu (top-right in Chrome)</li>
                   <li>Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>)</li>
                   <li>Tap <strong>Add</strong> / <strong>Install</strong> to confirm</li>
-                  <li>Open AstroXL from your home screen — your free reading will be waiting</li>
+                  <li>Open AstroProXL from your home screen — your free reading will be waiting</li>
                 </ol>
               )}
 
