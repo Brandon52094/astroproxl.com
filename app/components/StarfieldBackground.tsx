@@ -11,6 +11,11 @@ export default function StarfieldBackground() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // ── Type definitions for the star arrays ──
+    type PStar = { x: number; y: number; r: number };
+    type TStar = { x: number; y: number; r: number; ph: number; sp: number };
+    type CStar = { x: number; y: number; vx: number; vy: number; r: number };
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = () => canvas.offsetWidth;
     const H = () => canvas.offsetHeight;
@@ -23,20 +28,20 @@ export default function StarfieldBackground() {
     window.addEventListener("resize", resize);
 
     // Parallax depth layers
-    const parallax: { x: number; y: number; r: number }[][] = [];
+    const parallax: PStar[][] = [];
     const pc = [26, 16, 9], psp = [0.04, 0.09, 0.16], psz = [0.5, 0.8, 1.2], pa = [0.28, 0.5, 0.75];
     for (let L = 0; L < 3; L++) {
-      const arr = [];
+      const arr: PStar[] = [];
       for (let i = 0; i < pc[L]; i++) arr.push({ x: Math.random(), y: Math.random(), r: Math.random() * psz[L] + 0.3 });
       parallax.push(arr);
     }
 
     // Twinkling stars
-    const twink: { x: number; y: number; r: number; ph: number; sp: number }[] = [];
+    const twink: TStar[] = [];
     for (let i = 0; i < 34; i++) twink.push({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.4, ph: Math.random() * 6.28, sp: Math.random() * 0.025 + 0.008 });
 
     // Drifting constellation stars
-    const con: { x: number; y: number; vx: number; vy: number; r: number }[] = [];
+    const con: CStar[] = [];
     for (let i = 0; i < 12; i++) con.push({ x: Math.random(), y: Math.random(), vx: (Math.random() - 0.5) * 0.0002, vy: (Math.random() - 0.5) * 0.0002, r: Math.random() * 1.2 + 0.7 });
 
     let raf = 0;
