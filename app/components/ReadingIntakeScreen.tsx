@@ -1073,19 +1073,25 @@ export default function ReadingIntakeScreen({
 
               {isIOS ? (
                 <ol className="install-steps">
-                  <li>Tap the Share icon <span className="ios-share">⎋</span> at the bottom of your screen</li>
-                  <li>Scroll and tap <strong>Add to Home Screen</strong></li>
-                  <li>Open the app from your home screen — your free reading will be waiting</li>
+                  <li>Make sure you're in <strong>Safari</strong> (this only works in Safari on iPhone)</li>
+                  <li>Tap the <strong>Share</strong> icon <span className="ios-share">⎋</span> — the square with an arrow, at the bottom of the screen</li>
+                  <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
+                  <li>Tap <strong>Add</strong> in the top corner</li>
+                  <li>Open AstroXL from your home screen — your free reading will be waiting</li>
                 </ol>
               ) : deferredPrompt ? (
-                <button type="button" className="install-oneclick" onClick={triggerAndroidInstall}>
-                  Add to Home Screen
-                </button>
+                <>
+                  <button type="button" className="install-oneclick" onClick={triggerAndroidInstall}>
+                    Add to Home Screen
+                  </button>
+                  <p className="install-hint">Tap the button, then confirm <strong>Install</strong></p>
+                </>
               ) : (
                 <ol className="install-steps">
-                  <li>Open your browser menu (⋮)</li>
-                  <li>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong></li>
-                  <li>Open the app from your home screen — your free reading will be waiting</li>
+                  <li>Tap the <strong>⋮</strong> menu (top-right in Chrome)</li>
+                  <li>Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>)</li>
+                  <li>Tap <strong>Add</strong> / <strong>Install</strong> to confirm</li>
+                  <li>Open AstroXL from your home screen — your free reading will be waiting</li>
                 </ol>
               )}
 
