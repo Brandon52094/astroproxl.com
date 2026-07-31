@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronDown,
 } from "lucide-react";
+import StarfieldBackground from "./StarfieldBackground";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { cn } from "@/lib/utils";
@@ -253,19 +254,6 @@ export default function ReadingIntakeScreen({
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null); // Android one-tap
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 68 }).map((_, i) => {
-        const left = `${((i * 37) % 100)}%`;
-        const top = `${((i * 19 + 13) % 100)}%`;
-        const size = i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5;
-        const opacity = i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34;
-        const delay = (i * 0.37) % 4;
-        return { left, top, size, opacity, delay, id: i };
-      }),
-    []
-  );
 
   // ── Platform/install detection ─────────────────────────────────────────
   useEffect(() => {
@@ -775,30 +763,7 @@ export default function ReadingIntakeScreen({
         }
       `}</style>
 
-      {/* ── STARS ── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {stars.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{ left: star.left, top: star.top, width: star.size, height: star.size, opacity: star.opacity }}
-            animate={
-              shouldReduceMotion ? undefined : {
-                opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
-                scale: [1, 1.6, 1],
-              }
-            }
-            transition={
-              shouldReduceMotion ? undefined : {
-                duration: 2.34 + (star.id % 5) * 0.54,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay: star.delay,
-              }
-            }
-          />
-        ))}
-      </div>
+   <StarfieldBackground />
 
       <div
         className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
