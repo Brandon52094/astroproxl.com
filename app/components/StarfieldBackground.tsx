@@ -15,6 +15,7 @@ export default function StarfieldBackground() {
     type PStar = { x: number; y: number; r: number };
     type TStar = { x: number; y: number; r: number; ph: number; sp: number };
     type CStar = { x: number; y: number; vx: number; vy: number; r: number };
+    type Shooter = { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; len: number };
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = () => canvas.offsetWidth;
@@ -62,6 +63,11 @@ export default function StarfieldBackground() {
       });
     });
     let rot = 0;
+
+    // ── Shooting stars — rare, special. Every ~6-10 seconds at 60fps. ──
+    const shooters: Shooter[] = [];
+    let tick = 0;
+    let nextShoot = 360; // first one after ~6s
 
     let raf = 0;
     const frame = () => {
@@ -135,6 +141,41 @@ export default function StarfieldBackground() {
         const tw = (Math.sin(a.ph) + 1) / 2;
         ctx.fillStyle = `rgba(226,232,240,${0.2 + tw * 0.6})`;
         ctx.beginPath(); ctx.arc(a.x * w, a.y * h, a.r * (0.7 + tw * 0.4), 0, 7); ctx.fill();
+      }
+
+      // ── Shooting stars ──
+      tick++;
+      if (tick >= nextShoot) {
+        shooters.push({
+          x: Math.random() * w * 0.7,
+          y: Math.random() * h * 0.35,
+          vx: Math.random() * 2 + 3,
+          vy: Math.random() * 1.5 + 1.5,
+          life: 0,
+          maxLife: 60 + Math.random() * 20,
+          len: Math.random() * 40 + 50,
+        });
+        nextShoot = tick + 360 + Math.random() * 240; // ~6-10s until next
+      }
+      for (let i = shooters.length - 1; i >= 0; i--) {
+        const s = shooters[i];
+        s.x += s.vx; s.y += s.vy; s.life++;
+        let fade = 1;
+        if (s.life < 10) fade = s.life / 10;
+        else if (s.life > s.maxLife - 15) fade = Math.max(0, (s.maxLife - s.life) / 15);
+        const mag = Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+        const tailX = s.x - (s.vx / mag) * s.len;
+        const tailY = s.y - (s.vy / mag) * s.len;
+        const grad = ctx.createLinearGradient(s.x, s.y, tailX, tailY);
+        grad.addColorStop(0, `rgba(226,232,240,${0.9 * fade})`);
+        grad.addColorStop(1, "rgba(147,197,253,0)");
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tailX, tailY); ctx.stroke();
+        ctx.fillStyle = `rgba(255,255,255,${0.95 * fade})`;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 1.5, 0, 7); ctx.fill();
+        if (s.life >= s.maxLife || s.x > w + 60 || s.y > h + 60) shooters.splice(i, 1);
       }
 
       raf = requestAnimationFrame(frame);
