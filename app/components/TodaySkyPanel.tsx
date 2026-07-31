@@ -158,26 +158,42 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const chart = loadChart();
-    if (!chart?.chartData) {
+    let cancelled = false;
+
+    const tryLoad = () => {
+      const chart = loadChart();
+      if (!chart?.chartData) return false; // not ready yet
+      const data = chart.chartData as unknown as {
+        transits?: TransitPlanet[];
+        moonPhase?: MoonPhaseData;
+        profection?: ProfectionData;
+      };
+      if (data.transits) {
+        setTransits(
+          [...data.transits].sort(
+            (a, b) => TRANSIT_ORDER.indexOf(a.name) - TRANSIT_ORDER.indexOf(b.name)
+          )
+        );
+      }
+      if (data.moonPhase) setMoonPhase(data.moonPhase);
+      if (data.profection) setProfection(data.profection);
       setIsLoading(false);
-      return;
-    }
-    const data = chart.chartData as unknown as {
-      transits?: TransitPlanet[];
-      moonPhase?: MoonPhaseData;
-      profection?: ProfectionData;
+      return true; // loaded
     };
-    if (data.transits) {
-      setTransits(
-        [...data.transits].sort(
-          (a, b) => TRANSIT_ORDER.indexOf(a.name) - TRANSIT_ORDER.indexOf(b.name)
-        )
-      );
-    }
-    if (data.moonPhase) setMoonPhase(data.moonPhase);
-    if (data.profection) setProfection(data.profection);
-    setIsLoading(false);
+
+    // Try immediately; if the chart isn't ready, retry briefly until it is.
+    if (tryLoad()) return;
+
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (cancelled || tryLoad() || attempts > 20) {
+        clearInterval(interval);
+        if (attempts > 20) setIsLoading(false); // give up after ~5s, show empty state
+      }
+    }, 250);
+
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   // Same star recipe across all panels — continuous sky when you swipe.
@@ -360,7 +376,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                 <>
                   <p className="text-[26px] font-light leading-tight text-slate-500">—</p>
                   <p className="mt-4 text-[12px] leading-5 text-slate-500">
-                    Recalculate your chart to reveal this year's ruler.
+                    This page may take time to load as the code is being updated.
                   </p>
                 </>
               )}
