@@ -717,7 +717,7 @@ export default function ReadingIntakeScreen({
 
         /* ── Mission section ── */
         .mission-section {
-          margin: 28px auto 40px;
+          margin: 12px auto 20px;
           max-width: 420px;
           padding: 0 20px;
         }
@@ -974,7 +974,6 @@ export default function ReadingIntakeScreen({
                     />
                   </div>
                 </div>
-                <p className="text-xs leading-5 text-slate-300/80">Be specific. The clearer your question, the sharper the reading.</p>
               </motion.section>
             )}
           </AnimatePresence>
