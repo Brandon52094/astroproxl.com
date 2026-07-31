@@ -102,7 +102,7 @@ export default function StarfieldBackground() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      style={{ position: "fixed", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 0 }}
     />
   );
 }
