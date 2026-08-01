@@ -5,6 +5,7 @@ import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import JxlPanel from "./JxlPanel";
 import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
+import MembershipPanel from "./MembershipPanel";
 import { migrateChartV2 } from "@/lib/chartStore";
 
 // ── Simplified to match ReadingIntakeScreen ───────────────────────────────────
@@ -16,16 +17,17 @@ interface UserStatus {
   cooldownExpiresAt: string | null;
   canBypass: boolean;
   firstPaidReadingUsed: boolean;
+  pwaFreeReadingUsed?: boolean;
 }
 
 /**
- * PAGER — four panels:
+ * PAGER — five panels:
  *
- *   [0: Reading Intake (main)] ⇄ [1: Ask Jxl] ⇄ [2: Birth Chart] ⇄ [3: Today's Sky]
+ *   [0: Reading Intake (main)] ⇄ [1: Ask Jxl] ⇄ [2: Birth Chart] ⇄ [3: Today's Sky] ⇄ [4: Membership]
  *
  * Jxl sits immediately left of the main screen so it is the first thing anyone
  * finds when they swipe. Swipe right to come back. The loop wraps: one more
- * left from Today's Sky returns to the main screen.
+ * left from Membership returns to the main screen.
  *
  * The infinite-loop clone technique: a clone of the last panel sits before the
  * first, and a clone of the first sits after the last. When a transition lands
@@ -40,7 +42,7 @@ const HORIZONTAL_DOMINANCE_RATIO = 1.4;
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 export default function PagerContainer() {
-  const totalPanels = 4;
+  const totalPanels = 5;
 
   const [extendedIndex, setExtendedIndex] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -67,6 +69,7 @@ export default function PagerContainer() {
           cooldownExpiresAt: data.cooldownExpiresAt ?? null,
           canBypass: data.canBypass === true,
           firstPaidReadingUsed: data.firstPaidReadingUsed === true,
+          pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
         });
       } catch {
         // silent
@@ -104,6 +107,7 @@ export default function PagerContainer() {
             cooldownExpiresAt: status.cooldownExpiresAt ?? null,
             canBypass: status.canBypass === true,
             firstPaidReadingUsed: status.firstPaidReadingUsed === true,
+            pwaFreeReadingUsed: status.pwaFreeReadingUsed === true,
           });
         }
       })
@@ -146,16 +150,16 @@ export default function PagerContainer() {
   const gestureAxis = useRef<GestureAxis>("undecided");
 
   const handleTouchStart = (e: React.TouchEvent) => {
-  // Let taps on interactive opt-out elements (like the install teaser) through
-  // to their own handlers instead of the swipe logic.
-  if ((e.target as HTMLElement).closest?.('[data-no-swipe]')) return;
+    // Let taps on interactive opt-out elements (like the install teaser) through
+    // to their own handlers instead of the swipe logic.
+    if ((e.target as HTMLElement).closest?.('[data-no-swipe]')) return;
 
-  touchStartX.current = e.touches[0].clientX;
-  touchStartY.current = e.touches[0].clientY;
-  touchDeltaX.current = 0;
-  gestureAxis.current = "undecided";
-  setIsDragging(true);
-};
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchDeltaX.current = 0;
+    gestureAxis.current = "undecided";
+    setIsDragging(true);
+  };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     const deltaX = e.touches[0].clientX - touchStartX.current;
@@ -266,24 +270,20 @@ export default function PagerContainer() {
               ? "none"
               : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
             cursor: isDragging ? "grabbing" : "grab",
-            // FIX: Set the track height to 100% of the container
             height: "100%",
           }}
         >
-          {/* ── CLONE: Today's Sky (before the real first panel) ── */}
+          {/* ── CLONE: Membership (before the real first panel) ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
-            <TodaySkyPanel userStatus={userStatus} />
+            <MembershipPanel userStatus={userStatus} onSwipeRight={goToPrevious} />
           </div>
 
-          {/* ── PANEL 0: Reading Intake (main) ── 
-              Use h-full flex-shrink-0 to prevent height collapse */}
+          {/* ── PANEL 0: Reading Intake (main) ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
 
-          {/* ── PANEL 1: Ask Jxl ──
-              overflow-hidden, not auto: JxlPanel manages its own inner
-              scroller so the sky and dock stay fixed to the panel. */}
+          {/* ── PANEL 1: Ask Jxl ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-hidden">
             <JxlPanel isActive={activePanel === 1} />
           </div>
@@ -298,6 +298,11 @@ export default function PagerContainer() {
             <TodaySkyPanel userStatus={userStatus} />
           </div>
 
+          {/* ── PANEL 4: Membership ── */}
+          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+            <MembershipPanel userStatus={userStatus} onSwipeRight={goToPrevious} />
+          </div>
+
           {/* ── CLONE: Reading Intake (after the real last panel) ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
@@ -305,9 +310,7 @@ export default function PagerContainer() {
         </div>
       </div>
 
-      {/* ── Page indicators ──
-          Swipe is an invisible affordance. Dots make the number of pages and
-          your position in them legible at a glance. */}
+      {/* ── Page indicators ── */}
       <div
         className="pointer-events-none absolute left-0 right-0 flex items-center justify-center gap-1.5"
         style={{ bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 50 }}

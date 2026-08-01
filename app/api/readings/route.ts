@@ -623,7 +623,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Failed to generate reading. Please try again." },
         { status: 502 }
-      );
+      );d
     }
 
     const claudeData = await response.json();
