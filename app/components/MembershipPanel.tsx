@@ -125,13 +125,21 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
       <style jsx>{`
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
+        /* ── Safe-area aware inset so the frame clears notch + home bar ── */
+        .frame-inset {
+          padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+          padding-left: calc(env(safe-area-inset-left, 0px) + 10px);
+          padding-right: calc(env(safe-area-inset-right, 0px) + 10px);
+        }
+
         /* ── Gold outline frame (liquid glass, phone edge) ── */
         .gold-frame {
           position: relative;
           flex: 1;
           display: flex;
           flex-direction: column;
-          border: 1.5px solid rgba(251,191,36,0.35);
+          border: 2px solid rgba(251,191,36,0.75);
           border-radius: 40px;
           background:
             linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015) 45%, rgba(255,255,255,0.04)),
@@ -139,7 +147,8 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           backdrop-filter: blur(16px) saturate(165%) brightness(1.06);
           -webkit-backdrop-filter: blur(16px) saturate(165%) brightness(1.06);
           box-shadow:
-            0 0 60px rgba(251,191,36,0.06),
+            0 0 24px rgba(251,191,36,0.22),
+            0 0 70px rgba(251,191,36,0.10),
             inset 0 1px 0 rgba(255,255,255,0.20),
             inset 0 0 40px rgba(255,255,255,0.03);
           padding: 24px 20px 28px;
@@ -153,9 +162,10 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         }
         .gold-frame::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .gold-frame:hover {
-          border-color: rgba(251,191,36,0.5);
+          border-color: rgba(251,191,36,0.9);
           box-shadow:
-            0 0 80px rgba(251,191,36,0.12),
+            0 0 32px rgba(251,191,36,0.30),
+            0 0 80px rgba(251,191,36,0.14),
             inset 0 1px 0 rgba(255,255,255,0.24),
             inset 0 0 60px rgba(255,255,255,0.04);
         }
@@ -197,7 +207,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           display: flex;
           align-items: center;
           gap: 12px;
-          margin: 16px 0 14px;
+          margin: 22px 0 14px;
         }
         .section-divider .line {
           flex: 1;
@@ -373,15 +383,14 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
 
         @media (prefers-reduced-motion: reduce) {
           .gold-shimmer::after { animation: none !important; }
-          .gold-frame:hover { border-color: rgba(251,191,36,0.35); }
         }
       `}</style>
 
       {/* ── Starfield / galaxy backdrop ── */}
       <StarfieldBackground />
 
-      {/* ── Phone-edge frame ── */}
-      <div className="relative z-10 mx-auto flex h-full w-full max-w-[430px] p-3">
+      {/* ── Phone-edge frame (safe-area inset so it clears the status bar) ── */}
+      <div className="frame-inset relative z-10 mx-auto flex h-full w-full max-w-[430px]">
         <motion.div
           className="gold-frame"
           initial={{ opacity: 0 }}
@@ -390,55 +399,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         >
           <div className="gold-shimmer" aria-hidden="true" />
 
-          {/* ── TOP: Mission ── */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowMission(!showMission)}
-              className="mission-toggle tap-fix"
-            >
-              <span className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-300/60" />
-                Why AstroProXL Exists
-              </span>
-              <ChevronDown className={`h-4 w-4 ${showMission ? "open" : ""}`} />
-            </button>
-
-            {showMission && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="mt-3 space-y-3"
-              >
-                <p className="mission-text">
-                  Most people look for a reading when they're going through something hard —
-                  a heartbreak, a money fear, a crossroads they can't see past. That's exactly
-                  when clarity matters most, and exactly when it's usually least affordable.
-                </p>
-                <p className="mission-text">
-                  Readings elsewhere run $60 to $120, often from someone working off intuition
-                  alone — and even the most well-meaning human carries bias they may not notice.
-                </p>
-                <p className="mission-text">
-                  <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
-                  placements, transits, timing — with no agenda and no guesswork, at a price
-                  that doesn't add to your stress. Affordable, honest clarity, for the moments
-                  you need it most.
-                </p>
-                <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
-              </motion.div>
-            )}
-          </div>
-
-          {/* ── Divider ── */}
-          <div className="section-divider">
-            <span className="line" />
-            <span className="label">Membership</span>
-            <span className="line" />
-          </div>
-
-          {/* ── BOTTOM: Offer ── */}
+          {/* ── TOP: Membership offer ── */}
           <div>
             {/* ── Section heading ── */}
             <h3 className="offer-heading">More Readings, Real Savings</h3>
@@ -507,8 +468,55 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
               <span className="bundle-sub">One-time bundle — no subscription</span>
             </button>
 
-            {/* ── Footer ── */}
             <p className="cancel-anytime">Cancel anytime</p>
+          </div>
+
+          {/* ── Divider ── */}
+          <div className="section-divider">
+            <span className="line" />
+            <span className="label">Our Mission</span>
+            <span className="line" />
+          </div>
+
+          {/* ── BOTTOM: Why AstroProXL ── */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowMission(!showMission)}
+              className="mission-toggle tap-fix"
+            >
+              <span className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-300/60" />
+                Why AstroProXL Exists
+              </span>
+              <ChevronDown className={`h-4 w-4 ${showMission ? "open" : ""}`} />
+            </button>
+
+            {showMission && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="mt-3 space-y-3"
+              >
+                <p className="mission-text">
+                  Most people look for a reading when they're going through something hard —
+                  a heartbreak, a money fear, a crossroads they can't see past. That's exactly
+                  when clarity matters most, and exactly when it's usually least affordable.
+                </p>
+                <p className="mission-text">
+                  Readings elsewhere run $60 to $120, often from someone working off intuition
+                  alone — and even the most well-meaning human carries bias they may not notice.
+                </p>
+                <p className="mission-text">
+                  <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
+                  placements, transits, timing — with no agenda and no guesswork, at a price
+                  that doesn't add to your stress. Affordable, honest clarity, for the moments
+                  you need it most.
+                </p>
+                <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
+              </motion.div>
+            )}
           </div>
         </motion.div>
       </div>
