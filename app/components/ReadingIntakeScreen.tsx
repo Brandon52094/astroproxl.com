@@ -9,6 +9,7 @@ import {
   Wallet,
   Sparkles,
   ChevronLeft,
+  Lock,
 } from "lucide-react";
 import StarfieldBackground from "./StarfieldBackground";
 import { Button } from "./ui/button";
@@ -24,6 +25,7 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { SUB_TIERS } from "@/lib/paywallConfig";
+import AskJxlButton from "./AskJxlButton";
 
 declare global {
   interface Window {
@@ -514,23 +516,10 @@ export default function ReadingIntakeScreen({
         .selected-card-shell[data-selected="true"] .selected-icon-wrap { animation: whiteGlowPulse 2.2s ease-in-out infinite; }
         @keyframes selectedSweep { 0% { transform: translateX(-155%); } 100% { transform: translateX(155%); } }
 
-        /* ── Membership placeholder (replaces carousel) ── */
-        .membership-placeholder {
-          margin-top: 16px;
-          padding: 24px 20px;
-          border-radius: 24px;
-          border: 1px solid rgba(251,191,36,0.15);
-          background: rgba(251,191,36,0.03);
-          text-align: center;
-          min-height: 80px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .membership-placeholder p {
-          font-size: 13px;
-          color: #94a3b8;
-          letter-spacing: 0.05em;
+        /* ── JXL Button wrapper ── */
+        .jxl-wrapper {
+          margin-top: 12px;
+          padding: 0 4px;
         }
 
         @keyframes swipeCuePulse {
@@ -632,9 +621,9 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
-  style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
->
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
+        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+      >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -681,8 +670,7 @@ export default function ReadingIntakeScreen({
           )}
 
           {/* ── Swipe cue ── */}
-          <button
-            type="button"
+          <button            type="button"
             onClick={() => onSwipeLeft?.()}
             className="swipe-cue tap-fix mx-auto mt-1 mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
           >
@@ -809,7 +797,7 @@ export default function ReadingIntakeScreen({
             )}
           </AnimatePresence>
 
-                    {/* ── SUBMIT ── */}
+          {/* ── SUBMIT ── */}
           <div className="mt-0.5 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             {selectedArea && (
@@ -838,8 +826,13 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── Empty space preserved for future content ── */}
-          <div className="mt-4" />
+          {/* ── JXL Button ── */}
+          <div className="jxl-wrapper" data-no-swipe>
+            <AskJxlButton
+              onClick={() => console.log("Ask JXL tapped — wire routing next")}
+              height={120}
+            />
+          </div>
 
         </motion.div>
       </div>

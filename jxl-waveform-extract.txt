@@ -1,0 +1,86 @@
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.78;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const freq = new Uint8Array(analyser.frequencyBinCount);
+      const canvas = canvasRef.current;
+      const c2d = canvas?.getContext("2d") ?? null;
+      let smooth = 0;
+      let time = 0;
+      let cw = 0, ch = 0, dpr = 1;
+
+      const fit = () => {
+        if (!canvas || !c2d) return;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const r = canvas.getBoundingClientRect();
+        cw = r.width; ch = r.height;
+        canvas.width = Math.round(cw * dpr);
+        canvas.height = Math.round(ch * dpr);
+        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+      fit();
+
+      const draw = () => {
+        if (!cw || !ch) fit();
+        time += 0.016 * WAVE.speed;
+        analyser.getByteFrequencyData(freq);
+        let sum = 0, cnt = 0;
+        const lo = 2, hi = Math.max(lo + 1, Math.floor(freq.length * 0.5));
+        for (let i = lo; i < hi; i++) { sum += freq[i]; cnt++; }
+        const energy = cnt ? (sum / cnt) / 255 : 0;
+        smooth += (energy - smooth) * 0.18;
+
+        if (c2d && cw && ch) {
+          const cy = ch / 2;
+          c2d.clearRect(0, 0, cw, ch);
+          const grad = c2d.createLinearGradient(0, 0, cw, 0);
+          WAVE.colors.forEach((col, i) => grad.addColorStop(i / (WAVE.colors.length - 1), col));
+          c2d.lineCap = "round";
+          c2d.lineJoin = "round";
+          c2d.globalCompositeOperation = "lighter";
+          const amp = (WAVE.idle + smooth * WAVE.sensitivity) * (ch * 0.44);
+          for (let l = 0; l < WAVE.lines; l++) {
+            const lf = WAVE.lines > 1 ? l / (WAVE.lines - 1) : 0;
+            const phase = time * (1 + lf * 0.45) + l * 0.7;
+            const la = amp * (1 - lf * 0.14);
+            c2d.beginPath();
+            for (let x = 0; x <= cw; x += 3) {
+              const tx = x / cw;
+              const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
+              const y = cy + env * la * (
+                Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
+                Math.sin(tx * Math.PI * 7 - phase * 0.7 + l) * 0.4
+              );
+              x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+            }
+            c2d.strokeStyle = grad;
+            c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
+            c2d.lineWidth = WAVE.thickness * (0.7 + (1 - lf) * 0.8);
+            c2d.shadowBlur = WAVE.glow;
+            c2d.shadowColor = "rgba(129,140,248,0.5)";
+            c2d.stroke();
+          }
+          // Hot near-white core
+          const coreAmp = (WAVE.idle * 0.5 + smooth * WAVE.sensitivity * 1.15) * (ch * 0.44);
+          c2d.beginPath();
+          for (let x = 0; x <= cw; x += 2) {
+            const tx = x / cw;
+            const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
+            const y = cy + env * coreAmp * Math.sin(tx * Math.PI * 5 + time * 1.4) * 0.9;
+            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+          }
+          c2d.globalAlpha = 0.3 + smooth * 0.5;
+          c2d.strokeStyle = "rgba(255,255,255,0.92)";
+          c2d.lineWidth = Math.max(1, WAVE.thickness * 0.6);
+          c2d.shadowBlur = WAVE.glow * 1.3;
+          c2d.shadowColor = "rgba(255,255,255,0.7)";
+          c2d.stroke();
+          c2d.globalCompositeOperation = "source-over";
+          c2d.globalAlpha = 1;
+          c2d.shadowBlur = 0;
+        }
+        rafRef.current = requestAnimationFrame(draw);
+      };
+      draw();
