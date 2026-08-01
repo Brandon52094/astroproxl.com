@@ -25,6 +25,7 @@ import {
 } from "@/lib/chartStore";
 import { SUB_TIERS } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
+import JxlPanel from "./JxlPanel";
 
 declare global {
   interface Window {
@@ -203,6 +204,7 @@ export default function ReadingIntakeScreen({
   const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
+  const [showJxl, setShowJxl] = useState(false);
 
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
@@ -840,7 +842,7 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
           <div className="mt-4">
-            <AskJxlButton onClick={() => router.push("/jxl")} />
+            <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
 
           <div className="mt-2 flex items-center gap-3">
@@ -900,6 +902,39 @@ export default function ReadingIntakeScreen({
                 Maybe later
               </button>
             </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ── JXL overlay (portaled to body) ── */}
+      {showJxl && typeof document !== "undefined" &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
+            <button
+              type="button"
+              onClick={() => setShowJxl(false)}
+              style={{
+                position: "fixed",
+                top: "calc(12px + env(safe-area-inset-top))",
+                left: "16px",
+                zIndex: 100,
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                background: "rgba(5,8,22,0.6)",
+                border: "1px solid rgba(148,163,184,0.2)",
+                borderRadius: "999px",
+                padding: "6px 12px 6px 8px",
+                color: "#cbd5e1",
+                fontSize: "13px",
+                cursor: "pointer",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <ChevronLeft size={16} />
+              Back
+            </button>
+            <JxlPanel isActive={showJxl} />
           </div>,
           document.body
         )}
