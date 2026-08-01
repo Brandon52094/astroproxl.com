@@ -12,9 +12,8 @@ export interface AskJxlButtonProps {
 }
 
 /**
- * "Ask JXL" button — plain translucent card.
- * No canvas / waveform. Any glow (e.g. the page's bottom aurora) shows
- * through the translucent background from behind.
+ * "Ask JXL" button — no waveform. Just the button with an animated
+ * aurora glow bleeding out behind its edges (CSS only, no canvas).
  */
 export default function AskJxlButton({
   label = "Ask JXL",
@@ -24,56 +23,72 @@ export default function AskJxlButton({
   height = 104,
 }: AskJxlButtonProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={className}
-      style={{
-        position: "relative",
-        width: "100%",
-        height,
-        borderRadius: 24,
-        border: "1px solid rgba(129,140,248,0.28)",
-        background: "rgba(7,10,22,0.5)",   // translucent so the aurora behind shows through
-        overflow: "hidden",
-        cursor: "pointer",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 4,
-        boxShadow: "0 8px 44px rgba(52,211,153,0.12)",
-      }}
-    >
-      <span
-        style={{
-          fontSize: 28,
-          fontWeight: 800,
-          letterSpacing: "0.05em",
-          lineHeight: 1,
-          background: "linear-gradient(180deg, #ffffff 0%, #cffaf0 100%)",
-          WebkitBackgroundClip: "text",
-          backgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          color: "transparent",
-          filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.6))",
-        }}
-      >
-        {label}
-      </span>
-      {subtitle && (
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 500,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            color: "rgba(207,250,240,0.8)",
-          }}
-        >
-          {subtitle}
-        </span>
-      )}
-    </button>
+    <div className={`ask-jxl-wrap${className ? ` ${className}` : ""}`}>
+      {/* Aurora glow bleeding out behind the container edges */}
+      <div className="ask-jxl-glow" aria-hidden="true" />
+
+      <button type="button" onClick={onClick} className="ask-jxl-btn" style={{ height }}>
+        <span className="ask-jxl-label">{label}</span>
+        {subtitle && <span className="ask-jxl-sub">{subtitle}</span>}
+      </button>
+
+      <style jsx>{`
+        .ask-jxl-wrap { position: relative; width: 100%; }
+
+        .ask-jxl-glow {
+          position: absolute;
+          inset: -10px;
+          border-radius: 34px;
+          z-index: 0;
+          pointer-events: none;
+          background: linear-gradient(120deg, #34d399, #22d3ee, #38bdf8, #a855f7, #34d399);
+          background-size: 220% 220%;
+          filter: blur(22px);
+          opacity: 0.5;
+          animation: auroraGlow 9s ease-in-out infinite;
+        }
+        @keyframes auroraGlow {
+          0%, 100% { background-position: 0% 50%; opacity: 0.42; }
+          50% { background-position: 100% 50%; opacity: 0.62; }
+        }
+
+        .ask-jxl-btn {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          border-radius: 24px;
+          border: 1px solid rgba(129,140,248,0.22);
+          background: rgba(7,10,22,0.72);   /* darker so the glow stays OUTSIDE, not through */
+          overflow: hidden;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          transition: border-color 0.25s ease;
+        }
+        .ask-jxl-btn:hover { border-color: rgba(129,140,248,0.4); }
+
+        .ask-jxl-label {
+          position: relative; z-index: 2;
+          font-size: 28px; font-weight: 800; letter-spacing: 0.05em; line-height: 1;
+          background: linear-gradient(180deg, #ffffff 0%, #cffaf0 100%);
+          -webkit-background-clip: text; background-clip: text;
+          -webkit-text-fill-color: transparent; color: transparent;
+          filter: drop-shadow(0 2px 8px rgba(0,0,0,0.55));
+        }
+        .ask-jxl-sub {
+          position: relative; z-index: 2;
+          font-size: 10px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;
+          color: rgba(207,250,240,0.7);
+          text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .ask-jxl-glow { animation: none !important; }
+        }
+      `}</style>
+    </div>
   );
 }
