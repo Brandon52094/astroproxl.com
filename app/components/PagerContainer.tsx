@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
-import JxlPanel from "./JxlPanel";
 import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
 import MembershipPanel from "./MembershipPanel";
@@ -21,13 +20,11 @@ interface UserStatus {
 }
 
 /**
- * PAGER — five panels:
+ * PAGER — four panels:
  *
- *   [0: Reading Intake (main)] ⇄ [1: Ask Jxl] ⇄ [2: Birth Chart] ⇄ [3: Today's Sky] ⇄ [4: Membership]
+ *   [0: Reading Intake (main)] ⇄ [1: Birth Chart] ⇄ [2: Today's Sky] ⇄ [3: Membership]
  *
- * Jxl sits immediately left of the main screen so it is the first thing anyone
- * finds when they swipe. Swipe right to come back. The loop wraps: one more
- * left from Membership returns to the main screen.
+ * The loop wraps: one more left from Membership returns to the main screen.
  *
  * The infinite-loop clone technique: a clone of the last panel sits before the
  * first, and a clone of the first sits after the last. When a transition lands
@@ -42,7 +39,7 @@ const HORIZONTAL_DOMINANCE_RATIO = 1.4;
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 export default function PagerContainer() {
-  const totalPanels = 5;
+  const totalPanels = 4;
 
   const [extendedIndex, setExtendedIndex] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -283,22 +280,17 @@ export default function PagerContainer() {
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
 
-          {/* ── PANEL 1: Ask Jxl ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-hidden">
-            <JxlPanel isActive={activePanel === 1} />
-          </div>
-
-          {/* ── PANEL 2: Your Birth Chart ── */}
+          {/* ── PANEL 1: Your Birth Chart ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
             <BirthChartPanel userStatus={userStatus} />
           </div>
 
-          {/* ── PANEL 3: Today's Sky ── */}
+          {/* ── PANEL 2: Today's Sky ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
             <TodaySkyPanel userStatus={userStatus} />
           </div>
 
-          {/* ── PANEL 4: Membership ── */}
+          {/* ── PANEL 3: Membership ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
             <MembershipPanel userStatus={userStatus} onSwipeRight={goToPrevious} />
           </div>
