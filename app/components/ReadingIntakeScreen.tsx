@@ -832,7 +832,7 @@ export default function ReadingIntakeScreen({
             )}
           </div>
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Membership</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
