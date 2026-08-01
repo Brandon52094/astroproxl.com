@@ -33,7 +33,7 @@ const PERKS = [
 
 export default function MembershipPanel({ userStatus, onSwipeRight }: MembershipPanelProps) {
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
-  const [showMission, setShowMission] = useState(true);
+  const [showMission, setShowMission] = useState(true); // Start open
   const isSubscribed = userStatus?.isSubscribed || false;
 
   const handleSubscribe = async (tierKey: "sub_base" | "sub_plus") => {
@@ -91,7 +91,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
 
   return (
     <div
-      className="relative h-screen w-full overflow-y-auto overscroll-none text-slate-100"
+      className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
       style={{
         WebkitOverflowScrolling: "touch",
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
@@ -102,47 +102,60 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
-        /* ── Gold outline frame — full screen edge ── */
+        /* ── Gold outline frame ── */
         .gold-frame {
-          position: fixed;
-          inset: 8px;
-          border: 1.5px solid rgba(251,191,36,0.25);
-          border-radius: 28px;
-          pointer-events: none;
-          z-index: 2;
-          box-shadow: 0 0 60px rgba(251,191,36,0.04), inset 0 0 60px rgba(251,191,36,0.02);
-          transition: border-color 0.6s ease, box-shadow 0.6s ease;
+          position: relative;
+          border: 1.5px solid rgba(251,191,36,0.3);
+          border-radius: 32px;
+          background: rgba(5,6,15,0.6);
+          backdrop-filter: blur(12px);
+          box-shadow: 0 0 60px rgba(251,191,36,0.06), inset 0 0 60px rgba(251,191,36,0.03);
+          padding: 24px 20px;
+          margin: 0 16px 20px;
+          transition: border-color 0.4s ease, box-shadow 0.4s ease;
         }
         .gold-frame::before {
           content: "";
           position: absolute;
           inset: -2px;
-          border-radius: 30px;
+          border-radius: 34px;
           padding: 2px;
-          background: linear-gradient(135deg, rgba(251,191,36,0.08), rgba(251,191,36,0.02), rgba(251,191,36,0.08));
+          background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05), rgba(251,191,36,0.15));
           -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
           pointer-events: none;
         }
-        /* Subtle shimmer on the frame */
-        .gold-frame::after {
+        .gold-frame:hover {
+          border-color: rgba(251,191,36,0.5);
+          box-shadow: 0 0 80px rgba(251,191,36,0.12), inset 0 0 80px rgba(251,191,36,0.05);
+        }
+
+        /* ── Shimmer overlay for gold frame ── */
+        .gold-shimmer {
+          position: absolute;
+          inset: 0;
+          border-radius: 32px;
+          overflow: hidden;
+          pointer-events: none;
+          z-index: 0;
+        }
+        .gold-shimmer::after {
           content: "";
           position: absolute;
           inset: -40%;
           background-image: linear-gradient(
             120deg,
             rgba(253,230,138,0) 0%,
-            rgba(253,230,138,0.03) 40%,
-            rgba(250,204,21,0.06) 50%,
-            rgba(253,230,138,0.03) 60%,
+            rgba(253,230,138,0.06) 40%,
+            rgba(250,204,21,0.12) 50%,
+            rgba(253,230,138,0.06) 60%,
             rgba(253,230,138,0) 100%
           );
           mix-blend-mode: screen;
-          opacity: 0.4;
+          opacity: 0.6;
           transform: translateX(-60%);
-          animation: shimmer-slow 8s ease-in-out infinite;
-          pointer-events: none;
+          animation: shimmer-slow 6s ease-in-out infinite;
         }
         @keyframes shimmer-slow {
           0% { transform: translateX(-60%); }
@@ -150,36 +163,26 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           100% { transform: translateX(120%); }
         }
 
-        /* ── Content container — uses full width with padding ── */
-        .content {
-          position: relative;
-          z-index: 3;
-          min-height: 100vh;
-          padding: 60px 20px 40px;
-          max-width: 480px;
-          margin: 0 auto;
-          display: flex;
-          flex-direction: column;
-        }
+        .gold-frame > * { position: relative; z-index: 1; }
 
-        /* ── Section divider ── */
+        /* ── Section dividers ── */
         .section-divider {
           display: flex;
           align-items: center;
           gap: 12px;
-          margin: 16px 0 14px;
+          margin: 20px 0 16px;
         }
         .section-divider .line {
           flex: 1;
           height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(251,191,36,0.15), transparent);
+          background: linear-gradient(90deg, transparent, rgba(251,191,36,0.2), transparent);
         }
         .section-divider .label {
           font-size: 9px;
           font-weight: 600;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: rgba(251,191,36,0.35);
+          color: rgba(251,191,36,0.4);
           white-space: nowrap;
         }
 
@@ -206,23 +209,24 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           border-radius: 16px;
           padding: 16px 18px;
           transition: all 0.25s ease;
+          cursor: pointer;
           position: relative;
         }
         .tier-card.hero {
-          border: 1.5px solid rgba(251,191,36,0.4);
-          background: linear-gradient(135deg, rgba(251,191,36,0.10), rgba(251,191,36,0.03));
+          border: 1.5px solid rgba(251,191,36,0.5);
+          background: linear-gradient(135deg, rgba(251,191,36,0.12), rgba(251,191,36,0.04));
         }
         .tier-card.hero:hover {
-          border-color: rgba(251,191,36,0.7);
-          background: linear-gradient(135deg, rgba(251,191,36,0.16), rgba(251,191,36,0.05));
-          box-shadow: 0 0 40px rgba(251,191,36,0.06);
+          border-color: rgba(251,191,36,0.8);
+          background: linear-gradient(135deg, rgba(251,191,36,0.18), rgba(251,191,36,0.06));
+          box-shadow: 0 0 40px rgba(251,191,36,0.08);
         }
         .tier-card.base {
-          border: 1px solid rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.08);
           background: rgba(255,255,255,0.02);
         }
         .tier-card.base:hover {
-          border-color: rgba(255,255,255,0.15);
+          border-color: rgba(255,255,255,0.2);
           background: rgba(255,255,255,0.04);
         }
         .best-badge {
@@ -230,7 +234,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           top: -10px;
           left: 16px;
           border-radius: 9999px;
-          border: 1px solid rgba(251,191,36,0.35);
+          border: 1px solid rgba(251,191,36,0.4);
           background: #050816;
           padding: 2px 14px;
           font-size: 9px;
@@ -242,24 +246,24 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
 
         /* ── Bundle placeholder ── */
         .bundle-spot {
-          margin-top: 14px;
+          margin: 14px 0 8px;
           padding: 12px 16px;
           border-radius: 14px;
-          border: 1.5px dashed rgba(251,191,36,0.2);
-          background: rgba(251,191,36,0.03);
+          border: 1.5px dashed rgba(251,191,36,0.25);
+          background: rgba(251,191,36,0.04);
           text-align: center;
           transition: all 0.25s ease;
         }
         .bundle-spot:hover {
-          border-color: rgba(251,191,36,0.35);
-          background: rgba(251,191,36,0.06);
+          border-color: rgba(251,191,36,0.4);
+          background: rgba(251,191,36,0.07);
         }
         .bundle-spot .label {
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: rgba(251,191,36,0.45);
+          color: rgba(251,191,36,0.5);
         }
         .bundle-spot .coming {
           font-size: 12px;
@@ -267,13 +271,13 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           margin-top: 4px;
         }
 
-        /* ── Founder notice ── */
+        /* ── Founder notice spot ── */
         .founder-spot {
-          margin-top: 14px;
+          margin-top: 16px;
           padding: 12px 16px;
           border-radius: 12px;
-          border: 1px solid rgba(147,197,253,0.12);
-          background: rgba(147,197,253,0.03);
+          border: 1px solid rgba(147,197,253,0.15);
+          background: rgba(147,197,253,0.04);
           text-align: center;
         }
         .founder-spot .label {
@@ -281,7 +285,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           font-weight: 600;
           letter-spacing: 0.12em;
           text-transform: uppercase;
-          color: rgba(147,197,253,0.4);
+          color: rgba(147,197,253,0.5);
         }
         .founder-spot .coming {
           font-size: 12px;
@@ -289,237 +293,169 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           margin-top: 4px;
         }
 
-        /* ── Perks ── */
-        .perk-item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 4px 0;
-        }
-        .perk-check {
-          display: flex;
-          height: 18px;
-          width: 18px;
-          flex-shrink: 0;
-          align-items: center;
-          justify-content: center;
-          border-radius: 9999px;
-          background: rgba(251,191,36,0.12);
-          color: #fbbf24;
-          font-size: 10px;
-          font-weight: 700;
-        }
-        .perk-text {
-          font-size: 13px;
-          color: #cbd5e1;
-        }
-
-        /* ── Swipe cue ── */
         @keyframes swipeCuePulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.9; text-shadow: 0 0 14px rgba(255,255,255,0.3); }
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; text-shadow: 0 0 14px rgba(255,255,255,0.55); }
         }
         @keyframes swipeCueNudge {
           0%, 100% { transform: translateX(0); }
           50% { transform: translateX(-4px); }
         }
-        .swipe-cue {
-          animation: swipeCuePulse 2.1s ease-in-out infinite;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          color: rgba(255,255,255,0.6);
-          font-size: 11px;
-          font-weight: 500;
-          letter-spacing: 0.15em;
-          text-transform: uppercase;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 8px 0;
-          width: 100%;
-        }
-        .swipe-cue svg {
-          animation: swipeCueNudge 2.1s ease-in-out infinite;
-        }
-
-        .mission-toggle {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          width: 100%;
-          background: none;
-          border: none;
-          color: #fbbf24;
-          font-size: 15px;
-          font-weight: 600;
-          padding: 4px 0 8px;
-          cursor: pointer;
-          text-align: left;
-        }
-        .mission-toggle svg {
-          transition: transform 0.3s ease;
-          color: rgba(251,191,36,0.5);
-        }
-        .mission-toggle svg.open {
-          transform: rotate(180deg);
-        }
-
-        .cancel-anytime {
-          text-align: center;
-          font-size: 10px;
-          color: #475569;
-          margin-top: 14px;
-          letter-spacing: 0.05em;
-        }
+        .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
+        .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
 
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
-          .gold-frame::after { animation: none !important; }
+          .gold-shimmer::after { animation: none !important; }
+          .gold-frame:hover { border-color: rgba(251,191,36,0.3); }
         }
       `}</style>
 
-      {/* ── Gold outline frame at screen edge ── */}
-      <div className="gold-frame" aria-hidden="true" />
-
-      {/* ── Starfield backdrop ── */}
+      {/* ── Starfield backdrop (stars + shooting stars only) ── */}
       <StarfieldBackground />
 
-      {/* ── Content ── */}
-      <div className="content">
+      <div className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col flex-1"
+          className="flex flex-col top-section"
         >
           {/* ── Swipe cue ── */}
           <button
             type="button"
             onClick={() => onSwipeRight?.()}
-            className="swipe-cue tap-fix"
+            className="swipe-cue tap-fix mx-auto mt-1 mb-4 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
             Swipe Right to Go Back
           </button>
 
-          {/* ── TOP: Mission ── */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowMission(!showMission)}
-              className="mission-toggle tap-fix"
-            >
-              <span className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-300/60" />
-                Why AstroProXL Exists
-              </span>
-              <ChevronDown className={`h-4 w-4 ${showMission ? "open" : ""}`} />
-            </button>
+          {/* ── GOLD FRAME ── */}
+          <div className="gold-frame">
+            <div className="gold-shimmer" aria-hidden="true" />
 
-            {showMission && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="mt-3 space-y-3"
+            {/* ── TOP: Mission ── */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowMission(!showMission)}
+                className="flex items-center justify-between w-full text-left group"
               >
-                <p className="mission-text">
-                  Most people look for a reading when they're going through something hard —
-                  a heartbreak, a money fear, a crossroads they can't see past. That's exactly
-                  when clarity matters most, and exactly when it's usually least affordable.
-                </p>
-                <p className="mission-text">
-                  Readings elsewhere run $60 to $120, often from someone working off intuition
-                  alone — and even the most well-meaning human carries bias they may not notice.
-                </p>
-                <p className="mission-text">
-                  <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
-                  placements, transits, timing — with no agenda and no guesswork, at a price
-                  that doesn't add to your stress. Affordable, honest clarity, for the moments
-                  you need it most.
-                </p>
-                <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
-              </motion.div>
-            )}
-          </div>
+                <h2 className="text-[15px] font-semibold text-amber-200 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-300/70" />
+                  Why AstroProXL Exists
+                </h2>
+                <ChevronDown
+                  className={`h-4 w-4 text-amber-300/50 transition-transform duration-300 ${
+                    showMission ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
 
-          {/* ── Divider ── */}
-          <div className="section-divider">
-            <span className="line" />
-            <span className="label">More Readings, Real Savings</span>
-            <span className="line" />
-          </div>
-
-          {/* ── BOTTOM: Offer ── */}
-          <div className="flex-1">
-            {/* ── Perks ── */}
-            <div className="space-y-1 mb-4">
-              {PERKS.map((perk) => (
-                <div key={perk} className="perk-item">
-                  <span className="perk-check">✓</span>
-                  <span className="perk-text">{perk}</span>
-                </div>
-              ))}
+              {showMission && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className="mt-4 space-y-3"
+                >
+                  <p className="mission-text">
+                    Most people look for a reading when they're going through something hard —
+                    a heartbreak, a money fear, a crossroads they can't see past. That's exactly
+                    when clarity matters most, and exactly when it's usually least affordable.
+                  </p>
+                  <p className="mission-text">
+                    Readings elsewhere run $60 to $120, often from someone working off intuition
+                    alone — and even the most well-meaning human carries bias they may not notice.
+                  </p>
+                  <p className="mission-text">
+                    <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
+                    placements, transits, timing — with no agenda and no guesswork, at a price
+                    that doesn't add to your stress. Affordable, honest clarity, for the moments
+                    you need it most.
+                  </p>
+                  <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
+                </motion.div>
+              )}
             </div>
 
-            <p className="text-[11px] text-amber-300/50 mb-4">
-              Less than two single readings a month.
-            </p>
+            {/* ── Divider ── */}
+            <div className="section-divider">
+              <span className="line" />
+              <span className="label">More Readings, Real Savings</span>
+              <span className="line" />
+            </div>
 
-            {/* ── Tier cards ── */}
-            <div className="space-y-3">
-              {(["sub_plus", "sub_base"] as const).map((tierKey) => {
-                const t = SUB_TIERS[tierKey];
-                const isHero = tierKey === "sub_plus";
-                return (
-                  <div
-                    key={tierKey}
-                    className={cn("tier-card", isHero ? "hero" : "base")}
-                  >
-                    {isHero && <span className="best-badge">Best Value</span>}
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[20px] font-bold text-white">{t.displayPrice}</p>
-                        <p className="text-[13px] text-slate-300">
-                          {t.readings} readings + {t.jxl} JXL
-                        </p>
-                        <p className="text-[11px] text-slate-500">every month</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleSubscribe(tierKey)}
-                        disabled={isSubscribeLoading}
-                        className={cn(
-                          "px-6 py-2.5 rounded-full text-sm font-semibold transition",
-                          isHero
-                            ? "bg-amber-300 text-[#050816] hover:bg-amber-200 disabled:opacity-50"
-                            : "border border-white/15 text-white hover:bg-white/5 disabled:opacity-50"
-                        )}
-                      >
-                        {isSubscribeLoading ? "..." : "Subscribe"}
-                      </button>
-                    </div>
+            {/* ── BOTTOM: Offer ── */}
+            <div>
+              {/* ── Perks ── */}
+              <div className="space-y-1.5 mb-4">
+                {PERKS.map((perk) => (
+                  <div key={perk} className="flex items-center gap-2.5">
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">✓</span>
+                    <span className="text-[12px] text-slate-300">{perk}</span>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
 
-            {/* ── Bundle spot ── */}
-            <div className="bundle-spot">
-              <p className="label">🎁 Bundle Pack — Coming Soon</p>
-              <p className="coming">Save even more with a 6-month or 12-month plan</p>
-            </div>
+              <p className="text-[11px] text-amber-300/60 mb-4">
+                Less than two single readings a month.
+              </p>
 
-            {/* ── Founder notice ── */}
-            <div className="founder-spot">
-              <p className="label">✨ Founder's Notice</p>
-              <p className="coming">Coming soon — a special offer for early supporters</p>
-            </div>
+              {/* ── Tier cards ── */}
+              <div className="space-y-3">
+                {(["sub_plus", "sub_base"] as const).map((tierKey) => {
+                  const t = SUB_TIERS[tierKey];
+                  const isHero = tierKey === "sub_plus";
+                  return (
+                    <div
+                      key={tierKey}
+                      className={cn("tier-card", isHero ? "hero" : "base")}
+                    >
+                      {isHero && <span className="best-badge">Best Value</span>}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[20px] font-bold text-white">{t.displayPrice}</p>
+                          <p className="text-[13px] text-slate-300">
+                            {t.readings} readings + {t.jxl} JXL
+                          </p>
+                          <p className="text-[11px] text-slate-500">every month</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSubscribe(tierKey)}
+                          disabled={isSubscribeLoading}
+                          className={cn(
+                            "px-6 py-2.5 rounded-full text-sm font-semibold transition",
+                            isHero
+                              ? "bg-amber-300 text-[#050816] hover:bg-amber-200 disabled:opacity-50"
+                              : "border border-white/20 text-white hover:bg-white/5 disabled:opacity-50"
+                          )}
+                        >
+                          {isSubscribeLoading ? "..." : "Subscribe"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-            {/* ── Cancel anytime ── */}
-            <p className="cancel-anytime">Cancel anytime</p>
+              {/* ── Bundle spot ── */}
+              <div className="bundle-spot">
+                <p className="label">🎁 Bundle Pack — Coming Soon</p>
+                <p className="coming">Save even more with a 6-month or 12-month plan</p>
+              </div>
+
+              {/* ── Founder notice spot ── */}
+              <div className="founder-spot">
+                <p className="label">✨ Founder's Notice</p>
+                <p className="coming">Coming soon — a special offer for early supporters</p>
+              </div>
+
+              {/* ── Footer ── */}
+              <p className="mt-3 text-center text-[10px] text-slate-500">Cancel anytime</p>
+            </div>
           </div>
         </motion.div>
       </div>
