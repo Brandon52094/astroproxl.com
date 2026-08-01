@@ -71,7 +71,7 @@ const AREAS = [
   {
     id: "other",
     title: "What's Coming",
-    description: "What to expect in the next 30–45 days — timing, shifts, events.",
+    description: "What to expect in the next 30–45 days.",
     icon: Sparkles,
     placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     cta: "Begin My Reading",
