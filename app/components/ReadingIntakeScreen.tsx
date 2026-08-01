@@ -636,7 +636,7 @@ export default function ReadingIntakeScreen({
 
       <div
         className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
-        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
@@ -844,9 +844,6 @@ export default function ReadingIntakeScreen({
           <div className="mt-4">
             <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
-
-          {/* ── Empty space preserved for future content ── */}
-          <div className="mt-0.5" />
 
         </motion.div>
       </div>
