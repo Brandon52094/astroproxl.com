@@ -24,11 +24,11 @@ interface MembershipPanelProps {
 }
 
 const PERKS = [
-  "Reading credits every month",
-  "JXL follow-up credits every month",
-  "Free reading downloads",
-  "50% off extras after you run out",
-  "No cooldowns, ever",
+  "Up to $80 in monthly value starting at just $12/mo",
+  "50% Off All Extras — never pay full price again, if you ever ",
+  "4 Free Follow-Up Replies PER ready. Expand every conversation",
+  "Unused Top-Up Credits Never Expire or get wiped",
+  "No Cooldowns & Free Downloads on every reading",
 ];
 
 export default function MembershipPanel({ userStatus, onSwipeRight }: MembershipPanelProps) {
@@ -373,7 +373,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
                 at a price that doesn't add to your stress. Affordable, honest clarity, for the
                 moments you need it most.
               </p>
-              <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
+              <p className="mission-signoff">— Jáneel, The AstroProXL Founder</p>
             </div>
           </div>
 
@@ -416,7 +416,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
                     <div className="flex flex-col items-center text-center gap-1">
                       <p className="text-[24px] font-bold text-white leading-none">{t.displayPrice}</p>
                       <p className="text-[12px] text-slate-300 leading-tight">
-                        {t.readings} readings + {t.jxl} JXL
+                        {t.readings} readings + {t.jxl} JXL READINGS
                       </p>
                       <p className="text-[10px] text-slate-500 mb-2">every month</p>
                       <button
