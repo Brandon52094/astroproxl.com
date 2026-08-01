@@ -840,7 +840,7 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
           <div className="mt-4">
-            <AskJxlButton onClick={() => { console.log("Ask JXL tapped — wire routing next"); }} />
+            <AskJxlButton onClick={() => router.push("/jxl")} />
           </div>
 
           <div className="mt-2 flex items-center gap-3">

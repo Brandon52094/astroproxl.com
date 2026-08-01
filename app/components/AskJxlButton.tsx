@@ -8,7 +8,7 @@ const WAVE = {
   colors: ["#34d399", "#22d3ee", "#38bdf8", "#a855f7"],
   idle: 0.32,
   sensitivity: 0.9,
-  lines: 4,
+  lines: 1,
   thickness: 2.4,
   glow: 12,
 };
@@ -18,13 +18,12 @@ export interface AskJxlButtonProps {
   subtitle?: string;
   onClick?: () => void;
   className?: string;
-  /** Box height in px. Defaults to 184 (the shell size). */
+  /** Box height in px. Defaults to 104 (the shell size). */
   height?: number;
 }
 
 /**
- * "Ask JXL" button with a self-running aurora waveform background
- * and an aurora glow behind the container edges.
+ * "Ask JXL" button with a self-running aurora waveform background.
  *
  * The waveform rendering is lifted from JxlPanel's mic-reactive visual,
  * but the microphone analyser is replaced by a self-generating "energy"
@@ -35,7 +34,7 @@ export default function AskJxlButton({
   subtitle = "Ask anything about your chart",
   onClick,
   className,
-  height = 184,
+  height = 104,
 }: AskJxlButtonProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -137,9 +136,6 @@ export default function AskJxlButton({
 
   return (
     <div className={`ask-jxl-wrap${className ? ` ${className}` : ""}`}>
-      {/* Aurora glow bleeding out behind the container edges */}
-      <div className="ask-jxl-glow" aria-hidden="true" />
-
       <button type="button" onClick={onClick} className="ask-jxl-btn" style={{ height }}>
         <canvas ref={canvasRef} className="ask-jxl-wave" aria-hidden="true" />
         <span className="ask-jxl-label">{label}</span>
@@ -149,37 +145,21 @@ export default function AskJxlButton({
       <style jsx>{`
         .ask-jxl-wrap { position: relative; width: 100%; }
 
-        .ask-jxl-glow {
-          position: absolute;
-          inset: -10px;
-          border-radius: 38px;
-          z-index: 0;
-          pointer-events: none;
-          background: linear-gradient(120deg, #34d399, #22d3ee, #38bdf8, #a855f7, #34d399);
-          background-size: 220% 220%;
-          filter: blur(22px);
-          opacity: 0.5;
-          animation: auroraGlow 9s ease-in-out infinite;
-        }
-        @keyframes auroraGlow {
-          0%, 100% { background-position: 0% 50%; opacity: 0.42; }
-          50% { background-position: 100% 50%; opacity: 0.62; }
-        }
-
         .ask-jxl-btn {
           position: relative;
           z-index: 1;
           width: 100%;
-          border-radius: 28px;
-          border: 1px solid rgba(129,140,248,0.2);   /* indigo-400/20 */
-          background: rgba(0,0,0,0.3);                /* bg-black/30 */
+          border-radius: 24px;
+          border: 1px solid rgba(129,140,248,0.2);
+          background: rgba(0,0,0,0.3);
           overflow: hidden;
           cursor: pointer;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 8px;
+          gap: 4px;
+          box-shadow: 0 0 22px rgba(45,212,191,0.10);
           transition: border-color 0.25s ease;
         }
         .ask-jxl-btn:hover { border-color: rgba(129,140,248,0.35); }
@@ -192,11 +172,11 @@ export default function AskJxlButton({
 
         .ask-jxl-label {
           position: relative; z-index: 2;
-          font-size: 36px; font-weight: 800; letter-spacing: 0.05em; line-height: 1;
+          font-size: 28px; font-weight: 800; letter-spacing: 0.05em; line-height: 1;
           background: linear-gradient(180deg, #ffffff 0%, #cffaf0 100%);
           -webkit-background-clip: text; background-clip: text;
           -webkit-text-fill-color: transparent; color: transparent;
-          filter: drop-shadow(0 2px 10px rgba(0,0,0,0.55)) drop-shadow(0 0 20px rgba(120,255,214,0.35));
+          filter: drop-shadow(0 2px 8px rgba(0,0,0,0.55));
         }
         .ask-jxl-sub {
           position: relative; z-index: 2;
@@ -206,7 +186,7 @@ export default function AskJxlButton({
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .ask-jxl-glow { animation: none !important; }
+          .ask-jxl-btn { box-shadow: none; }
         }
       `}</style>
     </div>
