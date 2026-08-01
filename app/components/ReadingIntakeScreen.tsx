@@ -24,6 +24,7 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { SUB_TIERS } from "@/lib/paywallConfig";
+import AskJxlButton from "./AskJxlButton";
 
 declare global {
   interface Window {
@@ -632,9 +633,9 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
-  style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
->
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
+        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+      >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -809,7 +810,7 @@ export default function ReadingIntakeScreen({
             )}
           </AnimatePresence>
 
-                    {/* ── SUBMIT ── */}
+          {/* ── SUBMIT ── */}
           <div className="mt-0.5 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             {selectedArea && (
@@ -830,6 +831,16 @@ export default function ReadingIntakeScreen({
                 {buttonCopy}
               </Button>
             )}
+          </div>
+
+          {/* ── Ask JXL ── */}
+          <div className="mt-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.06]" />
+            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
+            <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+          <div className="mt-4">
+            <AskJxlButton onClick={() => { console.log("Ask JXL tapped — wire routing next"); }} />
           </div>
 
           <div className="mt-2 flex items-center gap-3">
