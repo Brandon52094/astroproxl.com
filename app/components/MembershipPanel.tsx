@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, ChevronDown, Gift } from "lucide-react";
+import { ChevronDown, Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SUB_TIERS } from "@/lib/paywallConfig";
 import StarfieldBackground from "./StarfieldBackground";
@@ -90,7 +90,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
             transition={{ duration: 0.4, ease: "easeOut" }}
           >
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300 mx-auto mb-6">
-              <Sparkles className="h-10 w-10" />
+              <Gift className="h-10 w-10" />
             </div>
             <h1 className="text-3xl font-semibold text-white mb-3">
               You're Subscribed! 🎉
@@ -151,7 +151,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
             0 0 70px rgba(251,191,36,0.10),
             inset 0 1px 0 rgba(255,255,255,0.20),
             inset 0 0 40px rgba(255,255,255,0.03);
-          padding: 24px 20px 28px;
+          padding: 20px 20px 28px;
           transition: border-color 0.4s ease, box-shadow 0.4s ease;
           overflow-y: auto;
           overflow-x: hidden;
@@ -171,43 +171,12 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         }
         .gold-frame > * { position: relative; z-index: 1; }
 
-        .gold-shimmer {
-          position: absolute;
-          inset: 0;
-          border-radius: 40px;
-          overflow: hidden;
-          pointer-events: none;
-          z-index: 0;
-        }
-        .gold-shimmer::after {
-          content: "";
-          position: absolute;
-          inset: -40%;
-          background-image: linear-gradient(
-            120deg,
-            rgba(253,230,138,0) 0%,
-            rgba(253,230,138,0.06) 40%,
-            rgba(250,204,21,0.12) 50%,
-            rgba(253,230,138,0.06) 60%,
-            rgba(253,230,138,0) 100%
-          );
-          mix-blend-mode: screen;
-          opacity: 0.6;
-          transform: translateX(-60%);
-          animation: shimmer-slow 6s ease-in-out infinite;
-        }
-        @keyframes shimmer-slow {
-          0% { transform: translateX(-60%); }
-          50% { transform: translateX(40%); }
-          100% { transform: translateX(120%); }
-        }
-
         /* ── Section dividers ── */
         .section-divider {
           display: flex;
           align-items: center;
           gap: 12px;
-          margin: 22px 0 14px;
+          margin: 20px 0 14px;
         }
         .section-divider .line {
           flex: 1;
@@ -241,26 +210,14 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           color: #93c5fd;
         }
 
-        .mission-toggle {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          width: 100%;
-          background: none;
-          border: none;
-          color: #fbbf24;
-          font-size: 15px;
-          font-weight: 600;
-          padding: 4px 0 8px;
-          cursor: pointer;
-          text-align: left;
-        }
-        .mission-toggle svg {
-          transition: transform 0.3s ease;
-          color: rgba(251,191,36,0.5);
-        }
-        .mission-toggle svg.open {
-          transform: rotate(180deg);
+        /* ── Mission heading (same size as offer-heading) ── */
+        .mission-heading {
+          font-size: 17px;
+          font-weight: 700;
+          text-align: center;
+          color: #fef3c7;
+          letter-spacing: 0.01em;
+          margin-bottom: 12px;
         }
 
         /* ── Offer heading ── */
@@ -382,11 +339,11 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .gold-shimmer::after { animation: none !important; }
+          .gold-frame:hover { border-color: rgba(251,191,36,0.75); }
         }
       `}</style>
 
-      {/* ── Starfield / galaxy backdrop ── */}
+      {/* ── Starfield / galaxy backdrop (stars only, no constellations) ── */}
       <StarfieldBackground />
 
       {/* ── Phone-edge frame (safe-area inset so it clears the status bar) ── */}
@@ -397,11 +354,8 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          <div className="gold-shimmer" aria-hidden="true" />
-
           {/* ── TOP: Membership offer ── */}
           <div>
-            {/* ── Section heading ── */}
             <h3 className="offer-heading">More Readings, Real Savings</h3>
 
             {/* ── Perks ── */}
@@ -478,45 +432,28 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
             <span className="line" />
           </div>
 
-          {/* ── BOTTOM: Why AstroProXL ── */}
+          {/* ── BOTTOM: Why AstroProXL (no dropdown, no sparkle icon) ── */}
           <div>
-            <button
-              type="button"
-              onClick={() => setShowMission(!showMission)}
-              className="mission-toggle tap-fix"
-            >
-              <span className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-300/60" />
-                Why AstroProXL Exists
-              </span>
-              <ChevronDown className={`h-4 w-4 ${showMission ? "open" : ""}`} />
-            </button>
+            <h3 className="mission-heading">Why AstroProXL Exists</h3>
 
-            {showMission && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="mt-3 space-y-3"
-              >
-                <p className="mission-text">
-                  Most people look for a reading when they're going through something hard —
-                  a heartbreak, a money fear, a crossroads they can't see past. That's exactly
-                  when clarity matters most, and exactly when it's usually least affordable.
-                </p>
-                <p className="mission-text">
-                  Readings elsewhere run $60 to $120, often from someone working off intuition
-                  alone — and even the most well-meaning human carries bias they may not notice.
-                </p>
-                <p className="mission-text">
-                  <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
-                  placements, transits, timing — with no agenda and no guesswork, at a price
-                  that doesn't add to your stress. Affordable, honest clarity, for the moments
-                  you need it most.
-                </p>
-                <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
-              </motion.div>
-            )}
+            <div className="mt-3 space-y-3">
+              <p className="mission-text">
+                Most people look for a reading when they're going through something hard —
+                a heartbreak, a money fear, a crossroads they can't see past. That's exactly
+                when clarity matters most, and exactly when it's usually least affordable.
+              </p>
+              <p className="mission-text">
+                Readings elsewhere run $60 to $120, often from someone working off intuition
+                alone — and even the most well-meaning human carries bias they may not notice.
+              </p>
+              <p className="mission-text">
+                <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
+                placements, transits, timing — with no agenda and no guesswork, at a price
+                that doesn't add to your stress. Affordable, honest clarity, for the moments
+                you need it most.
+              </p>
+              <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
+            </div>
           </div>
         </motion.div>
       </div>
