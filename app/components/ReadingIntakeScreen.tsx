@@ -632,9 +632,9 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
-        style={{ paddingBottom: "calc(3rem + env(safe-area-inset-bottom))" }}
-      >
+  className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
+  style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+>
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
