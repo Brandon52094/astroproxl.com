@@ -301,26 +301,6 @@ export default function PagerContainer() {
           </div>
         </div>
       </div>
-
-      {/* ── Page indicators ── */}
-      <div
-        className="pointer-events-none absolute left-0 right-0 flex items-center justify-center gap-1.5"
-        style={{ bottom: "calc(8px + env(safe-area-inset-bottom))", zIndex: 50 }}
-        aria-hidden="true"
-      >
-        {Array.from({ length: totalPanels }).map((_, i) => (
-          <span
-            key={i}
-            style={{
-              width: i === activePanel ? 16 : 5,
-              height: 5,
-              borderRadius: 9999,
-              background: i === activePanel ? "rgba(94,234,212,0.85)" : "rgba(255,255,255,0.18)",
-              transition: "width 300ms ease, background 300ms ease",
-            }}
-          />
-        ))}
-      </div>
     </div>
   );
 }
