@@ -8,7 +8,6 @@ import {
   Briefcase,
   Wallet,
   Sparkles,
-  ChevronRight,
   ChevronLeft,
   ChevronDown,
 } from "lucide-react";
@@ -191,7 +190,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 };
 
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
-const CARD_TITLES = ["Choose Your Access"];
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
@@ -205,7 +203,6 @@ export default function ReadingIntakeScreen({
   const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
-  const [isCarouselOpen, setIsCarouselOpen] = useState(false);
   const [showMission, setShowMission] = useState(false);
 
   const theme = THEMES.cosmic;
@@ -437,42 +434,6 @@ export default function ReadingIntakeScreen({
     return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
   }, [getAreaColors]);
 
-  const renderCardContent = useCallback(() => (
-    <div className="space-y-4 flex-1">
-      <div>
-        <h3 className="text-[15px] font-semibold leading-snug text-white">
-          {userStatus?.isSubscribed ? "You're Subscribed! 🎉" : "More Clarity. No Waiting."}
-        </h3>
-        {!userStatus?.isSubscribed && (
-          <p className="mt-1.5 text-[12px] leading-5 text-slate-400">
-            Monthly access to deeper readings, JXL follow-ups, and no cooldowns.
-          </p>
-        )}
-      </div>
-      {!userStatus?.isSubscribed ? (
-        <>
-          <div className="space-y-2">
-            {["Reading credits every month", "JXL follow-up credits every month", "Free reading downloads", "50% off extras after you run out", "No cooldowns, ever"].map(perk => (
-              <div key={perk} className="flex items-center gap-2.5">
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">✓</span>
-                <span className="text-[12px] text-slate-300">{perk}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-amber-300/60">Less than two single readings a month.</p>
-        </>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-4 flex-1">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300">
-            <Sparkles className="h-6 w-6" />
-          </div>
-          <p className="mt-3 text-center text-sm text-slate-300">You have full access to all features.</p>
-          <p className="text-center text-xs text-slate-500 mt-1">Enjoy your Unlimited Access.</p>
-        </div>
-      )}
-    </div>
-  ), [userStatus]);
-
   return (
     <div
       className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
@@ -555,13 +516,24 @@ export default function ReadingIntakeScreen({
         .selected-card-shell[data-selected="true"] .selected-icon-wrap { animation: whiteGlowPulse 2.2s ease-in-out infinite; }
         @keyframes selectedSweep { 0% { transform: translateX(-155%); } 100% { transform: translateX(155%); } }
 
-        .carousel-container { position: relative; overflow: hidden; border-radius: 24px; border: 1px solid rgba(251,191,36,0.2); background: linear-gradient(180deg, rgba(251,191,36,0.06), rgba(251,191,36,0.02)); animation: jxlAmberPulse 2.8s ease-in-out infinite; }
-        .carousel-container::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 16% 18%, rgba(255,255,255,0.06), transparent 26%), radial-gradient(circle at 80% 12%, rgba(251,191,36,0.12), transparent 24%); pointer-events: none; z-index: 0; }
-        .carousel-container::after { content: ""; position: absolute; inset: -40%; background-image: linear-gradient(120deg, rgba(253,230,138,0) 0%, rgba(253,230,138,0.12) 40%, rgba(250,204,21,0.3) 50%, rgba(253,230,138,0.12) 60%, rgba(253,230,138,0) 100%); mix-blend-mode: screen; pointer-events: none; opacity: 0.55; transform: translateX(-60%); animation: jxlShimmer 5s linear infinite; z-index: 0; }
-        .carousel-container > * { position: relative; z-index: 1; }
-        .carousel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; cursor: pointer; transition: background 0.15s ease; width: 100%; text-align: left; background: transparent; border: none; color: inherit; font: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-        .carousel-header:hover { background: rgba(255,255,255,0.02); }
-        .carousel-content { border-top: 1px solid rgba(251,191,36,0.1); padding: 0; display: flex; flex-direction: column; }
+        /* ── Membership placeholder (replaces carousel) ── */
+        .membership-placeholder {
+          margin-top: 16px;
+          padding: 24px 20px;
+          border-radius: 24px;
+          border: 1px solid rgba(251,191,36,0.15);
+          background: rgba(251,191,36,0.03);
+          text-align: center;
+          min-height: 80px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .membership-placeholder p {
+          font-size: 13px;
+          color: #94a3b8;
+          letter-spacing: 0.05em;
+        }
 
         @keyframes swipeCuePulse {
           0%, 100% { opacity: 0.5; }
@@ -701,7 +673,6 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
-          .carousel-container::after,
           .hero-shine::after,
           .install-teaser,
           .mission-body { animation: none !important; opacity: 0.8; box-shadow: none; }
@@ -918,102 +889,9 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── CAROUSEL ── */}
-          <div className="mt-4">
-            <div className="carousel-container">
-              <button type="button" onClick={() => setIsCarouselOpen(!isCarouselOpen)} className="carousel-header" aria-expanded={isCarouselOpen}>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-200">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <div className="text-left">
-                    <h2 className="text-[15px] font-semibold text-amber-200">Choose Your Access</h2>
-                    <p className="text-[11px] text-slate-400">More readings, more follow-up, no waiting</p>
-                  </div>
-                </div>
-                <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-300/20 bg-black/20 text-amber-300/70 transition-transform duration-200", isCarouselOpen && "rotate-180")}>
-                  <ChevronRight className="h-4 w-4" />
-                </div>
-              </button>
-
-              <AnimatePresence>
-                {isCarouselOpen && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: "easeOut" }} className="overflow-hidden">
-                    <div className="carousel-content">
-                      <div className="relative w-full min-h-[220px] bg-black/20 p-6 flex flex-col">
-                        <h3 className="text-sm font-semibold text-amber-200 mb-3">{CARD_TITLES[0]}</h3>
-                        <div className="flex-1">{renderCardContent()}</div>
-                      </div>
-                      {!userStatus?.isSubscribed && (
-                        <div className="p-4 pt-3 border-t border-amber-300/10">
-                          <div className="grid grid-cols-2 gap-2">
-                            {(["sub_base", "sub_plus"] as const).map((tierKey) => {
-                              const t = SUB_TIERS[tierKey];
-                              const isHero = tierKey === "sub_plus";
-                              return (
-                                <button
-                                  key={tierKey}
-                                  type="button"
-                                  disabled={isSubscribeLoading}
-                                  onClick={() => {
-                                    setIsSubscribeLoading(true);
-                                    trackTtq("InitiateCheckout", {
-                                      content_id: "subscription",
-                                      value: isHero ? 16 : 12,
-                                      currency: "USD",
-                                    });
-                                    (async () => {
-                                      try {
-                                        const res = await fetch("/api/stripe/checkout", {
-                                          method: "POST",
-                                          headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({
-                                            returnUrl: `${window.location.origin}/reading/intake`,
-                                            mode: "subscription",
-                                            bundleTier: tierKey,
-                                          }),
-                                        });
-                                        const data = await res.json();
-                                        if (data.url) window.location.href = data.url;
-                                      } finally {
-                                        setIsSubscribeLoading(false);
-                                      }
-                                    })();
-                                  }}
-                                  className={cn(
-                                    "relative flex flex-col items-center rounded-xl border px-3 py-3 text-center transition disabled:opacity-60",
-                                    isHero
-                                      ? "border-amber-300/60 bg-amber-300/20 hover:bg-amber-300/30"
-                                      : "border-amber-300/25 bg-amber-300/[0.06] hover:bg-amber-300/15"
-                                  )}
-                                >
-                                  {isHero && (
-                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-300/50 bg-[#050816] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-300">
-                                      Best Value
-                                    </span>
-                                  )}
-                                  <span className={cn("text-[16px] font-bold", isHero ? "text-amber-100" : "text-amber-200")}>
-                                    {t.displayPrice}
-                                  </span>
-                                  <span className="mt-1 text-[11px] leading-4 text-slate-200">
-                                    {t.readings} readings + {t.jxl} JXL
-                                  </span>
-                                  <span className="text-[10px] text-slate-500">every month</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <p className="mt-3 text-center text-[11px] font-medium text-amber-300/90">
-                            Double the access for only $4 more
-                          </p>
-                          <p className="mt-1 text-center text-[10px] text-slate-500">Cancel anytime</p>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+          {/* ── MEMBERSHIP PLACEHOLDER ── */}
+          <div className="membership-placeholder">
+            <p>✨ Membership options moved to the dedicated page — swipe right to explore</p>
           </div>
 
         </motion.div>
