@@ -809,8 +809,8 @@ export default function ReadingIntakeScreen({
             )}
           </AnimatePresence>
 
-          {/* ── SUBMIT ── */}
-          <div className="mt-6 space-y-3 pb-2" ref={clusterBottomRef}>
+                    {/* ── SUBMIT ── */}
+          <div className="mt-2 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             {selectedArea && (
               <Button
