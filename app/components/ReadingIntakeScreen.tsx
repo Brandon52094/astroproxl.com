@@ -889,10 +889,8 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── MEMBERSHIP PLACEHOLDER ── */}
-          <div className="membership-placeholder">
-            <p>✨ Membership options moved to the dedicated page — swipe right to explore</p>
-          </div>
+            {/* ── Empty space preserved for future content ── */}
+          <div className="mt-4" />
 
         </motion.div>
       </div>
