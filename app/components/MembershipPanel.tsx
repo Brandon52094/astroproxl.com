@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, ChevronLeft, ChevronRight, ChevronDown, Zap, Gift } from "lucide-react";
+import { Sparkles, ChevronDown, Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SUB_TIERS } from "@/lib/paywallConfig";
 import StarfieldBackground from "./StarfieldBackground";
@@ -33,7 +33,8 @@ const PERKS = [
 
 export default function MembershipPanel({ userStatus, onSwipeRight }: MembershipPanelProps) {
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
-  const [showMission, setShowMission] = useState(true); // Start open
+  const [isBundleLoading, setIsBundleLoading] = useState(false);
+  const [showMission, setShowMission] = useState(true);
   const isSubscribed = userStatus?.isSubscribed || false;
 
   const handleSubscribe = async (tierKey: "sub_base" | "sub_plus") => {
@@ -54,6 +55,27 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
       // silent
     } finally {
       setIsSubscribeLoading(false);
+    }
+  };
+
+  const handleBundle = async () => {
+    setIsBundleLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          returnUrl: `${window.location.origin}/reading/intake`,
+          mode: "payment",
+          bundleTier: "bundle_3",
+        }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch {
+      // silent
+    } finally {
+      setIsBundleLoading(false);
     }
   };
 
@@ -91,51 +113,58 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
 
   return (
     <div
-      className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
+      className="relative h-screen w-full overflow-hidden text-slate-100"
       style={{
-        WebkitOverflowScrolling: "touch",
-        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+        background:
+          "radial-gradient(55% 40% at 18% 12%, rgba(56,60,140,0.20), transparent 60%)," +
+          "radial-gradient(50% 40% at 85% 82%, rgba(120,50,120,0.16), transparent 60%)," +
+          "radial-gradient(45% 35% at 70% 30%, rgba(40,90,140,0.14), transparent 60%)," +
+          "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
       <style jsx>{`
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
-        /* ── Gold outline frame ── */
+        /* ── Gold outline frame (liquid glass, phone edge) ── */
         .gold-frame {
           position: relative;
-          border: 1.5px solid rgba(251,191,36,0.3);
-          border-radius: 32px;
-          background: rgba(5,6,15,0.6);
-          backdrop-filter: blur(12px);
-          box-shadow: 0 0 60px rgba(251,191,36,0.06), inset 0 0 60px rgba(251,191,36,0.03);
-          padding: 24px 20px;
-          margin: 0 16px 20px;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          border: 1.5px solid rgba(251,191,36,0.35);
+          border-radius: 40px;
+          background:
+            linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015) 45%, rgba(255,255,255,0.04)),
+            rgba(7,10,22,0.55);
+          backdrop-filter: blur(16px) saturate(165%) brightness(1.06);
+          -webkit-backdrop-filter: blur(16px) saturate(165%) brightness(1.06);
+          box-shadow:
+            0 0 60px rgba(251,191,36,0.06),
+            inset 0 1px 0 rgba(255,255,255,0.20),
+            inset 0 0 40px rgba(255,255,255,0.03);
+          padding: 24px 20px 28px;
           transition: border-color 0.4s ease, box-shadow 0.4s ease;
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: none;
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
-        .gold-frame::before {
-          content: "";
-          position: absolute;
-          inset: -2px;
-          border-radius: 34px;
-          padding: 2px;
-          background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05), rgba(251,191,36,0.15));
-          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          pointer-events: none;
-        }
+        .gold-frame::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .gold-frame:hover {
           border-color: rgba(251,191,36,0.5);
-          box-shadow: 0 0 80px rgba(251,191,36,0.12), inset 0 0 80px rgba(251,191,36,0.05);
+          box-shadow:
+            0 0 80px rgba(251,191,36,0.12),
+            inset 0 1px 0 rgba(255,255,255,0.24),
+            inset 0 0 60px rgba(255,255,255,0.04);
         }
+        .gold-frame > * { position: relative; z-index: 1; }
 
-        /* ── Shimmer overlay for gold frame ── */
         .gold-shimmer {
           position: absolute;
           inset: 0;
-          border-radius: 32px;
+          border-radius: 40px;
           overflow: hidden;
           pointer-events: none;
           z-index: 0;
@@ -163,14 +192,12 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           100% { transform: translateX(120%); }
         }
 
-        .gold-frame > * { position: relative; z-index: 1; }
-
         /* ── Section dividers ── */
         .section-divider {
           display: flex;
           align-items: center;
           gap: 12px;
-          margin: 20px 0 16px;
+          margin: 16px 0 14px;
         }
         .section-divider .line {
           flex: 1;
@@ -204,12 +231,68 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           color: #93c5fd;
         }
 
+        .mission-toggle {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+          background: none;
+          border: none;
+          color: #fbbf24;
+          font-size: 15px;
+          font-weight: 600;
+          padding: 4px 0 8px;
+          cursor: pointer;
+          text-align: left;
+        }
+        .mission-toggle svg {
+          transition: transform 0.3s ease;
+          color: rgba(251,191,36,0.5);
+        }
+        .mission-toggle svg.open {
+          transform: rotate(180deg);
+        }
+
+        /* ── Offer heading ── */
+        .offer-heading {
+          font-size: 17px;
+          font-weight: 700;
+          text-align: center;
+          color: #fef3c7;
+          letter-spacing: 0.01em;
+          margin-bottom: 14px;
+        }
+
+        /* ── Perks ── */
+        .perk-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 3px 0;
+        }
+        .perk-check {
+          display: flex;
+          height: 18px;
+          width: 18px;
+          flex-shrink: 0;
+          align-items: center;
+          justify-content: center;
+          border-radius: 9999px;
+          background: rgba(251,191,36,0.12);
+          color: #fbbf24;
+          font-size: 10px;
+          font-weight: 700;
+        }
+        .perk-text {
+          font-size: 13px;
+          color: #cbd5e1;
+        }
+
         /* ── Tier cards ── */
         .tier-card {
           border-radius: 16px;
-          padding: 16px 18px;
+          padding: 18px 12px 16px;
           transition: all 0.25s ease;
-          cursor: pointer;
           position: relative;
         }
         .tier-card.hero {
@@ -232,230 +315,200 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         .best-badge {
           position: absolute;
           top: -10px;
-          left: 16px;
+          left: 50%;
+          transform: translateX(-50%);
           border-radius: 9999px;
           border: 1px solid rgba(251,191,36,0.4);
           background: #050816;
-          padding: 2px 14px;
-          font-size: 9px;
+          padding: 2px 12px;
+          font-size: 8px;
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.12em;
           color: #fbbf24;
+          white-space: nowrap;
         }
 
-        /* ── Bundle placeholder ── */
-        .bundle-spot {
-          margin: 14px 0 8px;
-          padding: 12px 16px;
-          border-radius: 14px;
-          border: 1.5px dashed rgba(251,191,36,0.25);
-          background: rgba(251,191,36,0.04);
-          text-align: center;
+        /* ── 3-for-10 bundle ── */
+        .bundle-offer {
+          width: 100%;
+          margin: 16px 0 4px;
+          padding: 14px 16px;
+          border-radius: 16px;
+          border: 1.5px solid rgba(251,191,36,0.35);
+          background: linear-gradient(135deg, rgba(251,191,36,0.10), rgba(251,191,36,0.03));
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 3px;
+          cursor: pointer;
           transition: all 0.25s ease;
         }
-        .bundle-spot:hover {
-          border-color: rgba(251,191,36,0.4);
-          background: rgba(251,191,36,0.07);
+        .bundle-offer:hover {
+          border-color: rgba(251,191,36,0.6);
+          background: linear-gradient(135deg, rgba(251,191,36,0.16), rgba(251,191,36,0.05));
+          box-shadow: 0 0 40px rgba(251,191,36,0.08);
         }
-        .bundle-spot .label {
+        .bundle-offer:disabled { opacity: 0.5; cursor: default; }
+        .bundle-offer .bundle-title {
+          font-size: 15px;
+          font-weight: 700;
+          color: #fde68a;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .bundle-offer .bundle-sub {
           font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: rgba(251,191,36,0.5);
-        }
-        .bundle-spot .coming {
-          font-size: 12px;
-          color: #64748b;
-          margin-top: 4px;
+          color: #94a3b8;
         }
 
-        /* ── Founder notice spot ── */
-        .founder-spot {
-          margin-top: 16px;
-          padding: 12px 16px;
-          border-radius: 12px;
-          border: 1px solid rgba(147,197,253,0.15);
-          background: rgba(147,197,253,0.04);
+        .cancel-anytime {
           text-align: center;
-        }
-        .founder-spot .label {
           font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: rgba(147,197,253,0.5);
+          color: #475569;
+          margin-top: 14px;
+          letter-spacing: 0.05em;
         }
-        .founder-spot .coming {
-          font-size: 12px;
-          color: #64748b;
-          margin-top: 4px;
-        }
-
-        @keyframes swipeCuePulse {
-          0%, 100% { opacity: 0.5; }
-          50% { opacity: 1; text-shadow: 0 0 14px rgba(255,255,255,0.55); }
-        }
-        @keyframes swipeCueNudge {
-          0%, 100% { transform: translateX(0); }
-          50% { transform: translateX(-4px); }
-        }
-        .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
-        .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
 
         @media (prefers-reduced-motion: reduce) {
-          .swipe-cue, .swipe-cue svg,
           .gold-shimmer::after { animation: none !important; }
-          .gold-frame:hover { border-color: rgba(251,191,36,0.3); }
+          .gold-frame:hover { border-color: rgba(251,191,36,0.35); }
         }
       `}</style>
 
-      {/* ── Starfield backdrop (stars + shooting stars only) ── */}
+      {/* ── Starfield / galaxy backdrop ── */}
       <StarfieldBackground />
 
-      <div className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14">
+      {/* ── Phone-edge frame ── */}
+      <div className="relative z-10 mx-auto flex h-full w-full max-w-[430px] p-3">
         <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col top-section"
+          className="gold-frame"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          {/* ── Swipe cue ── */}
-          <button
-            type="button"
-            onClick={() => onSwipeRight?.()}
-            className="swipe-cue tap-fix mx-auto mt-1 mb-4 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Swipe Right to Go Back
-          </button>
+          <div className="gold-shimmer" aria-hidden="true" />
 
-          {/* ── GOLD FRAME ── */}
-          <div className="gold-frame">
-            <div className="gold-shimmer" aria-hidden="true" />
+          {/* ── TOP: Mission ── */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowMission(!showMission)}
+              className="mission-toggle tap-fix"
+            >
+              <span className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-300/60" />
+                Why AstroProXL Exists
+              </span>
+              <ChevronDown className={`h-4 w-4 ${showMission ? "open" : ""}`} />
+            </button>
 
-            {/* ── TOP: Mission ── */}
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowMission(!showMission)}
-                className="flex items-center justify-between w-full text-left group"
+            {showMission && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="mt-3 space-y-3"
               >
-                <h2 className="text-[15px] font-semibold text-amber-200 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-amber-300/70" />
-                  Why AstroProXL Exists
-                </h2>
-                <ChevronDown
-                  className={`h-4 w-4 text-amber-300/50 transition-transform duration-300 ${
-                    showMission ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+                <p className="mission-text">
+                  Most people look for a reading when they're going through something hard —
+                  a heartbreak, a money fear, a crossroads they can't see past. That's exactly
+                  when clarity matters most, and exactly when it's usually least affordable.
+                </p>
+                <p className="mission-text">
+                  Readings elsewhere run $60 to $120, often from someone working off intuition
+                  alone — and even the most well-meaning human carries bias they may not notice.
+                </p>
+                <p className="mission-text">
+                  <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
+                  placements, transits, timing — with no agenda and no guesswork, at a price
+                  that doesn't add to your stress. Affordable, honest clarity, for the moments
+                  you need it most.
+                </p>
+                <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
+              </motion.div>
+            )}
+          </div>
 
-              {showMission && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="mt-4 space-y-3"
-                >
-                  <p className="mission-text">
-                    Most people look for a reading when they're going through something hard —
-                    a heartbreak, a money fear, a crossroads they can't see past. That's exactly
-                    when clarity matters most, and exactly when it's usually least affordable.
-                  </p>
-                  <p className="mission-text">
-                    Readings elsewhere run $60 to $120, often from someone working off intuition
-                    alone — and even the most well-meaning human carries bias they may not notice.
-                  </p>
-                  <p className="mission-text">
-                    <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
-                    placements, transits, timing — with no agenda and no guesswork, at a price
-                    that doesn't add to your stress. Affordable, honest clarity, for the moments
-                    you need it most.
-                  </p>
-                  <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
-                </motion.div>
-              )}
+          {/* ── Divider ── */}
+          <div className="section-divider">
+            <span className="line" />
+            <span className="label">Membership</span>
+            <span className="line" />
+          </div>
+
+          {/* ── BOTTOM: Offer ── */}
+          <div>
+            {/* ── Section heading ── */}
+            <h3 className="offer-heading">More Readings, Real Savings</h3>
+
+            {/* ── Perks ── */}
+            <div className="space-y-1 mb-4">
+              {PERKS.map((perk) => (
+                <div key={perk} className="perk-item">
+                  <span className="perk-check">✓</span>
+                  <span className="perk-text">{perk}</span>
+                </div>
+              ))}
             </div>
 
-            {/* ── Divider ── */}
-            <div className="section-divider">
-              <span className="line" />
-              <span className="label">More Readings, Real Savings</span>
-              <span className="line" />
-            </div>
+            <p className="text-[11px] text-amber-300/50 mb-4 text-center">
+              Less than two single readings a month.
+            </p>
 
-            {/* ── BOTTOM: Offer ── */}
-            <div>
-              {/* ── Perks ── */}
-              <div className="space-y-1.5 mb-4">
-                {PERKS.map((perk) => (
-                  <div key={perk} className="flex items-center gap-2.5">
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[9px] text-amber-300">✓</span>
-                    <span className="text-[12px] text-slate-300">{perk}</span>
-                  </div>
-                ))}
-              </div>
-
-              <p className="text-[11px] text-amber-300/60 mb-4">
-                Less than two single readings a month.
-              </p>
-
-              {/* ── Tier cards ── */}
-              <div className="space-y-3">
-                {(["sub_plus", "sub_base"] as const).map((tierKey) => {
-                  const t = SUB_TIERS[tierKey];
-                  const isHero = tierKey === "sub_plus";
-                  return (
-                    <div
-                      key={tierKey}
-                      className={cn("tier-card", isHero ? "hero" : "base")}
-                    >
-                      {isHero && <span className="best-badge">Best Value</span>}
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[20px] font-bold text-white">{t.displayPrice}</p>
-                          <p className="text-[13px] text-slate-300">
-                            {t.readings} readings + {t.jxl} JXL
-                          </p>
-                          <p className="text-[11px] text-slate-500">every month</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleSubscribe(tierKey)}
-                          disabled={isSubscribeLoading}
-                          className={cn(
-                            "px-6 py-2.5 rounded-full text-sm font-semibold transition",
-                            isHero
-                              ? "bg-amber-300 text-[#050816] hover:bg-amber-200 disabled:opacity-50"
-                              : "border border-white/20 text-white hover:bg-white/5 disabled:opacity-50"
-                          )}
-                        >
-                          {isSubscribeLoading ? "..." : "Subscribe"}
-                        </button>
-                      </div>
+            {/* ── Tier cards (side by side) ── */}
+            <div className="grid grid-cols-2 gap-3 items-stretch">
+              {(["sub_base", "sub_plus"] as const).map((tierKey) => {
+                const t = SUB_TIERS[tierKey];
+                const isHero = tierKey === "sub_plus";
+                return (
+                  <div
+                    key={tierKey}
+                    className={cn("tier-card", isHero ? "hero" : "base")}
+                  >
+                    {isHero && <span className="best-badge">Best Value</span>}
+                    <div className="flex flex-col items-center text-center gap-1">
+                      <p className="text-[24px] font-bold text-white leading-none">{t.displayPrice}</p>
+                      <p className="text-[12px] text-slate-300 leading-tight">
+                        {t.readings} readings + {t.jxl} JXL
+                      </p>
+                      <p className="text-[10px] text-slate-500 mb-2">every month</p>
+                      <button
+                        type="button"
+                        onClick={() => handleSubscribe(tierKey)}
+                        disabled={isSubscribeLoading}
+                        className={cn(
+                          "w-full px-3 py-2 rounded-full text-[13px] font-semibold transition",
+                          isHero
+                            ? "bg-amber-300 text-[#050816] hover:bg-amber-200 disabled:opacity-50"
+                            : "border border-white/20 text-white hover:bg-white/5 disabled:opacity-50"
+                        )}
+                      >
+                        {isSubscribeLoading ? "..." : "Subscribe"}
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* ── Bundle spot ── */}
-              <div className="bundle-spot">
-                <p className="label">🎁 Bundle Pack — Coming Soon</p>
-                <p className="coming">Save even more with a 6-month or 12-month plan</p>
-              </div>
-
-              {/* ── Founder notice spot ── */}
-              <div className="founder-spot">
-                <p className="label">✨ Founder's Notice</p>
-                <p className="coming">Coming soon — a special offer for early supporters</p>
-              </div>
-
-              {/* ── Footer ── */}
-              <p className="mt-3 text-center text-[10px] text-slate-500">Cancel anytime</p>
+                  </div>
+                );
+              })}
             </div>
+
+            {/* ── 3-for-10 one-time bundle ── */}
+            <button
+              type="button"
+              onClick={handleBundle}
+              disabled={isBundleLoading}
+              className="bundle-offer tap-fix"
+            >
+              <span className="bundle-title">
+                <Gift className="h-4 w-4 text-amber-300/80" />
+                {isBundleLoading ? "..." : "3 Readings for $10"}
+              </span>
+              <span className="bundle-sub">One-time bundle — no subscription</span>
+            </button>
+
+            {/* ── Footer ── */}
+            <p className="cancel-anytime">Cancel anytime</p>
           </div>
         </motion.div>
       </div>
