@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, Gift } from "lucide-react";
+import { Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SUB_TIERS } from "@/lib/paywallConfig";
 import StarfieldBackground from "./StarfieldBackground";
@@ -34,7 +34,6 @@ const PERKS = [
 export default function MembershipPanel({ userStatus, onSwipeRight }: MembershipPanelProps) {
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [isBundleLoading, setIsBundleLoading] = useState(false);
-  const [showMission, setShowMission] = useState(true);
   const isSubscribed = userStatus?.isSubscribed || false;
 
   const handleSubscribe = async (tierKey: "sub_base" | "sub_plus") => {
@@ -176,7 +175,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           display: flex;
           align-items: center;
           gap: 12px;
-          margin: 20px 0 14px;
+          margin: 18px 0 14px;
         }
         .section-divider .line {
           flex: 1;
@@ -193,6 +192,15 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         }
 
         /* ── Mission section ── */
+        .mission-heading {
+          font-size: 20px;
+          font-weight: 700;
+          text-align: center;
+          color: #fef3c7;
+          letter-spacing: 0.01em;
+          margin-bottom: 16px;
+        }
+
         .mission-text {
           font-size: 13px;
           line-height: 1.7;
@@ -208,16 +216,6 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           font-size: 13px;
           font-style: italic;
           color: #93c5fd;
-        }
-
-        /* ── Mission heading (same size as offer-heading) ── */
-        .mission-heading {
-          font-size: 17px;
-          font-weight: 700;
-          text-align: center;
-          color: #fef3c7;
-          letter-spacing: 0.01em;
-          margin-bottom: 12px;
         }
 
         /* ── Offer heading ── */
@@ -354,7 +352,38 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          {/* ── TOP: Membership offer ── */}
+          {/* ── TOP: Our Mission ── */}
+          <div>
+            <h3 className="mission-heading">Our Mission</h3>
+
+            <div className="space-y-3">
+              <p className="mission-text">
+                Most people look for a reading when they're going through something hard —
+                a heartbreak, a money fear, a crossroads they can't see past. That's exactly
+                when clarity matters most, and exactly when it's usually least affordable.
+              </p>
+              <p className="mission-text">
+                Readings elsewhere run $60 to $120, often from someone working off intuition
+                alone — and even the most well-meaning human carries bias they may not notice.
+              </p>
+              <p className="mission-text">
+                <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
+                placements, transits, timing — with no agenda and no guesswork, at a price
+                that doesn't add to your stress. Affordable, honest clarity, for the moments
+                you need it most.
+              </p>
+              <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
+            </div>
+          </div>
+
+          {/* ── Divider ── */}
+          <div className="section-divider">
+            <span className="line" />
+            <span className="label">Membership</span>
+            <span className="line" />
+          </div>
+
+          {/* ── BOTTOM: Membership offer ── */}
           <div>
             <h3 className="offer-heading">More Readings, Real Savings</h3>
 
@@ -423,37 +452,6 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
             </button>
 
             <p className="cancel-anytime">Cancel anytime</p>
-          </div>
-
-          {/* ── Divider ── */}
-          <div className="section-divider">
-            <span className="line" />
-            <span className="label">Our Mission</span>
-            <span className="line" />
-          </div>
-
-          {/* ── BOTTOM: Why AstroProXL (no dropdown, no sparkle icon) ── */}
-          <div>
-            <h3 className="mission-heading">Why AstroProXL Exists</h3>
-
-            <div className="mt-3 space-y-3">
-              <p className="mission-text">
-                Most people look for a reading when they're going through something hard —
-                a heartbreak, a money fear, a crossroads they can't see past. That's exactly
-                when clarity matters most, and exactly when it's usually least affordable.
-              </p>
-              <p className="mission-text">
-                Readings elsewhere run $60 to $120, often from someone working off intuition
-                alone — and even the most well-meaning human carries bias they may not notice.
-              </p>
-              <p className="mission-text">
-                <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
-                placements, transits, timing — with no agenda and no guesswork, at a price
-                that doesn't add to your stress. Affordable, honest clarity, for the moments
-                you need it most.
-              </p>
-              <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
-            </div>
           </div>
         </motion.div>
       </div>
