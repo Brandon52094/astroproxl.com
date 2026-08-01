@@ -16,6 +16,28 @@ export async function GET() {
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
+    // ── First-load initialization ──────────────────────────────────────────
+    // If this account has never had its fields written, initialize the full
+    // set so everything is present and editable in the Clerk dashboard.
+    if (metadata?.credits === undefined) {
+      const defaults = {
+        ...metadata,
+        credits: 0,
+        jxlCredits: 0,
+        replyCredits: 0,
+        jxlReplyCredits: 0,
+        isSubscribed: false,
+        subscriptionTier: null,
+        firstReadingUsed: false,
+        firstPaidReadingUsed: false,
+        pwaFreeReadingUsed: false,
+        readingsCompleted: 0,
+      };
+      await client.users.updateUserMetadata(userId, { publicMetadata: defaults });
+      // Use the defaults for the rest of this request so the response is correct
+      Object.assign(metadata ?? {}, defaults);
+    }
+
     return NextResponse.json({
       credits: Number(metadata?.credits ?? 0),
       jxlCredits: Number(metadata?.jxlCredits ?? 0),
