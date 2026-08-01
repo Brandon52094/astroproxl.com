@@ -358,19 +358,20 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
 
             <div className="space-y-3">
               <p className="mission-text">
-                Most people look for a reading when they're going through something hard —
+                Most people look for a reading when they're going through something hard like
                 a heartbreak, a money fear, a crossroads they can't see past. That's exactly
                 when clarity matters most, and exactly when it's usually least affordable.
               </p>
               <p className="mission-text">
                 Readings elsewhere run $60 to $120, often from someone working off intuition
-                alone — and even the most well-meaning human carries bias they may not notice.
+                alone and even the most well meaning human carries bias they may not notice.  
               </p>
               <p className="mission-text">
-                <strong>AstroProXL</strong> is different: a full calculation of your actual chart —
-                placements, transits, timing — with no agenda and no guesswork, at a price
-                that doesn't add to your stress. Affordable, honest clarity, for the moments
-                you need it most.
+                <strong>AstroProXL</strong> is different, and <em>advanced</em>: on top of your
+                actual chart. Not just placements, transits, and orbs — we run <strong>13 distinct
+                calculations</strong> to deliver personalized future predictions, done correctly,
+                at a price that doesn't add to your stress. Affordable, honest clarity, for the
+                moments you need it most.
               </p>
               <p className="mission-signoff">— Jáneel, Founder &amp; The AstroProXL Team</p>
             </div>
