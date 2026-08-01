@@ -1,7 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE, SUBSCRIBER_TAIL } from "@/lib/paywallConfig";
+import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE, SUBSCRIBER_TAIL, BUNDLE_PACK } from "@/lib/paywallConfig";
 import { JXL_SESSION, JXL_REPLY_PACK } from "@/lib/jxlConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { returnUrl, mode, bundleTier } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "sub_reply_tail_regular" | "sub_reply_tail_jxl" | "jxl_session";
+      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "sub_reply_tail_regular" | "sub_reply_tail_jxl" | "jxl_session" | "bundle_pack";
       bundleTier?: string;
     };
 
@@ -234,6 +234,34 @@ export async function POST(request: NextRequest) {
         }],
         metadata: { userId, mode: "jxl_session", jxlReplies: JXL_SESSION.replies },
         success_url: `${returnUrl}?payment=success&mode=jxl_session`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Bundle pack — one-time, grants 2 regular + 1 JXL credit ─────────────
+    if (mode === "bundle_pack") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Reading Bundle — 2 Readings + 1 JXL",
+              description: "Two full readings and one JXL session",
+            },
+            unit_amount: BUNDLE_PACK.price,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "bundle_pack",
+          credits: BUNDLE_PACK.credits,       // 2 regular
+          jxlCredits: BUNDLE_PACK.jxlCredits, // 1 JXL
+        },
+        success_url: `${returnUrl}?payment=success&mode=bundle_pack`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });

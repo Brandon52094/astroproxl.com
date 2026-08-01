@@ -55,6 +55,15 @@ export const JXL_REPLY_PACK = {
   replies: 2,
 };
 
+// ── Bundle pack — one-time purchase, mixed credits ──────────────────────────
+export const BUNDLE_PACK = {
+  mode: "bundle_pack" as const,
+  price: 1000,          // $10.00 in cents
+  credits: 2,           // regular reading credits
+  jxlCredits: 1,        // JXL credits
+  label: "2 readings + 1 JXL for $10",
+} as const;
+
 // ── Per-conversation safety wall (unpurchasable hard stop) ────────────────────
 // COUNTED replies only. Included replies do not count toward this.
 // Identical for both features by design. Resets when a new conversation starts.

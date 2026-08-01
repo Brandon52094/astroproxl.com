@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       | "jxl_reply_pack"
       | "sub_reply_tail_regular"
       | "sub_reply_tail_jxl"
+      | "bundle_pack"
       | undefined;
 
     if (!userId || !mode) {
@@ -164,6 +165,24 @@ export async function POST(request: NextRequest) {
 
         console.log(
           `[webhook] ${mode} — granted ${regularGrant || jxlGrant} discounted tail replies to ${userId}`
+        );
+
+      // ── Bundle pack — grant 2 regular + 1 JXL credit ───────────────────────
+      } else if (mode === "bundle_pack") {
+        const creditsToGrant = Number(session.metadata?.credits ?? 0);
+        const jxlToGrant = Number(session.metadata?.jxlCredits ?? 0);
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            credits: currentCredits + creditsToGrant,
+            jxlCredits: currentJxlCredits + jxlToGrant,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] bundle_pack — granted ${creditsToGrant} readings + ${jxlToGrant} JXL to ${userId}`
         );
 
       } else if (mode === "followup") {
