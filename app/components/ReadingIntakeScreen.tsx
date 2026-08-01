@@ -618,70 +618,13 @@ export default function ReadingIntakeScreen({
           margin: 8px 0 4px;
         }
 
-        /* ── JXL section ── */
-        .jxl-section { margin: 8px 0 4px; }
-        .jxl-divider {
-          text-align: center;
-          font-size: 11px;
-          letter-spacing: 0.28em;
-          text-transform: uppercase;
-          color: rgba(251,191,36,0.65);
-          margin-bottom: 18px;
-        }
-        .jxl-button {
-          position: relative;
-          width: 100%;
-          overflow: hidden;
-          border-radius: 24px;
-          border: 1px solid rgba(251,191,36,0.45);
-          background: linear-gradient(180deg, rgba(32,32,48,0.75), rgba(14,14,26,0.9));
-          padding: 44px 24px;
-          cursor: pointer;
-          box-shadow: 0 0 44px rgba(251,191,36,0.16), 0 16px 40px rgba(0,0,0,0.55);
-          transition: transform 0.15s ease;
-        }
-        .jxl-button:active { transform: scale(0.98); }
-        .jxl-button-halo {
-          position: absolute;
-          inset: 0;
-          background: radial-gradient(circle at 50% 40%, rgba(251,191,36,0.12), transparent 60%);
-          pointer-events: none;
-        }
-        .jxl-button-glow {
-          position: absolute;
-          inset: -40%;
-          background-image: linear-gradient(120deg, rgba(253,230,138,0) 0%, rgba(253,230,138,0.16) 45%, rgba(250,204,21,0.4) 50%, rgba(253,230,138,0.16) 55%, rgba(253,230,138,0) 100%);
-          mix-blend-mode: screen;
-          pointer-events: none;
-          transform: translateX(-60%);
-          animation: jxlShimmer 4s linear infinite;
-        }
-        .jxl-button-content {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 10px;
-        }
-        .jxl-button-icon { color: #fde68a; }
-        .jxl-button-text { font-size: 26px; font-weight: 800; color: #fde68a; letter-spacing: 0.01em; }
-        .jxl-button-sub {
-          font-size: 13px;
-          color: #cbd5e1;
-          max-width: 220px;
-          text-align: center;
-          line-height: 1.5;
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .hero-shine::after,
-          .install-teaser,
-          .jxl-button-glow { animation: none !important; opacity: 0.8; box-shadow: none; }
+          .install-teaser { animation: none !important; opacity: 0.8; box-shadow: none; }
         }
       `}</style>
 
@@ -689,9 +632,9 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
-        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
-      >
+  className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
+  style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+>
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -866,7 +809,7 @@ export default function ReadingIntakeScreen({
             )}
           </AnimatePresence>
 
-          {/* ── SUBMIT ── */}
+                    {/* ── SUBMIT ── */}
           <div className="mt-0.5 space-y-3 pb-2" ref={clusterBottomRef}>
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             {selectedArea && (
@@ -895,23 +838,8 @@ export default function ReadingIntakeScreen({
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
 
-          {/* ── JXL Section ── */}
-          <div className="jxl-section" data-no-swipe>
-            <div className="jxl-divider">Premium</div>
-            <button
-              type="button"
-              className="jxl-button tap-fix"
-              onClick={() => console.log("Ask JXL tapped — wire routing next")}
-            >
-              <span className="jxl-button-halo" aria-hidden="true" />
-              <span className="jxl-button-glow" aria-hidden="true" />
-              <span className="jxl-button-content">
-                <Sparkles className="jxl-button-icon" size={32} />
-                <span className="jxl-button-text">Ask JXL</span>
-                <span className="jxl-button-sub">Your chart, in conversation — ask anything, out loud</span>
-              </span>
-            </button>
-          </div>
+          {/* ── Empty space preserved for future content ── */}
+          <div className="mt-4" />
 
         </motion.div>
       </div>
