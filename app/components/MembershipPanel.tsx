@@ -65,8 +65,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           returnUrl: `${window.location.origin}/reading/intake`,
-          mode: "payment",
-          bundleTier: "bundle_3",
+          mode: "bundle_pack",
         }),
       });
       const data = await res.json();
