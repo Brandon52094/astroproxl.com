@@ -602,8 +602,6 @@ export async function POST(request: NextRequest) {
     const isSubscribed = metadata?.isSubscribed === true;
     const jxlCredits = Number(metadata?.jxlCredits ?? 0);
     const jxlReplyCredits = Number(metadata?.jxlReplyCredits ?? 0);
-    const jxlFreeUsedAt = metadata?.jxlFreeUsedAt as string | undefined;
-    const hasFreeSession = !jxlFreeUsedAt;
 
     const historyLen = earlyBody.conversationHistory?.length ?? 0;
     const turnCount = historyLen + 1;
@@ -623,15 +621,13 @@ export async function POST(request: NextRequest) {
     let metaUpdate: Record<string, unknown> | null = null;
 
     if (isNewSession) {
-      if (hasFreeSession) {
-        metaUpdate = { jxlFreeUsedAt: new Date().toISOString() };
-      } else if (jxlCredits > 0) {
+      // JXL is credits-only. First-JXL 50% off is handled at checkout.
+      // Zero jxlCredits → paywall.
+      if (jxlCredits > 0) {
         metaUpdate = { jxlCredits: jxlCredits - 1 };
-      } else if (jxlReplyCredits > 0) {
-        metaUpdate = { jxlReplyCredits: jxlReplyCredits - 1 };
       } else {
         return NextResponse.json(
-          { error: "Your session is complete.", code: "NO_JXL_ACCESS" },
+          { error: "You need a JXL credit to start a session.", code: "NO_JXL_ACCESS" },
           { status: 402 }
         );
       }
