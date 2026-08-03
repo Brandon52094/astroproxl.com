@@ -26,7 +26,7 @@ import {
 import { SUB_TIERS } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
-import CreditsPanel from "./components/CreditsPanel";
+import CreditsPanel from "./CreditsPanel";
 
 declare global {
   interface Window {
