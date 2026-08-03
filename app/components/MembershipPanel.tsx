@@ -184,9 +184,9 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
               </p>
               <p className="mission-text">
                 <strong>AstroProXL</strong> is different, and <em>advanced</em>: on top of your
-                actual chart. Not just placements, transits, and orbs — we run <strong>13 distinct
-                calculations</strong> to deliver personalized future predictions, done correctly,
-                at a price that doesn't add to your stress. Affordable, honest clarity, for the
+                actual chart, placements, transits, and orbs — we run up to <strong>15 distinct
+                calculations</strong> <em>each reading & reply</em> to deliver personalized future predictions, 
+                done correctly, at a price that doesn't add to your stress. Affordable, honest clarity, for the
                 moments you need it most.
               </p>
               <p className="mission-signoff">— Jáneel, The AstroProXL Founder</p>
