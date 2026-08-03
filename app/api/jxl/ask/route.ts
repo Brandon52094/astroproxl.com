@@ -608,7 +608,7 @@ export async function POST(request: NextRequest) {
     const isNewSession = historyLen === 0;
 
     // Free band: subscribers 4, non-subscribers 2 (their included replies).
-    const freeReplies = isSubscribed ? 4 : 1;
+    const freeReplies = isSubscribed ? 4 : 2;
 
     // ── The 8-reply safety wall — absolute, counts every turn, fresh per convo ──
     if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {

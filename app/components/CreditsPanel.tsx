@@ -83,15 +83,14 @@ export default function CreditsPanel({ onClose }: { onClose?: () => void }) {
       {/* ── Starfield backdrop ── */}
       <StarfieldBackground />
 
-      {/* Back */}
-      <button type="button" onClick={onClose} style={C.back}>
-        <ChevronLeft size={16} /> Back
-      </button>
-
       <div style={C.container}>
-        {/* ── CART ── */}
-        <div style={C.titleRow}>
-          <span style={C.titleLine} /><span style={C.title}>Get Credits</span><span style={C.titleLine} />
+        {/* ── Header row: Back + Get Credits ── */}
+        <div style={C.headerRow}>
+          <button type="button" onClick={onClose} style={C.back}>
+            <ChevronLeft size={16} /> Back
+          </button>
+          <span style={C.title}>Get Credits</span>
+          <div style={C.headerSpacer} />
         </div>
 
         <div style={C.grid}>
@@ -217,13 +216,6 @@ const STYLES: Record<string, React.CSSProperties> = {
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     overflow: "hidden",
   },
-  back: {
-    position: "fixed", top: "calc(12px + env(safe-area-inset-top))", left: 16, zIndex: 100,
-    display: "flex", alignItems: "center", gap: 4,
-    background: "rgba(5,8,22,0.6)", border: "1px solid rgba(148,163,184,0.2)",
-    borderRadius: 999, padding: "6px 12px 6px 8px", color: "#cbd5e1",
-    fontSize: 13, cursor: "pointer", backdropFilter: "blur(8px)",
-  },
   container: {
     position: "relative",
     zIndex: 10,
@@ -233,9 +225,38 @@ const STYLES: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
   },
 
-  titleRow: { display: "flex", alignItems: "center", gap: 12, marginBottom: 22 },
-  titleLine: { height: 1, flex: 1, background: "rgba(255,255,255,0.18)" },
-  title: { fontSize: 20, fontWeight: 700, letterSpacing: "0.06em", color: "#fff", whiteSpace: "nowrap" },
+  headerRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 22,
+    gap: 12,
+  },
+  back: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    background: "rgba(5,8,22,0.6)",
+    border: "1px solid rgba(148,163,184,0.2)",
+    borderRadius: 999,
+    padding: "6px 12px 6px 8px",
+    color: "#cbd5e1",
+    fontSize: 13,
+    cursor: "pointer",
+    backdropFilter: "blur(8px)",
+    flexShrink: 0,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    color: "#fff",
+    whiteSpace: "nowrap",
+  },
+  headerSpacer: {
+    width: 20,
+    flexShrink: 0,
+  },
 
   grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
   repliesRow: { marginTop: 14, display: "flex", justifyContent: "center" },
