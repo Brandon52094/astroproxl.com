@@ -638,7 +638,7 @@ export default function ReadingIntakeScreen({
 
       <div
         className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
-        style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
