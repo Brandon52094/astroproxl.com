@@ -229,7 +229,7 @@ const STYLES: Record<string, React.CSSProperties> = {
     zIndex: 10,
     maxWidth: 430,
     margin: "0 auto",
-    padding: "calc(40px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom))",
+    padding: "calc(35px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom))",
     minHeight: "100vh",
   },
 
