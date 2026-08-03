@@ -21,10 +21,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { returnUrl, mode, bundleTier } = body as {
+    const { returnUrl, mode, bundleTier, items } = body as {
       returnUrl: string;
-      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "sub_reply_tail_regular" | "sub_reply_tail_jxl" | "jxl_session" | "bundle_pack";
+      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "sub_reply_tail_regular" | "sub_reply_tail_jxl" | "jxl_session" | "bundle_pack" | "cart";
       bundleTier?: string;
+      items?: Array<{ id?: string; quantity?: number }>;
     };
 
     if (!returnUrl) {
@@ -262,6 +263,69 @@ export async function POST(request: NextRequest) {
           jxlCredits: BUNDLE_PACK.jxlCredits, // 1 JXL
         },
         success_url: `${returnUrl}?payment=success&mode=bundle_pack`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Cart — à-la-carte checkout from the Get Credits panel ──────────────────
+    // Client sends items: [{ mode, id, quantity }]. We NEVER trust a client price;
+    // each id maps to a server-side price + grant here. One line_item per product,
+    // and we pre-sum the grants into flat metadata so the webhook just reads three
+    // numbers and adds them (same pattern as bundle_pack).
+    if (mode === "cart") {
+      const cartItems: Array<{ id?: string; quantity?: number }> =
+        Array.isArray(items) ? items : [];
+
+      // Server-side source of truth for price + what each unit grants.
+      const CART_CATALOG: Record<
+        string,
+        { name: string; description: string; unit_amount: number;
+          grant: { credits?: number; jxlCredits?: number; replyCredits?: number } }
+      > = {
+        reading: { name: "Reading",           description: "1 reading credit · 1 free reply",        unit_amount: 400, grant: { credits: 1 } },
+        jxl:     { name: "JXL Session",        description: "1 JXL session · 2 free replies",         unit_amount: 600, grant: { jxlCredits: 1 } },
+        replies: { name: "Follow-Up Replies",  description: "2 replies — works on readings or JXL",   unit_amount: 200, grant: { replyCredits: 2 } },
+      };
+
+      const line_items: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+      let grantCredits = 0, grantJxlCredits = 0, grantReplyCredits = 0;
+
+      for (const item of cartItems) {
+        const entry = item?.id ? CART_CATALOG[item.id] : undefined;
+        const qty = Math.max(0, Math.floor(Number(item?.quantity ?? 0)));
+        if (!entry || qty <= 0) continue; // ignore anything not in the catalog
+
+        line_items.push({
+          price_data: {
+            currency: "usd",
+            product_data: { name: entry.name, description: entry.description },
+            unit_amount: entry.unit_amount,
+          },
+          quantity: qty,
+        });
+
+        grantCredits      += (entry.grant.credits      ?? 0) * qty;
+        grantJxlCredits   += (entry.grant.jxlCredits   ?? 0) * qty;
+        grantReplyCredits += (entry.grant.replyCredits ?? 0) * qty;
+      }
+
+      if (line_items.length === 0) {
+        return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items,
+        metadata: {
+          userId,
+          mode: "cart",
+          grantCredits: String(grantCredits),
+          grantJxlCredits: String(grantJxlCredits),
+          grantReplyCredits: String(grantReplyCredits),
+        },
+        success_url: `${returnUrl}?payment=success&mode=cart`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });

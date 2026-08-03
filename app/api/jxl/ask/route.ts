@@ -601,7 +601,7 @@ export async function POST(request: NextRequest) {
 
     const isSubscribed = metadata?.isSubscribed === true;
     const jxlCredits = Number(metadata?.jxlCredits ?? 0);
-    const jxlReplyCredits = Number(metadata?.jxlReplyCredits ?? 0);
+    const replyCredits = Number(metadata?.replyCredits ?? 0);
 
     const historyLen = earlyBody.conversationHistory?.length ?? 0;
     const turnCount = historyLen + 1;
@@ -635,18 +635,19 @@ export async function POST(request: NextRequest) {
       // CONTINUING within the free band — no charge.
       metaUpdate = null;
     } else {
-      // CONTINUING past the free band — spend from the paid pool.
-      if (jxlReplyCredits > 0) {
-        metaUpdate = { jxlReplyCredits: jxlReplyCredits - 1 };
+      // CONTINUING past the free band — spend from the UNIFIED reply pool.
+      if (replyCredits > 0) {
+        metaUpdate = { replyCredits: replyCredits - 1 };
       } else {
-        // Pool empty — client should prompt to buy the right pack.
-        // Subscribers get the discounted tail; non-subscribers buy the normal JXL pack.
         return NextResponse.json(
           {
             error: "You've used your free replies.",
             code: "NEEDS_REPLY_PACK",
             isSubscribed,
-            tailMode: isSubscribed ? "sub_reply_tail_jxl" : "jxl_reply_pack",
+            // One pool now. Non-subs buy the à-la-carte replies pack
+            // (reply_pack → replyCredits); subs get the discounted tail,
+            // which also lands in replyCredits via sub_reply_tail_regular.
+            tailMode: isSubscribed ? "sub_reply_tail_regular" : "reply_pack",
           },
           { status: 402 }
         );

@@ -1,0 +1,1210 @@
+===== COMPONENT / ROUTE MAP =====
+./.agents/skills/clerk-nextjs-patterns/templates/nextjs-basic-auth/app/layout.tsx
+./.agents/skills/clerk-nextjs-patterns/templates/nextjs-basic-auth/app/page.tsx
+./.agents/skills/clerk-nextjs-patterns/templates/nextjs-basic-auth/proxy.ts
+./app/api/admin/announce /route.ts
+./app/api/chart-calculate/route.ts
+./app/api/chart-extract/route.ts
+./app/api/cron/free-reading-reminder/route.ts
+./app/api/email/send/route.ts
+./app/api/jxl/access/route.ts
+./app/api/jxl/ask/route.ts
+./app/api/jxl/page.tsx
+./app/api/jxl/transcribe/route.ts
+./app/api/places/autocomplete/route.ts
+./app/api/places/geocode/route.ts
+./app/api/readings/followup/route.ts
+./app/api/readings/route.ts
+./app/api/stripe/checkout/route.ts
+./app/api/stripe/webhook/route.ts
+./app/api/user/claim-pwa-reading/route.ts
+./app/api/user/credits/route.ts
+./app/api/user/get-chart/route.ts
+./app/api/user/reading-complete/route.ts
+./app/api/user/save-chart/route.ts
+./app/chart-data/page.tsx
+./app/components/AskJxlButton.tsx
+./app/components/BirthChartPanel.tsx
+./app/components/ChartDataScreen.tsx
+./app/components/CreditsPanel.tsx
+./app/components/DailyTransitsPanel.tsx
+./app/components/JxlPanel.tsx
+./app/components/MembershipPanel.tsx
+./app/components/MoonCyclesPanel.tsx
+./app/components/PagerContainer.tsx
+./app/components/PayWallScreen.tsx
+./app/components/ReadingIntakeScreen.tsx
+./app/components/StarfieldBackground.tsx
+./app/components/TodaySkyPanel.tsx
+./app/components/ui/button.tsx
+./app/components/ui/card.tsx
+./app/components/ui/input.tsx
+./app/components/ui/label.tsx
+./app/components/ui/textarea.tsx
+./app/jxl/page.tsx
+./app/layout.tsx
+./app/manifest.ts
+./app/page.tsx
+./app/reading/intake/page.tsx
+./app/reading/preparing/page.tsx
+./app/reading/results/page.tsx
+./app/sign-in/[[...sign-in]]/page.tsx
+./app/sign-up/[[...sign-up]]/page.tsx
+./app/terms/page.tsx
+./hooks/useChartExtract.ts
+./lib/chartStore.ts
+./lib/crisisDetection.ts
+./lib/email/templates.ts
+./lib/geoapify.ts
+./lib/jxlConfig.ts
+./lib/paywallConfig.ts
+./lib/schema/charts.ts
+./lib/schema/readings.ts
+./lib/signVoice.ts
+./lib/tiktokEvents.ts
+./lib/transitAspects.ts
+./lib/utils.ts
+./next-env.d.ts
+./next.config.ts
+./proxy.ts
+./types/charts.ts
+./types/geo.ts
+
+===== FILE CONTENTS =====
+
+----- app/api/stripe/checkout/route.ts -----
+import { auth, clerkClient } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
+import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE, SUBSCRIBER_TAIL, BUNDLE_PACK } from "@/lib/paywallConfig";
+import { JXL_SESSION, JXL_REPLY_PACK } from "@/lib/jxlConfig";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+// $4 per reading; the user's FIRST paid reading is discounted to $2 as a
+// low-friction entry point. One reading costs 4 credits, so a paid reading
+// grants exactly 4.
+const ONE_TIME_READING_PRICE = 400; // cents — every paid reading after the first
+const FIRST_PAID_READING_PRICE = 200; // cents — first paid reading only ($2)
+const ONE_TIME_READING_CREDITS = 4;
+
+export async function POST(request: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { returnUrl, mode, bundleTier } = body as {
+      returnUrl: string;
+      mode: "one_time" | "subscription" | "followup" | "reply_pack" | "jxl_reply_pack" | "sub_reply_tail_regular" | "sub_reply_tail_jxl" | "jxl_session" | "bundle_pack";
+      bundleTier?: string;
+    };
+
+    if (!returnUrl) {
+      return NextResponse.json({ error: "returnUrl is required" }, { status: 400 });
+    }
+
+    // ── One-time reading — $2 first paid reading, $4 after ────────────────────
+    // Price is driven by `firstPaidReadingUsed`, a per-user flag stamped by the
+    // webhook on the first successful one_time purchase. We deliberately do NOT
+    // key this off paywallsCompleted, which currently never advances.
+    if (mode === "one_time") {
+      const client = await clerkClient();
+      const buyer = await client.users.getUser(userId);
+      const firstPaidReadingUsed = buyer.publicMetadata?.firstPaidReadingUsed === true;
+      const unitAmount = firstPaidReadingUsed ? READING_PRICE : READING_FIRST_PRICE;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Astrological Reading",
+              description: firstPaidReadingUsed
+                ? "One full personalized astrological reading"
+                : "Your first full reading — 50% off to begin",
+            },
+            unit_amount: unitAmount,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          credits: ONE_TIME_READING_CREDITS,
+          mode: "one_time",
+          // So the webhook can stamp the flag and log which price was charged.
+          isFirstPaidReading: firstPaidReadingUsed ? "false" : "true",
+        },
+        success_url: `${returnUrl}?payment=success&mode=one_time`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Subscription — $12.99/mo or $16/mo ────────────────────────────────────
+    if (mode === "subscription") {
+      // tier comes in from the client: "sub_base" or "sub_plus"
+      const tier = SUB_TIERS[bundleTier === "sub_plus" ? "sub_plus" : "sub_base"];
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "subscription",
+        allow_promotion_codes: true,
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: tier.name, description: tier.tagline },
+            unit_amount: tier.price,
+            recurring: { interval: "month" },
+          },
+          quantity: 1,
+        }],
+        // CRITICAL: userId must live on the SUBSCRIPTION, not just the session —
+        // renewals have no session, so the renewal webhook reads it from here.
+        subscription_data: { metadata: { userId, tier: tier.key } },
+        metadata: { userId, tier: tier.key, mode: "subscription" },
+        success_url: `${returnUrl}?payment=success&mode=subscription`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Follow-up question ────────────────────────────────────────────────────
+    if (mode === "followup") {
+      // Follow-up pricing from paywallConfig
+      const followupPrice = 200; // $2.00
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: "Ask a Follow-Up", description: "Get a deeper answer on your reading" },
+            unit_amount: followupPrice,
+          },
+          quantity: 1,
+        }],
+        metadata: { userId, mode: "followup" },
+        success_url: `${returnUrl}?payment=success&mode=followup`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Reply pack (legacy — kept for backward compatibility) ────────────────
+    if (mode === "reply_pack") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "2 Follow-Up Replies",
+              description: "Keep the conversation going — 2 more replies to your reading",
+            },
+            unit_amount: 200,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "reply_pack",
+          replyCredits: 2,
+        },
+        success_url: `${returnUrl}?payment=success&mode=reply_pack`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── JXL reply pack — $6.00 for 3 replies ──────────────────────────────────
+    if (mode === "jxl_reply_pack") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { 
+              name: JXL_REPLY_PACK.name, 
+              description: JXL_REPLY_PACK.description
+            },
+            unit_amount: JXL_REPLY_PACK.price,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "jxl_reply_pack",
+          jxlReplyCredits: JXL_REPLY_PACK.replies,
+        },
+        success_url: `${returnUrl}?payment=success&mode=jxl_reply_pack`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Subscriber discounted reply tail — $2 regular / $3 JXL ──────────────
+    // CRITICAL: the 50% price is ONLY for verified subscribers. We check
+    // server-side against Clerk metadata — NEVER trust a client claim of
+    // subscriber status. A non-subscriber hitting this mode is rejected.
+    if (mode === "sub_reply_tail_regular" || mode === "sub_reply_tail_jxl") {
+      const client = await clerkClient();
+      const buyer = await client.users.getUser(userId);
+      const isSubscribed = buyer.publicMetadata?.isSubscribed === true;
+
+      if (!isSubscribed) {
+        return NextResponse.json(
+          { error: "This discounted pack is for subscribers only." },
+          { status: 403 }
+        );
+      }
+
+      const tail = mode === "sub_reply_tail_jxl" ? SUBSCRIBER_TAIL.jxl : SUBSCRIBER_TAIL.regular;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "4 More Replies — Subscriber Price",
+              description: "Half-price follow-up replies to keep this conversation going",
+            },
+            unit_amount: tail.price,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode,
+          // which pool the webhook credits, and how many
+          replyCredits: mode === "sub_reply_tail_regular" ? tail.replies : 0,
+          jxlReplyCredits: mode === "sub_reply_tail_jxl" ? tail.replies : 0,
+        },
+        success_url: `${returnUrl}?payment=success&mode=${mode}`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Ask JXL — one session, $6.00 → 3 replies ──────────────────────────────
+    if (mode === "jxl_session") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: JXL_SESSION.name, description: JXL_SESSION.tagline },
+            unit_amount: JXL_SESSION.price,
+          },
+          quantity: 1,
+        }],
+        metadata: { userId, mode: "jxl_session", jxlReplies: JXL_SESSION.replies },
+        success_url: `${returnUrl}?payment=success&mode=jxl_session`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    // ── Bundle pack — one-time, grants 2 regular + 1 JXL credit ─────────────
+    if (mode === "bundle_pack") {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Reading Bundle — 2 Readings + 1 JXL",
+              description: "Two full readings and one JXL session",
+            },
+            unit_amount: BUNDLE_PACK.price,
+          },
+          quantity: 1,
+        }],
+        metadata: {
+          userId,
+          mode: "bundle_pack",
+          credits: BUNDLE_PACK.credits,       // 2 regular
+          jxlCredits: BUNDLE_PACK.jxlCredits, // 1 JXL
+        },
+        success_url: `${returnUrl}?payment=success&mode=bundle_pack`,
+        cancel_url: `${returnUrl}?payment=cancelled`,
+      });
+      return NextResponse.json({ url: session.url });
+    }
+
+    return NextResponse.json({ error: "Invalid mode" }, { status: 400 });
+
+  } catch (error) {
+    console.error("[checkout] Error:", error);
+    return NextResponse.json({ error: "Failed to create checkout session." }, { status: 500 });
+  }
+}
+----- app/api/stripe/webhook/route.ts -----
+import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
+import { clerkClient } from "@clerk/nextjs/server";
+import { trackServerPurchase } from "@/lib/tiktokEvents";
+import { getSubTier, renewalCredits } from "@/lib/paywallConfig";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+export async function POST(request: NextRequest) {
+  const body = await request.text();
+  const signature = request.headers.get("stripe-signature");
+
+  if (!signature) {
+    return NextResponse.json({ error: "No signature" }, { status: 400 });
+  }
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch (err) {
+    console.error("[webhook] Signature verification failed:", err);
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  console.log("[webhook] event type:", event.type);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // INITIAL PURCHASE — checkout.session.completed
+  // ══════════════════════════════════════════════════════════════════════════
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const userId = session.metadata?.userId;
+    const mode = session.metadata?.mode as
+      | "one_time"
+      | "subscription"
+      | "jxl_session"
+      | "followup"
+      | "reply_pack"
+      | "jxl_reply_pack"
+      | "sub_reply_tail_regular"
+      | "sub_reply_tail_jxl"
+      | "bundle_pack"
+      | undefined;
+
+    if (!userId || !mode) {
+      console.error("[webhook] Missing userId or mode in metadata");
+      return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
+    }
+
+    try {
+      const client = await clerkClient();
+      const user = await client.users.getUser(userId);
+      const meta = user.publicMetadata;
+      const userEmail = user.emailAddresses[0]?.emailAddress;
+
+      const currentCredits = Number(meta?.credits ?? 0);
+      const currentReplyCredits = Number(meta?.replyCredits ?? 0);
+      const currentJxlReplyCredits = Number(meta?.jxlReplyCredits ?? 0);
+      const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
+
+      // ── Fire TikTok Purchase for every revenue-generating mode ──────────────
+      // event_id = session.id for automatic dedupe.
+      await trackServerPurchase({
+        email: userEmail,
+        amountCents: session.amount_total ?? 0,
+        currency: (session.currency ?? "usd").toUpperCase(),
+        eventId: session.id,
+      });
+
+      // ── One-time regular reading (1 credit = 1 reading) ─────────────────────
+      if (mode === "one_time") {
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            credits: currentCredits + 1,
+            firstReadingUsed: true,
+            // Once true, the $2 first-reading price never applies again.
+            firstPaidReadingUsed: true,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+        console.log(`[webhook] one_time — +1 reading credit to ${userId}`);
+
+      // ── Subscription — grant reads the tier, not a hardcoded number ─────────
+      } else if (mode === "subscription") {
+        const stripeSubscriptionId = session.subscription as string;
+        const tier = getSubTier(session.metadata?.tier);
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            firstReadingUsed: true,
+            isSubscribed: true,
+            downloadUnlocked: true, // downloads free for everyone now; harmless to keep true
+            subscriptionId: stripeSubscriptionId,
+            subscriptionTier: tier.key,
+            subscriptionStartedAt: new Date().toISOString(),
+            // Never set below current balance — protects any top-ups bought pre-sub.
+            credits: renewalCredits(currentCredits, tier.readings),
+            jxlCredits: renewalCredits(currentJxlCredits, tier.jxl),
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+        console.log(
+          `[webhook] subscription — ${tier.key} for ${userId}: ` +
+          `${tier.readings} readings + ${tier.jxl} JXL.`
+        );
+
+      // ── Ask JXL session — one flat product, grants 1 JXL credit ─────────────
+      } else if (mode === "jxl_session") {
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            jxlCredits: currentJxlCredits + 1,
+            firstJxlUsed: true, // stamps out the $3 first-JXL discount
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+        console.log(`[webhook] jxl_session — +1 JXL credit to ${userId}`);
+
+      // ── Regular reading reply pack — $2 → 2 replies (regular pool ONLY) ─────
+      } else if (mode === "reply_pack") {
+        const grant = Number(session.metadata?.replyCredits ?? 2);
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            replyCredits: currentReplyCredits + grant,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+        console.log(`[webhook] reply_pack — +${grant} regular reply credits to ${userId}`);
+
+      // ── JXL reply pack — $3 → 2 replies (JXL pool ONLY, never mixes) ────────
+      } else if (mode === "jxl_reply_pack") {
+        const grant = Number(session.metadata?.jxlReplyCredits ?? 2);
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            jxlReplyCredits: currentJxlReplyCredits + grant,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+        console.log(`[webhook] jxl_reply_pack — +${grant} JXL reply credits to ${userId}`);
+
+      // ── Subscriber discounted reply tail — grants into the persistent pool ──
+      // Reuses the same pools as the regular packs. The metadata carries the
+      // amount for exactly one pool (the other is 0), so we add both safely.
+      } else if (mode === "sub_reply_tail_regular" || mode === "sub_reply_tail_jxl") {
+        const regularGrant = Number(session.metadata?.replyCredits ?? 0);
+        const jxlGrant = Number(session.metadata?.jxlReplyCredits ?? 0);
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            replyCredits: currentReplyCredits + regularGrant,
+            jxlReplyCredits: currentJxlReplyCredits + jxlGrant,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] ${mode} — granted ${regularGrant || jxlGrant} discounted tail replies to ${userId}`
+        );
+
+      // ── Bundle pack — grant 2 regular + 1 JXL credit ───────────────────────
+      } else if (mode === "bundle_pack") {
+        const creditsToGrant = Number(session.metadata?.credits ?? 0);
+        const jxlToGrant = Number(session.metadata?.jxlCredits ?? 0);
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            credits: currentCredits + creditsToGrant,
+            jxlCredits: currentJxlCredits + jxlToGrant,
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] bundle_pack — granted ${creditsToGrant} readings + ${jxlToGrant} JXL to ${userId}`
+        );
+
+      } else if (mode === "followup") {
+        console.log(`[webhook] followup — charged ${userId}.`);
+      }
+
+    } catch (err) {
+      console.error("[webhook] CRITICAL — Stripe charged but Clerk update failed.", {
+        userId,
+        mode,
+        sessionId: session.id,
+        amount: session.amount_total,
+        error: String(err),
+        timestamp: new Date().toISOString(),
+      });
+      return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MONTHLY RENEWAL — invoice.payment_succeeded
+  // ══════════════════════════════════════════════════════════════════════════
+  // This is the ONLY genuinely new branch. It resets a subscriber's credits to
+  // their plan amount each billing cycle (use-it-or-lose-it via renewalCredits,
+  // which never sets below the current balance so top-ups survive).
+  //
+  // Stripe sends this for BOTH the first invoice and every renewal. We skip the
+  // first one (billing_reason === "subscription_create") because the initial
+  // checkout.session.completed above already granted those credits — otherwise
+  // signup would double-grant.
+  if (event.type === "invoice.payment_succeeded") {
+    const invoice = event.data.object as Stripe.Invoice;
+
+    // Only subscription invoices matter here.
+    const subId = (invoice as unknown as { subscription?: string }).subscription;
+    if (!subId) {
+      return NextResponse.json({ received: true });
+    }
+
+    // Skip the very first invoice — checkout.session.completed handled it.
+    if (invoice.billing_reason === "subscription_create") {
+      console.log("[webhook] invoice — first invoice, skipping (handled at checkout).");
+      return NextResponse.json({ received: true });
+    }
+
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subId);
+      const userId = subscription.metadata?.userId;
+      if (!userId) {
+        console.error("[webhook] renewal — no userId on subscription", subId);
+        return NextResponse.json({ received: true });
+      }
+
+      const client = await clerkClient();
+      const user = await client.users.getUser(userId);
+      const meta = user.publicMetadata;
+      const tier = getSubTier(meta?.subscriptionTier as string | undefined);
+
+      const currentCredits = Number(meta?.credits ?? 0);
+      const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
+
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          ...meta,
+          // Reset UP to plan amount; never claw back a purchased balance.
+          credits: renewalCredits(currentCredits, tier.readings),
+          jxlCredits: renewalCredits(currentJxlCredits, tier.jxl),
+          lastRenewalAt: new Date().toISOString(),
+        },
+      });
+
+      console.log(
+        `[webhook] renewal — ${tier.key} reset for ${userId}: ` +
+        `readings→${renewalCredits(currentCredits, tier.readings)}, ` +
+        `jxl→${renewalCredits(currentJxlCredits, tier.jxl)}`
+      );
+    } catch (err) {
+      console.error("[webhook] CRITICAL — renewal reset failed.", {
+        subId,
+        error: String(err),
+        timestamp: new Date().toISOString(),
+      });
+      return NextResponse.json({ error: "Renewal reset failed" }, { status: 500 });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CANCELLATION — customer.subscription.deleted
+  // ══════════════════════════════════════════════════════════════════════════
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription;
+    const userId = subscription.metadata?.userId;
+
+    if (userId) {
+      try {
+        const client = await clerkClient();
+        const user = await client.users.getUser(userId);
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...user.publicMetadata,
+            isSubscribed: false,
+            subscriptionId: undefined,
+            subscriptionTier: undefined,
+            subscriptionCancelledAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(`[webhook] subscription cancelled for ${userId}`);
+      } catch (err) {
+        console.error("[webhook] CRITICAL — Failed to update cancelled subscription.", {
+          userId,
+          subscriptionId: subscription.id,
+          error: String(err),
+          timestamp: new Date().toISOString(),
+        });
+        return NextResponse.json({ error: "Failed to update subscription" }, { status: 500 });
+      }
+    }
+  }
+
+  return NextResponse.json({ received: true });
+}
+----- app/api/user/credits/route.ts -----
+import { auth, clerkClient } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+
+// ── GET /api/user/credits ─────────────────────────────────────────────────────
+// Cooldowns removed entirely — no more onCooldown / bypass / auto-reset logic.
+// Downloads are free for everyone now, so downloadUnlocked is always effectively
+// true. Reading credits are still spent in exactly one place: reading-complete.
+export async function GET() {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const metadata = user.publicMetadata;
+
+    // ── First-load initialization ──────────────────────────────────────────
+    // If this account has never had its fields written, initialize the full
+    // set so everything is present and editable in the Clerk dashboard.
+    if (metadata?.credits === undefined) {
+      const defaults = {
+        ...metadata,
+        credits: 0,
+        jxlCredits: 0,
+        replyCredits: 0,
+        jxlReplyCredits: 0,
+        isSubscribed: false,
+        subscriptionTier: null,
+        firstReadingUsed: false,
+        firstPaidReadingUsed: false,
+        pwaFreeReadingUsed: false,
+        readingsCompleted: 0,
+      };
+      await client.users.updateUserMetadata(userId, { publicMetadata: defaults });
+      // Use the defaults for the rest of this request so the response is correct
+      Object.assign(metadata ?? {}, defaults);
+    }
+
+    return NextResponse.json({
+      credits: Number(metadata?.credits ?? 0),
+      jxlCredits: Number(metadata?.jxlCredits ?? 0),
+      jxlReplyCredits: Number(metadata?.jxlReplyCredits ?? 0),
+      replyCredits: Number(metadata?.replyCredits ?? 0),
+      isSubscribed: metadata?.isSubscribed === true,
+      subscriptionTier: (metadata?.subscriptionTier as string) ?? null,
+      readingsCompleted: Number(metadata?.readingsCompleted ?? 0),
+      downloadUnlocked: true, // free for everyone now
+      freeRepliesRemaining: Number(metadata?.freeRepliesRemaining ?? 0),
+      pwaFreeReadingUsed: metadata?.pwaFreeReadingUsed === true,
+    });
+  } catch (error) {
+    console.error("[credits GET] Error:", error);
+    return NextResponse.json({ error: "Failed to get credits." }, { status: 500 });
+  }
+}
+----- app/credits/page.tsx -----
+(not found at this path)
+
+----- app/components/CreditsPanel.tsx -----
+"use client";
+
+import React, { useState, useMemo } from "react";
+import { ChevronLeft, Minus, Plus } from "lucide-react";
+import StarfieldBackground from "./StarfieldBackground";
+
+/* ── Products ── */
+type ProductId = "reading" | "jxl" | "replies";
+interface Product { id: ProductId; title: string; desc: string; price: number; mode: string; row: 1 | 2; }
+const PRODUCTS: Product[] = [
+  { id: "reading", title: "Reading", desc: "1 reading credit · 1 free reply", price: 4.0, mode: "one_time",   row: 1 },
+  { id: "jxl",     title: "JXL",     desc: "1 JXL session · 2 free replies",  price: 6.0, mode: "jxl_session", row: 1 },
+  { id: "replies", title: "Replies", desc: "Works on readings or JXL · +2",   price: 2.0, mode: "reply_pack",  row: 2 },
+];
+
+interface Tier { id: string; price: string; desc: string; hero?: boolean; }
+const TIERS: Tier[] = [
+  { id: "sub_base", price: "$12/mo", desc: "4 readings + 4 JXL" },
+  { id: "sub_plus", price: "$16/mo", desc: "8 readings + 8 JXL", hero: true },
+];
+const PERKS = ["Reading credits every month","JXL follow-up credits every month","Free reading downloads","50% off extras after you run out","No cooldowns, ever"];
+
+interface Balance { readings: number; jxl: number; replies: number; }
+
+/**
+ * Credits panel. Render as an OVERLAY (createPortal) so it feels like the app,
+ * not a browser tab. `onClose` returns to the previous screen.
+ */
+export default function CreditsPanel({ onClose }: { onClose?: () => void }) {
+  const [cart, setCart] = useState<Record<ProductId, number>>({ reading: 0, jxl: 0, replies: 0 });
+  const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState<Balance | null>(null);
+
+  // Pull the user's current credits for the line under checkout.
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/user/credits");
+        const d = await res.json();
+        setBalance({
+          readings: Number(d.credits ?? 0),
+          jxl: Number(d.jxlCredits ?? 0),
+          replies: Number(d.replyCredits ?? 0) + Number(d.jxlReplyCredits ?? 0),
+        });
+      } catch { /* leave balance null; line just won't render */ }
+    })();
+  }, []);
+
+  const total = useMemo(() => PRODUCTS.reduce((s, p) => s + cart[p.id] * p.price, 0), [cart]);
+  const step = (id: ProductId, d: number) =>
+    setCart((c) => ({ ...c, [id]: Math.max(0, c[id] + d) }));
+
+  const handleCheckout = async () => {
+    if (total <= 0) return;
+    setLoading(true);
+    try {
+      const items = PRODUCTS.filter((p) => cart[p.id] > 0).map((p) => ({ mode: p.mode, id: p.id, quantity: cart[p.id] }));
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "cart", items, returnUrl: `${window.location.origin}/reading/intake` }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch { /* toast */ } finally { setLoading(false); }
+  };
+
+  const handleSubscribe = async (tier: Tier) => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "subscription", bundleTier: tier.id, returnUrl: `${window.location.origin}/reading/intake` }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch { /* toast */ } finally { setLoading(false); }
+  };
+
+  const C = STYLES;
+
+  return (
+    <div style={C.root}>
+      {/* ── Starfield backdrop ── */}
+      <StarfieldBackground />
+
+      {/* Back */}
+      <button type="button" onClick={onClose} style={C.back}>
+        <ChevronLeft size={16} /> Back
+      </button>
+
+      <div style={C.container}>
+        {/* ── CART ── */}
+        <div style={C.titleRow}>
+          <span style={C.titleLine} /><span style={C.title}>Get Credits</span><span style={C.titleLine} />
+        </div>
+
+        <div style={C.grid}>
+          {PRODUCTS.filter((p) => p.row === 1).map((p) => (
+            <ProductCard key={p.id} p={p} qty={cart[p.id]} onStep={step} />
+          ))}
+        </div>
+        <div style={C.repliesRow}>
+          <div style={{ width: "calc(50% - 7px)" }}>
+            {PRODUCTS.filter((p) => p.row === 2).map((p) => (
+              <ProductCard key={p.id} p={p} qty={cart[p.id]} onStep={step} />
+            ))}
+          </div>
+        </div>
+
+        <div style={C.totalLine}>TOTAL : <span style={{ color: "#fde68a" }}>${total.toFixed(2)}</span></div>
+        <button
+          type="button"
+          onClick={handleCheckout}
+          disabled={total <= 0 || loading}
+          style={{ ...C.checkout, ...(total <= 0 || loading ? C.checkoutDisabled : {}) }}
+        >
+          {loading ? "…" : "SWIPE TO CHECKOUT"}
+        </button>
+
+        {balance && (
+          <p style={C.balance}>
+            You currently have{" "}
+            <b style={C.balanceB}>{balance.readings}</b> {plural(balance.readings, "reading")},{" "}
+            <b style={C.balanceB}>{balance.jxl}</b> JXL, and{" "}
+            <b style={C.balanceB}>{balance.replies}</b> {plural(balance.replies, "reply", "replies")}.
+          </p>
+        )}
+
+        {/* ── MEMBERSHIP ── */}
+        <div style={C.memDiv}>
+          <span style={C.memLine} /><span style={C.memLabel}>Membership</span><span style={C.memLine} />
+        </div>
+
+        <h3 style={C.offerHeading}>More Readings, Real Savings</h3>
+        <div style={{ marginBottom: 4 }}>
+          {PERKS.map((perk) => (
+            <div key={perk} style={C.perkItem}>
+              <span style={C.perkCheck}>✓</span><span style={C.perkText}>{perk}</span>
+            </div>
+          ))}
+        </div>
+        <p style={C.memSub}>Less than two single readings a month.</p>
+
+        <div style={C.tiers}>
+          {TIERS.map((t) => (
+            <div key={t.id} style={{ ...C.tierCard, ...(t.hero ? C.tierHero : C.tierBase) }}>
+              {t.hero && <span style={C.bestBadge}>Best Value</span>}
+              <p style={C.tierPrice}>{t.price}</p>
+              <p style={C.tierDesc}>{t.desc}</p>
+              <p style={C.tierCadence}>every month</p>
+              <button
+                type="button"
+                onClick={() => handleSubscribe(t)}
+                disabled={loading}
+                style={{ ...C.tierBtn, ...(t.hero ? C.tierBtnHero : C.tierBtnBase) }}
+              >
+                Subscribe
+              </button>
+            </div>
+          ))}
+        </div>
+        <p style={C.cancel}>Cancel anytime</p>
+      </div>
+    </div>
+  );
+}
+
+function plural(n: number, one: string, many?: string) {
+  return n === 1 ? one : (many ?? one + "s");
+}
+
+/* ── Product card: 60/40 split, live stepper, top-left count badge ── */
+function ProductCard({ p, qty, onStep }: {
+  p: Product; qty: number; onStep: (id: ProductId, d: number) => void;
+}) {
+  const C = STYLES;
+  const active = qty > 0;
+  return (
+    <div style={{ ...C.card, ...(active ? C.cardActive : {}) }}>
+      {active && <span style={C.badge}>{qty}</span>}
+      <div style={C.cardInner}>
+        <div style={C.cardLeft}>
+          <p style={C.cardTitle}>{p.title}</p>
+          <p style={C.cardDesc}>{p.desc}</p>
+        </div>
+        <div style={C.cardRight}>
+          <div style={C.price}>${p.price.toFixed(2)}</div>
+          <div style={C.stepper}>
+            <button
+              type="button" aria-label="decrease"
+              onClick={() => onStep(p.id, -1)} disabled={qty <= 0}
+              style={{ ...C.stepBtn, ...C.stepMinus, ...(qty <= 0 ? C.stepDisabled : {}) }}
+            >
+              <Minus size={16} />
+            </button>
+            <button
+              type="button" aria-label="increase"
+              onClick={() => onStep(p.id, 1)}
+              style={C.stepBtn}
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Styles (plain objects — no styled-jsx, guaranteed to render) ── */
+const STYLES: Record<string, React.CSSProperties> = {
+  root: {
+    position: "relative",
+    minHeight: "100dvh",
+    background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+    color: "#f1f5f9",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    overflow: "hidden",
+  },
+  back: {
+    position: "fixed", top: "calc(12px + env(safe-area-inset-top))", left: 16, zIndex: 100,
+    display: "flex", alignItems: "center", gap: 4,
+    background: "rgba(5,8,22,0.6)", border: "1px solid rgba(148,163,184,0.2)",
+    borderRadius: 999, padding: "6px 12px 6px 8px", color: "#cbd5e1",
+    fontSize: 13, cursor: "pointer", backdropFilter: "blur(8px)",
+  },
+  container: {
+    position: "relative",
+    zIndex: 10,
+    maxWidth: 430,
+    margin: "0 auto",
+    padding: "calc(64px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom))",
+    minHeight: "100vh",
+  },
+
+  titleRow: { display: "flex", alignItems: "center", gap: 12, marginBottom: 22 },
+  titleLine: { height: 1, flex: 1, background: "rgba(255,255,255,0.18)" },
+  title: { fontSize: 20, fontWeight: 700, letterSpacing: "0.06em", color: "#fff", whiteSpace: "nowrap" },
+
+  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
+  repliesRow: { marginTop: 14, display: "flex", justifyContent: "center" },
+
+  card: { position: "relative", display: "flex", alignItems: "stretch", borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.035)", minHeight: 120 },
+  cardActive: { borderColor: "rgba(129,140,248,0.5)" },
+  cardInner: { display: "flex", alignItems: "stretch", width: "100%", borderRadius: 14, overflow: "hidden" },
+  cardLeft: { width: "60%", padding: "14px 10px 14px 14px", display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 },
+  cardTitle: { fontSize: 15, fontWeight: 700, color: "#fff", margin: "0 0 6px" },
+  cardDesc: { fontSize: 10.5, lineHeight: 1.35, color: "#94a3b8", margin: 0 },
+
+  cardRight: { width: "40%", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.14)", display: "flex", flexDirection: "column" },
+  price: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 700, color: "#fff" },
+
+  stepper: { display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid rgba(255,255,255,0.14)", height: 40 },
+  stepBtn: { background: "transparent", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
+  stepMinus: { borderRight: "1px solid rgba(255,255,255,0.14)" },
+  stepDisabled: { color: "#475569", cursor: "default" },
+
+  badge: { position: "absolute", top: -10, left: -10, zIndex: 3, width: 28, height: 28, borderRadius: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "#6366f1", color: "#fff", fontSize: 13, fontWeight: 800, border: "2px solid #050816", boxShadow: "0 4px 12px rgba(99,102,241,0.5)" },
+
+  totalLine: { margin: "26px 2px 10px", fontSize: 20, fontWeight: 700, color: "#fff" },
+  checkout: { width: "100%", height: 52, borderRadius: 10, cursor: "pointer", border: "1px solid rgba(129,140,248,0.6)", background: "rgba(129,140,248,0.14)", color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "0.08em" },
+  checkoutDisabled: { opacity: 0.4, cursor: "default", borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.04)" },
+
+  balance: { textAlign: "center", fontSize: 10.5, lineHeight: 1.4, color: "#94a3b8", margin: "10px 2px 0", letterSpacing: "0.01em" },
+  balanceB: { color: "#cbd5e1", fontWeight: 600 },
+
+  memDiv: { display: "flex", alignItems: "center", gap: 12, margin: "30px 0 16px" },
+  memLine: { flex: 1, height: 1, background: "linear-gradient(90deg, transparent, rgba(251,191,36,0.2), transparent)" },
+  memLabel: { fontSize: 9, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(251,191,36,0.4)", whiteSpace: "nowrap" },
+  offerHeading: { fontSize: 17, fontWeight: 700, textAlign: "center", color: "#fef3c7", letterSpacing: "0.01em", margin: "0 0 12px" },
+  perkItem: { display: "flex", alignItems: "center", gap: 10, padding: "3px 0" },
+  perkCheck: { display: "flex", height: 18, width: 18, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: 9999, background: "rgba(251,191,36,0.12)", color: "#fbbf24", fontSize: 10, fontWeight: 700 },
+  perkText: { fontSize: 13, color: "#cbd5e1" },
+  memSub: { fontSize: 11, color: "rgba(251,191,36,0.5)", textAlign: "center", margin: "12px 0 16px" },
+
+  tiers: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "stretch" },
+  tierCard: { borderRadius: 16, padding: "18px 12px 16px", position: "relative", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 4 },
+  tierHero: { border: "1.5px solid rgba(251,191,36,0.5)", background: "linear-gradient(135deg, rgba(251,191,36,0.12), rgba(251,191,36,0.04))" },
+  tierBase: { border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" },
+  bestBadge: { position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", borderRadius: 9999, border: "1px solid rgba(251,191,36,0.4)", background: "#050816", padding: "2px 12px", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#fbbf24", whiteSpace: "nowrap" },
+  tierPrice: { fontSize: 24, fontWeight: 700, color: "#fff", lineHeight: 1, margin: 0 },
+  tierDesc: { fontSize: 12, color: "#cbd5e1", lineHeight: 1.2, margin: 0 },
+  tierCadence: { fontSize: 10, color: "#64748b", margin: "0 0 8px" },
+  tierBtn: { width: "100%", padding: "8px 12px", borderRadius: 9999, fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  tierBtnHero: { background: "#fcd34d", color: "#050816", border: "none" },
+  tierBtnBase: { background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" },
+  cancel: { textAlign: "center", fontSize: 10, color: "#475569", marginTop: 14, letterSpacing: "0.05em" },
+};
+----- app/components/MembershipPanel.tsx -----
+"use client";
+
+import React from "react";
+import { motion } from "framer-motion";
+import StarfieldBackground from "./StarfieldBackground";
+
+interface UserStatus {
+  credits: number;
+  isSubscribed: boolean;
+  readingsCompleted: number;
+  onCooldown: boolean;
+  cooldownExpiresAt: string | null;
+  canBypass: boolean;
+  firstPaidReadingUsed: boolean;
+  pwaFreeReadingUsed?: boolean;
+}
+
+interface MembershipPanelProps {
+  userStatus: UserStatus | null;
+  onSwipeRight?: () => void;
+}
+
+export default function MembershipPanel({ userStatus, onSwipeRight }: MembershipPanelProps) {
+  const isSubscribed = userStatus?.isSubscribed || false;
+
+  // Already subscribed - show minimal view
+  if (isSubscribed) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#050816] px-6">
+        <div className="max-w-[430px] w-full text-center">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          >
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-300 mx-auto mb-6">
+              <span className="text-4xl">✨</span>
+            </div>
+            <h1 className="text-3xl font-semibold text-white mb-3">
+              You're Subscribed! 🎉
+            </h1>
+            <p className="text-base text-slate-400 leading-relaxed">
+              Full access to all features unlocked. Swipe right to explore your birth chart and daily transits.
+            </p>
+            <button
+              type="button"
+              onClick={() => onSwipeRight?.()}
+              className="mt-6 text-sm text-slate-500 hover:text-slate-300 transition"
+            >
+              ← Swipe right to go back
+            </button>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative min-h-screen h-full w-full overflow-hidden text-slate-100 flex items-center justify-center"
+      style={{
+        background:
+          "radial-gradient(55% 40% at 18% 12%, rgba(56,60,140,0.20), transparent 60%)," +
+          "radial-gradient(50% 40% at 85% 82%, rgba(120,50,120,0.16), transparent 60%)," +
+          "radial-gradient(45% 35% at 70% 30%, rgba(40,90,140,0.14), transparent 60%)," +
+          "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+      }}
+    >
+      <style jsx>{`
+        .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+        /* ── Safe-area aware inset ── */
+        .frame-inset {
+          padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+          padding-left: calc(env(safe-area-inset-left, 0px) + 16px);
+          padding-right: calc(env(safe-area-inset-right, 0px) + 16px);
+        }
+
+        /* ── Gold outline frame (liquid glass) ── */
+        .gold-frame {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          border: 2px solid rgba(251,191,36,0.75);
+          border-radius: 40px;
+          background:
+            linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015) 45%, rgba(255,255,255,0.04)),
+            rgba(7,10,22,0.55);
+          backdrop-filter: blur(16px) saturate(165%) brightness(1.06);
+          -webkit-backdrop-filter: blur(16px) saturate(165%) brightness(1.06);
+          box-shadow:
+            0 0 24px rgba(251,191,36,0.22),
+            0 0 70px rgba(251,191,36,0.10),
+            inset 0 1px 0 rgba(255,255,255,0.20),
+            inset 0 0 40px rgba(255,255,255,0.03);
+          padding: 28px 20px;
+          transition: border-color 0.4s ease, box-shadow 0.4s ease;
+          max-height: 100%;
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: none;
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .gold-frame::-webkit-scrollbar { display: none; width: 0; height: 0; }
+        .gold-frame:hover {
+          border-color: rgba(251,191,36,0.9);
+          box-shadow:
+            0 0 32px rgba(251,191,36,0.30),
+            0 0 80px rgba(251,191,36,0.14),
+            inset 0 1px 0 rgba(255,255,255,0.24),
+            inset 0 0 60px rgba(255,255,255,0.04);
+        }
+        .gold-frame > * { position: relative; z-index: 1; }
+
+        /* ── Mission section ── */
+        .mission-heading {
+          font-size: 24px;
+          font-weight: 700;
+          text-align: center;
+          color: #fef3c7;
+          letter-spacing: 0.01em;
+          margin-bottom: 20px;
+        }
+
+        .mission-text {
+          font-size: 14px;
+          line-height: 1.8;
+          color: #cbd5e1;
+          max-width: 340px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+        .mission-text strong {
+          color: #fbbf24;
+          font-weight: 600;
+        }
+        .mission-text em {
+          color: #93c5fd;
+          font-style: italic;
+        }
+        .mission-signoff {
+          margin-top: 16px;
+          font-size: 14px;
+          font-style: italic;
+          color: #93c5fd;
+          text-align: center;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .gold-frame:hover { border-color: rgba(251,191,36,0.75); }
+        }
+      `}</style>
+
+      {/* ── Starfield background ── */}
+      <StarfieldBackground />
+
+      {/* ── Outer alignment wrapper ── */}
+      <div className="frame-inset relative z-10 flex h-full w-full items-center justify-center max-w-[430px]">
+        <motion.div
+          className="gold-frame my-auto"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          {/* ── Mission Statement ── */}
+          <div className="text-center px-2 my-auto">
+            <h3 className="mission-heading">Our Mission</h3>
+
+            <div className="space-y-4">
+              <p className="mission-text">
+                Most people look for a reading when they're going through something hard like
+                a heartbreak, a money fear, a crossroads they can't see past. That's exactly
+                when clarity matters most, and exactly when it's usually least affordable.
+              </p>
+              <p className="mission-text">
+                Readings elsewhere run $60 to $120, often from someone working off intuition
+                alone — and even the most well meaning reader carries bias they may not notice.
+              </p>
+              <p className="mission-text">
+                <strong>AstroProXL</strong> is different, and <em>advanced</em>: on top of your
+                actual chart, placements, transits, and orbs — we run up to <strong>15 distinct
+                calculations</strong> <em>each reading & reply</em> to deliver personalized future predictions, 
+                done correctly, at a price that doesn't add to your stress. Affordable, honest clarity, for the
+                moments you need it most.
+              </p>
+              <p className="mission-signoff">— Jáneel, The AstroProXL Founder</p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
