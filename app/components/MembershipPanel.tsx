@@ -57,7 +57,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
 
   return (
     <div
-      className="relative h-screen w-full overflow-hidden text-slate-100"
+      className="relative min-h-screen h-full w-full overflow-hidden text-slate-100 flex items-center justify-center"
       style={{
         background:
           "radial-gradient(55% 40% at 18% 12%, rgba(56,60,140,0.20), transparent 60%)," +
@@ -69,20 +69,22 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
       <style jsx>{`
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
-        /* ── Safe-area aware inset so the frame clears notch + home bar ── */
+        /* ── Safe-area aware inset ── */
         .frame-inset {
-          padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
-          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
-          padding-left: calc(env(safe-area-inset-left, 0px) + 10px);
-          padding-right: calc(env(safe-area-inset-right, 0px) + 10px);
+          padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+          padding-left: calc(env(safe-area-inset-left, 0px) + 16px);
+          padding-right: calc(env(safe-area-inset-right, 0px) + 16px);
         }
 
-        /* ── Gold outline frame (liquid glass, phone edge) ── */
+        /* ── Gold outline frame (liquid glass) ── */
         .gold-frame {
           position: relative;
-          flex: 1;
           display: flex;
           flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
           border: 2px solid rgba(251,191,36,0.75);
           border-radius: 40px;
           background:
@@ -95,16 +97,15 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
             0 0 70px rgba(251,191,36,0.10),
             inset 0 1px 0 rgba(255,255,255,0.20),
             inset 0 0 40px rgba(255,255,255,0.03);
-          padding: 20px 20px 28px;
+          padding: 28px 20px;
           transition: border-color 0.4s ease, box-shadow 0.4s ease;
+          max-height: 100%;
           overflow-y: auto;
           overflow-x: hidden;
           -webkit-overflow-scrolling: touch;
           overscroll-behavior: none;
           -ms-overflow-style: none;
           scrollbar-width: none;
-          justify-content: center;
-          align-items: center;
         }
         .gold-frame::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .gold-frame:hover {
@@ -131,7 +132,6 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           font-size: 14px;
           line-height: 1.8;
           color: #cbd5e1;
-          margin-bottom: 14px;
           max-width: 340px;
           margin-left: auto;
           margin-right: auto;
@@ -157,22 +157,22 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
         }
       `}</style>
 
-      {/* ── Starfield / galaxy backdrop (stars only, no constellations) ── */}
+      {/* ── Starfield background ── */}
       <StarfieldBackground />
 
-      {/* ── Phone-edge frame (safe-area inset so it clears the status bar) ── */}
-      <div className="frame-inset relative z-10 mx-auto flex h-full w-full max-w-[430px]">
+      {/* ── Outer alignment wrapper ── */}
+      <div className="frame-inset relative z-10 flex h-full w-full items-center justify-center max-w-[430px]">
         <motion.div
-          className="gold-frame"
+          className="gold-frame my-auto"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          {/* ── Mission Statement (centered) ── */}
-          <div className="text-center px-2">
+          {/* ── Mission Statement ── */}
+          <div className="text-center px-2 my-auto">
             <h3 className="mission-heading">Our Mission</h3>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <p className="mission-text">
                 Most people look for a reading when they're going through something hard like
                 a heartbreak, a money fear, a crossroads they can't see past. That's exactly
@@ -180,7 +180,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
               </p>
               <p className="mission-text">
                 Readings elsewhere run $60 to $120, often from someone working off intuition
-                alone — and even the most well-meaning human carries bias they may not notice.  
+                alone — and even the most well-meaning human carries bias they may not notice.
               </p>
               <p className="mission-text">
                 <strong>AstroProXL</strong> is different, and <em>advanced</em>: on top of your
