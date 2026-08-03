@@ -180,7 +180,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
               </p>
               <p className="mission-text">
                 Readings elsewhere run $60 to $120, often from someone working off intuition
-                alone — and even the most well-meaning human carries bias they may not notice.
+                alone — and even the most well meaning reader carries bias they may not notice.
               </p>
               <p className="mission-text">
                 <strong>AstroProXL</strong> is different, and <em>advanced</em>: on top of your
