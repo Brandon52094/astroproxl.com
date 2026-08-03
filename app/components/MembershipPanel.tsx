@@ -169,32 +169,33 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
           {/* ── Mission Statement ── */}
-<div className="text-center px-2 my-auto">
-  <h3 className="mission-heading">Our Mission</h3>
+          <div className="text-center px-2 my-auto">
+            <h3 className="mission-heading">Our Mission</h3>
 
-  <div className="space-y-4">
-    <p className="mission-text">
-      Most people look to the stars when life hits a wall—a heartbreak, a financial 
-      crossroads, or a decision that feels too heavy to make alone.
-    </p>
-    <p className="mission-text">
-      That's when clarity matters most, yet traditional readings often run $60 to 
-      $120+, relying solely on human intuition—and human bias.
-    </p>
-    <p className="mission-text">
-      <strong>AstroProXL</strong> is built differently.
-    </p>
-    <p className="mission-text">
-      Beyond basic birth charts, we analyze your exact placements, transits, and 
-      mathematical orbs through up to <strong>15 distinct calculations</strong> per 
-      reading. The result? Unmatched astronomical precision, total objectivity, and 
-      deep clarity—delivered at a price that never adds to your stress.
-    </p>
-    <p className="mission-text">
-      High-level insight shouldn't be a luxury. It should be there when you need it most.
-    <p className="mission-signoff">— Janeel, Founder of AstroProXL</p>
+            <div className="space-y-4">
+              <p className="mission-text">
+                Most people look to the stars when life hits a wall—a heartbreak, a financial
+                crossroads, or a decision that feels too heavy to make alone.
+              </p>
+              <p className="mission-text">
+                That&apos;s when clarity matters most, yet traditional readings often run $60 to
+                $120+, relying solely on human intuition—and human bias.
+              </p>
+              <p className="mission-text">
+                <strong>AstroProXL</strong> is built differently.
+              </p>
+              <p className="mission-text">
+                Beyond basic birth charts, we analyze your exact placements, transits, and
+                mathematical orbs through up to <strong>15 distinct calculations</strong> per
+                reading. The result? Unmatched astronomical precision, total objectivity, and
+                deep clarity—delivered at a price that never adds to your stress.
+              </p>
+              <p className="mission-text">
+                High-level insight shouldn&apos;t be a luxury. It should be there when you need it most.
+              </p>
+              <p className="mission-signoff">— Janeel, Founder of AstroProXL</p>
+            </div>
           </div>
-        </div>
         </motion.div>
       </div>
     </div>
