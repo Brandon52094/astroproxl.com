@@ -168,7 +168,7 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-         {/* ── Mission Statement ── */}
+          {/* ── Mission Statement ── */}
 <div className="text-center px-2 my-auto">
   <h3 className="mission-heading">Our Mission</h3>
 
@@ -192,7 +192,11 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
     </p>
     <p className="mission-text">
       High-level insight shouldn't be a luxury. It should be there when you need it most.
-    </p>
     <p className="mission-signoff">— Janeel, Founder of AstroProXL</p>
-  </div>
-</div>
+          </div>
+        </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
