@@ -168,32 +168,31 @@ export default function MembershipPanel({ userStatus, onSwipeRight }: Membership
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          {/* ── Mission Statement ── */}
-          <div className="text-center px-2 my-auto">
-            <h3 className="mission-heading">Our Mission</h3>
+         {/* ── Mission Statement ── */}
+<div className="text-center px-2 my-auto">
+  <h3 className="mission-heading">Our Mission</h3>
 
-            <div className="space-y-4">
-              <p className="mission-text">
-                Most people look for a reading when they're going through something hard like
-                a heartbreak, a money fear, a crossroads they can't see past. That's exactly
-                when clarity matters most, and exactly when it's usually least affordable.
-              </p>
-              <p className="mission-text">
-                Readings elsewhere run $60 to $120, often from someone working off intuition
-                alone — and even the most well meaning reader carries bias they may not notice.
-              </p>
-              <p className="mission-text">
-                <strong>AstroProXL</strong> is different, and <em>advanced</em>: on top of your
-                actual chart, placements, transits, and orbs — we run up to <strong>15 distinct
-                calculations</strong> <em>each reading & reply</em> to deliver personalized future predictions, 
-                done correctly, at a price that doesn't add to your stress. Affordable, honest clarity, for the
-                moments you need it most.
-              </p>
-              <p className="mission-signoff">— Jáneel, The AstroProXL Founder</p>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    </div>
-  );
-}
+  <div className="space-y-4">
+    <p className="mission-text">
+      Most people look to the stars when life hits a wall—a heartbreak, a financial 
+      crossroads, or a decision that feels too heavy to make alone.
+    </p>
+    <p className="mission-text">
+      That's when clarity matters most, yet traditional readings often run $60 to 
+      $120+, relying solely on human intuition—and human bias.
+    </p>
+    <p className="mission-text">
+      <strong>AstroProXL</strong> is built differently.
+    </p>
+    <p className="mission-text">
+      Beyond basic birth charts, we analyze your exact placements, transits, and 
+      mathematical orbs through up to <strong>15 distinct calculations</strong> per 
+      reading. The result? Unmatched astronomical precision, total objectivity, and 
+      deep clarity—delivered at a price that never adds to your stress.
+    </p>
+    <p className="mission-text">
+      High-level insight shouldn't be a luxury. It should be there when you need it most.
+    </p>
+    <p className="mission-signoff">— Janeel, Founder of AstroProXL</p>
+  </div>
+</div>
