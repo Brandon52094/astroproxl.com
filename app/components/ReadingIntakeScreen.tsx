@@ -26,6 +26,7 @@ import {
 import { SUB_TIERS } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
+import CreditsPanel from "./components/CreditsPanel";
 
 declare global {
   interface Window {
@@ -205,6 +206,7 @@ export default function ReadingIntakeScreen({
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [showJxl, setShowJxl] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
 
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
@@ -841,7 +843,7 @@ export default function ReadingIntakeScreen({
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
-           <div className="mt-4">
+          <div className="mt-4">
             <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
 
@@ -849,7 +851,7 @@ export default function ReadingIntakeScreen({
           <div className="mt-3.5 flex justify-center">
             <button
               type="button"
-              onClick={() => router.push("/credits")}
+              onClick={() => setShowCredits(true)}
               className="tap-fix inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[13px] font-semibold tracking-[0.02em] transition"
               style={{
                 border: "1px solid rgba(251,191,36,0.4)",
@@ -943,6 +945,15 @@ export default function ReadingIntakeScreen({
               Back
             </button>
             <JxlPanel isActive={showJxl} />
+          </div>,
+          document.body
+        )}
+
+      {/* ── Credits overlay (portaled to body) ── */}
+      {showCredits && typeof document !== "undefined" &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
+            <CreditsPanel onClose={() => setShowCredits(false)} />
           </div>,
           document.body
         )}
