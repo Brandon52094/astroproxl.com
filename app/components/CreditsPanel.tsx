@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { ChevronLeft, Minus, Plus } from "lucide-react";
+import StarfieldBackground from "./StarfieldBackground";
 
 /* ── Products ── */
 type ProductId = "reading" | "jxl" | "replies";
@@ -19,18 +20,35 @@ const TIERS: Tier[] = [
 ];
 const PERKS = ["Reading credits every month","JXL follow-up credits every month","Free reading downloads","50% off extras after you run out","No cooldowns, ever"];
 
+interface Balance { readings: number; jxl: number; replies: number; }
+
 /**
- * Credits page. Render this as an OVERLAY (see notes) so it feels like the app,
+ * Credits panel. Render as an OVERLAY (createPortal) so it feels like the app,
  * not a browser tab. `onClose` returns to the previous screen.
  */
-export default function CreditsPage({ onClose }: { onClose?: () => void }) {
-  const [pending, setPending] = useState<Record<ProductId, number>>({ reading: 1, jxl: 1, replies: 1 });
+export default function CreditsPanel({ onClose }: { onClose?: () => void }) {
   const [cart, setCart] = useState<Record<ProductId, number>>({ reading: 0, jxl: 0, replies: 0 });
   const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState<Balance | null>(null);
+
+  // Pull the user's current credits for the line under checkout.
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/user/credits");
+        const d = await res.json();
+        setBalance({
+          readings: Number(d.credits ?? 0),
+          jxl: Number(d.jxlCredits ?? 0),
+          replies: Number(d.replyCredits ?? 0) + Number(d.jxlReplyCredits ?? 0),
+        });
+      } catch { /* leave balance null; line just won't render */ }
+    })();
+  }, []);
 
   const total = useMemo(() => PRODUCTS.reduce((s, p) => s + cart[p.id] * p.price, 0), [cart]);
-  const step = (id: ProductId, d: number) => setPending((p) => ({ ...p, [id]: Math.max(1, p[id] + d) }));
-  const addToCart = (id: ProductId) => setCart((c) => ({ ...c, [id]: pending[id] }));
+  const step = (id: ProductId, d: number) =>
+    setCart((c) => ({ ...c, [id]: Math.max(0, c[id] + d) }));
 
   const handleCheckout = async () => {
     if (total <= 0) return;
@@ -62,6 +80,9 @@ export default function CreditsPage({ onClose }: { onClose?: () => void }) {
 
   return (
     <div style={C.root}>
+      {/* ── Starfield backdrop ── */}
+      <StarfieldBackground />
+
       {/* Back */}
       <button type="button" onClick={onClose} style={C.back}>
         <ChevronLeft size={16} /> Back
@@ -75,13 +96,13 @@ export default function CreditsPage({ onClose }: { onClose?: () => void }) {
 
         <div style={C.grid}>
           {PRODUCTS.filter((p) => p.row === 1).map((p) => (
-            <ProductCard key={p.id} p={p} qty={pending[p.id]} inCart={cart[p.id] > 0} onStep={step} onAdd={addToCart} />
+            <ProductCard key={p.id} p={p} qty={cart[p.id]} onStep={step} />
           ))}
         </div>
         <div style={C.repliesRow}>
-          <div style={{ width: "calc(50% - 6px)" }}>
+          <div style={{ width: "calc(50% - 7px)" }}>
             {PRODUCTS.filter((p) => p.row === 2).map((p) => (
-              <ProductCard key={p.id} p={p} qty={pending[p.id]} inCart={cart[p.id] > 0} onStep={step} onAdd={addToCart} />
+              <ProductCard key={p.id} p={p} qty={cart[p.id]} onStep={step} />
             ))}
           </div>
         </div>
@@ -95,6 +116,15 @@ export default function CreditsPage({ onClose }: { onClose?: () => void }) {
         >
           {loading ? "…" : "SWIPE TO CHECKOUT"}
         </button>
+
+        {balance && (
+          <p style={C.balance}>
+            You currently have{" "}
+            <b style={C.balanceB}>{balance.readings}</b> {plural(balance.readings, "reading")},{" "}
+            <b style={C.balanceB}>{balance.jxl}</b> JXL, and{" "}
+            <b style={C.balanceB}>{balance.replies}</b> {plural(balance.replies, "reply", "replies")}.
+          </p>
+        )}
 
         {/* ── MEMBERSHIP ── */}
         <div style={C.memDiv}>
@@ -135,33 +165,49 @@ export default function CreditsPage({ onClose }: { onClose?: () => void }) {
   );
 }
 
-function ProductCard({ p, qty, inCart, onStep, onAdd }: {
-  p: Product; qty: number; inCart: boolean;
-  onStep: (id: ProductId, d: number) => void; onAdd: (id: ProductId) => void;
+function plural(n: number, one: string, many?: string) {
+  return n === 1 ? one : (many ?? one + "s");
+}
+
+/* ── Product card: 60/40 split, live stepper, top-left count badge ── */
+function ProductCard({ p, qty, onStep }: {
+  p: Product; qty: number; onStep: (id: ProductId, d: number) => void;
 }) {
   const C = STYLES;
+  const active = qty > 0;
   return (
-    <div style={C.card}>
-      <div style={C.cardLeft}>
-        <p style={C.cardTitle}>{p.title}</p>
-        <p style={C.cardDesc}>{p.desc}</p>
-      </div>
-      <div style={C.cardRight}>
-        <span style={C.price}>${p.price.toFixed(2)}</span>
-        <div style={C.stepper}>
-          <button type="button" aria-label="decrease" onClick={() => onStep(p.id, -1)} style={C.stepBtn}><Minus size={13} /></button>
-          <span style={C.qty}>{qty}</span>
-          <button type="button" aria-label="increase" onClick={() => onStep(p.id, 1)} style={C.stepBtn}><Plus size={13} /></button>
+    <div style={{ ...C.card, ...(active ? C.cardActive : {}) }}>
+      {active && <span style={C.badge}>{qty}</span>}
+      <div style={C.cardInner}>
+        <div style={C.cardLeft}>
+          <p style={C.cardTitle}>{p.title}</p>
+          <p style={C.cardDesc}>{p.desc}</p>
         </div>
-        <button type="button" onClick={() => onAdd(p.id)} style={{ ...C.addBtn, ...(inCart ? C.addBtnAdded : {}) }}>
-          {inCart ? "ADDED" : "ADD"}
-        </button>
+        <div style={C.cardRight}>
+          <div style={C.price}>${p.price.toFixed(2)}</div>
+          <div style={C.stepper}>
+            <button
+              type="button" aria-label="decrease"
+              onClick={() => onStep(p.id, -1)} disabled={qty <= 0}
+              style={{ ...C.stepBtn, ...C.stepMinus, ...(qty <= 0 ? C.stepDisabled : {}) }}
+            >
+              <Minus size={16} />
+            </button>
+            <button
+              type="button" aria-label="increase"
+              onClick={() => onStep(p.id, 1)}
+              style={C.stepBtn}
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ── All styles as plain objects (no styled-jsx — guaranteed to render) ── */
+/* ── Styles (plain objects — no styled-jsx, guaranteed to render) ── */
 const STYLES: Record<string, React.CSSProperties> = {
   root: {
     position: "relative",
@@ -169,6 +215,7 @@ const STYLES: Record<string, React.CSSProperties> = {
     background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
     color: "#f1f5f9",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    overflow: "hidden",
   },
   back: {
     position: "fixed", top: "calc(12px + env(safe-area-inset-top))", left: 16, zIndex: 100,
@@ -177,30 +224,45 @@ const STYLES: Record<string, React.CSSProperties> = {
     borderRadius: 999, padding: "6px 12px 6px 8px", color: "#cbd5e1",
     fontSize: 13, cursor: "pointer", backdropFilter: "blur(8px)",
   },
-  container: { maxWidth: 430, margin: "0 auto", padding: "calc(64px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom))" },
+  container: {
+    position: "relative",
+    zIndex: 10,
+    maxWidth: 430,
+    margin: "0 auto",
+    padding: "calc(64px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom))",
+    minHeight: "100vh",
+  },
 
-  titleRow: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 },
+  titleRow: { display: "flex", alignItems: "center", gap: 12, marginBottom: 22 },
   titleLine: { height: 1, flex: 1, background: "rgba(255,255,255,0.18)" },
   title: { fontSize: 20, fontWeight: 700, letterSpacing: "0.06em", color: "#fff", whiteSpace: "nowrap" },
 
-  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  repliesRow: { marginTop: 12, display: "flex", justifyContent: "center" },
+  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
+  repliesRow: { marginTop: 14, display: "flex", justifyContent: "center" },
 
-  card: { display: "flex", alignItems: "stretch", borderRadius: 14, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.035)", overflow: "hidden", minHeight: 118 },
-  cardLeft: { flex: 1, padding: "12px 10px 12px 12px", display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 },
-  cardTitle: { fontSize: 15, fontWeight: 700, color: "#fff", margin: 0 },
-  cardDesc: { fontSize: 10.5, lineHeight: 1.3, color: "#94a3b8", margin: "4px 0 0" },
-  cardRight: { width: 92, flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.12)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "10px 6px", gap: 6 },
-  price: { fontSize: 16, fontWeight: 700, color: "#fff", lineHeight: 1 },
-  stepper: { display: "flex", alignItems: "center", gap: 4 },
-  stepBtn: { width: 20, height: 20, borderRadius: 6, border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.05)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
-  qty: { minWidth: 16, textAlign: "center", fontSize: 13, fontWeight: 700, color: "#fff" },
-  addBtn: { width: "100%", height: 26, borderRadius: 7, border: "1px solid rgba(255,255,255,0.28)", background: "rgba(255,255,255,0.06)", color: "#fff", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer" },
-  addBtnAdded: { borderColor: "rgba(52,211,153,0.55)", background: "rgba(52,211,153,0.16)", color: "#a7f3d0" },
+  card: { position: "relative", display: "flex", alignItems: "stretch", borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.035)", minHeight: 120 },
+  cardActive: { borderColor: "rgba(129,140,248,0.5)" },
+  cardInner: { display: "flex", alignItems: "stretch", width: "100%", borderRadius: 14, overflow: "hidden" },
+  cardLeft: { width: "60%", padding: "14px 10px 14px 14px", display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 },
+  cardTitle: { fontSize: 15, fontWeight: 700, color: "#fff", margin: "0 0 6px" },
+  cardDesc: { fontSize: 10.5, lineHeight: 1.35, color: "#94a3b8", margin: 0 },
 
-  totalLine: { margin: "22px 2px 8px", fontSize: 20, fontWeight: 700, color: "#fff" },
+  cardRight: { width: "40%", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.14)", display: "flex", flexDirection: "column" },
+  price: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 700, color: "#fff" },
+
+  stepper: { display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid rgba(255,255,255,0.14)", height: 40 },
+  stepBtn: { background: "transparent", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
+  stepMinus: { borderRight: "1px solid rgba(255,255,255,0.14)" },
+  stepDisabled: { color: "#475569", cursor: "default" },
+
+  badge: { position: "absolute", top: -10, left: -10, zIndex: 3, width: 28, height: 28, borderRadius: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "#6366f1", color: "#fff", fontSize: 13, fontWeight: 800, border: "2px solid #050816", boxShadow: "0 4px 12px rgba(99,102,241,0.5)" },
+
+  totalLine: { margin: "26px 2px 10px", fontSize: 20, fontWeight: 700, color: "#fff" },
   checkout: { width: "100%", height: 52, borderRadius: 10, cursor: "pointer", border: "1px solid rgba(129,140,248,0.6)", background: "rgba(129,140,248,0.14)", color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "0.08em" },
   checkoutDisabled: { opacity: 0.4, cursor: "default", borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.04)" },
+
+  balance: { textAlign: "center", fontSize: 10.5, lineHeight: 1.4, color: "#94a3b8", margin: "10px 2px 0", letterSpacing: "0.01em" },
+  balanceB: { color: "#cbd5e1", fontWeight: 600 },
 
   memDiv: { display: "flex", alignItems: "center", gap: 12, margin: "30px 0 16px" },
   memLine: { flex: 1, height: 1, background: "linear-gradient(90deg, transparent, rgba(251,191,36,0.2), transparent)" },
