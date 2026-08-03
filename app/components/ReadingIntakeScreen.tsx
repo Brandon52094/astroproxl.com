@@ -841,8 +841,25 @@ export default function ReadingIntakeScreen({
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
-          <div className="mt-4">
+           <div className="mt-4">
             <AskJxlButton onClick={() => setShowJxl(true)} />
+          </div>
+
+          {/* ── Get Credits (smaller, secondary) ── */}
+          <div className="mt-3.5 flex justify-center">
+            <button
+              type="button"
+              onClick={() => router.push("/credits")}
+              className="tap-fix inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[13px] font-semibold tracking-[0.02em] transition"
+              style={{
+                border: "1px solid rgba(251,191,36,0.4)",
+                background: "rgba(251,191,36,0.08)",
+                color: "#fcd34d",
+              }}
+            >
+              <Sparkles className="h-[15px] w-[15px]" />
+              Get Credits
+            </button>
           </div>
 
         </motion.div>
