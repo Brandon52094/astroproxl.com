@@ -389,12 +389,15 @@ export default function ReadingIntakeScreen({
     localStorage.removeItem("dfp_followup_question");
     const topic = selectedArea === "love" ? "love" : selectedArea === "career" ? "career" : selectedArea === "money" ? "money" : "general";
     saveIntake({
-      topic: "love",
-      area: "",
-      question: "",
-      timeframeType: "month",
-      timeframeValue: ""
-    });
+  topic: topic as "love" | "career" | "money" | "general",
+  area: selectedArea,
+  question:
+    selectedArea === "other"
+      ? "What is coming for me in the next 30–45 days?"
+      : question.trim(),
+  timeframeType: "month",
+  timeframeValue: "next-45-days",
+});
 
     // Authoritative, fresh read — never decide from the mount snapshot.
     let status: UserStatus | null = null;
