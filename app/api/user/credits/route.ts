@@ -1,44 +1,57 @@
-import { NextRequest, NextResponse } from "next/server";
-import { clerkClient } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-// ONE-TIME: fold jxlReplyCredits → replyCredits, then zero the old field.
-// Idempotent — a second run finds jxlReplyCredits already 0 and skips.
-// Guarded by a secret. Hit once after deploy, confirm the counts, then delete.
-export async function POST(request: NextRequest) {
-  if (request.nextUrl.searchParams.get("secret") !== process.env.MIGRATION_SECRET) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const client = await clerkClient();
-  const pageSize = 100;
-  let offset = 0, scanned = 0, migrated = 0;
-  const failures: Array<{ userId: string; error: string }> = [];
-
-  for (;;) {
-    const { data: users } = await client.users.getUserList({ limit: pageSize, offset });
-    if (users.length === 0) break;
-
-    for (const user of users) {
-      scanned++;
-      const meta = user.publicMetadata ?? {};
-      const jxlReply = Number(meta.jxlReplyCredits ?? 0);
-      if (jxlReply <= 0) continue; // nothing to fold, or already migrated
-
-      try {
-        await client.users.updateUserMetadata(user.id, {
-          publicMetadata: {
-            ...meta,
-            replyCredits: Number(meta.replyCredits ?? 0) + jxlReply,
-            jxlReplyCredits: 0,
-          },
-        });
-        migrated++;
-      } catch (err) {
-        failures.push({ userId: user.id, error: String(err) });
-      }
+// ── GET /api/user/credits ─────────────────────────────────────────────────────
+// Cooldowns removed entirely — no more onCooldown / bypass / auto-reset logic.
+// Downloads are free for everyone now, so downloadUnlocked is always effectively
+// true. Reading credits are still spent in exactly one place: reading-complete.
+export async function GET() {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    offset += pageSize;
-  }
 
-  return NextResponse.json({ scanned, migrated, failures });
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const metadata = user.publicMetadata;
+
+    // ── First-load initialization ──────────────────────────────────────────
+    // If this account has never had its fields written, initialize the full
+    // set so everything is present and editable in the Clerk dashboard.
+    if (metadata?.credits === undefined) {
+      const defaults = {
+        ...metadata,
+        credits: 0,
+        jxlCredits: 0,
+        replyCredits: 0,
+        jxlReplyCredits: 0,
+        isSubscribed: false,
+        subscriptionTier: null,
+        firstReadingUsed: false,
+        firstPaidReadingUsed: false,
+        pwaFreeReadingUsed: false,
+        readingsCompleted: 0,
+      };
+      await client.users.updateUserMetadata(userId, { publicMetadata: defaults });
+      // Use the defaults for the rest of this request so the response is correct
+      Object.assign(metadata ?? {}, defaults);
+    }
+
+    return NextResponse.json({
+      credits: Number(metadata?.credits ?? 0),
+      jxlCredits: Number(metadata?.jxlCredits ?? 0),
+      jxlReplyCredits: Number(metadata?.jxlReplyCredits ?? 0),
+      replyCredits: Number(metadata?.replyCredits ?? 0),
+      isSubscribed: metadata?.isSubscribed === true,
+      subscriptionTier: (metadata?.subscriptionTier as string) ?? null,
+      readingsCompleted: Number(metadata?.readingsCompleted ?? 0),
+      downloadUnlocked: true, // free for everyone now
+      freeRepliesRemaining: Number(metadata?.freeRepliesRemaining ?? 0),
+      pwaFreeReadingUsed: metadata?.pwaFreeReadingUsed === true,
+    });
+  } catch (error) {
+    console.error("[credits GET] Error:", error);
+    return NextResponse.json({ error: "Failed to get credits." }, { status: 500 });
+  }
 }
