@@ -2,11 +2,12 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "AstroXL",
-    short_name: "AstroXL",
+    name: "AstroProXL",
+    short_name: "AstroProXL",
     description: "Your personal astrological predictions.",
     start_url: "/",
-    display: "standalone",       // makes it open like a real app (no browser chrome)
+    scope: "/",  // 👈 Add this – covers the entire app
+    display: "standalone",
     background_color: "#050816",
     theme_color: "#050816",
     icons: [
