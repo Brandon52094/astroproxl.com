@@ -8,7 +8,7 @@ export function isPWA(): boolean {
   if (typeof window === 'undefined') return false;
 
   // iOS Safari
-  if (window.navigator.standalone) return true;
+  if ((window.navigator as any).standalone) return true;
 
   // Android/Chrome (display-mode: standalone)
   if (window.matchMedia('(display-mode: standalone)').matches) return true;
