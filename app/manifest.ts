@@ -1,9 +1,9 @@
-`import type { MetadataRoute } from "next";
+import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "AstroProXL",
-    short_name: "AstroProXL",
+    short_name: "AstroXL",
     description: "Your personal astrological predictions.",
     start_url: "/",
     scope: "/",  // 👈 Add this – covers the entire app
@@ -25,4 +25,4 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
   };
-}`
+}
