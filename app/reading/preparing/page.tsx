@@ -23,8 +23,34 @@ function PreparingPageInner() {
   const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [showBrowserWarning, setShowBrowserWarning] = useState(false);
   const hasStarted = useRef(false);
   const shouldReduceMotion = useReducedMotion();
+
+  // ── PWA detection ──────────────────────────────────────────────────────────
+  const [isPWA, setIsPWA] = useState(false);
+
+  useEffect(() => {
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setIsPWA(standalone);
+  }, []);
+
+  // ── Browser warning for PWA users who opened in browser ──────────────────
+  useEffect(() => {
+    const fromStripe = localStorage.getItem('dfp_returning_from_stripe');
+    const wasPWA = localStorage.getItem('dfp_is_pwa') === 'true';
+    
+    if (!isPWA && fromStripe === 'true' && wasPWA) {
+      setShowBrowserWarning(true);
+      localStorage.removeItem('dfp_returning_from_stripe');
+      localStorage.removeItem('dfp_is_pwa');
+    } else if (fromStripe === 'true') {
+      localStorage.removeItem('dfp_returning_from_stripe');
+      localStorage.removeItem('dfp_is_pwa');
+    }
+  }, [isPWA]);
 
   const stars = React.useMemo(
     () =>
@@ -101,14 +127,14 @@ function PreparingPageInner() {
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
-            transitAspects: chart.chartData.transitAspects,   // ← ADD
+            transitAspects: chart.chartData.transitAspects,
             profection: chart.chartData.profection,
             progressions: chart.chartData.progressions,
             solarArcs: chart.chartData.solarArcs,
             upcomingTrigger: chart.chartData.upcomingTrigger,
             planetaryStations: chart.chartData.planetaryStations,
             solarReturn: chart.chartData.solarReturn,
-            moonPhase: chart.chartData.moonPhase,             // ← ADD
+            moonPhase: chart.chartData.moonPhase,
           }),
         });
 
@@ -202,7 +228,35 @@ function PreparingPageInner() {
 
       <div className="relative z-10 mx-auto w-full max-w-md px-6 text-center">
         <AnimatePresence mode="wait">
-          {error ? (
+          {showBrowserWarning ? (
+            <motion.div
+              key="browser-warning"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="space-y-6"
+            >
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-amber-300/20 bg-amber-500/10">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-xl font-semibold text-white">Open in the app</h1>
+                <p className="text-sm leading-6 text-slate-400">
+                  You started this purchase from the app, but you're viewing this page in a browser.
+                  Please open AstroProXL from your home screen to continue.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBrowserWarning(false);
+                  router.push("/reading/intake");
+                }}
+                className="h-12 w-full rounded-2xl bg-amber-400 text-sm font-medium text-slate-950 transition hover:bg-amber-300"
+              >
+                Go back
+              </button>
+            </motion.div>
+          ) : error ? (
             <motion.div
               key="error"
               initial={{ opacity: 0, y: 12 }}
