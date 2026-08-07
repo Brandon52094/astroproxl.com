@@ -378,79 +378,93 @@ export default function ReadingIntakeScreen({
   useEffect(() => () => { if (scrollFocusTimeoutRef.current) clearTimeout(scrollFocusTimeoutRef.current); }, []);
 
   const handleStartReading = async () => {
-  if (!canSubmit || !selectedArea) return;
-  setIsCreatingReading(true);
-  setSubmitError(null);
-  trackTtq("AddToCart", { content_id: selectedArea });
-  try {
-    clearIntake();
-    clearReading();
-    localStorage.removeItem("dfp_followup_return");
-    localStorage.removeItem("dfp_followup_question");
-    const topic = selectedArea === "love" ? "love" : selectedArea === "career" ? "career" : selectedArea === "money" ? "money" : "general";
-    saveIntake({
-  topic: topic as "love" | "career" | "money" | "general",
-  area: selectedArea,
-  question:
-    selectedArea === "other"
-      ? "What is coming for me in the next 30–45 days?"
-      : question.trim(),
-  timeframeType: "month",
-  timeframeValue: "next-45-days",
-});
-
-    // Authoritative, fresh read — never decide from the mount snapshot.
-    let status: UserStatus | null = null;
+    if (!canSubmit || !selectedArea) return;
+    setIsCreatingReading(true);
+    setSubmitError(null);
+    trackTtq("AddToCart", { content_id: selectedArea });
     try {
-      const res = await fetch("/api/user/credits", { cache: "no-store" });
-      if (res.ok) {
-        const d = await res.json();
-        status = {
-          credits: Number(d.credits ?? 0),
-          isSubscribed: d.isSubscribed === true,
-          readingsCompleted: Number(d.readingsCompleted ?? 0),
-          onCooldown: d.onCooldown === true,
-          cooldownExpiresAt: d.cooldownExpiresAt ?? null,
-          canBypass: d.canBypass === true,
-          firstPaidReadingUsed: d.firstPaidReadingUsed === true,
-          pwaFreeReadingUsed: d.pwaFreeReadingUsed === true,
-        };
-        setUserStatus(status);
+      clearIntake();
+      clearReading();
+      localStorage.removeItem("dfp_followup_return");
+      localStorage.removeItem("dfp_followup_question");
+      const topic = selectedArea === "love" ? "love" : selectedArea === "career" ? "career" : selectedArea === "money" ? "money" : "general";
+      saveIntake({
+        topic: topic as "love" | "career" | "money" | "general",
+        area: selectedArea,
+        question:
+          selectedArea === "other"
+            ? "What is coming for me in the next 30–45 days?"
+            : question.trim(),
+        timeframeType: "month",
+        timeframeValue: "next-45-days",
+      });
+
+      let status: UserStatus | null = null;
+      try {
+        const res = await fetch("/api/user/credits", { cache: "no-store" });
+        if (res.ok) {
+          const d = await res.json();
+          status = {
+            credits: Number(d.credits ?? 0),
+            isSubscribed: d.isSubscribed === true,
+            readingsCompleted: Number(d.readingsCompleted ?? 0),
+            onCooldown: d.onCooldown === true,
+            cooldownExpiresAt: d.cooldownExpiresAt ?? null,
+            canBypass: d.canBypass === true,
+            firstPaidReadingUsed: d.firstPaidReadingUsed === true,
+            pwaFreeReadingUsed: d.pwaFreeReadingUsed === true,
+          };
+          setUserStatus(status);
+        }
+      } catch { }
+
+      if (!status) {
+        setSubmitError("Couldn't verify your credits. Please try again.");
+        return;
       }
-    } catch { /* fall through to the guard below */ }
 
-    if (!status) {
-      setSubmitError("Couldn't verify your credits. Please try again.");
-      return; // never silently charge on an unknown balance
+      const CREDITS_PER_READING = 1;
+      const hasCredits = status.credits >= CREDITS_PER_READING;
+
+      if (hasCredits || status.isSubscribed) {
+        router.push("/reading/preparing");
+        return;
+      }
+
+      const readingValue = status.firstPaidReadingUsed ? 4.0 : 2.0;
+      trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
+
+      // ── Get the current PWA state ──────────────────────────────────────────────
+      const isStandalone =
+        window.matchMedia?.("(display-mode: standalone)").matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+
+      // ── Store PWA state before redirecting to Stripe ──────────────────────────
+      localStorage.setItem('dfp_returning_from_stripe', 'true');
+      localStorage.setItem('dfp_is_pwa', JSON.stringify(isStandalone));
+
+      const checkoutRes = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          returnUrl: window.location.origin + "/reading/preparing",
+          mode: "one_time",
+          platform: isStandalone ? "pwa" : "web",
+        }),
+      });
+      const checkoutData = await checkoutRes.json();
+      if (checkoutData?.url) { 
+        window.location.href = checkoutData.url; 
+        return; 
+      }
+
+      setSubmitError("Couldn't start checkout. Please try again.");
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Something went wrong");
+    } finally {
+      setIsCreatingReading(false);
     }
-
-    // Must mirror readings/route.ts. If /api/user/credits returns RAW credits,
-    // one reading costs CREDITS_PER_READING. If it already returns readings, use 1.
-    const CREDITS_PER_READING = 1;
-    const hasCredits = status.credits >= CREDITS_PER_READING;
-
-    if (hasCredits || status.isSubscribed) {
-      router.push("/reading/preparing");
-      return;
-    }
-
-    const readingValue = status.firstPaidReadingUsed ? 4.0 : 2.0;
-    trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
-    const checkoutRes = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ returnUrl: window.location.origin + "/reading/preparing", mode: "one_time" }),
-    });
-    const checkoutData = await checkoutRes.json();
-    if (checkoutData?.url) { window.location.href = checkoutData.url; return; }
-
-    setSubmitError("Couldn't start checkout. Please try again."); // don't fall through to a free reading
-  } catch (error) {
-    setSubmitError(error instanceof Error ? error.message : "Something went wrong");
-  } finally {
-    setIsCreatingReading(false);
-  }
-};
+  };
 
   const getAreaColors = useCallback((areaId: string) => {
     const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
