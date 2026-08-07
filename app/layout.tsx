@@ -44,7 +44,7 @@ export default function RootLayout({
       <head>
         {/* interactive-widget is kept here as a raw tag since Next.js viewport object doesn't fully map it natively yet */}
         <meta name="viewport" content="interactive-widget=resizes-content" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/manifest.webmanifest" />
       </head>
       <body className="h-full overflow-hidden bg-[#040611] text-foreground">
         {/* TikTok Pixel — loads after page becomes interactive, doesn't block render */}
