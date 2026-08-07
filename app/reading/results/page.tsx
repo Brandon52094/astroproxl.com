@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Download, ChevronDown, CalendarDays } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import {
   loadReading,
   loadChart,
@@ -11,6 +13,8 @@ import {
   type StoredReading,
 } from "@/lib/chartStore";
 import { usePWA } from "@/lib/pwa";
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 interface FollowupEntry {
   id: string;
@@ -181,6 +185,7 @@ export default function ReadingResultsPage() {
   const [replyCreditsRemaining, setReplyCreditsRemaining] = useState<number | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [justPurchased, setJustPurchased] = useState(false);
   const [tailMode, setTailMode] = useState<"reply_pack" | "sub_reply_tail_regular">("reply_pack");
 
@@ -476,16 +481,13 @@ export default function ReadingResultsPage() {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode,
-          returnUrl: typeof window !== "undefined" ? window.location.href : "",
-        }),
+        body: JSON.stringify({ mode }),
       });
       const data = await res.json();
-      if (data?.url) {
-        window.location.href = data.url;
+      if (data?.clientSecret) {
+        setClientSecret(data.clientSecret); // opens the embedded modal
       } else {
-        setFollowupError("Couldn't start checkout. Please try again.");
+        setFollowupError(data?.error || "Couldn't start checkout. Please try again.");
         setIsPurchasing(false);
       }
     } catch {
@@ -1113,6 +1115,75 @@ export default function ReadingResultsPage() {
           Done
         </button>
       </div>
+
+      {/* ── Embedded Stripe checkout modal ── */}
+      {clientSecret && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 60,
+            background: "rgba(4, 6, 17, 0.85)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            overflowY: "auto",
+            padding: "24px 16px calc(24px + env(safe-area-inset-bottom))",
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: 480 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setClientSecret(null);
+                  setIsPurchasing(false);
+                }}
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  color: "#e2e8f0",
+                  borderRadius: 9999,
+                  width: 36,
+                  height: 36,
+                  cursor: "pointer",
+                  fontSize: 18,
+                  lineHeight: 1,
+                }}
+                aria-label="Close checkout"
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+              <EmbeddedCheckoutProvider
+                stripe={stripePromise}
+                options={{
+                  clientSecret,
+                  onComplete: () => {
+                    // Payment done. The webhook grants credits asynchronously,
+                    // so we mirror the old success path: lift the paywall and
+                    // show the confirmation. Credits refresh on the next render.
+                    setClientSecret(null);
+                    setIsPurchasing(false);
+                    setJustPurchased(true);
+                    setShowPaywall(false);
+                    setReplyCreditsRemaining(null);
+                    try {
+                      if (readingKey) localStorage.removeItem(`dfp_paywall_${readingKey}`);
+                    } catch {
+                      // ignore
+                    }
+                  },
+                }}
+              >
+                <EmbeddedCheckout />
+              </EmbeddedCheckoutProvider>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
