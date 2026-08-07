@@ -166,7 +166,15 @@ function PreparingPageInner() {
   }, [router, searchParams]);
 
   return (
-    <div className="relative h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden">
+    <div 
+      className="relative h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        touchAction: "manipulation",
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
       <div className="pointer-events-none absolute inset-0">
         <div
           className="absolute inset-0"
@@ -363,7 +371,13 @@ function PreparingPageInner() {
 export default function PreparingPage() {
   return (
     <Suspense fallback={
-      <div className="h-screen bg-[#050816] flex items-center justify-center">
+      <div 
+        className="h-screen bg-[#050816] flex items-center justify-center"
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         <div className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
       </div>
     }>
