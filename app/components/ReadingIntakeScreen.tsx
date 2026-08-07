@@ -10,6 +10,8 @@ import {
   Sparkles,
   ChevronLeft,
 } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import StarfieldBackground from "./StarfieldBackground";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -27,6 +29,8 @@ import { SUB_TIERS } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
 import CreditsPanel from "./CreditsPanel";
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 declare global {
   interface Window {
@@ -207,6 +211,7 @@ export default function ReadingIntakeScreen({
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [showJxl, setShowJxl] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
 
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
@@ -434,28 +439,20 @@ export default function ReadingIntakeScreen({
       const readingValue = status.firstPaidReadingUsed ? 4.0 : 2.0;
       trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
 
-      // ── Get the current PWA state ──────────────────────────────────────────────
-      const isStandalone =
-        window.matchMedia?.("(display-mode: standalone)").matches ||
-        (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-
-      // ── Store PWA state before redirecting to Stripe ──────────────────────────
-      localStorage.setItem('dfp_returning_from_stripe', 'true');
-      localStorage.setItem('dfp_is_pwa', JSON.stringify(isStandalone));
-
       const checkoutRes = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          returnUrl: window.location.origin + "/reading/preparing",
           mode: "one_time",
-          platform: isStandalone ? "pwa" : "web",
+          // Still sent only to satisfy the route's `if (!returnUrl)` guard.
+          // The embedded flow never navigates to it — we stay in the app.
+          returnUrl: window.location.origin + "/reading/preparing",
         }),
       });
       const checkoutData = await checkoutRes.json();
-      if (checkoutData?.url) { 
-        window.location.href = checkoutData.url; 
-        return; 
+      if (checkoutData?.clientSecret) {
+        setClientSecret(checkoutData.clientSecret); // opens the embedded modal
+        return;
       }
 
       setSubmitError("Couldn't start checkout. Please try again.");
@@ -998,6 +995,51 @@ export default function ReadingIntakeScreen({
         createPortal(
           <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
             <CreditsPanel onClose={() => setShowCredits(false)} />
+          </div>,
+          document.body
+        )}
+
+      {/* ── Embedded Stripe checkout (portaled) ── */}
+      {clientSecret && typeof document !== "undefined" &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(4,6,17,0.85)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "24px 16px calc(24px + env(safe-area-inset-bottom))" }}>
+            <div style={{ width: "100%", maxWidth: 480 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => { setClientSecret(null); setIsCreatingReading(false); }}
+                  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "#e2e8f0", borderRadius: 9999, width: 36, height: 36, cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+                  aria-label="Close checkout"
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+                <EmbeddedCheckoutProvider
+                  stripe={stripePromise}
+                  options={{
+                    clientSecret,
+                    onComplete: async () => {
+                      // Payment succeeded in-app. The Stripe webhook grants the
+                      // reading credit asynchronously, so poll until it lands
+                      // before generating — otherwise /api/readings sees 0 credits.
+                      for (let i = 0; i < 10; i++) {
+                        try {
+                          const res = await fetch("/api/user/credits", { cache: "no-store" });
+                          const d = await res.json();
+                          if (Number(d.credits ?? 0) >= 1 || d.isSubscribed === true) break;
+                        } catch { /* keep polling */ }
+                        await new Promise((r) => setTimeout(r, 800));
+                      }
+                      setClientSecret(null);
+                      router.push("/reading/preparing");
+                    },
+                  }}
+                >
+                  <EmbeddedCheckout />
+                </EmbeddedCheckoutProvider>
+              </div>
+            </div>
           </div>,
           document.body
         )}
