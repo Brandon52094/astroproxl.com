@@ -12,6 +12,7 @@ interface TrackPurchaseParams {
   amountCents: number;
   currency?: string;
   eventId?: string; // dedupe key — use Stripe session ID
+  platform?: "web" | "pwa" | "mobile_app"; // Platform where the event originated
 }
 
 // Hash email with SHA-256 — TikTok requires hashed PII, never send raw email
@@ -25,12 +26,15 @@ async function sha256Hash(value: string): Promise<string> {
 
 export async function trackServerPurchase(params: TrackPurchaseParams): Promise<void> {
   try {
-    const { email, amountCents, currency = "USD", eventId } = params;
+    const { email, amountCents, currency = "USD", eventId, platform } = params;
 
     const hashedEmail = email ? await sha256Hash(email) : undefined;
 
+    // Determine event source - default to "web" if not specified
+    const eventSource = platform || "web";
+
     const payload = {
-      event_source: "web",
+      event_source: eventSource, // Now "web", "pwa", or "mobile_app"
       event_source_id: TIKTOK_PIXEL_ID,
       data: [
         {
@@ -61,7 +65,7 @@ export async function trackServerPurchase(params: TrackPurchaseParams): Promise<
       return;
     }
 
-    console.log(`[tiktokEvents] Purchase event sent — $${amountCents / 100} ${currency}`);
+    console.log(`[tiktokEvents] Purchase event sent — $${amountCents / 100} ${currency} (platform: ${eventSource})`);
   } catch (err) {
     // Never let a tracking failure break the actual payment flow
     console.error("[tiktokEvents] Unexpected error sending Purchase event:", err);

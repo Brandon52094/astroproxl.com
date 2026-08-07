@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         amountCents: session.amount_total ?? 0,
         currency: (session.currency ?? "usd").toUpperCase(),
         eventId: session.id,
+        platform: "pwa",
       });
 
       // ── One-time regular reading (1 credit = 1 reading) ─────────────────────

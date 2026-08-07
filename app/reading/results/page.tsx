@@ -10,7 +10,7 @@ import {
   clearIntake,
   type StoredReading,
 } from "@/lib/chartStore";
-import { usePWA } from "@/lib/pwa"; // <-- NEW
+import { usePWA } from "@/lib/pwa";
 
 interface FollowupEntry {
   id: string;
@@ -164,6 +164,25 @@ export default function ReadingResultsPage() {
 
   // ── PWA detection ────────────────────────────────────────────────
   const isPWA = usePWA();
+
+  // ── Handle Stripe return flow for PWA ────────────────────────────
+  useEffect(() => {
+    // Check if we're in browser mode but should be in PWA
+    const fromStripe = localStorage.getItem('dfp_returning_from_stripe');
+    const wasPWA = localStorage.getItem('dfp_is_pwa') === 'true';
+    
+    if (!isPWA && fromStripe === 'true' && wasPWA) {
+      // Show warning or redirect
+      localStorage.removeItem('dfp_returning_from_stripe');
+      localStorage.removeItem('dfp_is_pwa');
+      // You could also redirect back to preparing to show the warning
+      // router.push('/reading/preparing');
+      console.warn("[Results] User returned from Stripe in browser but was in PWA");
+    } else if (fromStripe === 'true') {
+      localStorage.removeItem('dfp_returning_from_stripe');
+      localStorage.removeItem('dfp_is_pwa');
+    }
+  }, [isPWA, router]);
 
   useEffect(() => {
     console.log("[Results] isPWA:", isPWA);
@@ -471,6 +490,10 @@ export default function ReadingResultsPage() {
     setIsPurchasing(true);
     setFollowupError(null);
     try {
+      // Store PWA state before redirecting to Stripe
+      localStorage.setItem('dfp_is_pwa', String(isPWA));
+      localStorage.setItem('dfp_returning_from_stripe', 'true');
+      
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -533,6 +556,7 @@ export default function ReadingResultsPage() {
         fontFamily: "var(--font-sans, ui-sans-serif, system-ui)",
         overflowX: "hidden",
         overflowY: "auto",
+        paddingBottom: isPWA ? "calc(120px + env(safe-area-inset-bottom))" : undefined,
       }}
     >
       {/* Debug badge (optional – remove after testing) */}
@@ -828,7 +852,7 @@ export default function ReadingResultsPage() {
       <div
         className="relative z-10 mx-auto w-full max-w-[560px] px-5 pt-14"
         style={{ 
-          paddingBottom: "calc(160px + env(safe-area-inset-bottom))",
+          paddingBottom: isPWA ? "calc(140px + env(safe-area-inset-bottom))" : "calc(160px + env(safe-area-inset-bottom))",
           minHeight: "calc(100vh - 40px)",
         }}
       >
@@ -1061,16 +1085,23 @@ export default function ReadingResultsPage() {
 
       {/* ── Fixed bottom bar ── */}
       <div className="bottom-bar">
-        <button
-          type="button"
-          className="download-btn"
-          onClick={handleDownload}
-          disabled={isDownloading}
-          aria-label="Download reading"
+        {!isPWA && (
+          <button
+            type="button"
+            className="download-btn"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            aria-label="Download reading"
+          >
+            <Download className="h-5 w-5" />
+          </button>
+        )}
+        <button 
+          type="button" 
+          className="done-btn" 
+          onClick={handleDone}
+          style={isPWA ? { flex: 1 } : undefined}
         >
-          <Download className="h-5 w-5" />
-        </button>
-        <button type="button" className="done-btn" onClick={handleDone}>
           Done
         </button>
       </div>
