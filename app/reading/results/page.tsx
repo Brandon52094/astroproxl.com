@@ -10,6 +10,7 @@ import {
   clearIntake,
   type StoredReading,
 } from "@/lib/chartStore";
+import { usePWA } from "@/lib/pwa";
 
 interface FollowupEntry {
   id: string;
@@ -35,12 +36,6 @@ const DROP_RE = /^\s*DROP\s*:\s*/i;
 const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
 const LOCK_RE = /^\s*LOCK\s+IN\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
 
-/**
- * Small, stable key derived from a reading's text. Used to (a) reset the free
- * reply counter when a NEW reading loads, and (b) mark a reading complete only
- * once — so returning from the Stripe reply-pack checkout can't re-advance the
- * reading cycle.
- */
 function hashKey(s: string): string {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
@@ -161,6 +156,26 @@ export default function ReadingResultsPage() {
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // ── PWA detection ────────────────────────────────────────────────
+  const isPWA = usePWA();
+  const [showBrowserWarning, setShowBrowserWarning] = useState(false);
+
+  // ── Check if returning from Stripe in browser ─────────────────────
+  useEffect(() => {
+    const fromStripe = localStorage.getItem('dfp_returning_from_stripe');
+    const wasPWA = localStorage.getItem('dfp_is_pwa') === 'true';
+    
+    if (!isPWA && fromStripe === 'true' && wasPWA) {
+      console.log('[Results] Returning from Stripe in browser mode');
+      setShowBrowserWarning(true);
+      localStorage.removeItem('dfp_returning_from_stripe');
+      localStorage.removeItem('dfp_is_pwa');
+    } else if (fromStripe === 'true') {
+      localStorage.removeItem('dfp_returning_from_stripe');
+      localStorage.removeItem('dfp_is_pwa');
+    }
+  }, [isPWA]);
+
   // ── Reply system state ──────────────────────────────────────────────────
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
   const [replyCreditsRemaining, setReplyCreditsRemaining] = useState<number | null>(null);
@@ -172,8 +187,6 @@ export default function ReadingResultsPage() {
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
 
-  // Stable per-reading key for all persisted reply state (survives the Stripe
-  // round-trip). A new reading produces a new key → fresh conversation.
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
     return p ? hashKey(p.title + "::" + p.content) : "";
@@ -189,19 +202,9 @@ export default function ReadingResultsPage() {
     setIsLoading(false);
   }, [router]);
 
-  // ── Mark the reading complete exactly once PER READING (not per mount).
-  // This advances readingsCompleted, deducts a per-reading credit, and triggers
-  // the cooldown at 4. It must fire once for a given reading and never again —
-  // otherwise returning from the reply-pack Stripe checkout (which reloads this
-  // page) would count the same reading twice. We persist a per-reading flag in
-  // localStorage and only set it after a successful call, so a failed call can
-  // still retry.
   useEffect(() => {
     if (!reading || !readingKey) return;
 
-    // Crisis safe-responses are NOT real readings. Never mark one complete —
-    // that would advance readingsCompleted and burn a credit / the weekly free
-    // reading for someone who came here in crisis. Bail before the API call.
     if ((reading as { isSafeResponse?: boolean }).isSafeResponse) {
       hasMarkedComplete.current = true;
       return;
@@ -230,21 +233,14 @@ export default function ReadingResultsPage() {
           }
         })
         .catch(() => {
-          // Allow a retry on failure rather than silently losing the count.
           hasMarkedComplete.current = false;
         });
     }
   }, [reading, readingKey]);
 
-  // ── Restore per-reading reply state ─────────────────────────────────────
-  // Rehydrates the follow-up conversation, the free-reply count, and the
-  // paywall state for THIS reading — so leaving for Stripe and coming back
-  // (whether you complete or cancel) lands you exactly where you were, with
-  // your replies intact. A new reading has a new key, so it starts fresh.
   useEffect(() => {
     if (!reading || !readingKey) return;
 
-    // Tidy up the previous reading's stored state when a new one loads.
     try {
       const prev = localStorage.getItem("dfp_last_reading_key") ?? "";
       if (prev && prev !== readingKey) {
@@ -257,14 +253,12 @@ export default function ReadingResultsPage() {
       // ignore
     }
 
-    // Free-reply count (0 for a brand-new reading).
     try {
       setFreeRepliesUsed(Math.max(0, Number(localStorage.getItem(`dfp_free_used_${readingKey}`) ?? 0)));
     } catch {
       setFreeRepliesUsed(0);
     }
 
-    // The follow-up conversation.
     try {
       const raw = localStorage.getItem(`dfp_followups_${readingKey}`);
       if (raw) {
@@ -275,9 +269,6 @@ export default function ReadingResultsPage() {
       // ignore malformed cache
     }
 
-    // Paywall: clear it if we just returned from a successful purchase,
-    // otherwise restore whatever we persisted (so a cancelled Stripe trip
-    // keeps the paywall up instead of dropping you back to the input).
     let cameFromSuccess = false;
     try {
       const params = new URLSearchParams(window.location.search);
@@ -305,7 +296,6 @@ export default function ReadingResultsPage() {
       }
     }
 
-    // Clean the payment params off the URL so a refresh is tidy.
     try {
       if (new URLSearchParams(window.location.search).has("payment")) {
         window.history.replaceState({}, "", window.location.pathname);
@@ -420,8 +410,6 @@ export default function ReadingResultsPage() {
 
       const data = await response.json();
       if (!response.ok) {
-        // Out of replies → surface the paywall instead of a red error, and
-        // persist it so a cancelled Stripe trip returns you to the paywall.
         if (response.status === 402 || data.code === "NEEDS_REPLY_PACK") {
           if (data.tailMode) setTailMode(data.tailMode);
           setShowPaywall(true);
@@ -436,7 +424,6 @@ export default function ReadingResultsPage() {
         return;
       }
 
-      // Update counters from the server's authoritative reply metadata.
       const meta = data.replyMeta;
       if (meta?.usedFreeReply) {
         const nextUsed = freeRepliesUsed + 1;
@@ -457,8 +444,6 @@ export default function ReadingResultsPage() {
         // ignore
       }
 
-      // Persist the follow-up conversation so it survives the Stripe round-trip
-      // (and page refreshes) instead of living only in memory.
       const newEntry: FollowupEntry = {
         id: crypto.randomUUID(),
         question,
@@ -483,7 +468,6 @@ export default function ReadingResultsPage() {
     }
   };
 
-  // ── Reply-pack / subscription checkout ──────────────────────────────────
   const startCheckout = async (mode: "reply_pack" | "sub_reply_tail_regular" | "subscription") => {
     if (isPurchasing) return;
     setIsPurchasing(true);
@@ -518,6 +502,43 @@ export default function ReadingResultsPage() {
     router.push("/reading/intake");
   };
 
+  // ── Browser warning UI ──────────────────────────────────────────
+  if (showBrowserWarning) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#050816] p-6">
+        <div className="max-w-md rounded-2xl border border-amber-400/30 bg-amber-400/5 p-8 text-center">
+          <div className="mb-4 text-5xl">📱</div>
+          <h2 className="mb-2 text-xl font-semibold text-white">Open from Home Screen</h2>
+          <p className="mb-6 text-sm text-slate-400">
+            Your reading is ready! Please close this browser tab and open AstroProXL from your home screen to continue.
+          </p>
+          <button
+            onClick={() => {
+              localStorage.removeItem('dfp_returning_from_stripe');
+              localStorage.removeItem('dfp_is_pwa');
+              setShowBrowserWarning(false);
+              window.location.reload();
+            }}
+            className="w-full rounded-xl bg-amber-400 py-3 font-semibold text-slate-950 transition hover:bg-amber-300"
+          >
+            I've opened from home screen
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem('dfp_returning_from_stripe');
+              localStorage.removeItem('dfp_is_pwa');
+              setShowBrowserWarning(false);
+              window.location.reload();
+            }}
+            className="mt-3 text-xs text-slate-500 hover:text-slate-300"
+          >
+            Continue in browser (not recommended)
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading || !reading || !page) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e27" }}>
@@ -530,7 +551,6 @@ export default function ReadingResultsPage() {
     ? parsedSections.findIndex((s) => s.kind === "opening")
     : -1;
 
-  // ── Reply availability (derived) ────────────────────────────────────────
   const isSubscribed = credits?.isSubscribed === true;
   const freeBand = isSubscribed ? 4 : 1;
   const freeRemainingClient = Math.max(0, freeBand - freeRepliesUsed);
@@ -539,12 +559,9 @@ export default function ReadingResultsPage() {
     freeRemainingClient <= 0 &&
     replyCreditsRemaining !== null &&
     replyCreditsRemaining <= 0;
-  // Subscribers never see the paywall. Everyone else sees it when the server
-  // said "no replies" (402 → showPaywall) or once we know credits hit zero.
   const paywallVisible = !isSubscribed && (showPaywall || outOfReplies);
 
   return (
-    // 🔥 FIX: Made results-root a proper scroll container
     <div 
       className="results-root"
       style={{
@@ -557,8 +574,12 @@ export default function ReadingResultsPage() {
         overflowY: "auto",
       }}
     >
+      {/* Debug badge */}
+      <div className="fixed top-4 right-4 z-50 rounded-full bg-black/60 px-3 py-1 text-[10px] text-white/70">
+        {isPWA ? '📱 PWA' : '🌐 Browser'}
+      </div>
+
       <style jsx global>{`
-        /* Reset any parent scrolling issues */
         html, body {
           overflow: auto !important;
           height: auto !important;
@@ -707,8 +728,6 @@ export default function ReadingResultsPage() {
           border: 1px solid rgba(45, 212, 191, 0.25);
           border-radius: 18px;
           color: #e2e8f0;
-          /* 16px keeps iOS Safari from auto-zooming the page on focus — this is
-             the keyboard "zoom in to fit" issue. Must stay >= 16px. */
           font-size: 16px;
           padding: 14px 16px;
           outline: none;
@@ -720,7 +739,6 @@ export default function ReadingResultsPage() {
           box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
         }
 
-        /* ── Reply paywall ── */
         .purchase-success {
           margin-bottom: 12px;
           padding: 10px 14px;
@@ -846,7 +864,6 @@ export default function ReadingResultsPage() {
         ))}
       </div>
 
-      {/* 🔥 FIX: Increased bottom padding to clear the fixed bar */}
       <div
         className="relative z-10 mx-auto w-full max-w-[560px] px-5 pt-14"
         style={{ 
