@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartStore";
 import type { ReadingPage } from "@/lib/chartStore";
+import { usePWA } from "@/lib/pwa"; // <-- NEW
 
 const LOADING_MESSAGES = [
   "Reading your natal placements…",
@@ -26,6 +27,15 @@ function PreparingPageInner() {
   const hasStarted = useRef(false);
   const shouldReduceMotion = useReducedMotion();
 
+  // ── PWA detection ────────────────────────────────────────────────
+  const isPWA = usePWA();
+
+  // (optional) you can use isPWA for conditional rendering or logging
+  useEffect(() => {
+    console.log("[Preparing] isPWA:", isPWA);
+    // Example: if (isPWA) { /* hide browser chrome */ }
+  }, [isPWA]);
+
   const stars = React.useMemo(
     () =>
       Array.from({ length: 28 }).map((_, i) => {
@@ -41,7 +51,6 @@ function PreparingPageInner() {
 
   useEffect(() => {
     // Fix 1 — if user cancelled Stripe, send them back to intake immediately
-    // This closes the bypass where they could exit Stripe and get a free reading
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
       router.replace("/reading/intake");
@@ -87,7 +96,7 @@ function PreparingPageInner() {
           return;
         }
 
-         const response = await fetch("/api/readings", {
+        const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -101,14 +110,14 @@ function PreparingPageInner() {
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
-            transitAspects: chart.chartData.transitAspects,   // ← ADD
+            transitAspects: chart.chartData.transitAspects,
             profection: chart.chartData.profection,
             progressions: chart.chartData.progressions,
             solarArcs: chart.chartData.solarArcs,
             upcomingTrigger: chart.chartData.upcomingTrigger,
             planetaryStations: chart.chartData.planetaryStations,
             solarReturn: chart.chartData.solarReturn,
-            moonPhase: chart.chartData.moonPhase,             // ← ADD
+            moonPhase: chart.chartData.moonPhase,
           }),
         });
 
@@ -126,8 +135,6 @@ function PreparingPageInner() {
           generatedAt: new Date().toISOString(),
         });
 
-        // Fix 2 — replace instead of push so preparing never appears in history
-        // This prevents the back button on results from re-triggering the AI
         router.replace("/reading/results");
       } catch (err) {
         setError(
@@ -141,6 +148,11 @@ function PreparingPageInner() {
 
   return (
     <div className="relative h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden">
+      {/* Debug badge (optional – remove after testing) */}
+      <div className="absolute top-4 right-4 z-20 rounded-full bg-black/60 px-3 py-1 text-[10px] text-white/70">
+        {isPWA ? '📱 PWA' : '🌐 Browser'}
+      </div>
+
       <div className="pointer-events-none absolute inset-0">
         <div
           className="absolute inset-0"
