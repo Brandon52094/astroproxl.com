@@ -12,7 +12,6 @@ import {
   clearIntake,
   type StoredReading,
 } from "@/lib/chartStore";
-import { usePWA } from "@/lib/pwa";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -159,26 +158,6 @@ export default function ReadingResultsPage() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-
-  // ── PWA detection ────────────────────────────────────────────────
-  const isPWA = usePWA();
-  const [showBrowserWarning, setShowBrowserWarning] = useState(false);
-
-  // ── Check if returning from Stripe in browser ─────────────────────
-  useEffect(() => {
-    const fromStripe = localStorage.getItem('dfp_returning_from_stripe');
-    const wasPWA = localStorage.getItem('dfp_is_pwa') === 'true';
-    
-    if (!isPWA && fromStripe === 'true' && wasPWA) {
-      console.log('[Results] Returning from Stripe in browser mode');
-      setShowBrowserWarning(true);
-      localStorage.removeItem('dfp_returning_from_stripe');
-      localStorage.removeItem('dfp_is_pwa');
-    } else if (fromStripe === 'true') {
-      localStorage.removeItem('dfp_returning_from_stripe');
-      localStorage.removeItem('dfp_is_pwa');
-    }
-  }, [isPWA]);
 
   // ── Reply system state ──────────────────────────────────────────────────
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -504,43 +483,6 @@ export default function ReadingResultsPage() {
     router.push("/reading/intake");
   };
 
-  // ── Browser warning UI ──────────────────────────────────────────
-  if (showBrowserWarning) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050816] p-6">
-        <div className="max-w-md rounded-2xl border border-amber-400/30 bg-amber-400/5 p-8 text-center">
-          <div className="mb-4 text-5xl">📱</div>
-          <h2 className="mb-2 text-xl font-semibold text-white">Open from Home Screen</h2>
-          <p className="mb-6 text-sm text-slate-400">
-            Your reading is ready! Please close this browser tab and open AstroProXL from your home screen to continue.
-          </p>
-          <button
-            onClick={() => {
-              localStorage.removeItem('dfp_returning_from_stripe');
-              localStorage.removeItem('dfp_is_pwa');
-              setShowBrowserWarning(false);
-              window.location.reload();
-            }}
-            className="w-full rounded-xl bg-amber-400 py-3 font-semibold text-slate-950 transition hover:bg-amber-300"
-          >
-            I've opened from home screen
-          </button>
-          <button
-            onClick={() => {
-              localStorage.removeItem('dfp_returning_from_stripe');
-              localStorage.removeItem('dfp_is_pwa');
-              setShowBrowserWarning(false);
-              window.location.reload();
-            }}
-            className="mt-3 text-xs text-slate-500 hover:text-slate-300"
-          >
-            Continue in browser (not recommended)
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (isLoading || !reading || !page) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e27" }}>
@@ -576,11 +518,6 @@ export default function ReadingResultsPage() {
         overflowY: "auto",
       }}
     >
-      {/* Debug badge */}
-      <div className="fixed top-4 right-4 z-50 rounded-full bg-black/60 px-3 py-1 text-[10px] text-white/70">
-        {isPWA ? '📱 PWA' : '🌐 Browser'}
-      </div>
-
       <style jsx global>{`
         html, body {
           overflow: auto !important;
