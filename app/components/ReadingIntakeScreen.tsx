@@ -225,13 +225,11 @@ export default function ReadingIntakeScreen({
 
   // ── Platform/install detection ─────────────────────────────────────────
   useEffect(() => {
-  const standalone =
-    window.matchMedia?.("(display-mode: standalone)").matches ||
-    (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-  setIsStandalone(standalone);
-  
-  // Store it for other pages
-  localStorage.setItem('dfp_is_pwa', JSON.stringify(standalone));
+    // Detect platform + install state
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setIsStandalone(standalone);
 
     const ios = /iphone|ipad|ipod/i.test(window.navigator.userAgent) &&
       !(window.navigator as unknown as { standalone?: boolean }).standalone;
@@ -437,48 +435,37 @@ export default function ReadingIntakeScreen({
     }
 
     const readingValue = status.firstPaidReadingUsed ? 4.0 : 2.0;
-trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
+    trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
+    const checkoutRes = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ returnUrl: window.location.origin + "/reading/preparing", mode: "one_time" }),
+    });
+    const checkoutData = await checkoutRes.json();
+    if (checkoutData?.url) { window.location.href = checkoutData.url; return; }
 
-// Get the current PWA state
-const isStandalone =
-  window.matchMedia?.("(display-mode: standalone)").matches ||
-  (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+    setSubmitError("Couldn't start checkout. Please try again."); // don't fall through to a free reading
+  } catch (error) {
+    setSubmitError(error instanceof Error ? error.message : "Something went wrong");
+  } finally {
+    setIsCreatingReading(false);
+  }
+};
 
-// Store PWA state before redirecting to Stripe
-localStorage.setItem('dfp_returning_from_stripe', 'true');
-localStorage.setItem('dfp_is_pwa', JSON.stringify(isStandalone));
+  const getAreaColors = useCallback((areaId: string) => {
+    const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
+    return theme.areaColors[key];
+  }, [theme]);
 
-const checkoutRes = await fetch("/api/stripe/checkout", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    returnUrl: window.location.origin + "/reading/preparing",
-    mode: "one_time",
-    platform: isStandalone ? "pwa" : "web",
-  }),
-});
-const checkoutData = await checkoutRes.json();
-if (checkoutData?.url) { 
-  window.location.href = checkoutData.url; 
-  return; 
-}
+  const getGlowOverlay = useCallback((areaId: string) => {
+    const c = getAreaColors(areaId);
+    return `radial-gradient(circle at 50% 50%, ${c.glow}, rgba(255,255,255,0.018) 38%, transparent 72%)`;
+  }, [getAreaColors]);
 
-setSubmitError("Couldn't start checkout. Please try again.");
-
-const getAreaColors = useCallback((areaId: string) => {
-  const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
-  return theme.areaColors[key];
-}, [theme]);
-
-const getGlowOverlay = useCallback((areaId: string) => {
-  const c = getAreaColors(areaId);
-  return `radial-gradient(circle at 50% 50%, ${c.glow}, rgba(255,255,255,0.018) 38%, transparent 72%)`;
-}, [getAreaColors]);
-
-const getIconTileShadow = useCallback((areaId: string) => {
-  const c = getAreaColors(areaId);
-  return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
-}, [getAreaColors]);
+  const getIconTileShadow = useCallback((areaId: string) => {
+    const c = getAreaColors(areaId);
+    return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
+  }, [getAreaColors]);
 
   return (
     <div

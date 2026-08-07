@@ -5,7 +5,6 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartStore";
 import type { ReadingPage } from "@/lib/chartStore";
-import { usePWA } from "@/lib/pwa";
 
 const LOADING_MESSAGES = [
   "Reading your natal placements…",
@@ -24,42 +23,8 @@ function PreparingPageInner() {
   const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [showBrowserWarning, setShowBrowserWarning] = useState(false);
   const hasStarted = useRef(false);
   const shouldReduceMotion = useReducedMotion();
-
-  // ── PWA detection ────────────────────────────────────────────────
-  const isPWA = usePWA();
-
-  useEffect(() => {
-    console.log("[Preparing] isPWA:", isPWA);
-  }, [isPWA]);
-
-  // ── Check if returning from Stripe in browser ─────────────────────
-  useEffect(() => {
-    const fromStripe = localStorage.getItem('dfp_returning_from_stripe');
-    const wasPWA = localStorage.getItem('dfp_is_pwa') === 'true';
-    
-    if (!isPWA && fromStripe === 'true' && wasPWA) {
-      console.log('[Preparing] Returning from Stripe in browser mode');
-      setShowBrowserWarning(true);
-      localStorage.removeItem('dfp_returning_from_stripe');
-      localStorage.removeItem('dfp_is_pwa');
-    } else if (fromStripe === 'true') {
-      localStorage.removeItem('dfp_returning_from_stripe');
-      localStorage.removeItem('dfp_is_pwa');
-    }
-    
-    const paymentStatus = searchParams.get("payment");
-    if (paymentStatus === "cancelled") {
-      router.replace("/reading/intake");
-      return;
-    }
-
-    if (searchParams.get("payment")) {
-      window.history.replaceState({}, "", "/reading/preparing");
-    }
-  }, [isPWA, searchParams, router]);
 
   const stars = React.useMemo(
     () =>
@@ -75,6 +40,21 @@ function PreparingPageInner() {
   );
 
   useEffect(() => {
+    // Fix 1 — if user cancelled Stripe, send them back to intake immediately
+    // This closes the bypass where they could exit Stripe and get a free reading
+    const paymentStatus = searchParams.get("payment");
+    if (paymentStatus === "cancelled") {
+      router.replace("/reading/intake");
+      return;
+    }
+
+    // Clean up any other payment params from the URL
+    if (searchParams.get("payment")) {
+      window.history.replaceState({}, "", "/reading/preparing");
+    }
+  }, [searchParams, router]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex((prev) =>
         prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
@@ -86,6 +66,7 @@ function PreparingPageInner() {
   useEffect(() => {
     if (hasStarted.current) return;
 
+    // Don't start generating if payment was cancelled
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") return;
 
@@ -106,7 +87,7 @@ function PreparingPageInner() {
           return;
         }
 
-        const response = await fetch("/api/readings", {
+         const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -120,14 +101,14 @@ function PreparingPageInner() {
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
-            transitAspects: chart.chartData.transitAspects,
+            transitAspects: chart.chartData.transitAspects,   // ← ADD
             profection: chart.chartData.profection,
             progressions: chart.chartData.progressions,
             solarArcs: chart.chartData.solarArcs,
             upcomingTrigger: chart.chartData.upcomingTrigger,
             planetaryStations: chart.chartData.planetaryStations,
             solarReturn: chart.chartData.solarReturn,
-            moonPhase: chart.chartData.moonPhase,
+            moonPhase: chart.chartData.moonPhase,             // ← ADD
           }),
         });
 
@@ -145,6 +126,8 @@ function PreparingPageInner() {
           generatedAt: new Date().toISOString(),
         });
 
+        // Fix 2 — replace instead of push so preparing never appears in history
+        // This prevents the back button on results from re-triggering the AI
         router.replace("/reading/results");
       } catch (err) {
         setError(
@@ -156,50 +139,8 @@ function PreparingPageInner() {
     generateReading();
   }, [router, searchParams]);
 
-  // ── Browser warning UI ──────────────────────────────────────────
-  if (showBrowserWarning) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050816] p-6">
-        <div className="max-w-md rounded-2xl border border-amber-400/30 bg-amber-400/5 p-8 text-center">
-          <div className="mb-4 text-5xl">📱</div>
-          <h2 className="mb-2 text-xl font-semibold text-white">Open from Home Screen</h2>
-          <p className="mb-6 text-sm text-slate-400">
-            Your reading is ready! Please close this browser tab and open AstroProXL from your home screen to continue.
-          </p>
-          <button
-            onClick={() => {
-              localStorage.removeItem('dfp_returning_from_stripe');
-              localStorage.removeItem('dfp_is_pwa');
-              setShowBrowserWarning(false);
-              window.location.reload();
-            }}
-            className="w-full rounded-xl bg-amber-400 py-3 font-semibold text-slate-950 transition hover:bg-amber-300"
-          >
-            I've opened from home screen
-          </button>
-          <button
-            onClick={() => {
-              localStorage.removeItem('dfp_returning_from_stripe');
-              localStorage.removeItem('dfp_is_pwa');
-              setShowBrowserWarning(false);
-              window.location.reload();
-            }}
-            className="mt-3 text-xs text-slate-500 hover:text-slate-300"
-          >
-            Continue in browser (not recommended)
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="relative h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden">
-      {/* Debug badge */}
-      <div className="absolute top-4 right-4 z-20 rounded-full bg-black/60 px-3 py-1 text-[10px] text-white/70">
-        {isPWA ? '📱 PWA' : '🌐 Browser'}
-      </div>
-
       <div className="pointer-events-none absolute inset-0">
         <div
           className="absolute inset-0"
