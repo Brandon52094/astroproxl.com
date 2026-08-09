@@ -11,7 +11,8 @@ import {
   MapPin,
   Calculator,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+// EDIT 1: Add useSearchParams to the import
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -113,6 +114,8 @@ function getStatus(type: "complete" | "missing" | "calculating", count?: number)
 
 export default function ChartDataScreen() {
   const router = useRouter();
+  // EDIT 1: Add useSearchParams hook
+  const searchParams = useSearchParams();
   const shouldReduceMotion = useReducedMotion();
   const stars = useMemo(
     () =>
@@ -146,6 +149,7 @@ export default function ChartDataScreen() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const previousCompletionRef = useRef({ birth: false, chart: false });
 
+  // ── Load saved chart on mount ────────────────────────────────────────────
   useEffect(() => {
     const saved = loadChart();
     if (saved && !birthDate && !birthTime && !birthPlace) {
@@ -159,6 +163,35 @@ export default function ChartDataScreen() {
       }
       setChartData(saved.chartData);
     }
+  }, []);
+
+  // EDIT 2: Pre-fill from saved chart when recalculate=true
+  useEffect(() => {
+    if (searchParams.get("recalculate") !== "true") return;
+    const existing = loadChart();
+    if (!existing) return;
+    // Pre-fill from the user's own saved chart — never a blank form.
+    if (existing.birthDate) setBirthDate(existing.birthDate);
+    if (existing.birthTime) setBirthTime(existing.birthTime);
+    if (existing.birthPlace) {
+      setBirthPlace(existing.birthPlace);
+      setResolvedPlace({
+        label: existing.birthPlace,
+        lat: existing.lat ?? null,
+        lng: existing.lng ?? null,
+        timezone: existing.timezone ?? null,
+      } as ResolvedPlace);
+    }
+    if (existing.currentPlace) {
+      setCurrentPlace(existing.currentPlace);
+      setResolvedCurrentPlace({
+        label: existing.currentPlace,
+        lat: existing.currentLat ?? null,
+        lng: existing.currentLng ?? null,
+        timezone: existing.currentTimezone ?? null,
+      } as ResolvedPlace);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleSection = useCallback((id: SectionId) => {
