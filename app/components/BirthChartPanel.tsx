@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, Compass, ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 
@@ -126,6 +127,7 @@ function SkyCard({
 
 export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
   const shouldReduceMotion = useReducedMotion();
+  const router = useRouter();
 
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
@@ -420,6 +422,25 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                 </p>
               </SkyCard>
             )}
+
+            {/* ── Recalculate — heals charts built by older engine versions ── */}
+            <button
+              type="button"
+              onClick={() => router.push("/reading/chart-data?recalculate=true")}
+              style={{
+                display: "block",
+                margin: "8px auto 20px",
+                background: "transparent",
+                border: "none",
+                color: "#64748b",
+                fontSize: "13px",
+                textDecoration: "underline",
+                textUnderlineOffset: "3px",
+                cursor: "pointer",
+              }}
+            >
+              Recalculate chart
+            </button>
 
             {/* ── Full placements ── */}
             <SkyCard icon={Sparkles} label="All Placements">
