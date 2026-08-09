@@ -770,12 +770,12 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1600,
+        max_tokens: 2600,
         system:
           "You are a precision astrologer answering a real person who just spoke aloud about a specific " +
           "situation in their life. They may know nothing about astrology — write so they understand every " +
           "sentence. The transit aspects are calculated and given to you: never compute or invent one, and " +
-          "never manufacture a date. Returning a null date is correct and common. " +
+          "never manufacture a date. but give a date if it's astrologically signigcant. Returning a null date is correct and common. " +
           "CRITICAL: no degrees, no orbs, and no astrological jargon anywhere in your output. This is a " +
           "conversation, not a technical readout. Precision lives in the sharpness of the consequence, not " +
           "in decimal places. " +
