@@ -296,14 +296,20 @@ export default function ReadingIntakeScreen({
         const calcData = await calcResponse.json();
         if (!calcResponse.ok || !calcData.success) { setChartStatus("error"); return; }
         saveChart({
-          birthDate: data.chart.birthDate,
-          birthTime: data.chart.birthTime,
-          birthPlace: data.chart.birthPlace,
-          lat: data.chart.lat,
-          lng: data.chart.lng,
-          timezone: data.chart.timezone,
-          chartData: calcData,
-        });
+  birthDate: data.chart.birthDate,
+  birthTime: data.chart.birthTime,
+  birthPlace: data.chart.birthPlace,
+  lat: data.chart.lat,
+  lng: data.chart.lng,
+  timezone: data.chart.timezone,
+  // Current location fields — required by StoredChart
+  currentLat: data.chart.currentLat ?? undefined,
+  currentLng: data.chart.currentLng ?? undefined,
+  currentPlace: data.chart.currentPlace ?? "",
+  currentTimezone: data.chart.currentTimezone ?? "",
+  chartData: calcData,
+});
+setChartStatus("ready");
         setChartStatus("ready");
       } catch { setChartStatus("error"); }
     }
