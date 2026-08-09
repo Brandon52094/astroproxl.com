@@ -289,20 +289,21 @@ export default function ChartDataScreen() {
       }
 
       saveChart({
-        birthDate: normalizedDate,
-        birthTime: birthTime.trim(),
-        birthPlace: resolvedPlace.label,
-        lat: resolvedPlace.lat,
-        lng: resolvedPlace.lon,
-        timezone: resolvedPlace.timezone,
-        // Store current location alongside birth location
-        ...(resolvedCurrentPlace ? {
-          currentLat: resolvedCurrentPlace.lat,
-          currentLng: resolvedCurrentPlace.lon,
-          currentPlace: resolvedCurrentPlace.label,
-        } : {}),
-        chartData: data,
-      });
+  birthDate: normalizedDate,
+  birthTime: birthTime.trim(),
+  birthPlace: resolvedPlace.label,
+  lat: resolvedPlace.lat,
+  lng: resolvedPlace.lon,
+  timezone: resolvedPlace.timezone,
+  // Store current location alongside birth location
+  ...(resolvedCurrentPlace ? {
+    currentLat: resolvedCurrentPlace.lat,
+    currentLng: resolvedCurrentPlace.lon,
+    currentPlace: resolvedCurrentPlace.label,
+    currentTimezone: resolvedCurrentPlace.timezone,
+  } : {}),
+  chartData: data,
+});
 
       await fetch("/api/user/save-chart", {
         method: "POST",
