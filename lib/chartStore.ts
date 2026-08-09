@@ -242,18 +242,22 @@ export async function migrateChartV2(): Promise<boolean> {
     // don't set the flag, retry later.
     if (!response.ok || !data.success) return false;
 
-    saveChart({
-      birthDate: chart.birthDate,
-      birthTime: chart.birthTime,
-      birthPlace: chart.birthPlace,
-      lat: chart.lat,
-      lng: chart.lng,
-      timezone: chart.timezone,
-      ...(typeof chart.currentLat === "number" && typeof chart.currentLng === "number"
-        ? { currentLat: chart.currentLat, currentLng: chart.currentLng, currentPlace: chart.currentPlace }
-        : {}),
-      chartData: data,
-    });
+saveChart({
+  birthDate: chart.birthDate,
+  birthTime: chart.birthTime,
+  birthPlace: chart.birthPlace,
+  lat: chart.lat,
+  lng: chart.lng,
+  timezone: chart.timezone,
+  // Current location fields — required by StoredChart
+  currentLat: chart.currentLat ?? undefined,
+  currentLng: chart.currentLng ?? undefined,
+  currentPlace: chart.currentPlace ?? "",
+  currentTimezone: chart.currentTimezone ?? "",  // ADD THIS — missing property
+  chartData: data,
+});
+
+return true;
 
     markMigratedV2();
     return true;
