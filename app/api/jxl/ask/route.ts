@@ -770,7 +770,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2600,
+        max_tokens: 3600,
         system:
           "You are a precision astrologer answering a real person who just spoke aloud about a specific " +
           "situation in their life. They may know nothing about astrology — write so they understand every " +
