@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
@@ -11,7 +11,6 @@ import {
   MapPin,
   Calculator,
 } from "lucide-react";
-// EDIT 1: Add useSearchParams to the import
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -112,9 +111,8 @@ function getStatus(type: "complete" | "missing" | "calculating", count?: number)
   );
 }
 
-export default function ChartDataScreen() {
+function ChartDataScreenContent() {
   const router = useRouter();
-  // EDIT 1: Add useSearchParams hook
   const searchParams = useSearchParams();
   const shouldReduceMotion = useReducedMotion();
   const stars = useMemo(
@@ -165,7 +163,7 @@ export default function ChartDataScreen() {
     }
   }, []);
 
- // EDIT 2: Pre-fill from saved chart when recalculate=true
+  // Pre-fill from saved chart when recalculate=true
   useEffect(() => {
     if (searchParams.get("recalculate") !== "true") return;
     const existing = loadChart();
@@ -178,7 +176,7 @@ export default function ChartDataScreen() {
       setResolvedPlace({
         label: existing.birthPlace,
         lat: existing.lat ?? 0,
-        lon: existing.lng ?? 0,  // FIX: use 'lon' not 'lng'
+        lon: existing.lng ?? 0,
         timezone: existing.timezone ?? "",
       });
     }
@@ -187,7 +185,7 @@ export default function ChartDataScreen() {
       setResolvedCurrentPlace({
         label: existing.currentPlace,
         lat: existing.currentLat ?? 0,
-        lon: existing.currentLng ?? 0,  // FIX: use 'lon' not 'lng'
+        lon: existing.currentLng ?? 0,
         timezone: existing.currentTimezone ?? "",
       });
     }
@@ -289,19 +287,19 @@ export default function ChartDataScreen() {
       }
 
       saveChart({
-  birthDate: normalizedDate,
-  birthTime: birthTime.trim(),
-  birthPlace: resolvedPlace.label,
-  lat: resolvedPlace.lat,
-  lng: resolvedPlace.lon,
-  timezone: resolvedPlace.timezone,
-  // Store current location alongside birth location
-  currentLat: resolvedCurrentPlace?.lat,
-  currentLng: resolvedCurrentPlace?.lon,
-  currentPlace: resolvedCurrentPlace?.label ?? "",
-  currentTimezone: resolvedCurrentPlace?.timezone ?? "",  // Always provide with fallback
-  chartData: data,
-});
+        birthDate: normalizedDate,
+        birthTime: birthTime.trim(),
+        birthPlace: resolvedPlace.label,
+        lat: resolvedPlace.lat,
+        lng: resolvedPlace.lon,
+        timezone: resolvedPlace.timezone,
+        // Store current location alongside birth location
+        currentLat: resolvedCurrentPlace?.lat,
+        currentLng: resolvedCurrentPlace?.lon,
+        currentPlace: resolvedCurrentPlace?.label ?? "",
+        currentTimezone: resolvedCurrentPlace?.timezone ?? "",
+        chartData: data,
+      });
 
       await fetch("/api/user/save-chart", {
         method: "POST",
@@ -728,5 +726,17 @@ export default function ChartDataScreen() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ChartDataScreen() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-[#050816]">
+        <div className="text-sm text-slate-400">Loading chart data...</div>
+      </div>
+    }>
+      <ChartDataScreenContent />
+    </Suspense>
   );
 }
