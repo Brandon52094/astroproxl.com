@@ -424,23 +424,23 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
             )}
 
             {/* ── Recalculate — heals charts built by older engine versions ── */}
-            <button
-              type="button"
-              onClick={() => router.push("/reading/chart-data?recalculate=true")}
-              style={{
-                display: "block",
-                margin: "8px auto 20px",
-                background: "transparent",
-                border: "none",
-                color: "#64748b",
-                fontSize: "13px",
-                textDecoration: "underline",
-                textUnderlineOffset: "3px",
-                cursor: "pointer",
-              }}
-            >
-              Recalculate chart
-            </button>
+<button
+  type="button"
+  onClick={() => router.push("/chart-data?recalculate=true")}
+  style={{
+    display: "block",
+    margin: "8px auto 20px",
+    background: "transparent",
+    border: "none",
+    color: "#64748b",
+    fontSize: "13px",
+    textDecoration: "underline",
+    textUnderlineOffset: "3px",
+    cursor: "pointer",
+  }}
+>
+  Recalculate chart
+</button>
 
             {/* ── Full placements ── */}
             <SkyCard icon={Sparkles} label="All Placements">
