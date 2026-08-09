@@ -743,6 +743,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           planetaryStations: chart.chartData.planetaryStations,
           solarReturn: chart.chartData.solarReturn,
           moonPhase: chart.chartData.moonPhase,
+          extendedPoints: chart.chartData.extendedPoints,
         }),
       });
 

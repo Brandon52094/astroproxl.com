@@ -27,11 +27,13 @@ import {
 
 const REPLIES_PER_SESSION = JXL_MAX_REPLIES_PER_CONVERSATION;
 
+// EDIT 2: Add isAnaretic to PlanetPlacement interface
 interface PlanetPlacement {
   name: string;
   sign: string;
   degree: string;
   house?: string;
+  isAnaretic?: boolean;
 }
 
 interface Aspect {
@@ -55,10 +57,29 @@ interface ProgressedPlanet {
   isRetrograde: boolean;
 }
 
+// EDIT 2: Add new interfaces
 interface SolarArcPlanet {
   name: string;
   sign: string;
   degree: string;
+}
+
+interface DeclinationData {
+  planet: string;
+  declination: number;
+  isOutOfBounds: boolean;
+}
+
+interface ArabicLot {
+  name: "Lot of Fortune" | "Lot of Spirit";
+  sign: string;
+  degree: string;
+  house: number;
+}
+
+interface ExtendedPoints {
+  declinations: DeclinationData[];
+  arabicLots: ArabicLot[];
 }
 
 interface ProfectionData {
@@ -128,6 +149,8 @@ interface JxlAskBody {
   planetaryStations?: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
+  // EDIT 2: Add extendedPoints to JxlAskBody
+  extendedPoints?: ExtendedPoints;
 }
 
 const NL = "\n";
@@ -309,10 +332,63 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
 
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
 
+  // EDIT 4: JXL-specific anaretic block — explicitly NOT a date source
+  const anareticBlock = (() => {
+    const anaretic = tropical.planets.filter((p) => p.isAnaretic);
+    if (anaretic.length === 0) return "";
+    const names = anaretic.map((p) => `${p.name} (${p.sign})`).join(", ");
+    return NL + [
+      "",
+      "FINAL-DEGREE PLACEMENTS (anaretic — a quality, NOT a date):",
+      names,
+      "ROLE: A planet at the last degree of its sign carries a sense of something urgent or reaching its",
+      "limit. Translate as ending-energy in the PROSE only. This is a texture, never a timing source —",
+      "it does NOT permit a date, and it never overrides THE DATE RULE. Use only if central; else ignore.",
+      "",
+    ].join(NL);
+  })();
+
+  // EDIT 4: Extended points block — supporting signal only
+  const extendedPointsBlock = (() => {
+    if (!body.extendedPoints) return "";
+    const { arabicLots, declinations } = body.extendedPoints;
+    const oob = (declinations ?? []).filter((d) => d.isOutOfBounds);
+    if ((!arabicLots || arabicLots.length === 0) && oob.length === 0) return "";
+    const lines = ["", "EXTENDED POINTS (SUPPORTING SIGNAL ONLY — never a headline, never a date anchor):"];
+    if (arabicLots && arabicLots.length > 0) {
+      lines.push("Lots: " + arabicLots.map((l) => `${l.name} in ${l.sign} (House ${l.house})`).join(", "));
+      lines.push(
+        "ROLE: Fortune shows where ease flows; Spirit shows where effort lives. Use ONLY to confirm a theme the",
+        "calculated aspects already established. Never introduce a new topic from a Lot alone."
+      );
+    }
+    if (oob.length > 0) {
+      lines.push(
+        "Out-of-bounds: " + oob.map((d) => `${d.planet} (${d.declination}°)`).join(", "),
+        "ROLE: An out-of-bounds planet runs hotter, less governed. If central to the answer, note its expression",
+        "is extreme. If not central, ignore. Do not name it in the prose; let it sharpen the consequence."
+      );
+    }
+    lines.push("");
+    return NL + lines.join(NL);
+  })();
+
+  // EDIT 3: Rank and cap the natal aspects
+  const MAJOR_BODIES = new Set([
+    "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn",
+    "Uranus","Neptune","Pluto","North Node","Ascendant","Midheaven",
+  ]);
+  const isMajor = (a: Aspect) =>
+    MAJOR_BODIES.has(a.planetA) && MAJOR_BODIES.has(a.planetB);
+
   const aspectList = (tropical.aspects || [])
     .slice()
-    .sort((a, b) => a.orbDegrees - b.orbDegrees)
-    .map(fmtAspect)
+    .sort((a, b) => {
+      if (isMajor(a) !== isMajor(b)) return isMajor(a) ? -1 : 1;
+      return a.orbDegrees - b.orbDegrees;
+    })
+    .slice(0, 12)
+    .map((a) => (isMajor(a) ? fmtAspect(a) : fmtAspect(a) + "  [minor body — flavor only]"))
     .join(NL);
 
   const transitList = (transits || []).map(fmtTransit).join(NL);
@@ -362,7 +438,7 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "ASPECT LAW — THE MATH IS DONE FOR YOU",
     "═══════════════════════════════════════════",
     "The transit-to-natal aspects below are CALCULATED and EXACT. You do not compute them. You do not",
-    "estimate orbs. You do not invent an aspect that is not on the list. If an aspect is not in that",
+    "estimate orbs. You do not invent an aspect that is not in the list. If an aspect is not in that",
     "block, it is not happening and you may not mention it.",
     "Lead with EXACT and LIVE aspects. BACKGROUND aspects are context only.",
     "An APPLYING aspect is building — speak of it as coming. A SEPARATING one has peaked — speak of it as passing.",
@@ -399,10 +475,16 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     solarReturnBlock,
     "NATAL PLACEMENTS:",
     planetList,
+    // EDIT 4: Insert JXL-specific anaretic block
+    anareticBlock,
     "",
-    "NATAL ASPECTS (tightest first — the fixed wiring they were born with):",
+    // EDIT 4: Updated natal aspects block with ranking
+    "NATAL ASPECTS (ranked — major-body first, then by tightness; asteroid/Chiron/Lilith marked flavor):",
     aspectList || "None provided.",
     "ROLE: These never change. They are the pattern the transits are ACTIVATING.",
+    "Aspects marked '[minor body — flavor only]' may color a description but may never anchor a claim.",
+    // EDIT 4: Insert extended points block
+    extendedPointsBlock,
     siderealBlock,
     "CURRENT TRANSIT POSITIONS:",
     transitList || "None provided.",
