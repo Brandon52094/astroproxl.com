@@ -296,12 +296,10 @@ export default function ChartDataScreen() {
   lng: resolvedPlace.lon,
   timezone: resolvedPlace.timezone,
   // Store current location alongside birth location
-  ...(resolvedCurrentPlace ? {
-    currentLat: resolvedCurrentPlace.lat,
-    currentLng: resolvedCurrentPlace.lon,
-    currentPlace: resolvedCurrentPlace.label,
-    currentTimezone: resolvedCurrentPlace.timezone,
-  } : {}),
+  currentLat: resolvedCurrentPlace?.lat,
+  currentLng: resolvedCurrentPlace?.lon,
+  currentPlace: resolvedCurrentPlace?.label ?? "",
+  currentTimezone: resolvedCurrentPlace?.timezone ?? "",  // Always provide with fallback
   chartData: data,
 });
 
