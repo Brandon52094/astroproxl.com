@@ -8,11 +8,13 @@ const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks — must match credits/
 const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000; // 1 week — must match credits/route.ts
 const CREDITS_PER_READING = 4; // must match reading-complete/route.ts
 
+// EDIT 1: Add isAnaretic to PlanetPlacement interface
 interface PlanetPlacement {
   name: string;
   sign: string;
   degree: string;
   house?: string;
+  isAnaretic?: boolean;
 }
 
 interface Aspect {
@@ -40,6 +42,25 @@ interface SolarArcPlanet {
   name: string;
   sign: string;
   degree: string;
+}
+
+// EDIT 1: Add new interfaces
+interface DeclinationData {
+  planet: string;
+  declination: number;
+  isOutOfBounds: boolean;
+}
+
+interface ArabicLot {
+  name: "Lot of Fortune" | "Lot of Spirit";
+  sign: string;
+  degree: string;
+  house: number;
+}
+
+interface ExtendedPoints {
+  declinations: DeclinationData[];
+  arabicLots: ArabicLot[];
 }
 
 interface ProfectionData {
@@ -118,6 +139,7 @@ interface ReadingRequestBody {
   planetaryStations?: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
+  extendedPoints?: ExtendedPoints; // EDIT 1: Added to request body
 }
 
 const NL = "\n";
@@ -298,16 +320,87 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
         ].join(NL)
       : "";
 
+  // EDIT 2: Build the extended points block
+  const extendedPointsBlock = (() => {
+    if (!body.extendedPoints) return "";
+    const { arabicLots, declinations } = body.extendedPoints;
+    const oob = (declinations ?? []).filter((d) => d.isOutOfBounds);
+    if ((!arabicLots || arabicLots.length === 0) && oob.length === 0) return "";
+
+    const lines = [
+      "",
+      "EXTENDED POINTS (SUPPORTING SIGNAL ONLY — never a headline, never a date anchor):",
+    ];
+
+    if (arabicLots && arabicLots.length > 0) {
+      lines.push(
+        "Lots: " +
+          arabicLots
+            .map((l) => `${l.name} in ${l.sign} (House ${l.house})`)
+            .join(", ")
+      );
+      lines.push(
+        "ROLE: The Lot of Fortune shows where ease and body/material life flow; the Lot of Spirit shows where",
+        "effort and agency live. Use ONLY to confirm a theme the calculated aspects already established — if the",
+        "house a Lot sits in matches a house the reading is already about, that theme is reinforced. Never introduce",
+        "a new topic from a Lot alone."
+      );
+    }
+
+    if (oob.length > 0) {
+      lines.push(
+        "Out-of-bounds: " + oob.map((d) => `${d.planet} (${d.declination}°)`).join(", "),
+        "ROLE: An out-of-bounds planet acts outside its normal rules — its themes run hotter, less governed, harder",
+        "to contain. If one of these planets is already central to the reading, note that its expression is extreme.",
+        "If it is not already central, ignore it. Do not list this in the prose; let it sharpen the consequence."
+      );
+    }
+
+    lines.push("");
+    return NL + lines.join(NL);
+  })();
+
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
+
+  // EDIT 2: Anaretic (final-degree) planets block
+  const anareticBlock = (() => {
+    const anaretic = tropical.planets.filter((p) => p.isAnaretic);
+    if (anaretic.length === 0) return "";
+    const names = anaretic.map((p) => `${p.name} (${p.sign})`).join(", ");
+    return NL + [
+      "",
+      "FINAL-DEGREE PLACEMENTS (anaretic — a culmination signal):",
+      names,
+      "ROLE: A planet at the last degree of its sign is running out of room — its themes are urgent,",
+      "coming to a head, being forced to a conclusion. In the prose, translate this as a sense of something",
+      "ENDING or reaching its limit — never say 'anaretic' or name the degree. If one of these planets is",
+      "central to the reading, let that ending-energy sharpen the consequence. If it is not central, ignore it.",
+      "",
+    ].join(NL);
+  })();
 
   const voiceCalibrationBlock = buildVoiceCalibrationBlock(
     tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))
   );
 
-  const aspectList = tropical.aspects
+  // EDIT 4: Rank and cap the natal aspects
+  const MAJOR_BODIES = new Set([
+    "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn",
+    "Uranus","Neptune","Pluto","North Node","Ascendant","Midheaven",
+  ]);
+  const isMajor = (a: Aspect) =>
+    MAJOR_BODIES.has(a.planetA) && MAJOR_BODIES.has(a.planetB);
+
+  const rankedAspects = tropical.aspects
     .slice()
-    .sort((a, b) => a.orbDegrees - b.orbDegrees)
-    .map(fmtAspect)
+    .sort((a, b) => {
+      if (isMajor(a) !== isMajor(b)) return isMajor(a) ? -1 : 1;
+      return a.orbDegrees - b.orbDegrees;
+    })
+    .slice(0, 12);
+
+  const aspectList = rankedAspects
+    .map((a) => (isMajor(a) ? fmtAspect(a) : fmtAspect(a) + "  [minor body — flavor only]"))
     .join(NL);
 
   const transitList = transits.map(fmtTransit).join(NL);
@@ -368,10 +461,15 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     solarReturnBlock,
     "NATAL PLACEMENTS (tropical — the primary chart):",
     planetList,
+    // EDIT 2: Insert anaretic block here
+    anareticBlock,
     "",
-    "NATAL ASPECTS (tightest first — the fixed wiring they were born with):",
+    // EDIT 4: Updated natal aspects block
+    "NATAL ASPECTS (ranked — major-body aspects first, then by tightness; asteroid/Chiron/Lilith marked as flavor):",
     aspectList,
-    "ROLE: These never change. They are the pattern the transits are ACTIVATING. Part 2 lives here.",
+    "ROLE: These never change — the pattern the transits are ACTIVATING. Part 2 lives here.",
+    "Aspects marked '[minor body — flavor only]' may color a description but may NEVER be the tightest natal",
+    "aspect you name in Part 2, and may never anchor a claim. Part 2 must land on a major-body aspect.",
     "",
     "SIDEREAL PLACEMENTS:",
     siderealList,
@@ -390,6 +488,8 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "Time Lord, that window is the most important one in the reading.",
     progressionsBlock,
     solarArcsBlock,
+    // EDIT 3: Insert extended points block here
+    extendedPointsBlock,
     "",
     "THEIR QUESTION (" + topicLabel + "):",
     "\"" + question + "\"",

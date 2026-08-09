@@ -387,6 +387,7 @@ export default function ReadingResultsPage() {
           planetaryStations: chart.chartData.planetaryStations,
           solarReturn: chart.chartData.solarReturn,
           moonPhase: chart.chartData.moonPhase,
+          extendedPoints: chart.chartData.extendedPoints,
           conversationHistory: conversationHistory || undefined,
           freeRepliesUsed,
         }),

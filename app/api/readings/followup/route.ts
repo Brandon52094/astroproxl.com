@@ -4,11 +4,13 @@ import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
 
+// EDIT 1: Add isAnaretic to PlanetPlacement interface
 interface PlanetPlacement {
   name: string;
   sign: string;
   degree: string;
   house?: string;
+  isAnaretic?: boolean;
 }
 
 interface Aspect {
@@ -32,10 +34,29 @@ interface ProgressedPlanet {
   isRetrograde: boolean;
 }
 
+// EDIT 1: Add new interfaces
 interface SolarArcPlanet {
   name: string;
   sign: string;
   degree: string;
+}
+
+interface DeclinationData {
+  planet: string;
+  declination: number;
+  isOutOfBounds: boolean;
+}
+
+interface ArabicLot {
+  name: "Lot of Fortune" | "Lot of Spirit";
+  sign: string;
+  degree: string;
+  house: number;
+}
+
+interface ExtendedPoints {
+  declinations: DeclinationData[];
+  arabicLots: ArabicLot[];
 }
 
 interface ProfectionData {
@@ -100,6 +121,8 @@ interface FollowupRequestBody {
   planetaryStations?: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
+  // EDIT 1: Add extendedPoints to request body
+  extendedPoints?: ExtendedPoints;
   conversationHistory?: string;
   /**
    * How many free replies the client has already used on THIS reading.
@@ -199,10 +222,22 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
 
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
 
+  // EDIT 2: Rank and cap the natal aspects
+  const MAJOR_BODIES = new Set([
+    "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn",
+    "Uranus","Neptune","Pluto","North Node","Ascendant","Midheaven",
+  ]);
+  const isMajor = (a: Aspect) =>
+    MAJOR_BODIES.has(a.planetA) && MAJOR_BODIES.has(a.planetB);
+
   const aspectList = (tropical.aspects || [])
     .slice()
-    .sort((a, b) => a.orbDegrees - b.orbDegrees)
-    .map(fmtAspect)
+    .sort((a, b) => {
+      if (isMajor(a) !== isMajor(b)) return isMajor(a) ? -1 : 1;
+      return a.orbDegrees - b.orbDegrees;
+    })
+    .slice(0, 12)
+    .map((a) => (isMajor(a) ? fmtAspect(a) : fmtAspect(a) + "  [minor body — flavor only]"))
     .join(NL);
 
   const transitList = (transits || []).map(fmtTransit).join(NL);
@@ -299,6 +334,46 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
         ].join(NL)
       : "";
 
+  // EDIT 3: Build anaretic + extended-points blocks
+  const anareticBlock = (() => {
+    const anaretic = tropical.planets.filter((p) => p.isAnaretic);
+    if (anaretic.length === 0) return "";
+    const names = anaretic.map((p) => `${p.name} (${p.sign})`).join(", ");
+    return NL + [
+      "",
+      "FINAL-DEGREE PLACEMENTS (anaretic — a culmination signal):",
+      names,
+      "ROLE: A planet at the last degree of its sign is running out of room — its themes are urgent, coming",
+      "to a head. Translate as something ENDING or reaching its limit; never say 'anaretic' or name the degree.",
+      "Use only if central to the answer; otherwise ignore.",
+      "",
+    ].join(NL);
+  })();
+
+  const extendedPointsBlock = (() => {
+    if (!body.extendedPoints) return "";
+    const { arabicLots, declinations } = body.extendedPoints;
+    const oob = (declinations ?? []).filter((d) => d.isOutOfBounds);
+    if ((!arabicLots || arabicLots.length === 0) && oob.length === 0) return "";
+    const lines = ["", "EXTENDED POINTS (SUPPORTING SIGNAL ONLY — never a headline, never a date anchor):"];
+    if (arabicLots && arabicLots.length > 0) {
+      lines.push("Lots: " + arabicLots.map((l) => `${l.name} in ${l.sign} (House ${l.house})`).join(", "));
+      lines.push(
+        "ROLE: Fortune shows where ease flows; Spirit shows where effort lives. Use ONLY to confirm a theme the",
+        "calculated aspects already established. Never introduce a new topic from a Lot alone."
+      );
+    }
+    if (oob.length > 0) {
+      lines.push(
+        "Out-of-bounds: " + oob.map((d) => `${d.planet} (${d.declination}°)`).join(", "),
+        "ROLE: An out-of-bounds planet runs hotter, less governed. If central to the answer, note its expression",
+        "is extreme. If not central, ignore. Do not name it in the prose; let it sharpen the consequence."
+      );
+    }
+    lines.push("");
+    return NL + lines.join(NL);
+  })();
+
   const voiceCalibrationBlock = buildVoiceCalibrationBlock(
     tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))
   );
@@ -357,10 +432,16 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     solarReturnBlock,
     "NATAL PLACEMENTS:",
     planetList,
+    // EDIT 4: Insert anaretic block here
+    anareticBlock,
     "",
-    "NATAL ASPECTS (tightest first — the fixed wiring they were born with):",
+    // EDIT 4: Updated natal aspects block with ranking
+    "NATAL ASPECTS (ranked — major-body first, then by tightness; asteroid/Chiron/Lilith marked flavor):",
     aspectList || "None provided.",
     "ROLE: These never change. They are the pattern the transits are ACTIVATING.",
+    "Aspects marked '[minor body — flavor only]' may color a description but may never anchor a claim.",
+    // EDIT 4: Insert extended points block here
+    extendedPointsBlock,
     siderealBlock,
     "CURRENT TRANSIT POSITIONS:",
     transitList || "None provided.",

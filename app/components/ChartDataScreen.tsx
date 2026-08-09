@@ -290,7 +290,7 @@ export default function ChartDataScreen() {
     } finally {
       setCalculating(false);
     }
-  }, [birthDate, birthTime, resolvedPlace, resolvedCurrentPlace]);
+  }, [birthDate, birthTime, birthPlace, resolvedPlace, resolvedCurrentPlace]);
 
   const birthMissing = useMemo(() => [birthDate, birthTime, birthPlace].filter((v) => !v.trim()).length, [birthDate, birthTime, birthPlace]);
   const birthComplete = birthMissing === 0 && !!resolvedPlace;

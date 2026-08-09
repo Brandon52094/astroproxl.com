@@ -6,6 +6,7 @@ export const PlanetPlacementSchema = z.object({
   degree: z.string(),
   house: z.string().optional(),
   notes: z.string().optional(),
+  isAnaretic: z.boolean().optional(),
 });
 
 export const AngleSchema = z.object({

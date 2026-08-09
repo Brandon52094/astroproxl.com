@@ -80,12 +80,30 @@ export interface MoonPhaseData {
   moonDegree: string;
 }
 
+export interface DeclinationData {
+  planet: string;
+  declination: number;
+  isOutOfBounds: boolean;
+}
+
+export interface ArabicLot {
+  name: "Lot of Fortune" | "Lot of Spirit";
+  sign: string;
+  degree: string;
+  house: number;
+}
+
+export interface ExtendedPoints {
+  declinations: DeclinationData[];
+  arabicLots: ArabicLot[];
+}
+
 export interface ChartCalculateResponse {
   success: boolean;
   tropical: NormalizedChart;
   sidereal: NormalizedChart;
   transits: TransitPlanet[];
-  transitAspects: TransitAspect[];   // NEW — transit-to-natal, calculated not inferred
+  transitAspects: TransitAspect[];
   profection: ProfectionData;
   progressions: ProgressedPlanet[];
   solarArcs: SolarArcPlanet[];
@@ -93,6 +111,7 @@ export interface ChartCalculateResponse {
   planetaryStations: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
+  extendedPoints?: ExtendedPoints;
   error?: string;
 }
 
@@ -205,15 +224,12 @@ function longitudeToSignDegree(longitude: number): { sign: string; degree: strin
   return { sign: SIGNS[signIndex], degree: `${degrees}°${String(minutes).padStart(2, "0")}'` };
 }
 
-/**
- * CHANGED: now also returns longitudeSpeed on each planet.
- *
- * Speed was already being computed (that's what SEFLG_SPEED / the 256 flag
- * buys us) but it was being discarded after the isRetrograde check. We need
- * the raw value to determine whether a transit aspect is APPLYING (still
- * tightening — the event is building) or SEPARATING (peak has passed).
- * A model cannot infer that from position alone; code can, exactly.
- */
+// EDIT A: Add the anaretic helper function
+function isAnareticLongitude(longitude: number): boolean {
+  const degreeInSign = (((longitude % 360) + 360) % 360) % 30;
+  return degreeInSign >= 29; // the 29th degree — anaretic / "degree of fate"
+}
+
 function calculatePlanets(
   jd: number, lat: number, lng: number, houseSystem: string, ayanamsa?: number
 ): {
@@ -236,6 +252,13 @@ function calculatePlanets(
     { id: swisseph.SE_NEPTUNE,   name: "Neptune" },
     { id: swisseph.SE_PLUTO,     name: "Pluto" },
     { id: swisseph.SE_TRUE_NODE, name: "North Node" },
+    // FIX: Correct Swiss Ephemeris ID for Black Moon Lilith
+    { id: swisseph.SE_CHIRON,    name: "Chiron" },
+    { id: swisseph.SE_MEAN_APOG, name: "Lilith" },
+    { id: swisseph.SE_CERES,     name: "Ceres" },
+    { id: swisseph.SE_PALLAS,    name: "Pallas" },
+    { id: swisseph.SE_JUNO,      name: "Juno" },
+    { id: swisseph.SE_VESTA,     name: "Vesta" },
   ];
   // 4 = SEFLG_SWIEPH, 256 = SEFLG_SPEED, 65536 = SEFLG_SIDEREAL
   const iflag = ayanamsa !== undefined ? (4 | 65536 | 256) : (4 | 256);
@@ -244,8 +267,16 @@ function calculatePlanets(
   const ascLongitude = houses.ascendant;
   const mcLongitude = houses.mc;
   const houseCusps = houses.house;
+  
   const planets = PLANETS.map(({ id, name }) => {
+    // GUARD: Catch undefined constants before they silently become the Sun
+    if (id === undefined || id === null) {
+      console.error(`[swisseph] Constant for ${name} is undefined — check the binding`);
+    }
     const result = swisseph.swe_calc_ut(jd, id, iflag);
+    if (result.rflag < 0 || result.error) {
+      console.error(`[swisseph] Error calculating ${name}:`, result.error);
+    }
     return {
       name,
       longitude: result.longitude,
@@ -297,13 +328,28 @@ function buildNormalizedChart(
   const mcDeg  = longitudeToSignDegree(mcLongitude);
   const icDeg  = longitudeToSignDegree((mcLongitude + 180) % 360);
   const dcDeg  = longitudeToSignDegree((ascLongitude + 180) % 360);
+  
+  // EDIT B: Set the anaretic flag on each placement
   const planetPlacements = planets.map(({ name, longitude, isRetrograde }) => {
     const { sign, degree } = longitudeToSignDegree(longitude);
     const house = getWholeSignHouse(longitude, ascLongitude);
-    return { name, sign, degree: isRetrograde ? `${degree} Rx` : degree, house: String(house) };
+    return {
+      name,
+      sign,
+      degree: isRetrograde ? `${degree} Rx` : degree,
+      house: String(house),
+      isAnaretic: isAnareticLongitude(longitude),
+    };
   });
-  planetPlacements.push({ name: "Ascendant", sign: ascDeg.sign, degree: ascDeg.degree, house: "1" });
-  planetPlacements.push({ name: "Midheaven", sign: mcDeg.sign,  degree: mcDeg.degree,  house: "10" });
+  
+  planetPlacements.push({
+    name: "Ascendant", sign: ascDeg.sign, degree: ascDeg.degree, house: "1",
+    isAnaretic: isAnareticLongitude(ascLongitude),
+  });
+  planetPlacements.push({
+    name: "Midheaven", sign: mcDeg.sign, degree: mcDeg.degree, house: "10",
+    isAnaretic: isAnareticLongitude(mcLongitude),
+  });
   const aspects = calculateAspects(planets.map(({ name, longitude }) => ({ name, longitude })));
   return { birthDate, birthTime, birthPlace, timezone, coordinates: { lat, lng }, planets: planetPlacements, angles: { asc: ascDeg, mc: mcDeg, ic: icDeg, dc: dcDeg }, aspects };
 }
@@ -312,7 +358,7 @@ function calculateProfection(
   birthDate: string, ascSign: string,
   natalPlanets: Array<{ name: string; sign: string; house: number }>
 ): ProfectionData {
-  const [birthYear, birthMonth, birthDay] = birthDate.split("-").map(Number);
+  const [birthYear, birthMonth, birthDay] = parseDateParts(birthDate);
   const now = new Date();
   let age = now.getFullYear() - birthYear;
   if (now.getMonth() + 1 < birthMonth || (now.getMonth() + 1 === birthMonth && now.getDate() < birthDay)) age--;
@@ -325,22 +371,17 @@ function calculateProfection(
   return { age, profectionYear, activatedHouse, activatedSign, timeLord, timeLordNatalSign: timeLordNatal?.sign ?? "", timeLordNatalHouse: timeLordNatal?.house ?? 0 };
 }
 
-/**
- * CHANGED: now includes the PROGRESSED ANGLES (Ascendant and Midheaven).
- *
- * These were being calculated all along — calculatePlanets returns
- * ascLongitude and mcLongitude — but the function was only mapping over
- * .planets and dropping them. The progressed Ascendant changing sign is one
- * of the strongest "your life is visibly different now" markers in
- * predictive astrology, and the progressed MC does the same for career.
- * Solar arcs already included their angles; progressions just got missed.
- */
 function calculateProgressions(jdBirth: number, birthDate: string, lat: number, lng: number): ProgressedPlanet[] {
-  const [birthYear, birthMonth, birthDay] = birthDate.split("-").map(Number);
+  const [birthYear, birthMonth, birthDay] = parseDateParts(birthDate);
   const now = new Date();
   let age = now.getFullYear() - birthYear;
   if (now.getMonth() + 1 < birthMonth || (now.getMonth() + 1 === birthMonth && now.getDate() < birthDay)) age--;
-  const lastBirthday = new Date(now.getFullYear() - (now < new Date(now.getFullYear(), birthMonth - 1, birthDay) ? 0 : 0), birthMonth - 1, birthDay);
+  
+  // FIX: Correct birthday check - has birthday occurred this calendar year?
+  const hasHadBirthdayThisYear = now >= new Date(now.getFullYear(), birthMonth - 1, birthDay);
+  const lastBirthdayYear = hasHadBirthdayThisYear ? now.getFullYear() : now.getFullYear() - 1;
+  const lastBirthday = new Date(lastBirthdayYear, birthMonth - 1, birthDay);
+  
   const daysSinceLastBirthday = Math.floor((now.getTime() - lastBirthday.getTime()) / 86400000);
   const fractionalAge = age + daysSinceLastBirthday / 365.25;
   const jdProgressed = jdBirth + fractionalAge;
@@ -366,11 +407,15 @@ function calculateProgressions(jdBirth: number, birthDate: string, lat: number, 
 function calculateSolarArcs(jdBirth: number, birthDate: string, lat: number, lng: number): SolarArcPlanet[] {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const swisseph = require("swisseph");
-  const [birthYear, birthMonth, birthDay] = birthDate.split("-").map(Number);
+  const [birthYear, birthMonth, birthDay] = parseDateParts(birthDate);
   const now = new Date();
   let age = now.getFullYear() - birthYear;
   if (now.getMonth() + 1 < birthMonth || (now.getMonth() + 1 === birthMonth && now.getDate() < birthDay)) age--;
-  const lastBirthday = new Date(now.getFullYear(), birthMonth - 1, birthDay);
+  
+  // FIX: match the corrected birthday logic used in calculateProgressions
+  const hasHadBirthdayThisYear = now >= new Date(now.getFullYear(), birthMonth - 1, birthDay);
+  const lastBirthdayYear = hasHadBirthdayThisYear ? now.getFullYear() : now.getFullYear() - 1;
+  const lastBirthday = new Date(lastBirthdayYear, birthMonth - 1, birthDay);
   const daysSinceLastBirthday = Math.floor((now.getTime() - lastBirthday.getTime()) / 86400000);
   const fractionalAge = age + daysSinceLastBirthday / 365.25;
   const jdProgressed = jdBirth + fractionalAge;
@@ -397,24 +442,41 @@ function calculateUpcomingTrigger(natalRaw: ReturnType<typeof calculatePlanets>,
     { type: "conjunction", angle: 0 }, { type: "opposition", angle: 180 },
     { type: "square", angle: 90 }, { type: "trine", angle: 120 }, { type: "sextile", angle: 60 },
   ];
-  const natalTargets = natalRaw.planets.map(p => ({ name: p.name, longitude: p.longitude }));
+  
+  // FIX: Whitelist primary bodies to eliminate minor asteroid trigger noise
+  const TRIGGER_WHITELIST = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node"];
+
+  const natalTargets = natalRaw.planets
+    .filter(p => TRIGGER_WHITELIST.includes(p.name))
+    .map(p => ({ name: p.name, longitude: p.longitude }));
+    
   natalTargets.push({ name: "Ascendant", longitude: natalRaw.ascLongitude });
   natalTargets.push({ name: "Midheaven", longitude: natalRaw.mcLongitude });
+
   const today = new Date();
   for (let dayOffset = 0; dayOffset <= 30; dayOffset++) {
     const checkDate = new Date(today);
     checkDate.setDate(today.getDate() + dayOffset);
     const jdCheck = toJulianDay(checkDate.toISOString().slice(0, 10), "12:00", 0);
     const transitRaw = calculatePlanets(jdCheck, lat, lng, "W");
-    for (const tPlanet of transitRaw.planets) {
-      if (tPlanet.name === "Moon") continue;
+
+    const filteredTransits = transitRaw.planets.filter(p => TRIGGER_WHITELIST.includes(p.name));
+
+    for (const tPlanet of filteredTransits) {
+      if (tPlanet.name === "Moon") continue; // Skip fast-moving Moon for major trigger events
       for (const nTarget of natalTargets) {
         if (tPlanet.name === nTarget.name) continue;
         let diff = Math.abs(tPlanet.longitude - nTarget.longitude);
         if (diff > 180) diff = 360 - diff;
+        
         for (const aspect of ASPECT_CONFIGS) {
           if (Math.abs(diff - aspect.angle) <= 1.0) {
-            return { date: checkDate.toLocaleDateString("en-US", { month: "long", day: "numeric" }), transitPlanet: tPlanet.name, natalPlanet: nTarget.name, aspect: aspect.type };
+            return {
+              date: checkDate.toLocaleDateString("en-US", { month: "long", day: "numeric" }),
+              transitPlanet: tPlanet.name,
+              natalPlanet: nTarget.name,
+              aspect: aspect.type
+            };
           }
         }
       }
@@ -485,7 +547,11 @@ function calculateSolarReturn(
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  const yearsSinceBirth = currentYear - new Date(jdBirth * 86400000 - 210866760000).getFullYear();
+  // FIX: correct JD→Date conversion. The epoch offset is 2440587.5 * 86400000
+  //      = 210866760000000 ms (the old constant was short three zeros, throwing
+  //      approxJD back ~6600 years).
+  const jdToDate = (jd: number) => new Date((jd - 2440587.5) * 86400000);
+  const yearsSinceBirth = currentYear - jdToDate(jdBirth).getFullYear();
   const approxJD = jdBirth + yearsSinceBirth * 365.25;
 
   let bestJD = approxJD;
@@ -618,6 +684,73 @@ function calculateMoonPhase(
   };
 }
 
+// ── Extended Points: Declinations & Arabic Lots ──────────────────────────────
+
+function calculateDeclinations(jd: number): DeclinationData[] {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+  const BODIES = [
+    { id: swisseph.SE_SUN, name: "Sun" },
+    { id: swisseph.SE_MOON, name: "Moon" },
+    { id: swisseph.SE_MERCURY, name: "Mercury" },
+    { id: swisseph.SE_VENUS, name: "Venus" },
+    { id: swisseph.SE_MARS, name: "Mars" },
+    { id: swisseph.SE_JUPITER, name: "Jupiter" },
+    { id: swisseph.SE_SATURN, name: "Saturn" },
+    { id: swisseph.SE_URANUS, name: "Uranus" },
+    { id: swisseph.SE_NEPTUNE, name: "Neptune" },
+    { id: swisseph.SE_PLUTO, name: "Pluto" },
+  ];
+
+  return BODIES.map(({ id, name }) => {
+    // 4 = SEFLG_SWIEPH, 2048 = SEFLG_EQUATORIAL
+    const res = swisseph.swe_calc_ut(jd, id, 4 | 2048);
+    
+    // FIX: Read .latitude instead of .declination
+    const declinationVal = res.latitude ?? 0;
+    const declination = Math.round(declinationVal * 100) / 100;
+    const isOutOfBounds = Math.abs(declination) > 23.45;
+
+    return { planet: name, declination, isOutOfBounds };
+  });
+}
+
+function calculateArabicLots(
+  sunLong: number,
+  moonLong: number,
+  ascLong: number,
+  isDayChart: boolean
+): ArabicLot[] {
+  let fortuneLong: number;
+  let spiritLong: number;
+
+  if (isDayChart) {
+    fortuneLong = (ascLong + moonLong - sunLong + 360) % 360;
+    spiritLong = (ascLong + sunLong - moonLong + 360) % 360;
+  } else {
+    fortuneLong = (ascLong + sunLong - moonLong + 360) % 360;
+    spiritLong = (ascLong + moonLong - sunLong + 360) % 360;
+  }
+
+  const fortunePos = longitudeToSignDegree(fortuneLong);
+  const spiritPos = longitudeToSignDegree(spiritLong);
+
+  return [
+    {
+      name: "Lot of Fortune",
+      sign: fortunePos.sign,
+      degree: fortunePos.degree,
+      house: getWholeSignHouse(fortuneLong, ascLong),
+    },
+    {
+      name: "Lot of Spirit",
+      sign: spiritPos.sign,
+      degree: spiritPos.degree,
+      house: getWholeSignHouse(spiritLong, ascLong),
+    },
+  ];
+}
+
 export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const swisseph = require("swisseph");
@@ -655,11 +788,6 @@ export async function POST(req: NextRequest) {
       return { name, sign, degree, isRetrograde };
     });
 
-    // ── NEW: transit-to-natal aspects, calculated not inferred ────────────────
-    // Every transiting body crossed against every natal planet AND both angles,
-    // filtered to real orbs, sorted tightest first, with applying/separating
-    // determined from longitude speed. The reading engine no longer has to do
-    // ~700 arc-distance comparisons in its head — it receives the answer.
     let transitAspects: TransitAspect[] = [];
     try {
       transitAspects = calculateTransitAspects(
@@ -720,6 +848,29 @@ export async function POST(req: NextRequest) {
       console.warn("[chart-calculate] Moon phase calculation failed:", e);
     }
 
+    let extendedPoints: ExtendedPoints | undefined;
+    try {
+      const sunPlanet = tropicalRaw.planets.find((p) => p.name === "Sun");
+      const moonPlanet = tropicalRaw.planets.find((p) => p.name === "Moon");
+
+      if (sunPlanet && moonPlanet) {
+        const sunHouse = getWholeSignHouse(sunPlanet.longitude, tropicalRaw.ascLongitude);
+        const isDayChart = sunHouse >= 7 && sunHouse <= 12;
+
+        const arabicLots = calculateArabicLots(
+          sunPlanet.longitude,
+          moonPlanet.longitude,
+          tropicalRaw.ascLongitude,
+          isDayChart
+        );
+        const declinations = calculateDeclinations(jdBirth);
+
+        extendedPoints = { declinations, arabicLots };
+      }
+    } catch (e) {
+      console.warn("[chart-calculate] Extended points calculation failed:", e);
+    }
+
     const response: ChartCalculateResponse = {
       success: true,
       tropical: tropicalChart,
@@ -733,6 +884,7 @@ export async function POST(req: NextRequest) {
       planetaryStations,
       solarReturn,
       moonPhase,
+      extendedPoints,
     };
 
     return NextResponse.json(response, { status: 200 });
