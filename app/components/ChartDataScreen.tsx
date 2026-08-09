@@ -165,7 +165,7 @@ export default function ChartDataScreen() {
     }
   }, []);
 
-  // EDIT 2: Pre-fill from saved chart when recalculate=true
+ // EDIT 2: Pre-fill from saved chart when recalculate=true
   useEffect(() => {
     if (searchParams.get("recalculate") !== "true") return;
     const existing = loadChart();
@@ -177,19 +177,19 @@ export default function ChartDataScreen() {
       setBirthPlace(existing.birthPlace);
       setResolvedPlace({
         label: existing.birthPlace,
-        lat: existing.lat ?? null,
-        lng: existing.lng ?? null,
-        timezone: existing.timezone ?? null,
-      } as ResolvedPlace);
+        lat: existing.lat ?? 0,
+        lon: existing.lng ?? 0,  // FIX: use 'lon' not 'lng'
+        timezone: existing.timezone ?? "",
+      });
     }
     if (existing.currentPlace) {
       setCurrentPlace(existing.currentPlace);
       setResolvedCurrentPlace({
         label: existing.currentPlace,
-        lat: existing.currentLat ?? null,
-        lng: existing.currentLng ?? null,
-        timezone: existing.currentTimezone ?? null,
-      } as ResolvedPlace);
+        lat: existing.currentLat ?? 0,
+        lon: existing.currentLng ?? 0,  // FIX: use 'lon' not 'lng'
+        timezone: existing.currentTimezone ?? "",
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

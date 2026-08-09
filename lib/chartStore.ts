@@ -5,6 +5,7 @@
 import type { ChartCalculateResponse } from "@/app/api/chart-calculate/route";
 
 export interface StoredChart {
+  currentTimezone: string;
   birthDate: string;
   birthTime: string;
   birthPlace: string;
