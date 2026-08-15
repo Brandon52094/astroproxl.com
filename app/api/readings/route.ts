@@ -754,16 +754,16 @@ export async function POST(request: NextRequest) {
       console.warn(`[readings] supplied dates failed to parse (format bug?): ${dateIndex.unparseableSupplied.join(" ; ")}`);
     }
 
-    async function generate(
-      promptText: string,
-    ): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
+  async function generate(
+  promptText: string,
+): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey as string, // ← Type assertion
+      "anthropic-version": "2023-06-01",
+    },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 3000,
