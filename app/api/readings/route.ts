@@ -184,7 +184,8 @@ function allowedDatesInstruction(index: ReturnType<typeof buildValidDateIndex>):
   return (
     NL + NL +
     "DATE CORRECTION: Your previous draft named a date the chart data does not support. " +
-    "The ONLY dates you may place inside [[DATE: ...]] markers are:" + NL +
+    "The ONLY dates you may place inside [[DATE: ...]] markers are the calculated trigger dates below — these are " +
+    "the precise moments the ephemeris aspects perfect, which is exactly why they are the only valid anchors:" + NL +
     allowed.map((d) => `- ${d}`).join(NL) + NL +
     "Rewrite the reading. Every [[DATE: ...]] marker must be one of the dates above (a range may bracket one). " +
     "Use no other date. If a window has no supported date, drop that window rather than inventing one."
@@ -433,6 +434,78 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
   const transitList = transits.map(fmtTransit).join(NL);
   const siderealList = sidereal.planets.map(fmtPlanet).join(NL);
 
+  // ── TOPIC SIGNIFICATORS — the domain lens ──
+  // The chart speaks about each life area through specific houses, planets, and
+  // points. Without this, every topic selects the same loudest-overall aspect
+  // and produces near-identical readings with the topic word swapped. This makes
+  // the SPINE selection weight by DOMAIN RELEVANCE, not orb alone, so a money
+  // reading and a love reading interrogate different parts of the same chart.
+  // NOTE: the house/planet mappings below are a mainstream first pass — edit them
+  // to match your own astrological point of view.
+  const topicSignificatorBlock = (() => {
+    if (topic === "general") {
+      return NL + [
+        "═══════════════════════════════════════════",
+        "TOPIC FOCUS — GENERAL / WHAT'S COMING",
+        "═══════════════════════════════════════════",
+        "No domain filter applies. The whole chart is in scope. Select the SPINE purely by potency:",
+        "the tightest, loudest calculated aspect wins, whatever house or planet it touches.",
+        "",
+      ].join(NL);
+    }
+
+    const map: Record<"love" | "money" | "career", {
+      label: string; houses: string; planets: string; points: string; guard: string;
+    }> = {
+      love: {
+        label: "LOVE & RELATIONSHIPS",
+        houses: "5th (romance, dating, attraction), 7th (committed partnership, marriage), 8th (intimacy, deep bonding)",
+        planets: "Venus (attraction and relationship), the Moon (emotional needs and closeness), Mars (desire and pursuit)",
+        points: "the Descendant (the partner themselves)",
+        guard: "A 2nd/10th-house money or career signature is NOT a love event. Do not read ambition or income as romance.",
+      },
+      money: {
+        label: "MONEY & FINANCES",
+        houses: "2nd (earned income, possessions, self-worth as resource), 8th (shared money, debt, other people's resources, inheritance), 11th (gains, windfalls, payouts)",
+        planets: "Jupiter (expansion and abundance), Venus in its MATERIAL mode (resources and value — not romance), Saturn (financial discipline or restriction)",
+        points: "the Lot of Fortune (material wellbeing — if present in the extended points above)",
+        guard: "A 5th/7th-house romance signature is NOT a money event. Do not read a relationship transit as income.",
+      },
+      career: {
+        label: "CAREER & PROFESSIONAL LIFE",
+        houses: "10th (vocation, public standing, reputation), 6th (daily work, employment, service), 2nd (income earned through work)",
+        planets: "Saturn (mastery, ambition, structure), the Sun (purpose and visibility), Mars (drive and initiative)",
+        points: "the Midheaven (the career pinnacle and public role)",
+        guard: "A 5th/7th-house romance signature is NOT a career event. Do not read a relationship transit as a work move.",
+      },
+    };
+
+    const t = map[topic];
+    return NL + [
+      "═══════════════════════════════════════════",
+      "TOPIC FOCUS — " + t.label,
+      "═══════════════════════════════════════════",
+      "This reading is about " + t.label + ". The chart speaks about this domain through SPECIFIC channels.",
+      "When selecting the SPINE and its amplifiers, weight aspects by DOMAIN RELEVANCE, not orb alone:",
+      "",
+      "IN-DOMAIN HOUSES: " + t.houses,
+      "IN-DOMAIN PLANETS: " + t.planets,
+      "IN-DOMAIN POINTS: " + t.points,
+      "",
+      "POTENCY = TIGHTNESS × DOMAIN RELEVANCE. An aspect touching an in-domain house or planet outranks a",
+      "slightly tighter aspect that has nothing to do with this domain. A 3° aspect to an in-domain point beats",
+      "a 1° aspect in an unrelated house — for THIS reading.",
+      "",
+      "IF THE LOUDEST OVERALL ASPECT IS OUT OF DOMAIN: you have two honest choices. Either (a) lead with the",
+      "strongest IN-DOMAIN aspect instead, or (b) connect the loud out-of-domain transit to this domain through",
+      "its house — e.g. a 7th-house transit in a MONEY reading becomes 'a financial matter that runs through a",
+      "partnership or contract.' Never ignore the domain to chase the loudest noise.",
+      "",
+      t.guard,
+      "",
+    ].join(NL);
+  })();
+
   const lines = [
     "You are writing a reading for a real person who is paying for clarity about something that matters to them.",
     "They may know nothing about astrology. Write so they understand every sentence.",
@@ -479,6 +552,9 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "═══════════════════════════════════════════",
     "TODAY: " + currentDateString,
     voiceCalibrationBlock,
+    "",
+    // ── MOVED TOPIC FOCUS TO HERE (Fix #2) ──
+    topicSignificatorBlock,
     "",
     transitAspectBlock,
     "",
@@ -530,8 +606,14 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "pointed at the same sky. Your job is to find where they AGREE and build the reading on that agreement.",
     "",
     "Work through this silently before writing:",
-    "1. SPINE. Take the single tightest EXACT or LIVE transit-to-natal aspect. This is the backbone. Note its",
-    "   planet, the natal point it hits, and the house it touches.",
+    "1. SPINE. Select the backbone aspect by scoring every transit-to-natal aspect on three axes, then take the highest:",
+    "   BAND — EXACT (under 1°) is loudest; LIVE (under 3°) is strong; BACKGROUND (3°+) is context only and can never",
+    "   be the spine on its own. PLANET — a slow outer planet (Saturn, Uranus, Neptune, Pluto) on an angle (Ascendant",
+    "   or Midheaven) is the single loudest thing a chart can say and overrides a pile of minor transits, even slightly",
+    "   tighter ones; an outer planet on a personal planet outranks a fast inner-planet aspect. DOMAIN — the aspect must",
+    "   be IN DOMAIN for this topic (see TOPIC FOCUS above). Potency is band × planet × domain, never orb alone. For a",
+    "   general reading, drop the domain axis and take the loudest overall. Note the spine's planet, the natal point it",
+    "   hits, and the house it touches.",
     "2. ROOT. Find the tightest MAJOR-body natal aspect the spine lands on — the fixed wiring being activated.",
     "   This is why it lands on THEM, not on anyone having a hard week.",
     "3. AMPLIFIERS. Check every other layer against the spine. Ask each ONE question: does it point at the same",
@@ -542,10 +624,20 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "   - A station falls on the same natal point or house? → the timing is forced and unavoidable; it outranks ordinary transits.",
     "   - Sidereal agrees? → say it with more force. Disagrees? → soften that specific claim.",
     "   - Moon phase, lots, anaretic, or out-of-bounds reinforce it? → let them sharpen the consequence, not add a topic.",
+    // Fix #5: Progressed Moon Override
+    "   - PROGRESSED MOON OVERRIDE: If the Progressed Moon has changed signs within the last 3 months, or will change",
+    "     signs within the next 3 months, this is a PRIMARY AMPLIFIER. It outranks all personal-planet transits",
+    "     (Mercury/Venus/Mars) and should be mentioned in Part 1 as the 'emotional chapter you are entering.' If the",
+    "     Progressed Moon's new sign matches the Spine's house or planet, escalate the prediction to 'Critical Mass.'",
     "4. WEIGHT. A claim three converging layers support is stated as fact, with force. A claim only one layer",
     "   supports is stated lightly or dropped. Where two layers CONTRADICT, say the picture is mixed — do not force certainty.",
     "5. DISCARD. Anything that does not connect to the spine is dropped. You were given the whole chart to FIND",
     "   the convergence, not to list it. An unused layer is not a failure; a reading that name-drops every layer is.",
+    // Fix #3: Background Relief Exception
+    "6. BACKGROUND RELIEF EXCEPTION: If the discarded 70% contains a benefic aspect (Jupiter/Venus trine or sextile) " +
+    "to a personal planet (Sun, Moon, Venus, Mars), you may mention it in exactly ONE sentence at the end of Part 1. " +
+    "Frame it as 'what carries you through' the Spine. It cannot change the Spine's forecast, and it must be the ONLY " +
+    "non-convergent aspect you name. If no such benefic exists, skip this entirely.",
     "",
     "The finished reading is ONE throughline, not a stack of observations: the spine is what is happening, the",
     "root is why it lands on them, the amplifiers are why NOW and how hard, the directive is what to do. Each part",
@@ -559,7 +651,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "No section headers in output — only date labels and DROP/EXECUTE/LOCK appear in caps. Everything flows as prose.",
     "",
     "PART 1 — WHERE YOU ARE RIGHT NOW (exactly 1 compact paragraph)",
-    "Open with the tightest EXACT or LIVE aspect from the calculated list. Name the planets and translate the",
+    "Open with the SPINE aspect you selected in the synthesis pass (potency, not raw tightness). Name the planets and translate the",
     "house into what it governs. State what it is doing to their life in concrete behavioral terms — what they",
     "will actually face this week. End on one acute tension sentence that leaves the core conflict open.",
     "",
@@ -573,18 +665,24 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "Stay blunt — bluntness is what keeps this from being generic — but stay SHORT. The behavioral correction",
     "belongs in DROP, where it is actionable, not here where it is just commentary.",
     "",
-    // ── PART A RELAXATION: windows are now data-governed, zero is allowed ──
-    "PART 3 — DATED WINDOWS (0, 1, or 2 — governed entirely by what the data supports)",
-    "Only from calculated aspects, stations, or the next exact aspect. Never invented.",
-    "Format: [[DATE: ...]] — then plain language: which planet, what it touches, what it governs.",
-    "1 sentence: what this activates. 1 sentence: the specific consequence. Fact, not possibility.",
+    // ── PART A RELAXATION + TEMPORAL SLICING: 0 windows allowed; near vs long arc ──
+    "PART 3 — DATED WINDOWS (0 to 2 total — governed entirely by what the data supports)",
+    "Windows come ONLY from calculated aspects, stations, or the next exact aspect. Never invented.",
+    "Split them across two timescales and give whichever the data supports — one, both, or neither:",
+    "",
+    "IMMEDIATE (0-4 weeks): the near-term event. Attach a [[DATE: ...]] ONLY from a dated source — a station or",
+    "the next exact aspect. If neither supplies a near-term date, give no immediate window rather than inventing one.",
+    "STRUCTURAL (3-12 months): the longer arc a slow outer-planet transit, a solar arc within 1°, or a progressed",
+    "shift is building toward. Describe its DIRECTION and theme. Attach a [[DATE: ...]] ONLY if a station or the next",
+    "exact aspect actually supplies a real date that far out — otherwise give NO date marker and speak of it as a",
+    "season, not a day. Never invent a structural date to fill the slot.",
+    "",
+    "For any dated window: 1 sentence on what it activates, 1 sentence on the specific consequence. Fact, not possibility.",
     "If a window involves the Time Lord, say so — it outranks the others.",
     "",
     "DO NOT spend a window on a period where nothing happens. A window that says 'wait, nothing moves yet'",
     "is not a window — it is filler. Every window must contain an EVENT they can act on or prepare for.",
-    "If the calculated data supplies no real date for a window, give fewer windows — even zero. A window with",
-    "no calculated date behind it is a fabrication. Never invent one to fill the count. Two strong windows beat",
-    "three padded ones; zero real windows beats one invented one.",
+    "A window with no calculated date behind it is a fabrication. Zero real windows beats one invented one.",
     "",
     // ── PART A RELAXATION: EXECUTE and LOCK are now conditional on a real date ──
     "PART 4 — THE DIRECTIVE (1 to 3 — hard 3-sentence ceiling each)",
@@ -627,7 +725,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "- 'You' in every sentence. No passive voice.",
     "- Outcomes as facts. No hedging words.",
     "- No degrees, no orbs, no jargon in the prose. All of it goes in sources.",
-    "- 30-45 day window only.",
+    "- Immediate windows fall within ~45 days; a structural window may point 3-12 months out. Nothing beyond 12 months.",
     "- Strip all textbook phrasing and cosmic setup fluff.",
     "- Every date in the content wrapped as [[DATE: June 28]] or [[DATE: June 28-July 3]] so the UI can highlight it.",
     "- The reading feels complete but leaves them wanting the live conversation.",
@@ -639,9 +737,12 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "you write the exact degrees, orbs, houses, and system names. Be precise and terse. No prose.",
     "One entry per distinct section of the reading (Part 1, Part 2, each dated window, DROP, EXECUTE, LOCK IN).",
     "- 'section': short label ('Part 1', 'Part 2', 'July 6-7 window', 'DROP', 'EXECUTE', 'LOCK IN')",
+    // Fix #4: Updated sources with domain justification
     "- 'placements': the exact astrological data justifying that section — every planet, sign, degree, house,",
-    "  and orb you actually used, comma separated. Copy the numbers EXACTLY from the calculated aspect list.",
-    "  Do not pad. Do not omit anything you used.",
+    "  and orb you actually used, comma separated. ALSO include the domain justification: e.g., 'selected because",
+    "  this aspect falls in the 5th house (love domain), despite a tighter 1° aspect in the 10th house being discarded.'",
+    "  This proves the topic filter was applied correctly.",
+    "  Copy the numbers EXACTLY from the calculated aspect list. Do not pad. Do not omit anything you used.",
     "",
     "Return ONLY a valid JSON object — no markdown, no code fences, no explanation:",
     "{",
@@ -651,7 +752,7 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "      \"title\": \"WHY YOU FEEL [X] RIGHT NOW — AND IT'S REAL\",",
     "      \"content\": \"The reading as one unbroken piece, in plain human language. Part 1 into Part 2 into dated windows into directives into the warm direct answer. No headers except date labels and DROP/EXECUTE/LOCK. No degrees. No orbs. Dates wrapped in [[DATE: ...]].\",",
     "      \"sources\": [",
-    "        { \"section\": \"Part 1\", \"placements\": \"Transit Mercury 24°35' Cancer trine natal North Node 23°47' Scorpio, House 9, 0.8° orb, applying\" }",
+    "        { \"section\": \"Part 1\", \"placements\": \"Transit Mercury 24°35' Cancer trine natal North Node 23°47' Scorpio, House 9, 0.8° orb, applying — selected because House 9 governs courts/contracts, which matches the user's question about a legal matter\" }",
     "      ]",
     "    }",
     "  ]",
@@ -774,20 +875,15 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 3000,
+          // Fix #1: Updated system prompt with hierarchical mandate
           system:
-            "You are a precision astrologer writing for a real person who is paying for clarity about something " +
-            "that matters to them. They may know nothing about astrology — write so they understand every sentence. " +
-            "You are their personal astrologer: you know their chart completely and speak to them directly, without " +
-            "softening, without hedging, without generic language. " +
-            "The transit aspects are calculated and given to you — never compute or invent one. " +
-            "CRITICAL: the prose contains NO degrees, NO orbs, and NO astrological jargon. All technical proof goes " +
-            "in the 'sources' array, which the reader can expand. The reading loses no precision — precision lives in " +
-            "the sharpness of the consequence, not in decimal places. " +
-            "You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a " +
-            "single parseable JSON object containing one page with a content field and a sources field. " +
-            "You speak to the person as 'you' in every sentence. You state outcomes as facts. " +
-            "Keep it tight and mobile-optimized — no padding, no fluff. " +
-            "Every specific date in the content must be wrapped in [[DATE: ...]] brackets.",
+            "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
+            "IMMUTABLE LAWS (these override everything): " +
+            "1. The SPINE is the most POTENT transit aspect — scored by band (EXACT/LIVE) times planetary weight (an outer planet on an angle outranks a tighter inner-planet aspect) times domain relevance to the topic. It is NOT simply the tightest orb. Discard all others unless they converge on the same natal planet or house. " +
+            "2. TEMPORAL SLICING is mandatory: split the future into 'Immediate (0-4 weeks)' and 'Structural (3-12 months)'. Never collapse them. " +
+            "3. If a Transit and a Progression hit the same Natal planet, label it 'Critical Mass' – this is your headline. " +
+            "4. The prose contains NO degrees, NO orbs, NO jargon. All technical proof goes in the 'sources' array. " +
+            "5. You output ONLY raw valid JSON. No markdown, no code fences. Your entire response is one parseable JSON object.",
           messages: [{ role: "user", content: promptText }],
         }),
       });
