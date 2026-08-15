@@ -298,8 +298,9 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 
   // Use the validated aspects
   const transitAspectBlock = fmtTransitAspects(validatedAspects);
+  // CRITICAL FIX: Use .toUpperCase() for case-insensitive comparison
   const hasActiveAspects = validatedAspects.some(
-    (a) => a.band === "exact" || a.band === "live"
+    (a) => a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
   );
 
   // EDIT 3c: Upcoming trigger merge rule — note: we still include it, but the instruction clarifies it's the same.
@@ -682,27 +683,29 @@ export async function POST(request: NextRequest) {
 
     const isSubscribed = metadata?.isSubscribed === true;
     const credits = Number(metadata?.credits ?? 0);
-    const firstReadingUsed = metadata?.firstReadingUsed === true;
+    const hasEnoughCredits = credits >= CREDITS_PER_READING;
+    const isPaidReading = isSubscribed || hasEnoughCredits;
 
+    // CRITICAL FIX: Simplified free reading tracking using a single timestamp
+    const lastFreeReading = metadata?.freeReadingUsedAt
+      ? new Date(metadata.freeReadingUsedAt as string)
+      : null;
+    const freeReadingAvailable = !lastFreeReading ||
+      Date.now() >= lastFreeReading.getTime() + FREE_READING_RESET_MS;
+
+    // CRITICAL FIX: Cooldown now only applies to free readings, never blocks paying users
     const cooldownStartedAt = metadata?.cooldownStartedAt
       ? new Date(metadata.cooldownStartedAt as string)
       : null;
-    const onCooldown = !isSubscribed && !!cooldownStartedAt &&
+    const onCooldown = !isPaidReading && !!cooldownStartedAt &&
       Date.now() < cooldownStartedAt.getTime() + COOLDOWN_MS;
 
     if (onCooldown) {
       return NextResponse.json({ error: "You're on cooldown. Please wait before starting a new reading." }, { status: 403 });
     }
 
-    const freeReadingUsedAt = metadata?.freeReadingUsedAt
-      ? new Date(metadata.freeReadingUsedAt as string)
-      : null;
-    let freeReadingAvailable = !firstReadingUsed;
-    if (freeReadingUsedAt && !isSubscribed) {
-      freeReadingAvailable = Date.now() >= freeReadingUsedAt.getTime() + FREE_READING_RESET_MS;
-    }
-
-    const eligible = isSubscribed || freeReadingAvailable || credits >= CREDITS_PER_READING;
+    // ── Access check ──
+    const eligible = isPaidReading || freeReadingAvailable;
     if (!eligible) {
       return NextResponse.json({ error: "You don't have enough credits for a reading. Please purchase more or subscribe." }, { status: 403 });
     }
@@ -732,7 +735,7 @@ export async function POST(request: NextRequest) {
       promptText: string,
     ): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
       if (!apiKey) {
-        return { ok: false, status: 500, error: "API key is not configured" };
+        return { ok: false; status: 500, error: "API key is not configured" };
       }
 
       const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -743,19 +746,10 @@ export async function POST(request: NextRequest) {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          // FIX 1: Use a specific, reliable model
           model: "claude-3-5-sonnet-20241022",
-
-          // FIX 2: RAISE THIS to prevent truncation
           max_tokens: 6000,
-
-          // FIX 3: Add temperature for factual anchoring
           temperature: 0.3,
-
-          // FIX 4: Add top_p for focus
           top_p: 0.95,
-
-          // FIX 5: Overhauled system prompt
           system:
             "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
 
@@ -807,12 +801,12 @@ export async function POST(request: NextRequest) {
       if (!response.ok) {
         const err = await response.text();
         console.error("[readings] Claude error:", err);
-        return { ok: false, status: 502, error: "Failed to generate reading. Please try again." };
+        return { ok: false; status: 502, error: "Failed to generate reading. Please try again." };
       }
 
       const claudeData = await response.json();
       const rawText = claudeData.content?.[0]?.text;
-      if (!rawText) return { ok: false, status: 502, error: "No response from reading engine." };
+      if (!rawText) return { ok: false; status: 502, error: "No response from reading engine." };
 
       try {
         let cleaned = rawText.trim();
@@ -825,14 +819,14 @@ export async function POST(request: NextRequest) {
 
         const p = JSON.parse(cleaned) as { pages: ReadingPage[] };
         if (!p.pages || p.pages.length < 1) {
-          return { ok: false, status: 422, error: "Reading structure was incomplete. Please try again." };
+          return { ok: false; status: 422, error: "Reading structure was incomplete. Please try again." };
         }
-        return { ok: true, pages: p.pages };
+        return { ok: true; pages: p.pages };
       } catch (parseErr) {
         console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
         console.error("[readings] Raw response start:", rawText.slice(0, 300));
         console.error("[readings] Raw response end:", rawText.slice(-200));
-        return { ok: false, status: 422, error: "Failed to parse reading. Please try again." };
+        return { ok: false; status: 422, error: "Failed to parse reading. Please try again." };
       }
     }
 
