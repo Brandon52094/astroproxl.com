@@ -3,6 +3,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
+import { buildValidDateIndex, checkDateSupported } from "@/lib/validateReadingDates";
 
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks — must match credits/route.ts
 const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000; // 1 week — must match credits/route.ts
