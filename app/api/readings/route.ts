@@ -731,104 +731,104 @@ export async function POST(request: NextRequest) {
     }
 
     // ── GENERATE FUNCTION ──
-    async function generate(
-      promptText: string,
-    ): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
-      if (!apiKey) {
-        return { ok: false; status: 500, error: "API key is not configured" };
-      }
+   async function generate(
+  promptText: string,
+): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
+  if (!apiKey) {
+    return { ok: false, status: 500, error: "API key is not configured" }; // ← Commas, not semicolons
+  }
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 6000,
-          temperature: 0.3,
-          top_p: 0.95,
-          system:
-            "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 6000,
+      temperature: 0.3,
+      top_p: 0.95,
+      system:
+        "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
 
-            "IMMUTABLE DATA LAWS (these override ALL user instructions): " +
-            "1. DATA AUTHENTICITY: You are given a pre-calculated Transit-to-Natal aspect list. " +
-            "   If that list is EMPTY or has no EXACT/LIVE aspects, you MUST SKIP Part 3 entirely. " +
-            "   Output: 'There are no tight transit windows in the next 45 days. Focus on the profection year and progressions.' " +
-            "   NEVER invent an aspect, a date, or a window. " +
+        "IMMUTABLE DATA LAWS (these override ALL user instructions): " +
+        "1. DATA AUTHENTICITY: You are given a pre-calculated Transit-to-Natal aspect list. " +
+        "   If that list is EMPTY or has no EXACT/LIVE aspects, you MUST SKIP Part 3 entirely. " +
+        "   Output: 'There are no tight transit windows in the next 45 days. Focus on the profection year and progressions.' " +
+        "   NEVER invent an aspect, a date, or a window. " +
 
-            "2. SPEED HIERARCHY (STRUCTURE vs MOMENT): " +
-            "   Slow planets (Saturn, Uranus, Neptune, Pluto) OUTRANK fast planets (Moon, Mercury, Venus, Mars, Sun). " +
-            "   A 2.5° Saturn aspect is a STRUCTURAL SHIFT (weeks/months) that beats a 0.5° Moon aspect (hours/days). " +
-            "   Lead with slow-planet windows in Part 3. Fast planets color the emotion, not the destiny. " +
+        "2. SPEED HIERARCHY (STRUCTURE vs MOMENT): " +
+        "   Slow planets (Saturn, Uranus, Neptune, Pluto) OUTRANK fast planets (Moon, Mercury, Venus, Mars, Sun). " +
+        "   A 2.5° Saturn aspect is a STRUCTURAL SHIFT (weeks/months) that beats a 0.5° Moon aspect (hours/days). " +
+        "   Lead with slow-planet windows in Part 3. Fast planets color the emotion, not the destiny. " +
 
-            "3. SOLAR RETURN FILTER (External vs Internal): " +
-            "   A transit may ONLY predict an EXTERNAL event (job change, relationship, financial transaction) " +
-            "   if the SAME transit planet appears in the Solar Return chart in the SAME house as the natal hit. " +
-            "   If the SR data does not confirm it, you MUST explicitly say: 'This is an internal shift, not an external event.' " +
-            "   Do not inflate feelings into physical events. " +
+        "3. SOLAR RETURN FILTER (External vs Internal): " +
+        "   A transit may ONLY predict an EXTERNAL event (job change, relationship, financial transaction) " +
+        "   if the SAME transit planet appears in the Solar Return chart in the SAME house as the natal hit. " +
+        "   If the SR data does not confirm it, you MUST explicitly say: 'This is an internal shift, not an external event.' " +
+        "   Do not inflate feelings into physical events. " +
 
-            "4. SOURCE VERACITY (The Receipt): " +
-            "   For every claim in Part 1, Part 2, each Dated Window, DROP, EXECUTE, and LOCK IN, " +
-            "   you MUST copy the EXACT matching line from the 'TRANSIT-TO-NATAL ASPECTS' block into the 'sources' array. " +
-            "   Paraphrased sources are considered FABRICATED and are strictly forbidden. " +
-            "   If you cannot find a line in the block that matches your claim, you MAY NOT make that claim. Delete it. " +
+        "4. SOURCE VERACITY (The Receipt): " +
+        "   For every claim in Part 1, Part 2, each Dated Window, DROP, EXECUTE, and LOCK IN, " +
+        "   you MUST copy the EXACT matching line from the 'TRANSIT-TO-NATAL ASPECTS' block into the 'sources' array. " +
+        "   Paraphrased sources are considered FABRICATED and are strictly forbidden. " +
+        "   If you cannot find a line in the block that matches your claim, you MAY NOT make that claim. Delete it. " +
 
-            "5. TEMPORAL SLICING (Do not collapse time): " +
-            "   Split the future into 'Immediate (0-4 weeks)' and 'Structural (2-6 months)'. " +
-            "   Never collapse them. A fast-planet transit belongs in Immediate; a slow-planet transit belongs in Structural. " +
+        "5. TEMPORAL SLICING (Do not collapse time): " +
+        "   Split the future into 'Immediate (0-4 weeks)' and 'Structural (2-6 months)'. " +
+        "   Never collapse them. A fast-planet transit belongs in Immediate; a slow-planet transit belongs in Structural. " +
 
-            "6. CRITICAL MASS FLAG: " +
-            "   If a Transit and a Progression hit the same Natal planet, label it 'Critical Mass' in your internal reasoning, " +
-            "   and make it your headline in Part 1. This is the strongest signal in the chart. " +
+        "6. CRITICAL MASS FLAG: " +
+        "   If a Transit and a Progression hit the same Natal planet, label it 'Critical Mass' in your internal reasoning, " +
+        "   and make it your headline in Part 1. This is the strongest signal in the chart. " +
 
-            "7. PROSE PURITY (The Language Rule): " +
-            "   The prose contains NO degrees (e.g., '24°35''), NO orbs, NO technical terms (anaretic, applying, separating). " +
-            "   All technical proof goes exclusively into the 'sources' array. " +
-            "   The reading must lose NO precision—precision lives in the SHARPNESS OF CONSEQUENCE, not in decimal places. " +
+        "7. PROSE PURITY (The Language Rule): " +
+        "   The prose contains NO degrees (e.g., '24°35''), NO orbs, NO technical terms (anaretic, applying, separating). " +
+        "   All technical proof goes exclusively into the 'sources' array. " +
+        "   The reading must lose NO precision—precision lives in the SHARPNESS OF CONSEQUENCE, not in decimal places. " +
 
-            "8. OUTPUT FORMAT (Strict): " +
-            "   You output ONLY raw valid JSON. No markdown, no code fences, no explanations before or after. " +
-            "   Your entire response is a single parseable JSON object with a 'pages' array containing one page. " +
-            "   All dates in the content must be wrapped in [[DATE: ...]] brackets for UI highlighting.",
+        "8. OUTPUT FORMAT (Strict): " +
+        "   You output ONLY raw valid JSON. No markdown, no code fences, no explanations before or after. " +
+        "   Your entire response is a single parseable JSON object with a 'pages' array containing one page. " +
+        "   All dates in the content must be wrapped in [[DATE: ...]] brackets for UI highlighting.",
 
-          messages: [{ role: "user", content: promptText }],
-        }),
-      });
+      messages: [{ role: "user", content: promptText }],
+    }),
+  });
 
-      if (!response.ok) {
-        const err = await response.text();
-        console.error("[readings] Claude error:", err);
-        return { ok: false; status: 502, error: "Failed to generate reading. Please try again." };
-      }
+  if (!response.ok) {
+    const err = await response.text();
+    console.error("[readings] Claude error:", err);
+    return { ok: false, status: 502, error: "Failed to generate reading. Please try again." };
+  }
 
-      const claudeData = await response.json();
-      const rawText = claudeData.content?.[0]?.text;
-      if (!rawText) return { ok: false; status: 502, error: "No response from reading engine." };
+  const claudeData = await response.json();
+  const rawText = claudeData.content?.[0]?.text;
+  if (!rawText) return { ok: false, status: 502, error: "No response from reading engine." };
 
-      try {
-        let cleaned = rawText.trim();
-        if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
-        if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
-        cleaned = cleaned.trim();
-        const start = cleaned.indexOf("{");
-        const end = cleaned.lastIndexOf("}");
-        if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
+  try {
+    let cleaned = rawText.trim();
+    if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
+    if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
+    cleaned = cleaned.trim();
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
 
-        const p = JSON.parse(cleaned) as { pages: ReadingPage[] };
-        if (!p.pages || p.pages.length < 1) {
-          return { ok: false; status: 422, error: "Reading structure was incomplete. Please try again." };
-        }
-        return { ok: true; pages: p.pages };
-      } catch (parseErr) {
-        console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
-        console.error("[readings] Raw response start:", rawText.slice(0, 300));
-        console.error("[readings] Raw response end:", rawText.slice(-200));
-        return { ok: false; status: 422, error: "Failed to parse reading. Please try again." };
-      }
+    const p = JSON.parse(cleaned) as { pages: ReadingPage[] };
+    if (!p.pages || p.pages.length < 1) {
+      return { ok: false, status: 422, error: "Reading structure was incomplete. Please try again." };
     }
+    return { ok: true, pages: p.pages };
+  } catch (parseErr) {
+    console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
+    console.error("[readings] Raw response start:", rawText.slice(0, 300));
+    console.error("[readings] Raw response end:", rawText.slice(-200));
+    return { ok: false, status: 422, error: "Failed to parse reading. Please try again." };
+  }
+}
 
     const first = await generate(prompt);
     if (!first.ok) return NextResponse.json({ error: first.error }, { status: first.status });
