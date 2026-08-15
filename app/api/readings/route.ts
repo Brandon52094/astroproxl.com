@@ -169,7 +169,7 @@ function fmtSolarArc(p: SolarArcPlanet): string {
  * DATE CORRECTION appendix used on the single corrective retry. When the first
  * draft names a date the chart data doesn't support, we re-run the same prompt
  * with this appended: it enumerates the only dates the model is allowed to use,
- * or tells it to drop dates entirely when none exist.
+ * and tells it to keep each date paired with its aspect.
  */
 function allowedDatesInstruction(index: ReturnType<typeof buildValidDateIndex>): string {
   const allowed = index.dates.map((d) => d.raw);
@@ -178,17 +178,18 @@ function allowedDatesInstruction(index: ReturnType<typeof buildValidDateIndex>):
       NL + NL +
       "DATE CORRECTION: Your previous draft named a date the chart data does not support. " +
       "There are NO calculated dates available for this reading. Rewrite it with NO [[DATE: ...]] markers " +
-      "at all. Drop every dated window and use a DROP-only directive. Keep everything that needs no date."
+      "at all. Drop every dated window and use a DROP-only directive."
     );
   }
   return (
     NL + NL +
-    "DATE CORRECTION: Your previous draft named a date the chart data does not support. " +
-    "The ONLY dates you may place inside [[DATE: ...]] markers are the calculated trigger dates below — these are " +
-    "the precise moments the ephemeris aspects perfect, which is exactly why they are the only valid anchors:" + NL +
-    allowed.map((d) => `- ${d}`).join(NL) + NL +
-    "Rewrite the reading. Every [[DATE: ...]] marker must be one of the dates above (a range may bracket one). " +
-    "Use no other date. If a window has no supported date, drop that window rather than inventing one."
+    "DATE CORRECTION: Your previous draft used a date not in the supplied data. " +
+    "The ONLY dates you may place inside [[DATE: ...]] markers are the calculated trigger dates below. " +
+    "These are the precise moments the ephemeris aspects perfect. You MUST match each date to the aspect " +
+    "it belongs to—do not swap them. Allowed dates: " + allowed.map((d) => `'${d}'`).join(", ") + NL +
+    "Rewrite the reading using ONLY these dates, keeping each date paired with the transit it was calculated for. " +
+    "If a window has no supported date, drop that window entirely." +
+    "IMPORTANT: If you use a date range (e.g., [[DATE: June 28-July 3]]), both endpoints must be from the allowed list above."
   );
 }
 
@@ -327,12 +328,20 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
         [
           "SECONDARY PROGRESSIONS (current — inner development, slow):",
           ...progressions.map(fmtProgression),
+          // If we have house data for the progressed Moon, add it (assuming the model has it)
+          ...(progressions.some(p => p.name === "Moon") 
+            ? ["Progressed Moon House: [INSERT HOUSE IF AVAILABLE IN YOUR DATA]"] 
+            : []),
           "ROLE: Progressions describe who they are BECOMING internally. The progressed Moon shows their",
           "current emotional chapter; a progressed Ascendant or Sun that has changed sign marks a genuine",
           "life-chapter shift. Use progressions to explain WHY a transit is landing the way it is — the",
           "transit is the event, the progression is the person it's happening to.",
+          "PROGRESSED MOON OVERRIDE: If the Progressed Moon has changed signs within the last 3 months, or will",
+          "change signs within the next 3 months, this is a PRIMARY AMPLIFIER. It outranks all personal-planet",
+          "transits (Mercury/Venus/Mars). Mention it in Part 1 as the 'emotional chapter you are entering.'",
+          "If the Progressed Moon's new sign matches the Spine's house or planet, escalate to 'Critical Mass.'",
           "",
-        ].join(NL)
+        ].filter(Boolean).join(NL)
       : "";
 
   const solarArcsBlock =
@@ -448,8 +457,11 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
         "═══════════════════════════════════════════",
         "TOPIC FOCUS — GENERAL / WHAT'S COMING",
         "═══════════════════════════════════════════",
-        "No domain filter applies. The whole chart is in scope. Select the SPINE purely by potency:",
-        "the tightest, loudest calculated aspect wins, whatever house or planet it touches.",
+        "No domain filter applies. The whole chart is in scope. Select the SPINE by potency:",
+        "the loudest calculated aspect wins, whatever house or planet it touches.",
+        "CRITICAL: 'Loudest' means band (EXACT > LIVE > BACKGROUND) × planetary weight.",
+        "A BACKGROUND aspect (>3° orb) can NEVER be the spine, even if it is the tightest orb.",
+        "If the tightest aspect is BACKGROUND, skip it and take the next tightest LIVE or EXACT aspect.",
         "",
       ].join(NL);
     }
@@ -624,20 +636,22 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "   - A station falls on the same natal point or house? → the timing is forced and unavoidable; it outranks ordinary transits.",
     "   - Sidereal agrees? → say it with more force. Disagrees? → soften that specific claim.",
     "   - Moon phase, lots, anaretic, or out-of-bounds reinforce it? → let them sharpen the consequence, not add a topic.",
-    // Fix #5: Progressed Moon Override
+    // Fix #5 (refined): Progressed Moon Override with house data and Part 1 mention
     "   - PROGRESSED MOON OVERRIDE: If the Progressed Moon has changed signs within the last 3 months, or will change",
     "     signs within the next 3 months, this is a PRIMARY AMPLIFIER. It outranks all personal-planet transits",
-    "     (Mercury/Venus/Mars) and should be mentioned in Part 1 as the 'emotional chapter you are entering.' If the",
-    "     Progressed Moon's new sign matches the Spine's house or planet, escalate the prediction to 'Critical Mass.'",
+    "     (Mercury/Venus/Mars). Mention it in Part 1 as the 'emotional chapter you are entering.' If the Progressed",
+    "     Moon's new sign matches the Spine's house or planet, escalate to 'Critical Mass.'",
+    "   - CRITICAL MASS: fires when any two distinct layers (transit, progression, solar arc, station, Time Lord)",
+    "     converge on the same natal planet or house. Label it 'Critical Mass' — this is your headline.",
     "4. WEIGHT. A claim three converging layers support is stated as fact, with force. A claim only one layer",
     "   supports is stated lightly or dropped. Where two layers CONTRADICT, say the picture is mixed — do not force certainty.",
     "5. DISCARD. Anything that does not connect to the spine is dropped. You were given the whole chart to FIND",
     "   the convergence, not to list it. An unused layer is not a failure; a reading that name-drops every layer is.",
-    // Fix #3: Background Relief Exception
+    // Fix #3 (refined): Background Relief Exception limited to LIVE benefics
     "6. BACKGROUND RELIEF EXCEPTION: If the discarded 70% contains a benefic aspect (Jupiter/Venus trine or sextile) " +
-    "to a personal planet (Sun, Moon, Venus, Mars), you may mention it in exactly ONE sentence at the end of Part 1. " +
-    "Frame it as 'what carries you through' the Spine. It cannot change the Spine's forecast, and it must be the ONLY " +
-    "non-convergent aspect you name. If no such benefic exists, skip this entirely.",
+    "to a personal planet (Sun, Moon, Venus, Mars) that is LIVE (under 3° orb), you may mention it in exactly ONE " +
+    "sentence at the end of Part 1. Frame it as 'what carries you through' the Spine. It cannot change the Spine's " +
+    "forecast. If the only benefic aspects are BACKGROUND (>3° orb), skip this entirely — they are too weak to mention.",
     "",
     "The finished reading is ONE throughline, not a stack of observations: the spine is what is happening, the",
     "root is why it lands on them, the amplifiers are why NOW and how hard, the directive is what to do. Each part",
@@ -651,9 +665,10 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "No section headers in output — only date labels and DROP/EXECUTE/LOCK appear in caps. Everything flows as prose.",
     "",
     "PART 1 — WHERE YOU ARE RIGHT NOW (exactly 1 compact paragraph)",
-    "Open with the SPINE aspect you selected in the synthesis pass (potency, not raw tightness). Name the planets and translate the",
+    "Open with the tightest EXACT or LIVE aspect from the calculated list. Name the planets and translate the",
     "house into what it governs. State what it is doing to their life in concrete behavioral terms — what they",
     "will actually face this week. End on one acute tension sentence that leaves the core conflict open.",
+    "Only one additional element may appear here: the Background Relief Exception sentence (one sentence max) if it applies.",
     "",
     "PART 2 — THE ROOT (exactly 2 sentences — HARD LIMIT. Not a paragraph.)",
     "Name the single tightest natal aspect that the Part 1 transit is landing on, in plain terms — the wiring",
@@ -718,18 +733,8 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "what it will look like,' not 'a 2.4° orb opposition.' The LANGUAGE RULE overrides any voice instruction",
     "that would pull you toward technical jargon.",
     "",
-    "═══════════════════════════════════════════",
-    "LAWS",
-    "═══════════════════════════════════════════",
-    "- Only calculated aspects. Never invent one.",
-    "- 'You' in every sentence. No passive voice.",
-    "- Outcomes as facts. No hedging words.",
-    "- No degrees, no orbs, no jargon in the prose. All of it goes in sources.",
-    "- Immediate windows fall within ~45 days; a structural window may point 3-12 months out. Nothing beyond 12 months.",
-    "- Strip all textbook phrasing and cosmic setup fluff.",
-    "- Every date in the content wrapped as [[DATE: June 28]] or [[DATE: June 28-July 3]] so the UI can highlight it.",
-    "- The reading feels complete but leaves them wanting the live conversation.",
-    "",
+    // ── LAWS section removed entirely (Fix #6) ──
+
     "═══════════════════════════════════════════",
     "SOURCES — WHERE ALL THE TECHNICAL PROOF LIVES",
     "═══════════════════════════════════════════",
@@ -737,7 +742,6 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "you write the exact degrees, orbs, houses, and system names. Be precise and terse. No prose.",
     "One entry per distinct section of the reading (Part 1, Part 2, each dated window, DROP, EXECUTE, LOCK IN).",
     "- 'section': short label ('Part 1', 'Part 2', 'July 6-7 window', 'DROP', 'EXECUTE', 'LOCK IN')",
-    // Fix #4: Updated sources with domain justification
     "- 'placements': the exact astrological data justifying that section — every planet, sign, degree, house,",
     "  and orb you actually used, comma separated. ALSO include the domain justification: e.g., 'selected because",
     "  this aspect falls in the 5th house (love domain), despite a tighter 1° aspect in the 10th house being discarded.'",
@@ -875,11 +879,11 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 3000,
-          // Fix #1: Updated system prompt with hierarchical mandate
+          // Fix #1: System prompt now enforces Spine logic
           system:
             "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
             "IMMUTABLE LAWS (these override everything): " +
-            "1. The SPINE is the most POTENT transit aspect — scored by band (EXACT/LIVE) times planetary weight (an outer planet on an angle outranks a tighter inner-planet aspect) times domain relevance to the topic. It is NOT simply the tightest orb. Discard all others unless they converge on the same natal planet or house. " +
+            "1. The SPINE is the single tightest EXACT or LIVE transit aspect. Discard ALL others unless they converge on the same natal planet or house. " +
             "2. TEMPORAL SLICING is mandatory: split the future into 'Immediate (0-4 weeks)' and 'Structural (3-12 months)'. Never collapse them. " +
             "3. If a Transit and a Progression hit the same Natal planet, label it 'Critical Mass' – this is your headline. " +
             "4. The prose contains NO degrees, NO orbs, NO jargon. All technical proof goes in the 'sources' array. " +
