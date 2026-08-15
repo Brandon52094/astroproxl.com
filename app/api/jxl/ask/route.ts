@@ -7,6 +7,7 @@ import {
   JXL_MAX_REPLIES_PER_CONVERSATION,
   JXL_CONVERSATION_CAP_MESSAGE,
 } from "@/lib/jxlConfig";
+import { buildValidDateIndex, checkDateSupported } from "@/lib/validateReadingDates";
 
 /**
  * JXL — "ask anything" route.
@@ -519,6 +520,37 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
       : "They may speak again after this. That changes NOTHING about how complete this answer is.",
     "",
     "═══════════════════════════════════════════",
+    "SYNTHESIS PASS — DO THIS BEFORE YOU WRITE A SINGLE WORD",
+    "═══════════════════════════════════════════",
+    "The layers above — the calculated transit aspects, the natal aspects, the profection and Time Lord,",
+    "progressions, solar arcs, stations, the solar return, the moon phase, the sidereal check, the extended",
+    "points — are NOT a menu to pick one from, and NOT a checklist to recite. They are independent instruments",
+    "pointed at the same sky. Your job is to find where they AGREE and build the answer on that agreement.",
+    "",
+    "Work through this silently before writing:",
+    "1. SPINE. Take the single tightest EXACT or LIVE transit-to-natal aspect that bears on what they asked.",
+    "   This is the backbone. Note its planet, the natal point it hits, and the house it touches.",
+    "2. ROOT. Find the tightest MAJOR-body natal aspect the spine lands on — the fixed wiring being activated.",
+    "   This is why it lands on THEM, not on anyone having a hard week.",
+    "3. AMPLIFIERS. Check every other layer against the spine. Ask each ONE question: does it point at the same",
+    "   planet, house, or theme?",
+    "   - Spine's planet is the Time Lord, or its house is the profected house? → this is the headline of the year.",
+    "   - A progression (esp. progressed Moon/Sun/Ascendant) names the same chapter? → this is WHY it lands this way.",
+    "   - The Solar Return reflects the theme? → it is a real external event. If not → it is internal; do not inflate it.",
+    "   - A station falls on the same natal point or house? → the timing is forced and unavoidable; it outranks ordinary transits.",
+    "   - Sidereal agrees? → say it with more force. Disagrees? → soften that specific claim.",
+    "   - Moon phase, lots, anaretic, or out-of-bounds reinforce it? → let them sharpen the consequence, not add a topic.",
+    "4. WEIGHT. A claim three converging layers support is stated as fact, with force. A claim only one layer",
+    "   supports is stated lightly or dropped. Where two layers CONTRADICT, say the picture is mixed — do not force certainty.",
+    "5. DISCARD. Anything that does not connect to the spine is dropped. You were given the whole chart to FIND",
+    "   the convergence, not to list it. An unused layer is not a failure; a reading that name-drops every layer is.",
+    "",
+    "The finished answer is ONE throughline, not a stack of observations: paragraph one is what is happening,",
+    "paragraph two is the root of why it lands on them, paragraph three is why NOW and how hard, and the windows",
+    "and directives are what to do about it. Each part hands to the next. If they cannot feel a single thread",
+    "running through all of it, you have listed instead of synthesized — return to the spine and build outward.",
+    "",
+    "═══════════════════════════════════════════",
     "STRUCTURE — WHAT YOU RETURN",
     "═══════════════════════════════════════════",
     "",
@@ -858,6 +890,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── DATE PROVENANCE GUARD ──────────────────────────────────────────────
+    // Every date the model emits must trace to a date the ephemeris actually
+    // supplied (the next exact aspect, or a station with a natal hit). A date
+    // that doesn't trace is dropped — a window loses its whole entry (a window
+    // is its date), a directive loses its date and downgrades to DROP below.
+    const dateIndex = buildValidDateIndex(body);
+    const dateViolations: string[] = [];
+
     // Placeholder dates the model sometimes emits instead of omitting a date.
     // Anything on this list is treated as "no date", so the UI never renders a
     // chip reading "TBD" or "null".
@@ -867,22 +907,35 @@ export async function POST(request: NextRequest) {
       return t === "" || ["null", "none", "n/a", "na", "tbd", "unknown"].includes(t);
     };
 
-    // Windows: max 2, must have a real date AND a body.
+    // Windows: max 2, must have a real date AND a body, AND that date must
+    // trace to supplied data.
     const windows = (Array.isArray(parsed.windows) ? parsed.windows : [])
       .filter((w) => !isPlaceholder(w?.date) && typeof w?.body === "string" && w.body.trim())
+      .filter((w) => {
+        const chk = checkDateSupported(w!.date as string, dateIndex);
+        if (!chk.supported) {
+          dateViolations.push(`window date "${String(w!.date)}" not traceable to supplied data`);
+          return false; // a window is its date — drop it entirely
+        }
+        return true;
+      })
       .slice(0, 2)
-      .map((w) => ({ date: (w.date as string).trim(), body: (w.body as string).trim() }));
+      .map((w) => ({ date: (w!.date as string).trim(), body: (w!.body as string).trim() }));
 
     // Directives: max 2. EXECUTE and LOCK require a real date — if the model
-    // returns one without, downgrade it to DROP rather than showing a dateless
-    // "execute by" with nothing to execute by.
+    // returns one without, or with a date that doesn't trace to supplied data,
+    // downgrade it to DROP rather than showing a dateless "execute by".
     const directives = (Array.isArray(parsed.directives) ? parsed.directives : [])
       .filter((d) => typeof d?.body === "string" && d.body.trim())
       .slice(0, 2)
       .map((d) => {
         const rawType = String(d?.type ?? "DROP").toUpperCase();
         const type = ["DROP", "EXECUTE", "LOCK"].includes(rawType) ? rawType : "DROP";
-        const date = isPlaceholder(d?.date) ? null : (d!.date as string).trim();
+        let date = isPlaceholder(d?.date) ? null : (d!.date as string).trim();
+        if (date && !checkDateSupported(date, dateIndex).supported) {
+          dateViolations.push(`directive date "${date}" not traceable to supplied data`);
+          date = null;
+        }
         const needsDate = type === "EXECUTE" || type === "LOCK";
         return {
           type: needsDate && !date ? "DROP" : type,
@@ -903,6 +956,13 @@ export async function POST(request: NextRequest) {
           s.placements.trim()
       )
       .map((s) => ({ factor: (s.factor as string).trim(), placements: (s.placements as string).trim() }));
+
+    if (dateViolations.length > 0) {
+      console.warn(`[jxl/ask] date provenance — dropped ${dateViolations.length}: ${dateViolations.join(" ; ")}`);
+    }
+    if (dateIndex.unparseableSupplied.length > 0) {
+      console.warn(`[jxl/ask] supplied dates failed to parse (format bug?): ${dateIndex.unparseableSupplied.join(" ; ")}`);
+    }
 
     // Charge only now — the reading succeeded. Every failure path above already
     // returned without touching metadata.

@@ -3,6 +3,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
+import { buildValidDateIndex, findUnsupportedMarkers } from "@/lib/validateReadingDates";
 
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks — must match credits/route.ts
 const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000; // 1 week — must match credits/route.ts
@@ -162,6 +163,32 @@ function fmtProgression(p: ProgressedPlanet): string {
 
 function fmtSolarArc(p: SolarArcPlanet): string {
   return p.name + ": " + p.sign + " " + p.degree;
+}
+
+/**
+ * DATE CORRECTION appendix used on the single corrective retry. When the first
+ * draft names a date the chart data doesn't support, we re-run the same prompt
+ * with this appended: it enumerates the only dates the model is allowed to use,
+ * or tells it to drop dates entirely when none exist.
+ */
+function allowedDatesInstruction(index: ReturnType<typeof buildValidDateIndex>): string {
+  const allowed = index.dates.map((d) => d.raw);
+  if (allowed.length === 0) {
+    return (
+      NL + NL +
+      "DATE CORRECTION: Your previous draft named a date the chart data does not support. " +
+      "There are NO calculated dates available for this reading. Rewrite it with NO [[DATE: ...]] markers " +
+      "at all. Drop every dated window and use a DROP-only directive. Keep everything that needs no date."
+    );
+  }
+  return (
+    NL + NL +
+    "DATE CORRECTION: Your previous draft named a date the chart data does not support. " +
+    "The ONLY dates you may place inside [[DATE: ...]] markers are:" + NL +
+    allowed.map((d) => `- ${d}`).join(NL) + NL +
+    "Rewrite the reading. Every [[DATE: ...]] marker must be one of the dates above (a range may bracket one). " +
+    "Use no other date. If a window has no supported date, drop that window rather than inventing one."
+  );
 }
 
 /**
@@ -495,6 +522,37 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "\"" + question + "\"",
     "",
     "═══════════════════════════════════════════",
+    "SYNTHESIS PASS — DO THIS BEFORE YOU WRITE A SINGLE WORD",
+    "═══════════════════════════════════════════",
+    "The layers above — the calculated transit aspects, the natal aspects, the profection and Time Lord,",
+    "progressions, solar arcs, stations, the solar return, the moon phase, the sidereal check, the extended",
+    "points — are NOT a menu to pick one from, and NOT a checklist to recite. They are independent instruments",
+    "pointed at the same sky. Your job is to find where they AGREE and build the reading on that agreement.",
+    "",
+    "Work through this silently before writing:",
+    "1. SPINE. Take the single tightest EXACT or LIVE transit-to-natal aspect. This is the backbone. Note its",
+    "   planet, the natal point it hits, and the house it touches.",
+    "2. ROOT. Find the tightest MAJOR-body natal aspect the spine lands on — the fixed wiring being activated.",
+    "   This is why it lands on THEM, not on anyone having a hard week.",
+    "3. AMPLIFIERS. Check every other layer against the spine. Ask each ONE question: does it point at the same",
+    "   planet, house, or theme?",
+    "   - Spine's planet is the Time Lord, or its house is the profected house? → this is the headline of the year.",
+    "   - A progression (esp. progressed Moon/Sun/Ascendant) names the same chapter? → this is WHY it lands this way.",
+    "   - The Solar Return reflects the theme? → it is a real external event. If not → it is internal; do not inflate it.",
+    "   - A station falls on the same natal point or house? → the timing is forced and unavoidable; it outranks ordinary transits.",
+    "   - Sidereal agrees? → say it with more force. Disagrees? → soften that specific claim.",
+    "   - Moon phase, lots, anaretic, or out-of-bounds reinforce it? → let them sharpen the consequence, not add a topic.",
+    "4. WEIGHT. A claim three converging layers support is stated as fact, with force. A claim only one layer",
+    "   supports is stated lightly or dropped. Where two layers CONTRADICT, say the picture is mixed — do not force certainty.",
+    "5. DISCARD. Anything that does not connect to the spine is dropped. You were given the whole chart to FIND",
+    "   the convergence, not to list it. An unused layer is not a failure; a reading that name-drops every layer is.",
+    "",
+    "The finished reading is ONE throughline, not a stack of observations: the spine is what is happening, the",
+    "root is why it lands on them, the amplifiers are why NOW and how hard, the directive is what to do. Each part",
+    "hands to the next. If the reader cannot feel a single thread running through all of it, you have listed instead",
+    "of synthesized — return to the spine and build outward.",
+    "",
+    "═══════════════════════════════════════════",
     "READING STRUCTURE — STRICT LIMITS",
     "═══════════════════════════════════════════",
     "",
@@ -515,7 +573,8 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "Stay blunt — bluntness is what keeps this from being generic — but stay SHORT. The behavioral correction",
     "belongs in DROP, where it is actionable, not here where it is just commentary.",
     "",
-    "PART 3 — DATED WINDOWS (exactly 2 — no more. A third only if it is as strong as the first two.)",
+    // ── PART A RELAXATION: windows are now data-governed, zero is allowed ──
+    "PART 3 — DATED WINDOWS (0, 1, or 2 — governed entirely by what the data supports)",
     "Only from calculated aspects, stations, or the next exact aspect. Never invented.",
     "Format: [[DATE: ...]] — then plain language: which planet, what it touches, what it governs.",
     "1 sentence: what this activates. 1 sentence: the specific consequence. Fact, not possibility.",
@@ -523,12 +582,18 @@ function buildReadingPrompt(body: ReadingRequestBody): string {
     "",
     "DO NOT spend a window on a period where nothing happens. A window that says 'wait, nothing moves yet'",
     "is not a window — it is filler. Every window must contain an EVENT they can act on or prepare for.",
-    "If only two windows carry real activation, give two. Two strong windows beat three padded ones.",
+    "If the calculated data supplies no real date for a window, give fewer windows — even zero. A window with",
+    "no calculated date behind it is a fabrication. Never invent one to fill the count. Two strong windows beat",
+    "three padded ones; zero real windows beats one invented one.",
     "",
-    "PART 4 — THE DIRECTIVE (exactly 3 — hard 3-sentence ceiling each)",
+    // ── PART A RELAXATION: EXECUTE and LOCK are now conditional on a real date ──
+    "PART 4 — THE DIRECTIVE (1 to 3 — hard 3-sentence ceiling each)",
     "DROP: The specific behavior they must stop immediately. Name the natal pattern driving it in plain terms.",
+    "  DROP is always available and needs no date. If nothing else is dateable, DROP alone is a complete directive.",
     "EXECUTE BY [[DATE: ...]]: The exact action tied to the tightest upcoming window. What to do and when.",
     "LOCK IN BY [[DATE: ...]]: The structural commitment sealed before the window closes.",
+    "Include EXECUTE and LOCK ONLY when a real upcoming dated window exists in the data above. If no calculated",
+    "date is available, return DROP alone. Never invent a date to complete the set.",
     "",
     "PART 5 — THE ACTUAL ANSWER (exactly 1-2 warm sentences, last)",
     "Everything above is diagnosis. This is different. Directly answer the literal question they asked, in plain",
@@ -688,80 +753,109 @@ export async function POST(request: NextRequest) {
     }
 
     const prompt = buildReadingPrompt(body);
+    const dateIndex = buildValidDateIndex(body);
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 3000,
-        system:
-          "You are a precision astrologer writing for a real person who is paying for clarity about something " +
-          "that matters to them. They may know nothing about astrology — write so they understand every sentence. " +
-          "You are their personal astrologer: you know their chart completely and speak to them directly, without " +
-          "softening, without hedging, without generic language. " +
-          "The transit aspects are calculated and given to you — never compute or invent one. " +
-          "CRITICAL: the prose contains NO degrees, NO orbs, and NO astrological jargon. All technical proof goes " +
-          "in the 'sources' array, which the reader can expand. The reading loses no precision — precision lives in " +
-          "the sharpness of the consequence, not in decimal places. " +
-          "You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a " +
-          "single parseable JSON object containing one page with a content field and a sources field. " +
-          "You speak to the person as 'you' in every sentence. You state outcomes as facts. " +
-          "Keep it tight and mobile-optimized — no padding, no fluff. " +
-          "Every specific date in the content must be wrapped in [[DATE: ...]] brackets.",
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("[readings] Claude error:", err);
-      return NextResponse.json(
-        { error: "Failed to generate reading. Please try again." },
-        { status: 502 }
-      );
+    if (dateIndex.unparseableSupplied.length > 0) {
+      console.warn(`[readings] supplied dates failed to parse (format bug?): ${dateIndex.unparseableSupplied.join(" ; ")}`);
     }
 
-    const claudeData = await response.json();
-    const rawText = claudeData.content?.[0]?.text;
+    // Runs the model + cleans + parses. Returns pages or a typed error, so the
+    // corrective retry below can reuse the exact same path.
+    async function generate(
+      promptText: string,
+    ): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 3000,
+          system:
+            "You are a precision astrologer writing for a real person who is paying for clarity about something " +
+            "that matters to them. They may know nothing about astrology — write so they understand every sentence. " +
+            "You are their personal astrologer: you know their chart completely and speak to them directly, without " +
+            "softening, without hedging, without generic language. " +
+            "The transit aspects are calculated and given to you — never compute or invent one. " +
+            "CRITICAL: the prose contains NO degrees, NO orbs, and NO astrological jargon. All technical proof goes " +
+            "in the 'sources' array, which the reader can expand. The reading loses no precision — precision lives in " +
+            "the sharpness of the consequence, not in decimal places. " +
+            "You output ONLY raw valid JSON — no markdown, no code fences, no preamble. Your entire response is a " +
+            "single parseable JSON object containing one page with a content field and a sources field. " +
+            "You speak to the person as 'you' in every sentence. You state outcomes as facts. " +
+            "Keep it tight and mobile-optimized — no padding, no fluff. " +
+            "Every specific date in the content must be wrapped in [[DATE: ...]] brackets.",
+          messages: [{ role: "user", content: promptText }],
+        }),
+      });
 
-    if (!rawText) {
-      return NextResponse.json(
-        { error: "No response from reading engine." },
-        { status: 502 }
-      );
-    }
-
-    let parsed: { pages: ReadingPage[] };
-    try {
-      let cleaned = rawText.trim();
-      if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
-      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
-      cleaned = cleaned.trim();
-      const start = cleaned.indexOf("{");
-      const end = cleaned.lastIndexOf("}");
-      if (start !== -1 && end !== -1 && end > start) {
-        cleaned = cleaned.slice(start, end + 1);
+      if (!response.ok) {
+        const err = await response.text();
+        console.error("[readings] Claude error:", err);
+        return { ok: false, status: 502, error: "Failed to generate reading. Please try again." };
       }
-      parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
-      console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
-      console.error("[readings] Raw response start:", rawText.slice(0, 300));
-      console.error("[readings] Raw response end:", rawText.slice(-200));
-      return NextResponse.json(
-        { error: "Failed to parse reading. Please try again." },
-        { status: 422 }
-      );
+
+      const claudeData = await response.json();
+      const rawText = claudeData.content?.[0]?.text;
+      if (!rawText) return { ok: false, status: 502, error: "No response from reading engine." };
+
+      try {
+        let cleaned = rawText.trim();
+        if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
+        if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
+        cleaned = cleaned.trim();
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+        if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
+
+        const p = JSON.parse(cleaned) as { pages: ReadingPage[] };
+        if (!p.pages || p.pages.length < 1) {
+          return { ok: false, status: 422, error: "Reading structure was incomplete. Please try again." };
+        }
+        return { ok: true, pages: p.pages };
+      } catch (parseErr) {
+        console.error("[readings] Failed to parse Claude response. Error:", String(parseErr));
+        console.error("[readings] Raw response start:", rawText.slice(0, 300));
+        console.error("[readings] Raw response end:", rawText.slice(-200));
+        return { ok: false, status: 422, error: "Failed to parse reading. Please try again." };
+      }
     }
 
-    if (!parsed.pages || parsed.pages.length < 1) {
+    // First pass.
+    const first = await generate(prompt);
+    if (!first.ok) return NextResponse.json({ error: first.error }, { status: first.status });
+
+    let pages = first.pages;
+    let unsupported = pages.flatMap((pg) => findUnsupportedMarkers(pg.content ?? "", dateIndex));
+
+    // ── DATE PROVENANCE GUARD ──────────────────────────────────────────────
+    // Dates live inline in the prose as [[DATE: ...]] markers, so a bad one
+    // can't be surgically removed without breaking a sentence. Instead we retry
+    // ONCE with the exact allowed dates enumerated, then fail closed. Because
+    // the credit is only spent by the client via /api/user/reading-complete on
+    // success, a 422 here costs the person nothing.
+    if (unsupported.length > 0) {
+      console.warn(`[readings] date provenance — retrying once. Unsupported: ${unsupported.join(" | ")}`);
+      const retry = await generate(prompt + allowedDatesInstruction(dateIndex));
+      if (retry.ok) {
+        const stillBad = retry.pages.flatMap((pg) => findUnsupportedMarkers(pg.content ?? "", dateIndex));
+        if (stillBad.length === 0) {
+          pages = retry.pages;
+          unsupported = [];
+        } else {
+          unsupported = stillBad;
+        }
+      }
+    }
+
+    if (unsupported.length > 0) {
+      console.error(`[readings] date provenance FAILED after retry — unsupported: ${unsupported.join(" | ")}`);
       return NextResponse.json(
-        { error: "Reading structure was incomplete. Please try again." },
-        { status: 422 }
+        { error: "We couldn't verify the timing on this reading. Please try again." },
+        { status: 422 },
       );
     }
 
@@ -769,7 +863,7 @@ export async function POST(request: NextRequest) {
       {
         reading: {
           id: crypto.randomUUID(),
-          pages: parsed.pages,
+          pages,
           topic: body.topic,
           question: body.question,
           status: "complete",
