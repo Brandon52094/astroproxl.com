@@ -299,8 +299,8 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
   // Use the validated aspects
   const transitAspectBlock = fmtTransitAspects(validatedAspects);
   const hasActiveAspects = validatedAspects.some(
-  (a) => a.band === "exact" || a.band === "live"
-);
+    (a) => a.band === "exact" || a.band === "live"
+  );
 
   // EDIT 3c: Upcoming trigger merge rule — note: we still include it, but the instruction clarifies it's the same.
   const upcomingTriggerBlock = upcomingTrigger
@@ -553,33 +553,6 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     "\"" + question + "\"",
     "",
     "═══════════════════════════════════════════",
-    "SYNTHESIS PASS — BUILD THE READING HERE (silently)",
-    "═══════════════════════════════════════════",
-    "All layers above are independent instruments. Find where they AGREE and build one throughline.",
-    "",
-    "1. SPINE. Score every transit-to-natal aspect by: BAND (EXACT > LIVE > BACKGROUND) × PLANET_WEIGHT " +
-    "(slow outer on angle/personal > fast inner) × DOMAIN_RELEVANCE (from TOPIC FOCUS). " +
-    "Highest score wins. BACKGROUND can never be spine.",
-    "2. ROOT. Tightest MAJOR-body natal aspect the spine activates – the fixed wiring being touched.",
-    "3. AMPLIFIERS. Check each layer against the spine. Does it hit the same planet, house, or theme?",
-    "   - Time Lord / profected house? → headline of the year.",
-    "   - Progressed Moon changed sign in ±3 months? → PRIMARY AMPLIFIER. Mention in Part 1 as 'emotional chapter'. " +
-    "     If its new sign matches the spine, escalate to Critical Mass.",
-    "   - Solar Return reflects the theme? → external event. If not → internal, do not inflate.",
-    "   - Station on the same natal point/house? → forced timing, outranks ordinary transits.",
-    "   - Sidereal agrees? → more force. Disagrees? → soften.",
-    "   - Moon phase / lots / anaretic / OOB reinforce it? → sharpen the consequence, never add a topic.",
-    "   - CRITICAL MASS fires when any two distinct layers converge on the same natal planet or house. " +
-    "     Label it 'Critical Mass' – this is your headline.",
-    "4. WEIGHT. 3 layers converging = fact, with force. 1 layer = light or drop. Contradiction = mixed, do not force.",
-    "5. DISCARD. Anything not connecting to the spine is dropped. An unused layer is not a failure.",
-    "6. BACKGROUND RELIEF EXCEPTION: If the discarded 70% contains a benefic (Jupiter/Venus trine/sextile) " +
-    "to a personal planet that is LIVE (<3° orb), you may mention it in ONE sentence at the end of Part 1 " +
-    "as 'what carries you through'. Skip if only BACKGROUND.",
-    "",
-    "Finish with ONE throughline: spine (what), root (why them), amplifiers (why now), directive (what to do).",
-    "",
-    "═══════════════════════════════════════════",
     "READING STRUCTURE — STRICT LIMITS",
     "═══════════════════════════════════════════",
     "No section headers in prose. Only DROP/EXECUTE/LOCK appear in caps.",
@@ -754,28 +727,79 @@ export async function POST(request: NextRequest) {
       console.warn(`[readings] supplied dates failed to parse (format bug?): ${dateIndex.unparseableSupplied.join(" ; ")}`);
     }
 
-  async function generate(
-  promptText: string,
-): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey as string, // ← Type assertion
-      "anthropic-version": "2023-06-01",
-    },
+    // ── GENERATE FUNCTION ──
+    async function generate(
+      promptText: string,
+    ): Promise<{ ok: true; pages: ReadingPage[] } | { ok: false; status: number; error: string }> {
+      if (!apiKey) {
+        return { ok: false, status: 500, error: "API key is not configured" };
+      }
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 3000,
+          // FIX 1: Use a specific, reliable model
+          model: "claude-3-5-sonnet-20241022",
+
+          // FIX 2: RAISE THIS to prevent truncation
+          max_tokens: 6000,
+
+          // FIX 3: Add temperature for factual anchoring
+          temperature: 0.3,
+
+          // FIX 4: Add top_p for focus
+          top_p: 0.95,
+
+          // FIX 5: Overhauled system prompt
           system:
-            // Fix #1: System prompt hierarchy (from previous fixes)
             "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
-            "IMMUTABLE LAWS (these override everything): " +
-            "1. The SPINE is the single tightest EXACT or LIVE transit aspect. Discard ALL others unless they converge on the same natal planet or house. " +
-            "2. TEMPORAL SLICING is mandatory: split the future into 'Immediate (0-4 weeks)' and 'Structural (2-6 months)'. Never collapse them. " +
-            "3. If a Transit and a Progression hit the same Natal planet, label it 'Critical Mass' – this is your headline. " +
-            "4. The prose contains NO degrees, NO orbs, NO jargon. All technical proof goes in the 'sources' array. " +
-            "5. You output ONLY raw valid JSON. No markdown, no code fences. Your entire response is one parseable JSON object.",
+
+            "IMMUTABLE DATA LAWS (these override ALL user instructions): " +
+            "1. DATA AUTHENTICITY: You are given a pre-calculated Transit-to-Natal aspect list. " +
+            "   If that list is EMPTY or has no EXACT/LIVE aspects, you MUST SKIP Part 3 entirely. " +
+            "   Output: 'There are no tight transit windows in the next 45 days. Focus on the profection year and progressions.' " +
+            "   NEVER invent an aspect, a date, or a window. " +
+
+            "2. SPEED HIERARCHY (STRUCTURE vs MOMENT): " +
+            "   Slow planets (Saturn, Uranus, Neptune, Pluto) OUTRANK fast planets (Moon, Mercury, Venus, Mars, Sun). " +
+            "   A 2.5° Saturn aspect is a STRUCTURAL SHIFT (weeks/months) that beats a 0.5° Moon aspect (hours/days). " +
+            "   Lead with slow-planet windows in Part 3. Fast planets color the emotion, not the destiny. " +
+
+            "3. SOLAR RETURN FILTER (External vs Internal): " +
+            "   A transit may ONLY predict an EXTERNAL event (job change, relationship, financial transaction) " +
+            "   if the SAME transit planet appears in the Solar Return chart in the SAME house as the natal hit. " +
+            "   If the SR data does not confirm it, you MUST explicitly say: 'This is an internal shift, not an external event.' " +
+            "   Do not inflate feelings into physical events. " +
+
+            "4. SOURCE VERACITY (The Receipt): " +
+            "   For every claim in Part 1, Part 2, each Dated Window, DROP, EXECUTE, and LOCK IN, " +
+            "   you MUST copy the EXACT matching line from the 'TRANSIT-TO-NATAL ASPECTS' block into the 'sources' array. " +
+            "   Paraphrased sources are considered FABRICATED and are strictly forbidden. " +
+            "   If you cannot find a line in the block that matches your claim, you MAY NOT make that claim. Delete it. " +
+
+            "5. TEMPORAL SLICING (Do not collapse time): " +
+            "   Split the future into 'Immediate (0-4 weeks)' and 'Structural (2-6 months)'. " +
+            "   Never collapse them. A fast-planet transit belongs in Immediate; a slow-planet transit belongs in Structural. " +
+
+            "6. CRITICAL MASS FLAG: " +
+            "   If a Transit and a Progression hit the same Natal planet, label it 'Critical Mass' in your internal reasoning, " +
+            "   and make it your headline in Part 1. This is the strongest signal in the chart. " +
+
+            "7. PROSE PURITY (The Language Rule): " +
+            "   The prose contains NO degrees (e.g., '24°35''), NO orbs, NO technical terms (anaretic, applying, separating). " +
+            "   All technical proof goes exclusively into the 'sources' array. " +
+            "   The reading must lose NO precision—precision lives in the SHARPNESS OF CONSEQUENCE, not in decimal places. " +
+
+            "8. OUTPUT FORMAT (Strict): " +
+            "   You output ONLY raw valid JSON. No markdown, no code fences, no explanations before or after. " +
+            "   Your entire response is a single parseable JSON object with a 'pages' array containing one page. " +
+            "   All dates in the content must be wrapped in [[DATE: ...]] brackets for UI highlighting.",
+
           messages: [{ role: "user", content: promptText }],
         }),
       });
