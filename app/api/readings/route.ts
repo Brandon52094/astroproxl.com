@@ -299,8 +299,8 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
   // Use the validated aspects
   const transitAspectBlock = fmtTransitAspects(validatedAspects);
   const hasActiveAspects = validatedAspects.some(
-    (a) => a.band === "EXACT" || a.band === "LIVE"
-  );
+  (a) => a.band === "exact" || a.band === "live"
+);
 
   // EDIT 3c: Upcoming trigger merge rule — note: we still include it, but the instruction clarifies it's the same.
   const upcomingTriggerBlock = upcomingTrigger
@@ -772,7 +772,7 @@ export async function POST(request: NextRequest) {
             "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
             "IMMUTABLE LAWS (these override everything): " +
             "1. The SPINE is the single tightest EXACT or LIVE transit aspect. Discard ALL others unless they converge on the same natal planet or house. " +
-            "2. TEMPORAL SLICING is mandatory: split the future into 'Immediate (0-4 weeks)' and 'Structural (3-12 months)'. Never collapse them. " +
+            "2. TEMPORAL SLICING is mandatory: split the future into 'Immediate (0-4 weeks)' and 'Structural (2-6 months)'. Never collapse them. " +
             "3. If a Transit and a Progression hit the same Natal planet, label it 'Critical Mass' – this is your headline. " +
             "4. The prose contains NO degrees, NO orbs, NO jargon. All technical proof goes in the 'sources' array. " +
             "5. You output ONLY raw valid JSON. No markdown, no code fences. Your entire response is one parseable JSON object.",
