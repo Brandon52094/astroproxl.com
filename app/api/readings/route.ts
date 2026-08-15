@@ -747,7 +747,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey: string = process.env.ANTHROPIC_API_KEY ?? "";
     if (!apiKey) {
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
