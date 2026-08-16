@@ -747,7 +747,7 @@ export async function POST(request: NextRequest) {
     },
     body: JSON.stringify({
        model: "claude-sonnet-4-6",
-      max_tokens: 6000,
+      max_tokens: 3000,
       temperature: 0.3,
       top_p: 0.95,
       system:
