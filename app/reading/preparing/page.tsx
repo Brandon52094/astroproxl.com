@@ -18,13 +18,23 @@ const LOADING_MESSAGES = [
   "Finalizing your reading…",
 ];
 
+// Additional error messages for specific scenarios
+const ERROR_MESSAGES = {
+  credits: "You don't have enough credits for a reading. Please purchase more or subscribe.",
+  cooldown: "You're on cooldown. Please wait before starting a new reading.",
+  generic: "Something went wrong. Please try again.",
+  timeout: "The reading is taking longer than expected. Please try again.",
+};
+
 function PreparingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<"credits" | "cooldown" | "generic" | "timeout" | null>(null);
   const hasStarted = useRef(false);
   const shouldReduceMotion = useReducedMotion();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const stars = React.useMemo(
     () =>
@@ -39,21 +49,29 @@ function PreparingPageInner() {
     []
   );
 
+  // Clean up timeout on unmount
   useEffect(() => {
-    // Fix 1 — if user cancelled Stripe, send them back to intake immediately
-    // This closes the bypass where they could exit Stripe and get a free reading
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Handle payment cancellation
+  useEffect(() => {
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
       router.replace("/reading/intake");
       return;
     }
 
-    // Clean up any other payment params from the URL
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/preparing");
     }
   }, [searchParams, router]);
 
+  // Rotate loading messages
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex((prev) =>
@@ -63,10 +81,10 @@ function PreparingPageInner() {
     return () => clearInterval(interval);
   }, []);
 
+  // Generate the reading
   useEffect(() => {
     if (hasStarted.current) return;
 
-    // Don't start generating if payment was cancelled
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") return;
 
@@ -87,14 +105,19 @@ function PreparingPageInner() {
           return;
         }
 
-         const response = await fetch("/api/readings", {
+        // Set a timeout to prevent infinite loading (60 seconds)
+        timeoutRef.current = setTimeout(() => {
+          setError(ERROR_MESSAGES.timeout);
+          setErrorType("timeout");
+        }, 60000);
+
+        const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             topic: intake.topic,
             question: intake.question,
-            timeframeType: intake.timeframeType,
-            timeframeValue: intake.timeframeValue,
+            // REMOVED: timeframeType and timeframeValue - not used by API
             birthDate: chart.birthDate,
             birthTime: chart.birthTime,
             birthPlace: chart.birthPlace,
@@ -113,32 +136,106 @@ function PreparingPageInner() {
           }),
         });
 
-        const data = await response.json();
-
-        if (!response.ok || !data.reading) {
-          throw new Error(data.error ?? "Failed to generate reading.");
+        // Clear the timeout since we got a response
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
         }
 
-        saveReading({
-          id: data.reading.id,
-          pages: data.reading.pages as ReadingPage[],
-          topic: intake.topic,
-          question: intake.question,
-          generatedAt: new Date().toISOString(),
-        });
+        const data = await response.json();
 
-        // Fix 2 — replace instead of push so preparing never appears in history
-        // This prevents the back button on results from re-triggering the AI
+        // Handle specific error codes
+        if (!response.ok) {
+          // Check for credit/cooldown errors from the API
+          if (response.status === 403) {
+            const errorMsg = data.error || ERROR_MESSAGES.generic;
+            if (errorMsg.includes("cooldown")) {
+              setError(ERROR_MESSAGES.cooldown);
+              setErrorType("cooldown");
+            } else if (errorMsg.includes("credits") || errorMsg.includes("purchase")) {
+              setError(ERROR_MESSAGES.credits);
+              setErrorType("credits");
+            } else {
+              setError(errorMsg);
+              setErrorType("generic");
+            }
+            return;
+          }
+
+          // Handle other errors
+          throw new Error(data.error ?? `Failed to generate reading (${response.status})`);
+        }
+
+        if (!data.reading) {
+          throw new Error("No reading data received.");
+        }
+
+        // Check if this is a safe response (crisis detection triggered)
+        if (data.isSafeResponse) {
+          // The API returned a safe response instead of a real reading
+          // We still save it as a reading but with a flag
+          saveReading({
+            id: data.reading.id,
+            pages: data.reading.pages as ReadingPage[],
+            topic: intake.topic,
+            question: intake.question,
+            generatedAt: new Date().toISOString(),
+            isSafeResponse: true,
+            riskLevel: data.riskLevel,
+          });
+        } else {
+          // Normal reading
+          saveReading({
+            id: data.reading.id,
+            pages: data.reading.pages as ReadingPage[],
+            topic: intake.topic,
+            question: intake.question,
+            generatedAt: new Date().toISOString(),
+          });
+        }
+
+        // Redirect to results
         router.replace("/reading/results");
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Something went wrong. Please try again."
-        );
+        // Clear timeout on error
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+
+        const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.generic;
+        setError(errorMessage);
+        setErrorType("generic");
       }
     }
 
     generateReading();
   }, [router, searchParams]);
+
+  // Handle retry
+  const handleRetry = () => {
+    setError(null);
+    setErrorType(null);
+    hasStarted.current = false;
+    // Reset message index
+    setMessageIndex(0);
+    // Re-trigger the generation
+    setTimeout(() => {
+      hasStarted.current = true;
+      // The effect will run again since hasStarted is false
+    }, 100);
+  };
+
+  // Handle navigation based on error type
+  const handleErrorAction = () => {
+    if (errorType === "credits") {
+      router.push("/pricing");
+    } else if (errorType === "cooldown") {
+      router.push("/dashboard");
+    } else {
+      router.push("/reading/intake");
+    }
+  };
 
   return (
     <div 
@@ -222,15 +319,47 @@ function PreparingPageInner() {
                 <span className="text-2xl">✕</span>
               </div>
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold text-white">yikes</h1>
+                <h1 className="text-xl font-semibold text-white">
+                  {errorType === "credits" ? "Credits Needed" :
+                   errorType === "cooldown" ? "Cooling Down" :
+                   "Something Went Wrong"}
+                </h1>
                 <p className="text-sm leading-6 text-slate-400">{error}</p>
               </div>
-              <button
-                onClick={() => router.push("/reading/intake")}
-                className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
-              >
-                Tap again
-              </button>
+              <div className="flex flex-col gap-3">
+                {errorType === "credits" && (
+                  <button
+                    onClick={handleErrorAction}
+                    className="h-12 w-full rounded-2xl bg-amber-400 text-sm font-medium text-slate-950 transition hover:bg-amber-300"
+                  >
+                    View Pricing
+                  </button>
+                )}
+                {errorType === "cooldown" && (
+                  <button
+                    onClick={handleErrorAction}
+                    className="h-12 w-full rounded-2xl bg-slate-700 text-sm font-medium text-white transition hover:bg-slate-600"
+                  >
+                    Go to Dashboard
+                  </button>
+                )}
+                {(errorType === "generic" || errorType === "timeout") && (
+                  <>
+                    <button
+                      onClick={handleRetry}
+                      className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
+                    >
+                      Try Again
+                    </button>
+                    <button
+                      onClick={() => router.push("/reading/intake")}
+                      className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-sm font-medium text-slate-300 transition hover:bg-white/10"
+                    >
+                      Go Back
+                    </button>
+                  </>
+                )}
+              </div>
             </motion.div>
           ) : (
             <motion.div
