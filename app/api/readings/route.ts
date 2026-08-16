@@ -749,7 +749,6 @@ export async function POST(request: NextRequest) {
        model: "claude-sonnet-4-6",
       max_tokens: 3000,
       temperature: 0.3,
-      top_p: 0.95,
       system:
         "You are a precision astrological SYNTHESIS ENGINE, not a horoscope writer. " +
 
