@@ -483,7 +483,9 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     "═══════════════════════════════════════════",
     "ASPECT LAW (pre-calculated, do not compute)",
     "═══════════════════════════════════════════",
-    "EXACT (<1°) = firing now. LIVE (<3°) = active. BACKGROUND (3-6°) = context only, never a spine/date anchor.",
+    "EXACT (<1°) = firing now. LIVE (<3°) = active. BACKGROUND (3-6°) is real and worth naming as quiet, minor",
+    "texture — it can NEVER anchor a date or become the spine, but it is not invisible. A chart with one tight",
+    "aspect and ten background ones is still a full week, not a blank one.",
     "APPLYING = building; SEPARATING = passed. If it's not in the list below, it's not happening.",
     "",
     // EDIT 3a: Speed weighting rule
@@ -580,6 +582,12 @@ If only two windows carry real activation, give two. Two strong windows beat thr
     "PART 2 — THE ROOT (exactly 2 sentences, hard limit)",
     "Name the tightest natal aspect the spine lands on. Then name the loop it produces, once, bluntly. " +
     "This is a bridge to show this is happening to THEM, not a character autopsy.",
+    "",
+    "PART 2B — OTHER CURRENTS (1-2 sentences, OPTIONAL — only if real minor aspects exist)",
+    "The spine is the headline, not the whole sky. Name ONE or TWO calculated LIVE or BACKGROUND aspects that " +
+    "do NOT converge with the spine but are still real — quieter threads running under the main story. Keep it " +
+    "light: no dates, no directives, no elevated language. One clause each, e.g. 'underneath that, [planet] is " +
+    "also quietly stirring [house theme].' If nothing minor is worth naming, skip this section — do not pad.",
     "",
     "PART 4 — THE DIRECTIVE (1 to 3, hard 3-sentence ceiling each)",
     "DROP: the behavior to stop immediately. Always available, no date needed.",
