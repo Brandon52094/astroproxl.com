@@ -39,21 +39,19 @@ function PreparingPageInner() {
     []
   );
 
+  // ── Payment cancellation guard ──
   useEffect(() => {
-    // Fix 1 — if user cancelled Stripe, send them back to intake immediately
-    // This closes the bypass where they could exit Stripe and get a free reading
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
       router.replace("/reading/intake");
       return;
     }
-
-    // Clean up any other payment params from the URL
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/preparing");
     }
   }, [searchParams, router]);
 
+  // ── Rotate loading messages ──
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex((prev) =>
@@ -63,10 +61,10 @@ function PreparingPageInner() {
     return () => clearInterval(interval);
   }, []);
 
+  // ── Generate reading ──
   useEffect(() => {
     if (hasStarted.current) return;
 
-    // Don't start generating if payment was cancelled
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") return;
 
@@ -87,48 +85,67 @@ function PreparingPageInner() {
           return;
         }
 
-         const response = await fetch("/api/readings", {
+        // ── Build request payload (matches route's ReadingRequestBody) ──
+        const payload = {
+          topic: intake.topic,
+          question: intake.question,
+          // timeframeType and timeframeValue removed — not used by route
+          birthDate: chart.birthDate,
+          birthTime: chart.birthTime,
+          birthPlace: chart.birthPlace,
+          tropical: chart.chartData.tropical,
+          sidereal: chart.chartData.sidereal,
+          transits: chart.chartData.transits,
+          transitAspects: chart.chartData.transitAspects,
+          profection: chart.chartData.profection,
+          progressions: chart.chartData.progressions,
+          solarArcs: chart.chartData.solarArcs,
+          upcomingTrigger: chart.chartData.upcomingTrigger,
+          planetaryStations: chart.chartData.planetaryStations,
+          solarReturn: chart.chartData.solarReturn,
+          moonPhase: chart.chartData.moonPhase,
+          extendedPoints: chart.chartData.extendedPoints,
+        };
+
+        const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            topic: intake.topic,
-            question: intake.question,
-            timeframeType: intake.timeframeType,
-            timeframeValue: intake.timeframeValue,
-            birthDate: chart.birthDate,
-            birthTime: chart.birthTime,
-            birthPlace: chart.birthPlace,
-            tropical: chart.chartData.tropical,
-            sidereal: chart.chartData.sidereal,
-            transits: chart.chartData.transits,
-            transitAspects: chart.chartData.transitAspects,
-            profection: chart.chartData.profection,
-            progressions: chart.chartData.progressions,
-            solarArcs: chart.chartData.solarArcs,
-            upcomingTrigger: chart.chartData.upcomingTrigger,
-            planetaryStations: chart.chartData.planetaryStations,
-            solarReturn: chart.chartData.solarReturn,
-            moonPhase: chart.chartData.moonPhase,
-            extendedPoints: chart.chartData.extendedPoints,
-          }),
+          body: JSON.stringify(payload),
         });
 
         const data = await response.json();
 
         if (!response.ok || !data.reading) {
+          // Specific error messages from route (credits, cooldown, etc.)
           throw new Error(data.error ?? "Failed to generate reading.");
         }
 
-        saveReading({
-          id: data.reading.id,
-          pages: data.reading.pages as ReadingPage[],
-          topic: intake.topic,
-          question: intake.question,
-          generatedAt: new Date().toISOString(),
-        });
+        // ── Save the reading ──
+        // The route may return isSafeResponse for crisis blocks; we handle it.
+        if (data.isSafeResponse) {
+          saveReading({
+            id: data.reading.id,
+            pages: data.reading.pages as ReadingPage[],
+            topic: intake.topic,
+            question: intake.question,
+            generatedAt: new Date().toISOString(),
+            isSafeResponse: true,
+            riskLevel: data.riskLevel,
+          });
+        } else {
+          saveReading({
+            id: data.reading.id,
+            pages: data.reading.pages as ReadingPage[],
+            topic: intake.topic,
+            question: intake.question,
+            generatedAt: new Date().toISOString(),
+          });
+        }
 
-        // Fix 2 — replace instead of push so preparing never appears in history
-        // This prevents the back button on results from re-triggering the AI
+        // careNote (if present) is not displayed on preparing screen;
+        // it will be shown on the results page if the reading passes.
+
+        // ── Redirect to results ──
         router.replace("/reading/results");
       } catch (err) {
         setError(
@@ -140,6 +157,7 @@ function PreparingPageInner() {
     generateReading();
   }, [router, searchParams]);
 
+  // ── Render (unchanged timer and UI) ──
   return (
     <div 
       className="relative h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden"
