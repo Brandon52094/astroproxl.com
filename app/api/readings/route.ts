@@ -150,10 +150,55 @@ interface ReadingRequestBody {
 }
 
 // ============================================================
-// HELPER FUNCTIONS
+// CONSTANTS
 // ============================================================
 
 const NL = "\n";
+
+// CRITICAL FIX: Expanded personal natal points
+// These are the only points that can anchor a spine or dated window.
+const PERSONAL_NATAL_POINTS = new Set([
+  "Sun",
+  "Moon",
+  "Mercury",
+  "Venus",
+  "Mars",
+  "Ascendant",
+  "Midheaven",
+  "Descendant",      // added for relationship themes
+  "Imum Coeli",      // added for home/foundation themes
+  "North Node",      // added for karmic/directional themes
+  // Do NOT include Uranus, Neptune, Pluto, or Chiron here.
+]);
+
+// Generational planets that should never be used as date anchors alone
+const GENERATIONAL_PLANETS = new Set(["Uranus", "Neptune", "Pluto"]);
+
+// Slow planets (structural shifts)
+const SLOW_PLANETS = new Set(["Saturn", "Uranus", "Neptune", "Pluto"]);
+
+// Fast planets (immediate moments)
+const FAST_PLANETS = new Set(["Mercury", "Venus", "Mars", "Sun", "Moon"]);
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+function isPersonalPlanet(planet: string): boolean {
+  return PERSONAL_NATAL_POINTS.has(planet);
+}
+
+function isGenerationalPlanet(planet: string): boolean {
+  return GENERATIONAL_PLANETS.has(planet);
+}
+
+function isSlowPlanet(planet: string): boolean {
+  return SLOW_PLANETS.has(planet);
+}
+
+function isFastPlanet(planet: string): boolean {
+  return FAST_PLANETS.has(planet);
+}
 
 function fmtPlanet(p: PlanetPlacement): string {
   return p.name + ": " + p.sign + " " + p.degree + (p.house ? " (House " + p.house + ")" : "");
@@ -205,7 +250,7 @@ function validateAndFilterAspects(aspects: TransitAspect[] | undefined): Transit
 }
 
 // ============================================================
-// SPINE DETECTION ENGINE
+// SPINE DETECTION ENGINE (with personal-planet filtering)
 // ============================================================
 
 interface SpineResult {
@@ -213,6 +258,7 @@ interface SpineResult {
   priority: number;
   sources: string[];
   temporalClass: "Immediate" | "Structural" | "Foundational";
+  selectedAspect?: TransitAspect;
 }
 
 function determineSpine(
@@ -243,8 +289,23 @@ function determineSpine(
     };
   }
 
-  // Check 1: Critical Mass (Transit + Progression + Solar Arc hit same point)
-  for (const aspect of activeAspects) {
+  // CRITICAL FIX: Only consider aspects where the natal point is personal
+  const personalActive = activeAspects.filter(
+    (a) => isPersonalPlanet(a.natalPlanet) || a.natalPlanet === profection.timeLord
+  );
+
+  // If no personal aspects exist, fall back to profection
+  if (personalActive.length === 0) {
+    return {
+      primary: `${profection.activatedHouse}th House ${profection.activatedSign} Year — Time Lord: ${profection.timeLord}`,
+      priority: 5,
+      sources: ["No personal planet transits — profection year is the primary theme"],
+      temporalClass: "Foundational",
+    };
+  }
+
+  // Check 1: Critical Mass (Transit + Progression + Solar Arc hit same personal planet)
+  for (const aspect of personalActive) {
     const progressionsHit = progressions?.some(
       (p) => p.name === aspect.natalPlanet && Math.abs(parseFloat(p.degree) - parseFloat(aspect.natalDegree)) < 2
     );
@@ -262,38 +323,40 @@ function determineSpine(
           `Solar Arc activating ${aspect.natalPlanet}`,
         ],
         temporalClass: aspect.orbDegrees < 1 ? "Immediate" : "Structural",
+        selectedAspect: aspect,
       };
     }
   }
 
-  // Check 2: Time Lord Activation
-  for (const aspect of activeAspects) {
+  // Check 2: Time Lord Activation (Time Lord is always personal)
+  for (const aspect of personalActive) {
     if (aspect.natalPlanet === profection.timeLord) {
       return {
         primary: `TIME LORD ACTIVATION: ${profection.timeLord} (${profection.activatedHouse}th House Lord) activated by ${aspect.transitPlanet}`,
         priority: 2,
         sources: [`Transit ${aspect.transitPlanet} ${aspect.aspectType} natal ${aspect.natalPlanet}`],
         temporalClass: aspect.orbDegrees < 1 ? "Immediate" : "Structural",
+        selectedAspect: aspect,
       };
     }
   }
 
-  // Check 3: Slow Planet Activation
-  const slowPlanets = ["Saturn", "Uranus", "Neptune", "Pluto"];
-  for (const aspect of activeAspects) {
-    if (slowPlanets.includes(aspect.transitPlanet)) {
+  // CRITICAL FIX: Check 3 — Slow Planet activating a PERSONAL planet (not generational)
+  for (const aspect of personalActive) {
+    if (isSlowPlanet(aspect.transitPlanet) && isPersonalPlanet(aspect.natalPlanet)) {
       return {
         primary: `STRUCTURAL SHIFT: ${aspect.transitPlanet} activating ${aspect.natalPlanet} — lasts weeks/months`,
         priority: 3,
         sources: [`Transit ${aspect.transitPlanet} ${aspect.aspectType} natal ${aspect.natalPlanet}`],
         temporalClass: "Structural",
+        selectedAspect: aspect,
       };
     }
   }
 
-  // Check 4: Fast Planet Activation (EXACT only)
-  const exactFast = activeAspects.filter(
-    (a) => a.band?.toUpperCase() === "EXACT" && ["Mercury", "Venus", "Mars", "Sun", "Moon"].includes(a.transitPlanet)
+  // Check 4: Fast Planet Activation (EXACT only) on personal planet
+  const exactFast = personalActive.filter(
+    (a) => a.band?.toUpperCase() === "EXACT" && isFastPlanet(a.transitPlanet)
   );
   if (exactFast.length > 0) {
     const aspect = exactFast[0];
@@ -302,17 +365,19 @@ function determineSpine(
       priority: 4,
       sources: [`Transit ${aspect.transitPlanet} ${aspect.aspectType} natal ${aspect.natalPlanet}`],
       temporalClass: "Immediate",
+      selectedAspect: aspect,
     };
   }
 
-  // Check 5: Any LIVE aspect
-  if (activeAspects.length > 0) {
-    const aspect = activeAspects[0];
+  // Check 5: Any LIVE aspect to a personal planet
+  if (personalActive.length > 0) {
+    const aspect = personalActive[0];
     return {
       primary: `${aspect.transitPlanet} activating ${aspect.natalPlanet} — active and unfolding`,
       priority: 5,
       sources: [`Transit ${aspect.transitPlanet} ${aspect.aspectType} natal ${aspect.natalPlanet}`],
       temporalClass: aspect.orbDegrees < 1 ? "Immediate" : "Structural",
+      selectedAspect: aspect,
     };
   }
 
@@ -320,32 +385,55 @@ function determineSpine(
   return {
     primary: `${profection.activatedHouse}th House ${profection.activatedSign} Year — Time Lord: ${profection.timeLord}`,
     priority: 5,
-    sources: ["No EXACT or LIVE transits — profection year is the primary theme"],
+    sources: ["No personal planet transits — profection year is the primary theme"],
     temporalClass: "Foundational",
   };
 }
 
 // ============================================================
-// TEMPORAL CLASSIFICATION
+// TEMPORAL CLASSIFICATION (with personal-planet filtering)
 // ============================================================
 
-function classifyTemporal(aspects: TransitAspect[]): {
+function classifyTemporal(aspects: TransitAspect[], timeLord: string): {
   immediate: TransitAspect[];
   structural: TransitAspect[];
+  background: TransitAspect[];
 } {
   const immediate: TransitAspect[] = [];
   const structural: TransitAspect[] = [];
+  const background: TransitAspect[] = [];
 
   for (const a of aspects) {
     const band = a.band?.toUpperCase();
+    const isPersonal = isPersonalPlanet(a.natalPlanet) || a.natalPlanet === timeLord;
+    const isGenerational = isGenerationalPlanet(a.transitPlanet) && !isPersonal;
+
+    // BACKGROUND aspects never become windows
+    if (band === "BACKGROUND") {
+      background.push(a);
+      continue;
+    }
+
+    // Generational-only aspects never become windows
+    if (isGenerational) {
+      background.push(a);
+      continue;
+    }
+
+    // Only personal aspects can become windows
+    if (!isPersonal) {
+      background.push(a);
+      continue;
+    }
+
     if (band === "EXACT") {
-      if (["Mercury", "Venus", "Mars", "Sun", "Moon"].includes(a.transitPlanet)) {
+      if (isFastPlanet(a.transitPlanet)) {
         immediate.push(a);
       } else {
         structural.push(a);
       }
     } else if (band === "LIVE") {
-      if (["Saturn", "Uranus", "Neptune", "Pluto"].includes(a.transitPlanet)) {
+      if (isSlowPlanet(a.transitPlanet)) {
         structural.push(a);
       } else {
         immediate.push(a);
@@ -353,14 +441,27 @@ function classifyTemporal(aspects: TransitAspect[]): {
     }
   }
 
-  return { immediate, structural };
+  return { immediate, structural, background };
 }
 
 // ============================================================
-// FORMAT TRANSIT ASPECTS (with band grouping)
+// FILTER UPCOMING TRIGGER TO PERSONAL PLANETS
 // ============================================================
 
-function fmtTransitAspects(aspects: TransitAspect[]): string {
+function filterPersonalUpcomingTrigger(
+  trigger: UpcomingTrigger | undefined,
+  timeLord: string
+): UpcomingTrigger | null {
+  if (!trigger) return null;
+  const isPersonal = isPersonalPlanet(trigger.natalPlanet) || trigger.natalPlanet === timeLord;
+  return isPersonal ? trigger : null;
+}
+
+// ============================================================
+// FORMAT TRANSIT ASPECTS (with band grouping and personal filter)
+// ============================================================
+
+function fmtTransitAspects(aspects: TransitAspect[], timeLord: string): string {
   if (!aspects || aspects.length === 0) {
     return [
       "TRANSIT-TO-NATAL ASPECTS: NONE WITHIN ORB RIGHT NOW.",
@@ -376,9 +477,19 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
     ].join(NL);
   }
 
-  const exact = aspects.filter((a) => a.band?.toUpperCase() === "EXACT");
-  const live = aspects.filter((a) => a.band?.toUpperCase() === "LIVE");
+  // CRITICAL FIX: Filter for personal aspects only
+  const personalAspects = aspects.filter(
+    (a) => isPersonalPlanet(a.natalPlanet) || a.natalPlanet === timeLord
+  );
+
+  const exact = personalAspects.filter((a) => a.band?.toUpperCase() === "EXACT");
+  const live = personalAspects.filter((a) => a.band?.toUpperCase() === "LIVE");
   const background = aspects.filter((a) => a.band?.toUpperCase() === "BACKGROUND");
+
+  // Count generational-only aspects (for transparency)
+  const generationalCount = aspects.filter(
+    (a) => isGenerationalPlanet(a.transitPlanet) && !isPersonalPlanet(a.natalPlanet)
+  ).length;
 
   const lines = [
     "TRANSIT-TO-NATAL ASPECTS — PRE-CALCULATED, DO NOT COMPUTE",
@@ -388,6 +499,8 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
     "LIVE (< 3°) = ACTIVE — secondary windows, structural context",
     "BACKGROUND (3-6°) = QUIET TEXTURE — name briefly, never a window",
     "",
+    `PERSONAL ASPECTS (${personalAspects.length}):`,
+    "",
   ];
 
   if (exact.length > 0) {
@@ -395,8 +508,9 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
     for (const a of exact) {
       const motion = a.isApplying ? "APPLYING" : "SEPARATING";
       const rx = a.isRetrograde ? " Rx" : "";
+      const personalMark = isPersonalPlanet(a.natalPlanet) ? " ★" : " ⚡";
       lines.push(
-        `  • [EXACT] ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
+        `  • [EXACT]${personalMark} ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
         `${a.aspectType} natal ${a.natalPlanet} ${a.natalSign} ${a.natalDegree} ` +
         `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}`
       );
@@ -409,8 +523,9 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
     for (const a of live) {
       const motion = a.isApplying ? "APPLYING" : "SEPARATING";
       const rx = a.isRetrograde ? " Rx" : "";
+      const personalMark = isPersonalPlanet(a.natalPlanet) ? " ★" : " ⚡";
       lines.push(
-        `  • [LIVE] ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
+        `  • [LIVE]${personalMark} ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
         `${a.aspectType} natal ${a.natalPlanet} ${a.natalSign} ${a.natalDegree} ` +
         `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}`
       );
@@ -429,6 +544,14 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
         `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}`
       );
     }
+  }
+
+  if (generationalCount > 0) {
+    lines.push(
+      "",
+      `NOTE: ${generationalCount} generational aspects (outer-planet to outer-planet) were filtered out.`,
+      "These are universal background texture, never personal windows."
+    );
   }
 
   return lines.join(NL);
@@ -510,7 +633,7 @@ function allowedDatesInstruction(index: ReturnType<typeof buildValidDateIndex>):
 }
 
 // ============================================================
-// BUILD READING PROMPT (REFACTORED)
+// BUILD READING PROMPT (REFACTORED WITH PERSONAL-PLANET FILTER)
 // ============================================================
 
 function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitAspect[] = []): string {
@@ -546,16 +669,25 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
       ? "money and finances"
       : "life in general";
 
+  // CRITICAL FIX: Filter upcoming trigger to personal planets only
+  const personalTrigger = filterPersonalUpcomingTrigger(upcomingTrigger, profection.timeLord);
+
   // ── SPINE DETECTION ──
   const spine = determineSpine(validatedAspects, profection, progressions, solarArcs);
-  const temporal = classifyTemporal(validatedAspects);
+  const temporal = classifyTemporal(validatedAspects, profection.timeLord);
   const hasActiveAspects = validatedAspects.some(
     (a) => a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
   );
 
+  // CRITICAL FIX: Check if we have personal active aspects
+  const hasPersonalActive = validatedAspects.some(
+    (a) => (a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE") &&
+    (isPersonalPlanet(a.natalPlanet) || a.natalPlanet === profection.timeLord)
+  );
+
   // ── DATA BLOCKS ──
 
-  const transitAspectBlock = fmtTransitAspects(validatedAspects);
+  const transitAspectBlock = fmtTransitAspects(validatedAspects, profection.timeLord);
 
   const profectionBlock = [
     "PROFECTION YEAR — FOUNDATIONAL CONTAINER FOR ALL OTHER DATA",
@@ -725,16 +857,16 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 
   const transitList = transits.map(fmtTransit).join(NL);
 
-  const upcomingBlock = upcomingTrigger
+  const upcomingBlock = personalTrigger
     ? [
         "NEXT EXACT ASPECT — MERGE WITH WINDOWS, DO NOT DUPLICATE",
-        `${upcomingTrigger.transitPlanet} ${upcomingTrigger.aspect} natal ${upcomingTrigger.natalPlanet} — exact on ${upcomingTrigger.date}`,
+        `${personalTrigger.transitPlanet} ${personalTrigger.aspect} natal ${personalTrigger.natalPlanet} — exact on ${personalTrigger.date}`,
         "",
         "This is the SAME aspect as in the transit list above. Mention it ONCE as the 'nearest exact activation'.",
         "Do NOT create two separate windows.",
         "",
       ].join(NL)
-    : "";
+    : "No personal upcoming trigger within 45 days.";
 
   const voiceBlock = buildVoiceCalibrationBlock(
     tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))
@@ -752,13 +884,29 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     `STRUCTURAL (2-6 months): ${temporal.structural.length} aspects`,
     `  ${temporal.structural.map((a) => `${a.transitPlanet} ${a.aspectType} ${a.natalPlanet}`).join(", ") || "None"}`,
     "",
+    `BACKGROUND (texture only): ${temporal.background.length} aspects`,
+    "",
     "Never collapse Immediate and Structural into one timeframe.",
     "",
   ].join(NL);
 
-  // ── PART 3 WINDOW INSTRUCTION ──
-  const part3Instruction = hasActiveAspects
+  // ── CRITICAL FIX: PART 3 WINDOW INSTRUCTION WITH PERSONAL-PLANET RULE ──
+  const part3Instruction = (hasActiveAspects && hasPersonalActive)
     ? [
+        "═══════════════════════════════════════════",
+        "PERSONAL PLANET FILTER FOR WINDOWS — HARD RULE",
+        "═══════════════════════════════════════════",
+        "",
+        "You may ONLY create a dated window (Part 3) if the aspect involves at least one of these:",
+        "  - A personal planet: Sun, Moon, Mercury, Venus, Mars, Ascendant, Midheaven, Descendant, Imum Coeli, North Node",
+        "  - The Time Lord (even if not a personal planet)",
+        "",
+        "Any aspect involving ONLY generational planets (Uranus, Neptune, Pluto) may NEVER be used as a date anchor.",
+        "It can be mentioned as background texture, but never as a window.",
+        "",
+        "If there are no personal-planet aspects in the EXACT or LIVE lists, then Part 3 must be skipped.",
+        "",
+        "═══════════════════════════════════════════",
         "PART 3 — DATED WINDOWS (2-4 windows, as data supports)",
         "",
         "Each window format:",
@@ -769,25 +917,47 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
         "  - Slow planets (Jupiter, Saturn, Uranus, Neptune, Pluto): ±2 week window",
         "  - Stations: ±2 day window around station date",
         "",
-        "WINDOW SELECTION:",
-        "  1. Lead with the SPINE aspect identified above",
+        "WINDOW SELECTION (PERSONAL PLANETS ONLY):",
+        "  1. Lead with the SPINE aspect identified above (it is always personal)",
         "  2. Add any CRITICAL MASS windows",
         "  3. Add any Time Lord windows",
-        "  4. Fill remaining with strongest EXACT/LIVE aspects",
+        "  4. Fill remaining with strongest EXACT/LIVE personal aspects",
         "  5. NEVER use BACKGROUND aspects as windows",
+        "  6. NEVER use generational-only aspects as windows",
         "",
-        "If fewer than 2 EXACT/LIVE aspects exist, use the fallback below.",
+        "If fewer than 2 personal EXACT/LIVE aspects exist, give only what's available.",
         "",
       ].join(NL)
     : [
-        "PART 3 — SKIPPED: No EXACT or LIVE transit aspects in the next 45 days.",
+        "PART 3 — SKIPPED: No personal EXACT or LIVE transit aspects in the next 45 days.",
         "",
         "Replace Part 3 with:",
-        `  "There are no tight transit windows in the next 45 days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
+        `  "There are no tight personal transit windows in the next 45 days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
         "",
         "Do NOT invent dated windows. Do NOT pad with empty predictions.",
         "",
       ].join(NL);
+
+  // ── CRITICAL FIX: HIERARCHY RULES EXPLICITLY STATED ──
+  const hierarchyRules = [
+    "═══════════════════════════════════════════",
+    "SPINE HIERARCHY RULES (applied in this order)",
+    "═══════════════════════════════════════════",
+    "",
+    "1. CRITICAL MASS: Transit + Progression + Solar Arc hit same personal planet → strongest signal.",
+    "2. TIME LORD ACTIVATION: Transit aspects the Time Lord → outranks everything else.",
+    "3. SLOW PLANET (Saturn, Uranus, Neptune, Pluto) aspecting a PERSONAL PLANET → structural shift.",
+    "4. FAST PLANET (Mercury, Venus, Mars, Sun, Moon) EXACT aspect to a PERSONAL PLANET → immediate moment.",
+    "5. Any LIVE aspect to a PERSONAL PLANET → active unfolding.",
+    "6. No personal aspects → lead with the profection year and skip dated windows.",
+    "",
+    `SPINE IDENTIFIED: ${spine.primary}`,
+    `PRIORITY: ${spine.priority} (1 = highest)`,
+    `TEMPORAL CLASS: ${spine.temporalClass}`,
+    "",
+    "You MUST lead Part 1 with this spine. Do not override it with a lower-priority aspect.",
+    "",
+  ].join(NL);
 
   // ── PART 4 DIRECTIVE INSTRUCTION ──
   const part4Instruction = [
@@ -870,16 +1040,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     "",
     topicBlock,
     "",
-    "═══════════════════════════════════════════",
-    "DATA HIERARCHY — SPINE SELECTION",
-    "═══════════════════════════════════════════",
-    "",
-    `SPINE IDENTIFIED: ${spine.primary}`,
-    `PRIORITY: ${spine.priority} (1 = highest)`,
-    `TEMPORAL CLASS: ${spine.temporalClass}`,
-    `SOURCES: ${spine.sources.join("; ")}`,
-    "",
-    "You MUST lead Part 1 with this spine. Do not override it with a lower-priority aspect.",
+    hierarchyRules,
     "",
     "═══════════════════════════════════════════",
     "PROSE PURITY RULES",
@@ -970,7 +1131,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     "UPCOMING TRIGGER",
     "═══════════════════════════════════════════",
     "",
-    upcomingBlock || "No upcoming trigger within 45 days.",
+    upcomingBlock,
     "",
     "═══════════════════════════════════════════",
     "TEMPORAL CLASSIFICATION",
@@ -1145,6 +1306,8 @@ export async function POST(request: NextRequest) {
             "You are a precision astrological SYNTHESIS ENGINE. " +
             "You produce readings that are accurate, integrated, practical, and verifiable. " +
             "You work ONLY with the data provided. Never invent aspects, dates, or events. " +
+            "You ONLY use personal-planet aspects for dated windows. " +
+            "Generational aspects (Uranus, Neptune, Pluto to generational planets) are NEVER windows. " +
             "Your output is raw valid JSON with a 'pages' array containing the reading. " +
             "The reading has 5 parts: Where You Are, The Root, Other Currents (optional), " +
             "Dated Windows (or skip if none), The Directive, and The Actual Answer. " +

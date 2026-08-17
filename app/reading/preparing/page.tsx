@@ -18,12 +18,12 @@ const LOADING_MESSAGES = [
   "Finalizing your reading…",
 ];
 
-// Additional error messages for specific scenarios
 const ERROR_MESSAGES = {
   credits: "You don't have enough credits for a reading. Please purchase more or subscribe.",
   cooldown: "You're on cooldown. Please wait before starting a new reading.",
   generic: "Something went wrong. Please try again.",
   timeout: "The reading is taking longer than expected. Please try again.",
+  network: "Network error. Please check your connection and try again.",
 };
 
 function PreparingPageInner() {
@@ -32,9 +32,14 @@ function PreparingPageInner() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<"credits" | "cooldown" | "generic" | "timeout" | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+  
   const hasStarted = useRef(false);
-  const shouldReduceMotion = useReducedMotion();
+  const isMounted = useRef(true);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  const shouldReduceMotion = useReducedMotion();
 
   const stars = React.useMemo(
     () =>
@@ -49,11 +54,17 @@ function PreparingPageInner() {
     []
   );
 
-  // Clean up timeout on unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
+      isMounted.current = false;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
     };
   }, []);
@@ -65,7 +76,6 @@ function PreparingPageInner() {
       router.replace("/reading/intake");
       return;
     }
-
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/preparing");
     }
@@ -74,16 +84,18 @@ function PreparingPageInner() {
   // Rotate loading messages
   useEffect(() => {
     const interval = setInterval(() => {
-      setMessageIndex((prev) =>
-        prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
-      );
+      if (isMounted.current) {
+        setMessageIndex((prev) =>
+          prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
+        );
+      }
     }, 2300);
     return () => clearInterval(interval);
   }, []);
 
   // Generate the reading
   useEffect(() => {
-    if (hasStarted.current) return;
+    if (hasStarted.current || isRetrying) return;
 
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") return;
@@ -92,6 +104,7 @@ function PreparingPageInner() {
 
     async function generateReading() {
       try {
+        // 1. Load and validate chart data
         const chart = loadChart();
         const intake = loadIntake();
 
@@ -105,19 +118,36 @@ function PreparingPageInner() {
           return;
         }
 
-        // Set a timeout to prevent infinite loading (60 seconds)
+        // Validate that we have the minimum required data
+        if (!chart.chartData?.tropical?.planets?.length) {
+          router.push("/chart-data");
+          return;
+        }
+
+        // 2. Set up abort controller
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
+
+        // 3. Set timeout (60 seconds)
         timeoutRef.current = setTimeout(() => {
-          setError(ERROR_MESSAGES.timeout);
-          setErrorType("timeout");
+          if (isMounted.current) {
+            setError(ERROR_MESSAGES.timeout);
+            setErrorType("timeout");
+          }
+          if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+          }
         }, 60000);
 
+        // 4. Make the request
         const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal,
           body: JSON.stringify({
             topic: intake.topic,
             question: intake.question,
-            // REMOVED: timeframeType and timeframeValue - not used by API
             birthDate: chart.birthDate,
             birthTime: chart.birthTime,
             birthPlace: chart.birthPlace,
@@ -136,93 +166,136 @@ function PreparingPageInner() {
           }),
         });
 
-        // Clear the timeout since we got a response
+        // Clear timeout since we got a response
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
 
+        // Check if component is still mounted before proceeding
+        if (!isMounted.current) return;
+
         const data = await response.json();
 
-        // Handle specific error codes
+        // Handle non-OK responses
         if (!response.ok) {
-          // Check for credit/cooldown errors from the API
+          const errorMsg = data.error || data.message || ERROR_MESSAGES.generic;
           if (response.status === 403) {
-            const errorMsg = data.error || ERROR_MESSAGES.generic;
             if (errorMsg.includes("cooldown")) {
               setError(ERROR_MESSAGES.cooldown);
               setErrorType("cooldown");
-            } else if (errorMsg.includes("credits") || errorMsg.includes("purchase")) {
+            } else if (errorMsg.includes("credit") || errorMsg.includes("purchase")) {
               setError(ERROR_MESSAGES.credits);
               setErrorType("credits");
             } else {
               setError(errorMsg);
               setErrorType("generic");
             }
-            return;
+          } else if (response.status === 502 || response.status === 504) {
+            setError(ERROR_MESSAGES.timeout);
+            setErrorType("timeout");
+          } else {
+            setError(errorMsg || ERROR_MESSAGES.generic);
+            setErrorType("generic");
           }
-
-          // Handle other errors
-          throw new Error(data.error ?? `Failed to generate reading (${response.status})`);
+          return;
         }
 
         if (!data.reading) {
           throw new Error("No reading data received.");
         }
 
-        // Check if this is a safe response (crisis detection triggered)
-        if (data.isSafeResponse) {
-          // The API returned a safe response instead of a real reading
-          // We still save it as a reading but with a flag
-          saveReading({
-            id: data.reading.id,
-            pages: data.reading.pages as ReadingPage[],
-            topic: intake.topic,
-            question: intake.question,
-            generatedAt: new Date().toISOString(),
-            isSafeResponse: true,
-            riskLevel: data.riskLevel,
-          });
-        } else {
-          // Normal reading
-          saveReading({
-            id: data.reading.id,
-            pages: data.reading.pages as ReadingPage[],
-            topic: intake.topic,
-            question: intake.question,
-            generatedAt: new Date().toISOString(),
-          });
+        // 5. Save the reading (with error handling)
+        try {
+          if (data.isSafeResponse) {
+            saveReading({
+              id: data.reading.id,
+              pages: data.reading.pages as ReadingPage[],
+              topic: intake.topic,
+              question: intake.question,
+              generatedAt: new Date().toISOString(),
+              isSafeResponse: true,
+              riskLevel: data.riskLevel,
+            });
+          } else {
+            saveReading({
+              id: data.reading.id,
+              pages: data.reading.pages as ReadingPage[],
+              topic: intake.topic,
+              question: intake.question,
+              generatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (saveErr) {
+          console.error("Failed to save reading to localStorage:", saveErr);
+          // Continue anyway — the user can still see the reading
         }
 
-        // Redirect to results
-        router.replace("/reading/results");
+        // 6. Navigate to results
+        if (isMounted.current) {
+          router.replace("/reading/results");
+        }
       } catch (err) {
+        // Handle abort separately
+        if ((err as Error).name === "AbortError") {
+          // This was a planned abort (timeout or unmount)
+          return;
+        }
+
         // Clear timeout on error
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
 
-        const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.generic;
-        setError(errorMessage);
-        setErrorType("generic");
+        if (isMounted.current) {
+          // Network errors (e.g., no internet)
+          if (err instanceof TypeError && err.message.includes("fetch")) {
+            setError(ERROR_MESSAGES.network);
+          } else {
+            const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.generic;
+            setError(errorMessage);
+          }
+          setErrorType("generic");
+        }
+      } finally {
+        // Reset the abort controller reference
+        abortControllerRef.current = null;
+        // Reset the started flag only if not retrying
+        if (!isRetrying) {
+          hasStarted.current = false;
+        }
       }
     }
 
     generateReading();
-  }, [router, searchParams]);
+  }, [router, searchParams, isRetrying]);
 
   // Handle retry
   const handleRetry = () => {
+    if (isRetrying) return;
+    
+    setIsRetrying(true);
     setError(null);
     setErrorType(null);
     hasStarted.current = false;
-    // Reset message index
     setMessageIndex(0);
-    // Re-trigger the generation
+
+    // Reset the abort controller if it's still hanging
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    // Clear any lingering timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // Re-trigger after a brief pause
     setTimeout(() => {
-      hasStarted.current = true;
-      // The effect will run again since hasStarted is false
+      setIsRetrying(false);
     }, 100);
   };
 
@@ -313,6 +386,7 @@ function PreparingPageInner() {
               key="error"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
               className="space-y-6"
             >
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-rose-300/20 bg-rose-500/10">
@@ -347,9 +421,10 @@ function PreparingPageInner() {
                   <>
                     <button
                       onClick={handleRetry}
-                      className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
+                      disabled={isRetrying}
+                      className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Try Again
+                      {isRetrying ? "Retrying..." : "Try Again"}
                     </button>
                     <button
                       onClick={() => router.push("/reading/intake")}
