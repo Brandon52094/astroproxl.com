@@ -18,42 +18,12 @@ const LOADING_MESSAGES = [
   "Finalizing your reading…",
 ];
 
-// ESTIMATED maximum time for a reading to generate (in seconds).
-// This is NOT a timeout — it's a target for the progress bar.
-// We use it to pace the progress indication, not to cut off the request.
-const ESTIMATED_MAX_SECONDS = 45;
-
-// Emergency abort threshold (in seconds) — if the fetch takes longer than this,
-// we assume the request is genuinely stuck and show a retry option.
-const EMERGENCY_ABORT_SECONDS = 90;
-
-const ERROR_MESSAGES = {
-  credits: "You don't have enough credits for a reading. Please purchase more or subscribe.",
-  cooldown: "You're on cooldown. Please wait before starting a new reading.",
-  generic: "Something went wrong. Please try again.",
-  abort: "The reading is taking longer than expected. Please try again.",
-  network: "Network error. Please check your connection and try again.",
-};
-
 function PreparingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  // ── UI State ──
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [progressPercent, setProgressPercent] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [errorType, setErrorType] = useState<"credits" | "cooldown" | "generic" | "abort" | null>(null);
-  const [isRetrying, setIsRetrying] = useState(false);
-  
-  // ── Refs ──
   const hasStarted = useRef(false);
-  const isMounted = useRef(true);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const emergencyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  
   const shouldReduceMotion = useReducedMotion();
 
   const stars = React.useMemo(
@@ -69,73 +39,34 @@ function PreparingPageInner() {
     []
   );
 
-  // ── Cleanup on unmount ──
   useEffect(() => {
-    return () => {
-      isMounted.current = false;
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      if (emergencyTimeoutRef.current) {
-        clearTimeout(emergencyTimeoutRef.current);
-        emergencyTimeoutRef.current = null;
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-    };
-  }, []);
-
-  // ── Handle payment cancellation ──
-  useEffect(() => {
+    // Fix 1 — if user cancelled Stripe, send them back to intake immediately
+    // This closes the bypass where they could exit Stripe and get a free reading
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
       router.replace("/reading/intake");
       return;
     }
+
+    // Clean up any other payment params from the URL
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/preparing");
     }
   }, [searchParams, router]);
 
-  // ── DYNAMIC TIMER: updates elapsed seconds and progress ──
   useEffect(() => {
-    if (error) return; // Stop the timer if we hit an error
+    const interval = setInterval(() => {
+      setMessageIndex((prev) =>
+        prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
+      );
+    }, 2300);
+    return () => clearInterval(interval);
+  }, []);
 
-    timerIntervalRef.current = setInterval(() => {
-      if (!isMounted.current) return;
-
-      setElapsedSeconds((prev) => {
-        const next = prev + 1;
-        // Calculate progress: cap at 95% until the reading actually finishes
-        const progress = Math.min((next / ESTIMATED_MAX_SECONDS) * 100, 95);
-        setProgressPercent(progress);
-
-        // Derive message index from progress (0 → 0%, 100 → message length)
-        const msgIdx = Math.min(
-          Math.floor((progress / 100) * LOADING_MESSAGES.length),
-          LOADING_MESSAGES.length - 1
-        );
-        setMessageIndex(msgIdx);
-
-        return next;
-      });
-    }, 1000);
-
-    return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-    };
-  }, [error]);
-
-  // ── Generate the reading ──
   useEffect(() => {
-    if (hasStarted.current || isRetrying) return;
+    if (hasStarted.current) return;
 
+    // Don't start generating if payment was cancelled
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") return;
 
@@ -143,7 +74,6 @@ function PreparingPageInner() {
 
     async function generateReading() {
       try {
-        // 1. Load and validate chart data
         const chart = loadChart();
         const intake = loadIntake();
 
@@ -157,44 +87,14 @@ function PreparingPageInner() {
           return;
         }
 
-        if (!chart.chartData?.tropical?.planets?.length) {
-          router.push("/chart-data");
-          return;
-        }
-
-        // 2. Set up abort controller
-        abortControllerRef.current = new AbortController();
-        const signal = abortControllerRef.current.signal;
-
-        // 3. Emergency abort: if the request takes longer than EMERGENCY_ABORT_SECONDS,
-        //    we cancel the fetch and show a retry state.
-        emergencyTimeoutRef.current = setTimeout(() => {
-          if (!isMounted.current) return;
-
-          // Abort the fetch
-          if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-          }
-
-          // Stop the timer
-          if (timerIntervalRef.current) {
-            clearInterval(timerIntervalRef.current);
-            timerIntervalRef.current = null;
-          }
-
-          setError(ERROR_MESSAGES.abort);
-          setErrorType("abort");
-        }, EMERGENCY_ABORT_SECONDS * 1000);
-
-        // 4. Make the request
-        const response = await fetch("/api/readings", {
+         const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          signal,
           body: JSON.stringify({
             topic: intake.topic,
             question: intake.question,
+            timeframeType: intake.timeframeType,
+            timeframeValue: intake.timeframeValue,
             birthDate: chart.birthDate,
             birthTime: chart.birthTime,
             birthPlace: chart.birthPlace,
@@ -213,172 +113,32 @@ function PreparingPageInner() {
           }),
         });
 
-        // Clear emergency timeout since we got a response
-        if (emergencyTimeoutRef.current) {
-          clearTimeout(emergencyTimeoutRef.current);
-          emergencyTimeoutRef.current = null;
-        }
-
-        // Stop the timer interval — the request is done
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
-
-        // Check if component is still mounted
-        if (!isMounted.current) return;
-
         const data = await response.json();
 
-        // Handle non-OK responses
-        if (!response.ok) {
-          const errorMsg = data.error || data.message || ERROR_MESSAGES.generic;
-          if (response.status === 403) {
-            if (errorMsg.includes("cooldown")) {
-              setError(ERROR_MESSAGES.cooldown);
-              setErrorType("cooldown");
-            } else if (errorMsg.includes("credit") || errorMsg.includes("purchase")) {
-              setError(ERROR_MESSAGES.credits);
-              setErrorType("credits");
-            } else {
-              setError(errorMsg);
-              setErrorType("generic");
-            }
-          } else if (response.status === 502 || response.status === 504) {
-            setError(ERROR_MESSAGES.generic);
-            setErrorType("generic");
-          } else {
-            setError(errorMsg || ERROR_MESSAGES.generic);
-            setErrorType("generic");
-          }
-          return;
+        if (!response.ok || !data.reading) {
+          throw new Error(data.error ?? "Failed to generate reading.");
         }
 
-        if (!data.reading) {
-          throw new Error("No reading data received.");
-        }
+        saveReading({
+          id: data.reading.id,
+          pages: data.reading.pages as ReadingPage[],
+          topic: intake.topic,
+          question: intake.question,
+          generatedAt: new Date().toISOString(),
+        });
 
-        // 5. Save the reading
-        try {
-          if (data.isSafeResponse) {
-            saveReading({
-              id: data.reading.id,
-              pages: data.reading.pages as ReadingPage[],
-              topic: intake.topic,
-              question: intake.question,
-              generatedAt: new Date().toISOString(),
-              isSafeResponse: true,
-              riskLevel: data.riskLevel,
-            });
-          } else {
-            saveReading({
-              id: data.reading.id,
-              pages: data.reading.pages as ReadingPage[],
-              topic: intake.topic,
-              question: intake.question,
-              generatedAt: new Date().toISOString(),
-            });
-          }
-        } catch (saveErr) {
-          console.error("Failed to save reading to localStorage:", saveErr);
-          // Continue anyway — the user can still see the reading
-        }
-
-        // 6. Navigate to results
-        if (isMounted.current) {
-          router.replace("/reading/results");
-        }
+        // Fix 2 — replace instead of push so preparing never appears in history
+        // This prevents the back button on results from re-triggering the AI
+        router.replace("/reading/results");
       } catch (err) {
-        // Handle abort separately (if it was the emergency abort)
-        if ((err as Error).name === "AbortError") {
-          // If we already set an abort error, don't override it
-          if (!error) {
-            // But if the abort happened unexpectedly (e.g., network failure), show retry
-            setError(ERROR_MESSAGES.abort);
-            setErrorType("abort");
-          }
-          return;
-        }
-
-        // Clear emergency timeout on error
-        if (emergencyTimeoutRef.current) {
-          clearTimeout(emergencyTimeoutRef.current);
-          emergencyTimeoutRef.current = null;
-        }
-
-        // Stop the timer on error
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-        }
-
-        if (isMounted.current) {
-          if (err instanceof TypeError && err.message.includes("fetch")) {
-            setError(ERROR_MESSAGES.network);
-          } else {
-            const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.generic;
-            setError(errorMessage);
-          }
-          setErrorType("generic");
-        }
-      } finally {
-        abortControllerRef.current = null;
-        if (!isRetrying) {
-          hasStarted.current = false;
-        }
+        setError(
+          err instanceof Error ? err.message : "Something went wrong. Please try again."
+        );
       }
     }
 
     generateReading();
-  }, [router, searchParams, isRetrying, error]);
-
-  // ── Handle retry ──
-  const handleRetry = () => {
-    if (isRetrying) return;
-
-    setIsRetrying(true);
-    setError(null);
-    setErrorType(null);
-    hasStarted.current = false;
-    setElapsedSeconds(0);
-    setProgressPercent(0);
-    setMessageIndex(0);
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-
-    if (emergencyTimeoutRef.current) {
-      clearTimeout(emergencyTimeoutRef.current);
-      emergencyTimeoutRef.current = null;
-    }
-
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
-
-    setTimeout(() => {
-      setIsRetrying(false);
-    }, 100);
-  };
-
-  // ── Navigation helpers ──
-  const handleErrorAction = () => {
-    if (errorType === "credits") {
-      router.push("/pricing");
-    } else if (errorType === "cooldown") {
-      router.push("/dashboard");
-    } else {
-      router.push("/reading/intake");
-    }
-  };
-
-  // ── Render ──
-
-  // Calculate the width of the progress bar (smooth, not stepped)
-  const barWidth = `${Math.min(progressPercent, 100)}%`;
+  }, [router, searchParams]);
 
   return (
     <div 
@@ -456,55 +216,21 @@ function PreparingPageInner() {
               key="error"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
               className="space-y-6"
             >
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-rose-300/20 bg-rose-500/10">
                 <span className="text-2xl">✕</span>
               </div>
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold text-white">
-                  {errorType === "credits" ? "Credits Needed" :
-                   errorType === "cooldown" ? "Cooling Down" :
-                   "Something Went Wrong"}
-                </h1>
+                <h1 className="text-xl font-semibold text-white">yikes</h1>
                 <p className="text-sm leading-6 text-slate-400">{error}</p>
               </div>
-              <div className="flex flex-col gap-3">
-                {errorType === "credits" && (
-                  <button
-                    onClick={handleErrorAction}
-                    className="h-12 w-full rounded-2xl bg-amber-400 text-sm font-medium text-slate-950 transition hover:bg-amber-300"
-                  >
-                    View Pricing
-                  </button>
-                )}
-                {errorType === "cooldown" && (
-                  <button
-                    onClick={handleErrorAction}
-                    className="h-12 w-full rounded-2xl bg-slate-700 text-sm font-medium text-white transition hover:bg-slate-600"
-                  >
-                    Go to Dashboard
-                  </button>
-                )}
-                {(errorType === "generic" || errorType === "abort") && (
-                  <>
-                    <button
-                      onClick={handleRetry}
-                      disabled={isRetrying}
-                      className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isRetrying ? "Retrying..." : "Try Again"}
-                    </button>
-                    <button
-                      onClick={() => router.push("/reading/intake")}
-                      className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 text-sm font-medium text-slate-300 transition hover:bg-white/10"
-                    >
-                      Go Back
-                    </button>
-                  </>
-                )}
-              </div>
+              <button
+                onClick={() => router.push("/reading/intake")}
+                className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
+              >
+                Tap again
+              </button>
             </motion.div>
           ) : (
             <motion.div
@@ -512,7 +238,7 @@ function PreparingPageInner() {
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="space-y-10"
+              className="space-y-12"
             >
               <div className="relative mx-auto h-32 w-32">
                 <motion.div
@@ -540,25 +266,11 @@ function PreparingPageInner() {
                   Reading the sky
                 </h1>
                 <p className="text-sm leading-6 text-slate-400">
-                  Your chart is being traced from multiple angles. Only you can see this reading.
+                  Your chart is being traced from multiple angles. Only you can see this reading —
+                  tap the download icon to keep it.
                 </p>
               </div>
 
-              {/* ── DYNAMIC PROGRESS BAR ── */}
-              <div className="space-y-3">
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                  <motion.div
-                    className="h-full rounded-full bg-teal-300"
-                    style={{ width: barWidth }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
-                  />
-                </div>
-                <p className="text-xs text-slate-400 font-mono tracking-wide">
-                  {Math.min(Math.round(progressPercent), 100)}%
-                </p>
-              </div>
-
-              {/* ── DYNAMIC MESSAGE ── */}
               <div className="h-6">
                 <AnimatePresence mode="wait">
                   <motion.p
@@ -574,19 +286,15 @@ function PreparingPageInner() {
                 </AnimatePresence>
               </div>
 
-              {/* ── SMALL DOTS (now reflecting progress) ── */}
-              <div className="flex items-center justify-center gap-1.5">
-                {LOADING_MESSAGES.map((_, i) => {
-                  const isComplete = i <= messageIndex;
-                  return (
-                    <motion.div
-                      key={i}
-                      className={`h-1.5 rounded-full transition-all duration-500 ${
-                        isComplete ? "w-4 bg-teal-300" : "w-1.5 bg-white/10"
-                      }`}
-                    />
-                  );
-                })}
+              <div className="flex items-center justify-center gap-2">
+                {LOADING_MESSAGES.map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className={`h-1.5 rounded-full transition-all duration-500 ${
+                      i <= messageIndex ? "w-6 bg-teal-300" : "w-1.5 bg-white/10"
+                    }`}
+                  />
+                ))}
               </div>
 
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
@@ -595,7 +303,8 @@ function PreparingPageInner() {
                   <span className="text-slate-200">— this configuration is yours alone</span>,{" "}
                   read through <span className="text-slate-200">every layer your chart holds</span>,{" "}
                   weighed against <span className="text-slate-200">what is moving toward you now</span>.{" "}
-                  What surfaces next may be quiet, or it may change how you see the next few weeks.
+                  What surfaces next may be quiet, or it may change how you see the next few weeks
+                  — take note of the dates it gives.
                 </p>
               </div>
             </motion.div>
