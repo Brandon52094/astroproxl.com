@@ -1,9 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_22", "python311"]
+aptPkgs = ["python3-distutils"]
 
 [phases.install]
 cmds = ["npm ci"]
-
-[variables]
-PYTHON = "python3.11"
-npm_config_python = "python3.11"
