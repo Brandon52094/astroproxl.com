@@ -1170,8 +1170,8 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 3000,
-        temperature: 0.3,
+        max_tokens: 4000,
+        temperature: 0.7,
         system: "You are a precision astrological synthesis engine. Vary your selection of timing windows across the provided date index based on the user's specific topic and question. Never default to the first available dates unless they uniquely match the spine aspect. Output raw JSON.",
         messages: [{ role: "user", content: prompt }],
       }),
