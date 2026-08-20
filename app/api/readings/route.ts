@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: app/api/readings/route.ts (COMPLETE - FIXED)
+// FILE: app/api/readings/route.ts (TOPIC-SPECIFIC VERSION)
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,7 +23,7 @@ const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000;
 const CREDITS_PER_READING = 4;
 
 // ============================================================
-// TYPES - Extended to match chart-calculate
+// TYPES
 // ============================================================
 
 interface ReadingRequestBody {
@@ -82,7 +82,7 @@ interface ReadingRequestBody {
     arabicLots: Array<{ name: "Lot of Fortune" | "Lot of Spirit"; sign: string; degree: string; house: number }>;
   };
 
-  // ESSENTIAL CALCULATIONS (keeping only these 4)
+  // Essential calculations
   mutualReceptions?: MutualReception[];
   synodicCycles?: SynodicCycle[];
   midpoints?: Midpoint[];
@@ -121,6 +121,178 @@ const ASPECT_ORBS: Record<string, { exact: number; live: number; background: num
   semi_sextile: { exact: 1.0, live: 2.0, background: 4.0 },
   quincunx: { exact: 1.0, live: 2.0, background: 4.0 },
 };
+
+// ============================================================
+// TOPIC-SPECIFIC FILTERS
+// ============================================================
+
+function getTopicRelevantPlanets(topic: string): Set<string> {
+  const base = new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]);
+  
+  switch(topic) {
+    case "love":
+      return new Set([...base, "Venus", "Mars", "Moon", "North Node"]);
+    case "money":
+      return new Set([...base, "Venus", "Jupiter", "Saturn", "Pluto"]);
+    case "career":
+      return new Set([...base, "Saturn", "Sun", "Mars", "Jupiter", "Uranus", "Midheaven"]);
+    default: // general
+      return base;
+  }
+}
+
+function getTopicRelevantHouses(topic: string): Set<number> {
+  switch(topic) {
+    case "love":
+      return new Set([5, 7, 8]); // Romance, Partnerships, Intimacy
+    case "money":
+      return new Set([2, 8, 11]); // Income, Shared Resources, Gains
+    case "career":
+      return new Set([10, 6, 2]); // Vocation, Daily Work, Income
+    default:
+      return new Set([1, 4, 7, 10]); // Angular houses for general
+  }
+}
+
+function getTopicRelevantAspects(topic: string): Set<string> {
+  switch(topic) {
+    case "love":
+      return new Set(["conjunction", "trine", "sextile"]); // Harmonious aspects
+    case "money":
+      return new Set(["conjunction", "trine", "square"]); // Expansion + tension
+    case "career":
+      return new Set(["conjunction", "square", "opposition"]); // Tension + action
+    default:
+      return new Set(["conjunction", "opposition", "square", "trine", "sextile"]);
+  }
+}
+
+function getTopicWindowInstruction(topic: string): string {
+  const instructions = {
+    love: [
+      "LOVE READING — Focus on these transits:",
+      "  - Venus aspects (love, attraction, values)",
+      "  - Mars aspects (passion, drive, action)",
+      "  - Moon aspects (emotions, nurturing, receptivity)",
+      "  - 5th House activations (romance, pleasure, creativity)",
+      "  - 7th House activations (partnerships, commitments)",
+      "  - 8th House activations (intimacy, shared resources, depth)",
+      "",
+      "WINDOW INTERPRETATION:",
+      "  - Venus trine Mars → magnetic attraction, chemistry",
+      "  - Venus square Saturn → relationship tests, commitment fears",
+      "  - Moon conjunct Venus → emotional bonding, nurturing love",
+      "  - Mars in 5th → bold romantic gestures, passion",
+      "",
+      "🔴 AVOID: Reading money or career transits as love signals.",
+    ].join("\n"),
+    
+    money: [
+      "MONEY READING — Focus on these transits:",
+      "  - Venus aspects (money, values, resources)",
+      "  - Jupiter aspects (expansion, abundance, opportunity)",
+      "  - Saturn aspects (structure, discipline, long-term wealth)",
+      "  - Pluto aspects (transformation, power, shared resources)",
+      "  - 2nd House activations (income, personal assets)",
+      "  - 8th House activations (shared resources, debt, investments)",
+      "  - 11th House activations (gains, networks, financial opportunities)",
+      "",
+      "WINDOW INTERPRETATION:",
+      "  - Jupiter trine Venus → financial expansion, windfall",
+      "  - Saturn square Venus → financial constraints, budgeting required",
+      "  - Pluto sextile Venus → financial transformation, investment opportunity",
+      "  - Venus in 2nd → income increase, value recognition",
+      "",
+      "🔴 AVOID: Reading romance or career transits as money signals.",
+    ].join("\n"),
+    
+    career: [
+      "CAREER READING — Focus on these transits:",
+      "  - Saturn aspects (career structure, authority, long-term path)",
+      "  - Sun aspects (identity, recognition, leadership)",
+      "  - Mars aspects (action, ambition, drive)",
+      "  - Jupiter aspects (expansion, opportunity, promotion)",
+      "  - Uranus aspects (change, innovation, unexpected shifts)",
+      "  - 10th House activations (vocation, public reputation, authority)",
+      "  - 6th House activations (daily work, routines, service)",
+      "  - 2nd House activations (income from work, value)",
+      "",
+      "WINDOW INTERPRETATION:",
+      "  - Saturn trine Sun → career recognition, authority role",
+      "  - Mars square Saturn → work pressure, ambition vs reality",
+      "  - Jupiter sextile Sun → promotion, recognition, opportunity",
+      "  - Uranus in 10th → career pivot, unexpected change",
+      "",
+      "🔴 AVOID: Reading romance or money transits as career signals.",
+    ].join("\n"),
+    
+    general: [
+      "GENERAL READING — Focus on significant transits:",
+      "  - All personal planet transits",
+      "  - Angular house activations (1, 4, 7, 10)",
+      "  - Slow planet transits (structural shifts)",
+      "  - Fast planet transits (immediate moments)",
+      "",
+      "WINDOW INTERPRETATION:",
+      "  - Lead with the SPINE aspect",
+      "  - Mix structural and immediate windows",
+      "  - Include one long-term theme and one immediate action",
+      "",
+      "🔴 No topic filter applied — use all significant transits.",
+    ].join("\n"),
+  };
+
+  return instructions[topic as keyof typeof instructions] || instructions.general;
+}
+
+// ============================================================
+// FILTER TRANSITS BY TOPIC
+// ============================================================
+
+function filterTransitsByTopic(
+  aspects: TransitAspect[],
+  topic: string,
+  timeLord: string
+): TransitAspect[] {
+  const relevantPlanets = getTopicRelevantPlanets(topic);
+  const relevantHouses = getTopicRelevantHouses(topic);
+  const relevantAspects = getTopicRelevantAspects(topic);
+
+  const personalAspects = aspects.filter(a => 
+    PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === timeLord
+  );
+
+  // First pass: Filter by relevant planets and aspects
+  let filtered = personalAspects.filter(a => {
+    const isRelevantPlanet = relevantPlanets.has(a.transitPlanet) || 
+                           relevantPlanets.has(a.natalPlanet);
+    const isRelevantAspect = relevantAspects.has(a.aspectType?.toLowerCase() || "");
+    return isRelevantPlanet && isRelevantAspect;
+  });
+
+  // Second pass: If we have more than 8, prioritize by house
+  if (filtered.length > 8) {
+    filtered = filtered.filter(a => {
+      const house = a.natalHouse || 0;
+      return relevantHouses.has(house);
+    });
+  }
+
+  // Third pass: Still too many? Prioritize by band
+  if (filtered.length > 6) {
+    filtered = filtered.filter(a => 
+      a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
+    );
+  }
+
+  // If we have NO filtered aspects, fall back to personal aspects
+  if (filtered.length === 0) {
+    console.warn(`[readings] No topic-specific transits for "${topic}", falling back to all personal aspects`);
+    return personalAspects.slice(0, 6);
+  }
+
+  return filtered.slice(0, 6);
+}
 
 // ============================================================
 // VALIDATION
@@ -335,7 +507,7 @@ function filterPersonalTrigger(trigger: any, timeLord: string): any | null {
 }
 
 // ============================================================
-// BUILD PROMPT
+// BUILD PROMPT - Topic-Specific Version
 // ============================================================
 
 function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitAspect[] = []): string {
@@ -359,15 +531,26 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     houseRulers,
   } = body;
 
-  const spine = determineSpine(validatedAspects, profection, transitsToAngles, progressions, solarArcs);
-  const temporal = classifyTemporal(validatedAspects, profection.timeLord);
+  // ── TOPIC-SPECIFIC FILTERING ──
+  const topicRelevantAspects = filterTransitsByTopic(validatedAspects, topic, profection.timeLord);
+  
+  // For spine detection, use ALL aspects but weight topic-relevant ones
+  const spine = determineSpine(
+    topicRelevantAspects.length > 0 ? topicRelevantAspects : validatedAspects,
+    profection,
+    transitsToAngles,
+    progressions,
+    solarArcs
+  );
+  
+  const temporal = classifyTemporal(topicRelevantAspects.length > 0 ? topicRelevantAspects : validatedAspects, profection.timeLord);
   const personalTrigger = filterPersonalTrigger(upcomingTrigger, profection.timeLord);
 
-  const hasActiveAspects = validatedAspects.some(
+  const hasActiveAspects = topicRelevantAspects.some(
     (a) => a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
   );
 
-  const hasPersonalActive = validatedAspects.some(
+  const hasPersonalActive = topicRelevantAspects.some(
     (a) =>
       (a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE") &&
       (PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord)
@@ -375,7 +558,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 
   const sections: string[] = [];
 
-  // HEADER
+  // ── HEADER ──
   sections.push(
     "ASTROLOGICAL SYNTHESIS ENGINE",
     `TODAY: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
@@ -386,17 +569,26 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // TOPIC FOCUS
-  if (topic !== "general") {
-    const topicMap = {
-      love: "LOVE: 5th/7th/8th houses, Venus/Moon/Mars",
-      money: "MONEY: 2nd/8th/11th houses, Jupiter/Venus/Saturn",
-      career: "CAREER: 10th/6th/2nd houses, Saturn/Sun/Mars",
-    };
-    sections.push("TOPIC FOCUS — " + topicMap[topic], "");
-  }
+  // ── TOPIC FOCUS ──
+  const topicFocusMap = {
+    love: "LOVE & RELATIONSHIPS — Focus on Venus, Mars, Moon, 5th/7th/8th houses",
+    money: "MONEY & FINANCES — Focus on Venus, Jupiter, Saturn, 2nd/8th/11th houses",
+    career: "CAREER & PROFESSION — Focus on Saturn, Sun, Mars, 10th/6th/2nd houses",
+    general: "GENERAL — No topic filter, use all significant transits",
+  };
+  sections.push("TOPIC FOCUS — " + (topicFocusMap[topic as keyof typeof topicFocusMap] || topicFocusMap.general), "");
 
-  // SPINE HIERARCHY
+  // ── TOPIC-SPECIFIC WINDOW INSTRUCTION ──
+  sections.push(
+    "═══════════════════════════════════════════",
+    "TOPIC-SPECIFIC WINDOW SELECTION",
+    "═══════════════════════════════════════════",
+    "",
+    getTopicWindowInstruction(topic),
+    ""
+  );
+
+  // ── SPINE HIERARCHY ──
   sections.push(
     "SPINE HIERARCHY (apply in order):",
     "1. TRANSIT TO ANGLE → Major Life Event (outranks everything)",
@@ -413,7 +605,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // PROFECTION
+  // ── PROFECTION ──
   sections.push(
     "PROFECTION YEAR:",
     `Age ${profection.age} → House ${profection.activatedHouse} (${profection.activatedSign})`,
@@ -421,7 +613,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // HOUSE RULERS
+  // ── HOUSE RULERS ──
   if (houseRulers && houseRulers.length > 0) {
     sections.push(
       "HOUSE RULERS (context for house themes):",
@@ -430,66 +622,43 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // MUTUAL RECEPTION
+  // ── MUTUAL RECEPTION ──
   if (mutualReceptions && mutualReceptions.length > 0) {
     sections.push(
-      "═══════════════════════════════════════════",
-      "MUTUAL RECEPTION — AMPLIFIED CONNECTIONS",
-      "═══════════════════════════════════════════",
-      "",
+      "MUTUAL RECEPTION — AMPLIFIED CONNECTIONS:",
       ...mutualReceptions.map(
         (m) => `⚡ ${m.description} → ${m.planetA} and ${m.planetB} are in each other's signs`
       ),
-      "",
-      "ROLE: Mutual reception AMPLIFIES any transit involving either planet.",
-      "If a transit hits one of these planets, it is STRONGER than the orb suggests.",
-      "Lead with these when they appear in the active transit list.",
       ""
     );
   }
 
-  // SYNODIC CYCLES
+  // ── SYNODIC CYCLES ──
   if (synodicCycles && synodicCycles.length > 0) {
     const relevantCycles = synodicCycles.filter((s) => s.daysUntilReturn <= 45);
     if (relevantCycles.length > 0) {
       sections.push(
-        "═══════════════════════════════════════════",
-        "SYNODIC CYCLES — MAJOR CHAPTER MARKERS",
-        "═══════════════════════════════════════════",
-        "",
+        "SYNODIC CYCLES (Chapter Markers):",
         ...relevantCycles.map(
           (s) => `${s.planet} return in ${s.daysUntilReturn} days (${s.returnDate})`
         ),
-        "",
-        "ROLE: A planetary return is a MAJOR life chapter marker.",
-        "If a return is approaching in the next 45 days, it is a PRIMARY date anchor.",
-        "The Sun return = birthday. Moon return = monthly reset. Venus return = relationship chapter.",
-        "",
-        "Return windows: Mark the return date as [[DATE: X]] in Part 3.",
         ""
       );
     }
   }
 
-  // MIDPOINTS
+  // ── MIDPOINTS ──
   if (midpoints && midpoints.length > 0) {
     sections.push(
-      "═══════════════════════════════════════════",
-      "MIDPOINTS — SENSITIVE POINTS",
-      "═══════════════════════════════════════════",
-      "",
+      "MIDPOINTS (Sensitive Point Activators):",
       ...midpoints.map(
         (m) => `${m.pointA}/${m.pointB} midpoint: ${m.sign} ${m.degree}° (House ${m.house})`
       ),
-      "",
-      "ROLE: Midpoints are sensitive points that can be activated by transits.",
-      "If a transit hits a midpoint, it triggers both planets simultaneously.",
-      "Example: Sun/Moon midpoint = relationship balance. Venus/Mars = attraction/drive.",
       ""
     );
   }
 
-  // TRANSIT TO ANGLES
+  // ── TRANSIT TO ANGLES ──
   if (transitsToAngles && transitsToAngles.length > 0) {
     sections.push(
       "TRANSIT TO ANGLES (Major Life Events):",
@@ -500,7 +669,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // PROGRESSIONS & SOLAR ARCS
+  // ── PROGRESSIONS & SOLAR ARCS ──
   if (progressions?.length) {
     sections.push(
       "PROGRESSIONS:",
@@ -516,46 +685,51 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // TRANSIT ASPECTS
-  if (validatedAspects.length) {
-    const personalAspects = validatedAspects.filter(
-      (a) => PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord
-    );
+  // ── TRANSIT ASPECTS (Topic-Filtered) ──
+  if (topicRelevantAspects.length > 0) {
+    sections.push("TRANSIT-TO-NATAL ASPECTS — TOPIC-RELEVANT ONLY:");
+    sections.push(`RELEVANT ASPECTS (${topicRelevantAspects.length}):`);
 
-    const generationalCount = validatedAspects.filter(
-      (a) => GENERATIONAL_PLANETS.has(a.transitPlanet) && !PERSONAL_PLANETS.has(a.natalPlanet)
-    ).length;
+    // Group by band for clarity
+    const exact = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "EXACT");
+    const live = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "LIVE");
+    const background = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "BACKGROUND");
 
-    sections.push("TRANSIT-TO-NATAL ASPECTS — PERSONAL PLANETS ONLY:");
-    sections.push(`PERSONAL ASPECTS (${personalAspects.length}):`);
-
-    for (const a of personalAspects) {
-      const band = a.band?.toUpperCase() || "";
-      const rx = a.isRetrograde ? " Rx" : "";
-      const motion = a.isApplying ? "APPLYING" : "SEPARATING";
-      const personalMark = PERSONAL_PLANETS.has(a.natalPlanet) ? " ★" : " ⚡";
-      sections.push(
-        `  [${band}]${personalMark} ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}`
-      );
+    if (exact.length > 0) {
+      sections.push(`  EXACT (${exact.length}):`);
+      for (const a of exact) {
+        const rx = a.isRetrograde ? " Rx" : "";
+        const motion = a.isApplying ? "APPLYING" : "SEPARATING";
+        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}`);
+      }
     }
 
-    if (generationalCount > 0) {
-      sections.push(
-        "",
-        `NOTE: ${generationalCount} generational aspects were filtered out.`,
-        "These are universal background texture, never personal windows."
-      );
+    if (live.length > 0) {
+      sections.push(`  LIVE (${live.length}):`);
+      for (const a of live) {
+        const rx = a.isRetrograde ? " Rx" : "";
+        const motion = a.isApplying ? "APPLYING" : "SEPARATING";
+        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}`);
+      }
     }
+
+    if (background.length > 0) {
+      sections.push(`  BACKGROUND (${background.length} — texture only):`);
+      for (const a of background) {
+        sections.push(`    • ${a.transitPlanet} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb`);
+      }
+    }
+
     sections.push("");
   } else {
     sections.push(
-      "TRANSIT-TO-NATAL ASPECTS: NONE WITHIN ORB RIGHT NOW.",
-      "The sky is quiet for your personal chart.",
+      "TRANSIT-TO-NATAL ASPECTS: No topic-relevant transits within orb.",
+      "Using all personal aspects for context.",
       ""
     );
   }
 
-  // TEMPORAL CLASSIFICATION
+  // ── TEMPORAL CLASSIFICATION ──
   sections.push(
     "TEMPORAL CLASSIFICATION:",
     `IMMEDIATE (0-4 weeks): ${temporal.immediate.map((a) => `${a.transitPlanet}→${a.natalPlanet}`).join(", ") || "None"}`,
@@ -564,17 +738,16 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // UPCOMING TRIGGER
+  // ── UPCOMING TRIGGER ──
   if (personalTrigger) {
     sections.push(
       "NEXT EXACT ASPECT:",
       `${personalTrigger.transitPlanet} ${personalTrigger.aspect} natal ${personalTrigger.natalPlanet} on ${personalTrigger.date}`,
-      "This is the SAME aspect as in the transit list above. Mention it ONCE.",
       ""
     );
   }
 
-  // PLANETARY STATIONS
+  // ── PLANETARY STATIONS ──
   if (planetaryStations?.length) {
     sections.push("PLANETARY STATIONS:");
     for (const s of planetaryStations) {
@@ -584,45 +757,35 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     sections.push("");
   }
 
-  // SOLAR RETURN
+  // ── SOLAR RETURN ──
   if (solarReturn) {
     const timeLordInAngularHouse = solarReturn.timeLordSRHouse !== null && 
       ANGULAR_HOUSES.has(solarReturn.timeLordSRHouse);
     
     sections.push(
-      "═══════════════════════════════════════════",
-      "SOLAR RETURN — EXTERNAL/INTERNAL EVENT FILTER",
-      "═══════════════════════════════════════════",
-      "",
-      `Date: ${solarReturn.sunReturnDate} | Location: ${solarReturn.location}`,
+      "SOLAR RETURN — EXTERNAL/INTERNAL FILTER:",
+      `Date: ${solarReturn.sunReturnDate}`,
       `SR Asc: ${solarReturn.ascendant?.sign || "N/A"} ${solarReturn.ascendant?.degree || ""}`,
       `SR MC: ${solarReturn.midheaven?.sign || "N/A"} ${solarReturn.midheaven?.degree || ""}`,
       solarReturn.timeLordInSR
-        ? `Time Lord ${profection.timeLord} in SR: ${solarReturn.timeLordInSR} (House ${solarReturn.timeLordSRHouse})${timeLordInAngularHouse ? " ★ Angular House!" : ""}`
+        ? `Time Lord ${profection.timeLord} in SR: ${solarReturn.timeLordInSR}${timeLordInAngularHouse ? " ★ Angular House!" : ""}`
         : `Time Lord ${profection.timeLord} not prominent in SR chart`,
-      "",
-      "EXTERNAL EVENT TEST: A transit predicts an EXTERNAL event (job, relationship, money) ONLY if:",
-      "  1. Transit planet appears in Solar Return chart, OR",
-      "  2. Transit activates the Time Lord with SR support (Time Lord in angular house), OR",
-      "  3. Transit hits an angular house (1, 4, 7, 10)",
-      "Otherwise → INTERNAL (psychological/spiritual) interpretation.",
       ""
     );
   }
 
-  // MOON PHASE
+  // ── MOON PHASE ──
   if (moonPhase) {
     sections.push(
       "MOON PHASE:",
       `${moonPhase.phaseName}, ${moonPhase.illuminationPercent}% illuminated`,
       `Moon in ${moonPhase.moonSign} ${moonPhase.moonDegree}`,
       `Next ${moonPhase.nextEventName} in ${moonPhase.daysUntilNextEvent} days`,
-      "USE: Quiet texture, not a window anchor.",
       ""
     );
   }
 
-  // EXTENDED POINTS
+  // ── EXTENDED POINTS ──
   if (extendedPoints) {
     const { arabicLots, declinations } = extendedPoints;
     const oob = (declinations ?? []).filter((d: any) => d.isOutOfBounds);
@@ -638,7 +801,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     }
   }
 
-  // SIDEREAL
+  // ── SIDEREAL ──
   if (sidereal?.planets?.length) {
     sections.push(
       "SIDEREAL (confirmation filter):",
@@ -647,7 +810,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // NATAL ASPECTS
+  // ── NATAL ASPECTS ──
   const SPEED_PRIORITY: Record<string, number> = {
     Moon: 10, Mercury: 9, Venus: 8, Sun: 7, Mars: 6,
     Jupiter: 5, Saturn: 4, Uranus: 3, Neptune: 2, Pluto: 1,
@@ -676,7 +839,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 
   sections.push("NATAL ASPECTS (major first, capped at 15):", aspectList || "None", "");
 
-  // PERSONAL PLANET FILTER
+  // ── PERSONAL PLANET FILTER HARD RULE ──
   sections.push(
     "═══════════════════════════════════════════",
     "PERSONAL PLANET FILTER FOR WINDOWS — HARD RULE",
@@ -692,7 +855,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // PART 3 — DATED WINDOWS
+  // ── PART 3 — DATED WINDOWS ──
   if (hasActiveAspects && hasPersonalActive) {
     sections.push(
       "PART 3 — DATED WINDOWS (2-4 windows, as data supports):",
@@ -700,89 +863,77 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
       "Each window format:",
       "  [[DATE: X]] — [one sentence on what activates] [one sentence on consequence]",
       "",
+      "⚠️ CRITICAL: Use DIFFERENT dates for each window.",
+      "",
       "TIMING RULES:",
       "  - Fast planets (Mercury, Venus, Mars, Sun, Moon): ±1 day window",
       "  - Slow planets (Jupiter, Saturn, Uranus, Neptune, Pluto): ±2 week window",
       "  - Stations: ±2 day window around station date",
       "",
-      "WINDOW SELECTION (PERSONAL PLANETS ONLY):",
+      "WINDOW SELECTION — ALWAYS FOLLOW THE TOPIC RULES ABOVE:",
       "  1. Lead with the SPINE aspect identified above",
-      "  2. Add any CRITICAL MASS windows",
-      "  3. Add any Time Lord windows",
-      "  4. Add any Mutual Reception windows (amplified)",
-      "  5. Add any Synodic Cycle windows (chapter markers)",
-      "  6. Add any TRANSIT TO ANGLE windows (major life events)",
-      "  7. Fill remaining with strongest EXACT/LIVE personal aspects",
-      "  8. NEVER use BACKGROUND aspects as windows",
+      "  2. Prioritize topic-relevant planets and houses",
+      "  3. Add any CRITICAL MASS windows",
+      "  4. Add any Time Lord windows",
+      "  5. Add any Mutual Reception windows (amplified)",
+      "  6. Add any Synodic Cycle windows (chapter markers)",
+      "  7. Fill remaining with strongest topic-relevant aspects",
       "",
-      "If fewer than 2 personal EXACT/LIVE aspects exist, give only what's available.",
+      "If fewer than 2 topic-relevant EXACT/LIVE aspects exist, give only what's available.",
       ""
     );
   } else {
     sections.push(
-      "PART 3 — SKIPPED: No personal EXACT or LIVE transit aspects in the next 45 days.",
+      "PART 3 — SKIPPED: No topic-relevant personal EXACT or LIVE transit aspects.",
       "",
-      `Replace Part 3 with: "There are no tight personal transit windows in the next 45 days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
-      "",
-      "Do NOT invent dated windows. Do NOT pad with empty predictions.",
+      `Replace Part 3 with: "There are no tight topic-relevant transit windows in the next 45 days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
       ""
     );
   }
 
-  // PART 4 — DIRECTIVE
+  // ── PART 4 — DIRECTIVE ──
   sections.push(
     "PART 4 — THE DIRECTIVE (1-3 items, hard 3-sentence ceiling each):",
     "",
     "DROP: The behavior to stop immediately (ALWAYS available, no date needed)",
-    "  - Example: 'DROP: Stop over-explaining your decisions to people who aren't listening.'",
     "",
     "EXECUTE BY [[DATE: ...]]: A specific action for the tightest window (only if window exists)",
-    "  - Must be tied to a dated window from Part 3",
-    "  - Example: 'EXECUTE BY [[DATE: June 14-16]]: Have the direct conversation about the budget.'",
+    "  - Must be tied to a topic-relevant window from Part 3",
     "",
     "LOCK IN BY [[DATE: ...]]: A structural commitment (only for slow planet windows)",
-    "  - Must be tied to a slow planet window",
-    "  - Example: 'LOCK IN BY [[DATE: June 25]]: Commit to the new shared budget structure.'",
+    "  - Must be tied to a topic-relevant slow planet window",
     "",
     "If no dated windows exist, DROP alone is a complete directive.",
     ""
   );
 
-  // HOW TO USE THE CALCULATIONS
+  // ── HOW TO USE THE CALCULATIONS ──
+  const relevantPlanets = getTopicRelevantPlanets(topic);
+  const relevantHouses = getTopicRelevantHouses(topic);
+  const relevantAspects = getTopicRelevantAspects(topic);
+  
   sections.push(
     "═══════════════════════════════════════════",
-    "HOW TO USE THE CALCULATIONS (Priority Order)",
+    "HOW TO USE THE CALCULATIONS",
     "═══════════════════════════════════════════",
     "",
-    "1. TRANSIT TO ANGLE — Major Life Event:",
-    "   When a transit hits an angle (Asc, MC, Desc, IC), it's a MAJOR life event.",
-    "   This OUTRANKS all other aspects. Lead with it if present.",
+    "1. TRANSIT TO ANGLE → Major Life Event (OUTRANKS all)",
+    "2. SOLAR RETURN → External/Internal event filter",
+    "3. MUTUAL RECEPTION → Amplifier (makes transits stronger)",
+    "4. SYNODIC CYCLES → Chapter markers",
+    "5. MIDPOINTS → Sensitive point activators",
     "",
-    "2. SOLAR RETURN — External Event Filter:",
-    "   Use this to determine if a transit predicts an EXTERNAL event or INTERNAL shift.",
-    "   If the transit planet appears in the Solar Return chart → EXTERNAL.",
-    "   If the Time Lord is in an angular house in SR → EXTERNAL.",
-    "   If the transit hits an angular house → EXTERNAL.",
-    "   Otherwise → INTERNAL (psychological, spiritual, emotional).",
-    "",
-    "3. MUTUAL RECEPTION — Amplifier:",
-    "   When two planets are in each other's signs, any transit hitting either planet is AMPLIFIED.",
-    "   If a mutual reception pair appears in the active transit list, lead with it.",
-    "",
-    "4. SYNODIC CYCLES — Chapter Markers:",
-    "   Planetary returns (Sun, Moon, Venus, Mars, Jupiter, Saturn) are major life transitions.",
-    "   If a return is within 45 days, mark it as a PRIMARY date anchor.",
-    "",
-    "5. MIDPOINTS — Sensitive Point Activator:",
-    "   When a transit hits a midpoint, it activates both planets simultaneously.",
-    "   Use midpoints to identify subtle but powerful timing windows.",
+    `For this reading (${topic.toUpperCase()}):`,
+    `  - Priority planets: ${Array.from(relevantPlanets).join(", ")}`,
+    `  - Priority houses: ${Array.from(relevantHouses).join(", ")}`,
+    `  - Priority aspects: ${Array.from(relevantAspects).join(", ")}`,
     ""
   );
 
-  // SOURCE VERIFICATION
+  // ── SOURCE VERIFICATION ──
   sections.push(
     "═══════════════════════════════════════════",
-    "SOURCE VERIFICATION — YOUR SAFETY NET",
+    "SOURCE VERIFICATION",
     "═══════════════════════════════════════════",
     "",
     "For EVERY claim in Parts 1, 2, 3, and 4:",
@@ -793,12 +944,12 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     "Example sources entry:",
     '{',
     '  "section": "Part 1 — Spine",',
-    '  "placements": "[EXACT] Transit Saturn Rx 24°35\' Cancer square natal Moon 21°56\' Virgo — 1.2° orb, APPLYING"',
+    '  "placements": "[EXACT] Saturn Rx 24°35\' Cancer square natal Moon 21°56\' Virgo — 1.2° orb, APPLYING"',
     '}',
     ""
   );
 
-  // PROSE PURITY RULES
+  // ── PROSE PURITY RULES ──
   sections.push(
     "═══════════════════════════════════════════",
     "PROSE PURITY RULES",
@@ -810,7 +961,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // OUTPUT FORMAT
+  // ── OUTPUT FORMAT ──
   sections.push(
     "OUTPUT FORMAT — RAW JSON ONLY",
     "",
@@ -834,7 +985,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 }
 
 // ============================================================
-// POST HANDLER - COMPLETE IMPLEMENTATION
+// POST HANDLER
 // ============================================================
 
 export async function POST(request: NextRequest) {
