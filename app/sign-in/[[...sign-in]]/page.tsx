@@ -403,16 +403,16 @@ export default function SignInPage() {
                 fallbackRedirectUrl="/reading/intake"
                 appearance={{
                   variables: {
-  colorPrimary: "#fbbf24",
-  colorBackground: "transparent",
-  colorForeground: "#f8fafc",
-  colorMutedForeground: "#cbd5e1",
-  colorInput: "rgba(255,255,255,0.04)",
-  colorInputForeground: "#ffffff",
-  colorDanger: "#fb7185",
-  borderRadius: "24px",
-  fontFamily: "Inter, sans-serif",
-},
+                    colorPrimary: "#fbbf24",
+                    colorBackground: "transparent",
+                    colorText: "#f8fafc",
+                    colorTextSecondary: "#cbd5e1",
+                    colorInputBackground: "rgba(255,255,255,0.04)",
+                    colorInputText: "#ffffff",
+                    colorDanger: "#fb7185",
+                    borderRadius: "24px",
+                    fontFamily: "Inter, sans-serif",
+                  },
                   elements: {
                     rootBox: "w-full",
                     card: "bg-transparent shadow-none border-0 rounded-none",
@@ -444,11 +444,11 @@ export default function SignInPage() {
                     formFieldSuccessText: "text-amber-200",
                     formContainer: "pt-6 px-6",
                   },
-                  options: {
-  socialButtonsPlacement: "top",
-  socialButtonsVariant: "blockButton",
-  shimmer: false,
-},
+                  layout: {
+                    socialButtonsPlacement: "top",
+                    socialButtonsVariant: "blockButton",
+                    shimmer: false,
+                  },
                 }}
               />
             </div>
