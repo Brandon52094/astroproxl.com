@@ -464,6 +464,7 @@ export function buildReadingPrompt(
   console.log(`[DEBUG] Topic-relevant station dates:`, relevantStationDates);
   console.log(`[DEBUG] Topic-relevant cycle dates:`, relevantCycleDates);
   console.log(`[DEBUG] Total unique dates:`, finalDates);
+  console.log(`[DIAG] topic=${topic.id} | aspectDates=${JSON.stringify(aspectDates)} | finalDates=${JSON.stringify(finalDates)} | filteredAspectCount=${topicRelevantAspects.length}`);
 
   const spine = determineSpine(
     topicRelevantAspects.length > 0 ? topicRelevantAspects : validatedAspects,
