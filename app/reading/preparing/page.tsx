@@ -27,6 +27,8 @@ function PreparingPageInner() {
   const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [estimatedDuration, setEstimatedDuration] = useState<number>(88000); // ~88s baseline
   const hasStarted = useRef(false);
   const shouldReduceMotion = useReducedMotion();
 
@@ -43,39 +45,71 @@ function PreparingPageInner() {
     []
   );
 
+  // ── 1. Load rolling average duration on mount ──
   useEffect(() => {
-    // Fix 1 — if user cancelled Stripe, send them back to intake immediately
+    try {
+      const historyJson = localStorage.getItem("reading_speed_history");
+      if (historyJson) {
+        const history: number[] = JSON.parse(historyJson);
+        if (history.length > 0) {
+          const avg = history.reduce((a, b) => a + b, 0) / history.length;
+          // Clamp between 45 seconds min and 150 seconds max
+          setEstimatedDuration(Math.min(Math.max(avg, 45000), 150000));
+        }
+      }
+    } catch {
+      // Fallback to default
+    }
+  }, []);
+
+  // ── 2. Smooth progress bar runner ──
+  useEffect(() => {
+    const startTime = Date.now();
+
+    const progressInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const percentage = Math.min(Math.floor((elapsed / estimatedDuration) * 95), 95);
+      setProgress(percentage);
+    }, 250);
+
+    return () => clearInterval(progressInterval);
+  }, [estimatedDuration]);
+
+  // ── 3. Slower message rotation interval (7 seconds) ──
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIndex((prev) =>
+        prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
+      );
+    }, 7000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── 4. Handle payment cancellation ──
+  useEffect(() => {
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
       router.replace("/reading/intake");
       return;
     }
 
-    // Clean up any other payment params from the URL
     if (searchParams.get("payment")) {
       window.history.replaceState({}, "", "/reading/preparing");
     }
   }, [searchParams, router]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessageIndex((prev) =>
-        prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
-      );
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
+  // ── 5. Generate reading with timing tracking ──
   useEffect(() => {
     if (hasStarted.current) return;
 
-    // Don't start generating if payment was cancelled
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") return;
 
     hasStarted.current = true;
 
     async function generateReading() {
+      const startTime = Date.now();
+
       try {
         const chart = loadChart();
         const intake = loadIntake();
@@ -90,23 +124,17 @@ function PreparingPageInner() {
           return;
         }
 
-        // ── COMPLETE REQUEST BODY with all 20 data points ──
         const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            // Core intake data
             topic: intake.topic,
             question: intake.question,
             timeframeType: intake.timeframeType,
             timeframeValue: intake.timeframeValue,
-            
-            // Birth data
             birthDate: chart.birthDate,
             birthTime: chart.birthTime,
             birthPlace: chart.birthPlace,
-            
-            // Core chart data (always present)
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
@@ -119,8 +147,6 @@ function PreparingPageInner() {
             solarReturn: chart.chartData.solarReturn,
             moonPhase: chart.chartData.moonPhase,
             extendedPoints: chart.chartData.extendedPoints,
-            
-            // ── NEW: Essential Calculations from chart-calculate ──
             houseRulers: chart.chartData.houseRulers,
             mutualReceptions: chart.chartData.mutualReceptions,
             synodicCycles: chart.chartData.synodicCycles,
@@ -135,6 +161,17 @@ function PreparingPageInner() {
           throw new Error(data.error ?? "Failed to generate reading.");
         }
 
+        // ── 6. Record actual duration ──
+        const actualDuration = Date.now() - startTime;
+        try {
+          const historyJson = localStorage.getItem("reading_speed_history");
+          const history: number[] = historyJson ? JSON.parse(historyJson) : [];
+          const updatedHistory = [...history, actualDuration].slice(-3); // Keep last 3
+          localStorage.setItem("reading_speed_history", JSON.stringify(updatedHistory));
+        } catch {
+          // Ignore storage errors
+        }
+
         saveReading({
           id: data.reading.id,
           pages: data.reading.pages as ReadingPage[],
@@ -143,8 +180,10 @@ function PreparingPageInner() {
           generatedAt: new Date().toISOString(),
         });
 
-        // Fix 2 — replace instead of push so preparing never appears in history
-        router.replace("/reading/results");
+        setProgress(100);
+        setTimeout(() => {
+          router.replace("/reading/results");
+        }, 400);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Something went wrong. Please try again."
@@ -310,6 +349,20 @@ function PreparingPageInner() {
                     }`}
                   />
                 ))}
+              </div>
+
+              {/* ── Progress Bar ── */}
+              <div className="w-full">
+                <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-teal-400 to-teal-300"
+                    style={{ width: `${progress}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+                <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  {progress < 95 ? `Reading ${progress}%` : "Finalizing..."}
+                </p>
               </div>
 
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
