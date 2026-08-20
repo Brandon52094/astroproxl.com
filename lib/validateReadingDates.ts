@@ -13,11 +13,7 @@
  * Valid date sources (mirrors THE DATE RULE exactly):
  *   1. upcomingTrigger.date            — the NEXT EXACT ASPECT
  *   2. planetaryStations[].stationDate — ONLY when the station has a natal hit
- *
- * Solar Return date is intentionally NOT a valid anchor: your prompt uses SR as
- * a confirmation FILTER, not a timing source. "Today for EXACT aspects" is also
- * excluded — the prompt itself says EXACT aspects very likely warrant no date.
- * If you ever want either, add it in buildValidDateIndex and nowhere else.
+ *   3. transitAspects[].exactDate      — ephemeris-computed exact aspect dates
  */
 
 /** Minimal shape this module needs — a subset of JxlAskBody. */
@@ -30,6 +26,14 @@ interface DateProvenanceInput {
   }> | null;
 }
 
+/** Aspect carrying a real, ephemeris-computed exact date. */
+interface AspectAnchor {
+  transitPlanet?: string;
+  natalPlanet?: string;
+  exactDate?: string | null;
+  daysUntilExact?: number | null;
+}
+
 interface ParsedDate {
   month: number; // 1-12
   day: number; // 1-31
@@ -39,7 +43,7 @@ interface ParsedDate {
 export interface ValidDate {
   raw: string;
   parsed: ParsedDate | null; // null means the SUPPLIED date failed to parse — logged upstream
-  source: string; // e.g. "upcomingTrigger", "station:Mars"
+  source: string; // e.g. "upcomingTrigger", "station:Mars", "aspect:Venus-Sun"
 }
 
 export interface ValidDateIndex {
@@ -143,8 +147,13 @@ function minDayDiff(a: ParsedDate, b: ParsedDate): number {
  * Collect every date the model is ALLOWED to anchor to, tagged by source.
  * Stations without a natal hit are excluded — per THE DATE RULE they are not a
  * valid anchor.
+ * 
+ * UPDATED: Now accepts aspects array and includes ephemeris-computed exact dates.
  */
-export function buildValidDateIndex(body: DateProvenanceInput): ValidDateIndex {
+export function buildValidDateIndex(
+  body: DateProvenanceInput,
+  aspects: AspectAnchor[] = [],
+): ValidDateIndex {
   const dates: ValidDate[] = [];
   const unparseableSupplied: string[] = [];
 
@@ -162,6 +171,20 @@ export function buildValidDateIndex(body: DateProvenanceInput): ValidDateIndex {
   for (const s of body.planetaryStations ?? []) {
     if (s?.natalPlanetHit && s.stationDate) {
       add(s.stationDate, `station:${s.planet ?? "?"}`);
+    }
+  }
+
+  // Source 3 — transit-to-natal aspect exact dates (ephemeris-computed).
+  // Only aspects that actually perfect within the forward window count:
+  // a real exactDate AND a non-negative daysUntilExact within 45 days.
+  for (const a of aspects) {
+    if (
+      a?.exactDate &&
+      a.daysUntilExact != null &&
+      a.daysUntilExact >= 0 &&
+      a.daysUntilExact <= 45
+    ) {
+      add(a.exactDate, `aspect:${a.transitPlanet ?? "?"}-${a.natalPlanet ?? "?"}`);
     }
   }
 
