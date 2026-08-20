@@ -140,7 +140,7 @@ export interface ChartCalculateResponse {
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
   extendedPoints?: ExtendedPoints;
-  
+
   // ── NEW: Advanced calculations ──
   houseRulers?: HouseRuler[];
   mutualReceptions?: MutualReception[];
@@ -151,7 +151,7 @@ export interface ChartCalculateResponse {
   eclipseActivations?: EclipseActivation[];
   transitsToAngles?: TransitToAngle[];
   dispositorTree?: DispositorResult[];
-  
+
   error?: string;
 }
 
@@ -302,7 +302,7 @@ function calculatePlanets(
   const ascLongitude = houses.ascendant;
   const mcLongitude = houses.mc;
   const houseCusps = houses.house;
-  
+
   const planets = PLANETS.map(({ id, name }) => {
     if (id === undefined || id === null) {
       console.error(`[swisseph] Constant for ${name} is undefined — check the binding`);
@@ -362,7 +362,7 @@ function buildNormalizedChart(
   const mcDeg  = longitudeToSignDegree(mcLongitude);
   const icDeg  = longitudeToSignDegree((mcLongitude + 180) % 360);
   const dcDeg  = longitudeToSignDegree((ascLongitude + 180) % 360);
-  
+
   const planetPlacements = planets.map(({ name, longitude, isRetrograde }) => {
     const { sign, degree } = longitudeToSignDegree(longitude);
     const house = getWholeSignHouse(longitude, ascLongitude);
@@ -374,7 +374,7 @@ function buildNormalizedChart(
       isAnaretic: isAnareticLongitude(longitude),
     };
   });
-  
+
   planetPlacements.push({
     name: "Ascendant", sign: ascDeg.sign, degree: ascDeg.degree, house: "1",
     isAnaretic: isAnareticLongitude(ascLongitude),
@@ -409,11 +409,11 @@ function calculateProgressions(jdBirth: number, birthDate: string, lat: number, 
   const now = new Date();
   let age = now.getFullYear() - birthYear;
   if (now.getMonth() + 1 < birthMonth || (now.getMonth() + 1 === birthMonth && now.getDate() < birthDay)) age--;
-  
+
   const hasHadBirthdayThisYear = now >= new Date(now.getFullYear(), birthMonth - 1, birthDay);
   const lastBirthdayYear = hasHadBirthdayThisYear ? now.getFullYear() : now.getFullYear() - 1;
   const lastBirthday = new Date(lastBirthdayYear, birthMonth - 1, birthDay);
-  
+
   const daysSinceLastBirthday = Math.floor((now.getTime() - lastBirthday.getTime()) / 86400000);
   const fractionalAge = age + daysSinceLastBirthday / 365.25;
   const jdProgressed = jdBirth + fractionalAge;
@@ -442,7 +442,7 @@ function calculateSolarArcs(jdBirth: number, birthDate: string, lat: number, lng
   const now = new Date();
   let age = now.getFullYear() - birthYear;
   if (now.getMonth() + 1 < birthMonth || (now.getMonth() + 1 === birthMonth && now.getDate() < birthDay)) age--;
-  
+
   const hasHadBirthdayThisYear = now >= new Date(now.getFullYear(), birthMonth - 1, birthDay);
   const lastBirthdayYear = hasHadBirthdayThisYear ? now.getFullYear() : now.getFullYear() - 1;
   const lastBirthday = new Date(lastBirthdayYear, birthMonth - 1, birthDay);
@@ -472,13 +472,13 @@ function calculateUpcomingTrigger(natalRaw: ReturnType<typeof calculatePlanets>,
     { type: "conjunction", angle: 0 }, { type: "opposition", angle: 180 },
     { type: "square", angle: 90 }, { type: "trine", angle: 120 }, { type: "sextile", angle: 60 },
   ];
-  
+
   const TRIGGER_WHITELIST = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node"];
 
   const natalTargets = natalRaw.planets
     .filter(p => TRIGGER_WHITELIST.includes(p.name))
     .map(p => ({ name: p.name, longitude: p.longitude }));
-    
+
   natalTargets.push({ name: "Ascendant", longitude: natalRaw.ascLongitude });
   natalTargets.push({ name: "Midheaven", longitude: natalRaw.mcLongitude });
 
@@ -497,7 +497,7 @@ function calculateUpcomingTrigger(natalRaw: ReturnType<typeof calculatePlanets>,
         if (tPlanet.name === nTarget.name) continue;
         let diff = Math.abs(tPlanet.longitude - nTarget.longitude);
         if (diff > 180) diff = 360 - diff;
-        
+
         for (const aspect of ASPECT_CONFIGS) {
           if (Math.abs(diff - aspect.angle) <= 1.0) {
             return {
@@ -941,25 +941,35 @@ export async function POST(req: NextRequest) {
     let dispositorTree: DispositorResult[] = [];
 
     try {
+      // 0. Normalize the raw longitude-based planets into { name, sign, degree, ... }
+      //    shape that all the advanced-calculation helpers actually expect.
+      //    tropicalRaw.planets only has { name, longitude, isRetrograde, longitudeSpeed } —
+      //    passing that directly into functions that expect sign/degree is what was
+      //    producing the type errors / crashes here.
+      const dignityPlanets = tropicalRaw.planets.map((p) => {
+        const { sign, degree } = longitudeToSignDegree(p.longitude);
+        return { name: p.name, sign, degree, isRetrograde: p.isRetrograde };
+      });
+
       // 1. Build house cusp map
       const houseCuspMap = buildHouseCuspMap(tropicalRaw.houseCusps);
 
       // 2. House Rulers (Most Important)
-      houseRulers = calculateHouseRulers(tropicalRaw.planets, houseCuspMap);
+      houseRulers = calculateHouseRulers(dignityPlanets, houseCuspMap);
 
       // 3. Mutual Reception
-      mutualReceptions = calculateMutualReception(tropicalRaw.planets);
+      mutualReceptions = calculateMutualReception(dignityPlanets);
 
       // 4. Essential Dignities
-      essentialDignities = tropicalRaw.planets.map((p) =>
-        calculateEssentialDignity(p.name, longitudeToSignDegree(p.longitude).sign)
+      essentialDignities = dignityPlanets.map((p) =>
+        calculateEssentialDignity(p.name, p.sign)
       );
 
       // 5. Synodic Cycles (Planetary Returns)
-      synodicCycles = calculateSynodicCycles(tropicalRaw.planets, now);
+      synodicCycles = calculateSynodicCycles(dignityPlanets, now);
 
       // 6. Midpoints
-      midpoints = calculateMidpoints(tropicalRaw.planets, houseCuspMap);
+      midpoints = calculateMidpoints(dignityPlanets, houseCuspMap);
 
       // 7. Lunar Return
       const transitMoon = transitRaw.planets.find((p) => p.name === "Moon");
@@ -970,14 +980,14 @@ export async function POST(req: NextRequest) {
 
       // 8. Eclipse Activation
       const knownEclipses = getKnownEclipses(now);
-      eclipseActivations = calculateEclipseActivation(tropicalRaw.planets, knownEclipses);
+      eclipseActivations = calculateEclipseActivation(dignityPlanets, knownEclipses);
 
       // 9. Transit to Angles
       const angles = buildAngles(tropicalRaw.ascLongitude, tropicalRaw.mcLongitude);
       transitsToAngles = calculateTransitsToAngles(transits, angles);
 
       // 10. Dispositor Tree
-      dispositorTree = calculateDispositorTree(tropicalRaw.planets);
+      dispositorTree = calculateDispositorTree(dignityPlanets);
 
     } catch (e) {
       console.warn("[chart-calculate] Advanced calculations failed:", e);
@@ -1002,7 +1012,7 @@ export async function POST(req: NextRequest) {
       solarReturn,
       moonPhase,
       extendedPoints,
-      
+
       // ── NEW: Advanced calculations ──
       houseRulers,
       mutualReceptions,
