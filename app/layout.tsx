@@ -46,7 +46,7 @@ export default function RootLayout({
         <meta name="viewport" content="interactive-widget=resizes-content" />
         <link rel="manifest" href="/manifest.webmanifest" />
       </head>
-      <body className="h-full overflow-hidden bg-[#040611] text-foreground">
+      <body className="h-dvh overflow-hidden bg-[#040611] text-foreground">
         {/* TikTok Pixel — loads after page becomes interactive, doesn't block render */}
         <Script id="tiktok-pixel" strategy="afterInteractive">
           {`
