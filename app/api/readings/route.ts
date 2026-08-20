@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: app/api/readings/route.ts (FIXED - DUPLICATE REMOVED)
+// FILE: app/api/readings/route.ts (COMPLETE - FIXED)
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -83,13 +83,11 @@ interface ReadingRequestBody {
   };
 
   // ESSENTIAL CALCULATIONS (keeping only these 4)
-  mutualReceptions?: MutualReception[]; // KEPT: Amplifier
-  synodicCycles?: SynodicCycle[]; // KEPT: Chapter markers
-  midpoints?: Midpoint[]; // KEPT: Sensitive point activator
-  
-  // NEW: From chart-calculate
-  transitsToAngles?: TransitToAngle[]; // KEPT: For spine detection priority 1
-  houseRulers?: HouseRuler[]; // KEPT: Context for house themes
+  mutualReceptions?: MutualReception[];
+  synodicCycles?: SynodicCycle[];
+  midpoints?: Midpoint[];
+  transitsToAngles?: TransitToAngle[];
+  houseRulers?: HouseRuler[];
 }
 
 interface ReadingPage {
@@ -112,7 +110,6 @@ const GENERATIONAL_PLANETS = new Set(["Uranus", "Neptune", "Pluto"]);
 const SLOW_PLANETS = new Set(["Saturn", "Uranus", "Neptune", "Pluto"]);
 const FAST_PLANETS = new Set(["Mercury", "Venus", "Mars", "Sun", "Moon"]);
 
-// Angular houses (1, 4, 7, 10) - for Solar Return external event test
 const ANGULAR_HOUSES = new Set([1, 4, 7, 10]);
 
 const ASPECT_ORBS: Record<string, { exact: number; live: number; background: number }> = {
@@ -126,7 +123,7 @@ const ASPECT_ORBS: Record<string, { exact: number; live: number; background: num
 };
 
 // ============================================================
-// VALIDATION - Single pass
+// VALIDATION
 // ============================================================
 
 function validateAndFilterAspects(aspects: TransitAspect[] | undefined): TransitAspect[] {
@@ -152,7 +149,7 @@ function validateAndFilterAspects(aspects: TransitAspect[] | undefined): Transit
 }
 
 // ============================================================
-// SPINE DETECTION - With Angle priority (from chart-calculate)
+// SPINE DETECTION
 // ============================================================
 
 function determineSpine(
@@ -171,7 +168,6 @@ function determineSpine(
     };
   }
 
-  // Filter to active aspects
   const active: TransitAspect[] = [];
   for (const a of aspects) {
     const band = a.band?.toUpperCase();
@@ -187,7 +183,6 @@ function determineSpine(
     };
   }
 
-  // Filter to personal planet aspects
   const personal: TransitAspect[] = [];
   for (const a of active) {
     if (PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord) {
@@ -195,7 +190,7 @@ function determineSpine(
     }
   }
 
-  // CHECK 1: TRANSIT TO ANGLE (Highest Priority - Major Life Event)
+  // CHECK 1: TRANSIT TO ANGLE
   if (transitsToAngles && transitsToAngles.length > 0) {
     const exactAngles = transitsToAngles.filter((a) => a.orb < 2);
     if (exactAngles.length > 0) {
@@ -260,14 +255,14 @@ function determineSpine(
     }
   }
 
-  // CHECK 5: FAST PLANET EXACT activation
+  // CHECK 5: FAST PLANET EXACT
   const exactFast = personal.filter(
     (a) => a.band?.toUpperCase() === "EXACT" && FAST_PLANETS.has(a.transitPlanet)
   );
   if (exactFast.length) {
     const a = exactFast[0];
     return {
-      primary: `IMMEDIATE MOMENT: ${a.transitPlanet} exactly activating ${a.natalPlanet} — sharp, intense, fleeting`,
+      primary: `IMMEDIATE MOMENT: ${a.transitPlanet} exactly activating ${a.natalPlanet}`,
       priority: 5,
       sources: [`Transit ${a.transitPlanet} ${a.aspectType} natal ${a.natalPlanet}`],
       temporalClass: "Immediate",
@@ -275,7 +270,7 @@ function determineSpine(
     };
   }
 
-  // CHECK 6: Any LIVE aspect to personal planet
+  // CHECK 6: Any LIVE aspect
   if (personal.length > 0) {
     const a = personal[0];
     return {
@@ -287,7 +282,6 @@ function determineSpine(
     };
   }
 
-  // Fallback
   return {
     primary: `${profection.activatedHouse}th House ${profection.activatedSign} Year — Time Lord: ${profection.timeLord}`,
     priority: 7,
@@ -341,7 +335,7 @@ function filterPersonalTrigger(trigger: any, timeLord: string): any | null {
 }
 
 // ============================================================
-// BUILD PROMPT - With all 4 essential calculations + transitsToAngles
+// BUILD PROMPT
 // ============================================================
 
 function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitAspect[] = []): string {
@@ -381,7 +375,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 
   const sections: string[] = [];
 
-  // ── HEADER ──
+  // HEADER
   sections.push(
     "ASTROLOGICAL SYNTHESIS ENGINE",
     `TODAY: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
@@ -392,7 +386,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── TOPIC FOCUS ──
+  // TOPIC FOCUS
   if (topic !== "general") {
     const topicMap = {
       love: "LOVE: 5th/7th/8th houses, Venus/Moon/Mars",
@@ -402,7 +396,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     sections.push("TOPIC FOCUS — " + topicMap[topic], "");
   }
 
-  // ── SPINE HIERARCHY ──
+  // SPINE HIERARCHY
   sections.push(
     "SPINE HIERARCHY (apply in order):",
     "1. TRANSIT TO ANGLE → Major Life Event (outranks everything)",
@@ -419,7 +413,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── PROFECTION ──
+  // PROFECTION
   sections.push(
     "PROFECTION YEAR:",
     `Age ${profection.age} → House ${profection.activatedHouse} (${profection.activatedSign})`,
@@ -427,7 +421,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── HOUSE RULERS (from chart-calculate) ──
+  // HOUSE RULERS
   if (houseRulers && houseRulers.length > 0) {
     sections.push(
       "HOUSE RULERS (context for house themes):",
@@ -436,9 +430,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ============================================================
-  // ESSENTIAL CALCULATION 1: MUTUAL RECEPTION (Amplifier)
-  // ============================================================
+  // MUTUAL RECEPTION
   if (mutualReceptions && mutualReceptions.length > 0) {
     sections.push(
       "═══════════════════════════════════════════",
@@ -456,9 +448,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ============================================================
-  // ESSENTIAL CALCULATION 2: SYNODIC CYCLES (Chapter Markers)
-  // ============================================================
+  // SYNODIC CYCLES
   if (synodicCycles && synodicCycles.length > 0) {
     const relevantCycles = synodicCycles.filter((s) => s.daysUntilReturn <= 45);
     if (relevantCycles.length > 0) {
@@ -481,9 +471,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     }
   }
 
-  // ============================================================
-  // ESSENTIAL CALCULATION 3: MIDPOINTS (Sensitive Point Activator)
-  // ============================================================
+  // MIDPOINTS
   if (midpoints && midpoints.length > 0) {
     sections.push(
       "═══════════════════════════════════════════",
@@ -501,7 +489,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── TRANSIT TO ANGLES (from chart-calculate, used in spine) ──
+  // TRANSIT TO ANGLES
   if (transitsToAngles && transitsToAngles.length > 0) {
     sections.push(
       "TRANSIT TO ANGLES (Major Life Events):",
@@ -512,7 +500,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── PROGRESSIONS & SOLAR ARCS ──
+  // PROGRESSIONS & SOLAR ARCS
   if (progressions?.length) {
     sections.push(
       "PROGRESSIONS:",
@@ -528,7 +516,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── TRANSIT ASPECTS ──
+  // TRANSIT ASPECTS
   if (validatedAspects.length) {
     const personalAspects = validatedAspects.filter(
       (a) => PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord
@@ -567,7 +555,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── TEMPORAL CLASSIFICATION ──
+  // TEMPORAL CLASSIFICATION
   sections.push(
     "TEMPORAL CLASSIFICATION:",
     `IMMEDIATE (0-4 weeks): ${temporal.immediate.map((a) => `${a.transitPlanet}→${a.natalPlanet}`).join(", ") || "None"}`,
@@ -576,7 +564,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── UPCOMING TRIGGER ──
+  // UPCOMING TRIGGER
   if (personalTrigger) {
     sections.push(
       "NEXT EXACT ASPECT:",
@@ -586,7 +574,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── PLANETARY STATIONS ──
+  // PLANETARY STATIONS
   if (planetaryStations?.length) {
     sections.push("PLANETARY STATIONS:");
     for (const s of planetaryStations) {
@@ -596,11 +584,8 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     sections.push("");
   }
 
-  // ============================================================
-  // ESSENTIAL CALCULATION 4: SOLAR RETURN (External Event Filter)
-  // ============================================================
+  // SOLAR RETURN
   if (solarReturn) {
-    // Check if Time Lord is in an angular house in the SR chart
     const timeLordInAngularHouse = solarReturn.timeLordSRHouse !== null && 
       ANGULAR_HOUSES.has(solarReturn.timeLordSRHouse);
     
@@ -625,7 +610,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── MOON PHASE ──
+  // MOON PHASE
   if (moonPhase) {
     sections.push(
       "MOON PHASE:",
@@ -637,7 +622,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── EXTENDED POINTS ──
+  // EXTENDED POINTS
   if (extendedPoints) {
     const { arabicLots, declinations } = extendedPoints;
     const oob = (declinations ?? []).filter((d: any) => d.isOutOfBounds);
@@ -653,7 +638,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     }
   }
 
-  // ── SIDEREAL (Keep but minimize) ──
+  // SIDEREAL
   if (sidereal?.planets?.length) {
     sections.push(
       "SIDEREAL (confirmation filter):",
@@ -662,7 +647,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── NATAL ASPECTS ──
+  // NATAL ASPECTS
   const SPEED_PRIORITY: Record<string, number> = {
     Moon: 10, Mercury: 9, Venus: 8, Sun: 7, Mars: 6,
     Jupiter: 5, Saturn: 4, Uranus: 3, Neptune: 2, Pluto: 1,
@@ -691,7 +676,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 
   sections.push("NATAL ASPECTS (major first, capped at 15):", aspectList || "None", "");
 
-  // ── PERSONAL PLANET FILTER HARD RULE ──
+  // PERSONAL PLANET FILTER
   sections.push(
     "═══════════════════════════════════════════",
     "PERSONAL PLANET FILTER FOR WINDOWS — HARD RULE",
@@ -707,7 +692,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── PART 3 — DATED WINDOWS ──
+  // PART 3 — DATED WINDOWS
   if (hasActiveAspects && hasPersonalActive) {
     sections.push(
       "PART 3 — DATED WINDOWS (2-4 windows, as data supports):",
@@ -744,7 +729,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     );
   }
 
-  // ── PART 4 — DIRECTIVE ──
+  // PART 4 — DIRECTIVE
   sections.push(
     "PART 4 — THE DIRECTIVE (1-3 items, hard 3-sentence ceiling each):",
     "",
@@ -763,7 +748,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── HOW TO USE THE CALCULATIONS (Priority Order) ──
+  // HOW TO USE THE CALCULATIONS
   sections.push(
     "═══════════════════════════════════════════",
     "HOW TO USE THE CALCULATIONS (Priority Order)",
@@ -794,7 +779,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── SOURCE VERIFICATION ──
+  // SOURCE VERIFICATION
   sections.push(
     "═══════════════════════════════════════════",
     "SOURCE VERIFICATION — YOUR SAFETY NET",
@@ -813,7 +798,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── PROSE PURITY RULES ──
+  // PROSE PURITY RULES
   sections.push(
     "═══════════════════════════════════════════",
     "PROSE PURITY RULES",
@@ -825,7 +810,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ""
   );
 
-  // ── OUTPUT FORMAT ──
+  // OUTPUT FORMAT
   sections.push(
     "OUTPUT FORMAT — RAW JSON ONLY",
     "",
@@ -849,12 +834,213 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 }
 
 // ============================================================
-// POST HANDLER (unchanged from previous version)
+// POST HANDLER - COMPLETE IMPLEMENTATION
 // ============================================================
 
 export async function POST(request: NextRequest) {
-  // ... (same as before, no changes needed)
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = (await request.json()) as ReadingRequestBody;
+
+    // Crisis check
+    const risk = assessRisk(body?.question ?? "");
+    if (risk.action === "block_crisis" || risk.action === "block_emergency") {
+      const safe = getSafeResponse(risk);
+      return NextResponse.json({
+        reading: {
+          id: crypto.randomUUID(),
+          pages: [{
+            pageNumber: 1,
+            title: safe.title,
+            content: safe.answer + "\n\n" + safe.confirmation,
+            sources: [],
+          }],
+          topic: body?.topic ?? "general",
+          question: body?.question ?? "",
+          status: "complete",
+          isSafeResponse: true,
+          riskLevel: risk.level,
+        },
+      });
+    }
+
+    // Eligibility check
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const metadata = user.publicMetadata;
+
+    const isSubscribed = metadata?.isSubscribed === true;
+    const credits = Number(metadata?.credits ?? 0);
+    const isPaid = isSubscribed || credits >= CREDITS_PER_READING;
+
+    const lastFree = metadata?.freeReadingUsedAt ? new Date(metadata.freeReadingUsedAt as string) : null;
+    const freeAvailable = !lastFree || Date.now() >= lastFree.getTime() + FREE_READING_RESET_MS;
+
+    const cooldown = metadata?.cooldownStartedAt ? new Date(metadata.cooldownStartedAt as string) : null;
+    if (!isPaid && cooldown && Date.now() < cooldown.getTime() + COOLDOWN_MS) {
+      return NextResponse.json({ error: "Cooldown active. Please wait." }, { status: 403 });
+    }
+
+    if (!isPaid && !freeAvailable) {
+      return NextResponse.json({ error: "Insufficient credits. Purchase more or subscribe." }, { status: 403 });
+    }
+
+    if (!body.topic || !body.question || !body.tropical || !body.transits || !body.profection) {
+      return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "API configuration error." }, { status: 500 });
+    }
+
+    // Validate aspects
+    const validatedAspects = validateAndFilterAspects(body.transitAspects);
+    body.transitAspects = validatedAspects;
+
+    const prompt = buildReadingPrompt(body, validatedAspects);
+    const dateIndex = buildValidDateIndex(body);
+
+    // Generate reading
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 3000,
+        temperature: 0.3,
+        system: "You are a precision astrological synthesis engine. Use ONLY personal-planet aspects for dated windows. Output raw JSON.",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("[readings] Claude error:", err);
+      return NextResponse.json({ error: "Failed to generate reading." }, { status: 502 });
+    }
+
+    const data = await response.json();
+    const rawText = data.content?.[0]?.text;
+    if (!rawText) {
+      return NextResponse.json({ error: "No response from reading engine." }, { status: 502 });
+    }
+
+    // Parse response
+    try {
+      let cleaned = rawText.trim();
+      if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
+      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, cleaned.lastIndexOf("```"));
+      cleaned = cleaned.trim();
+
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      if (start !== -1 && end !== -1) {
+        cleaned = cleaned.slice(start, end + 1);
+      }
+
+      const parsed = JSON.parse(cleaned) as { pages: ReadingPage[] };
+
+      if (!parsed.pages?.length) {
+        return NextResponse.json({ error: "Invalid reading structure." }, { status: 422 });
+      }
+
+      // Verify dates
+      let pages = parsed.pages;
+      let unsupported = pages.flatMap((pg) => findUnsupportedMarkers(pg.content ?? "", dateIndex));
+
+      if (unsupported.length > 0) {
+        console.warn(`[readings] Unsupported dates: ${unsupported.join(" | ")}`);
+
+        // Retry with date correction
+        const retryResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 3000,
+            temperature: 0.3,
+            system: "You are a precision astrological synthesis engine. Use only the provided dates.",
+            messages: [{
+              role: "user",
+              content: prompt + "\n\nDATE CORRECTION: Use only these dates: " +
+                dateIndex.dates.map((d) => d.raw).join(", ") +
+                "\nRewrite using ONLY these dates. Drop any unsupported windows.",
+            }],
+          }),
+        });
+
+        if (retryResponse.ok) {
+          const retryData = await retryResponse.json();
+          const retryText = retryData.content?.[0]?.text;
+          if (retryText) {
+            let retryCleaned = retryText.trim();
+            if (retryCleaned.startsWith("```")) retryCleaned = retryCleaned.slice(retryCleaned.indexOf("\n") + 1);
+            if (retryCleaned.endsWith("```")) retryCleaned = retryCleaned.slice(0, retryCleaned.lastIndexOf("```"));
+            retryCleaned = retryCleaned.trim();
+
+            const start2 = retryCleaned.indexOf("{");
+            const end2 = retryCleaned.lastIndexOf("}");
+            if (start2 !== -1 && end2 !== -1) {
+              retryCleaned = retryCleaned.slice(start2, end2 + 1);
+            }
+
+            const retryParsed = JSON.parse(retryCleaned) as { pages: ReadingPage[] };
+            if (retryParsed.pages?.length) {
+              const stillBad = retryParsed.pages.flatMap((pg) =>
+                findUnsupportedMarkers(pg.content ?? "", dateIndex)
+              );
+              if (stillBad.length === 0) {
+                pages = retryParsed.pages;
+                unsupported = [];
+              }
+            }
+          }
+        }
+      }
+
+      if (unsupported.length > 0) {
+        console.error(`[readings] Date provenance FAILED: ${unsupported.join(" | ")}`);
+        return NextResponse.json({ error: "Could not verify timing. Please try again." }, { status: 422 });
+      }
+
+      return NextResponse.json({
+        reading: {
+          id: crypto.randomUUID(),
+          pages,
+          topic: body.topic,
+          question: body.question,
+          status: "complete",
+        },
+        careNote: getCareNote(risk),
+      }, { status: 201 });
+
+    } catch (parseErr) {
+      console.error("[readings] Parse error:", parseErr);
+      return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
+    }
+
+  } catch (error) {
+    console.error("[readings] Error:", error);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
 }
+
+// ============================================================
+// GET HANDLER
+// ============================================================
 
 export async function GET() {
   return NextResponse.json({ status: "ok", endpoint: "/api/readings", method: "POST" });
