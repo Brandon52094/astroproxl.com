@@ -89,7 +89,7 @@ export async function handleReading(request: NextRequest) {
     const dateIndex = buildValidDateIndex(body, validatedAspects);
 
     console.log("[DEBUG] === AVAILABLE DATES ===");
-    console.log("[DEBUG] Dates from index:", dateIndex.dates.map(d => d.raw));
+    console.log(`[IDX] count=${dateIndex.dates.length} raw=${JSON.stringify(dateIndex.dates.map(d => d.raw))} sources=${JSON.stringify(dateIndex.dates.map(d => d.source))}`);
     console.log("[DEBUG] Upcoming trigger:", body.upcomingTrigger?.date || "none");
     console.log("[DEBUG] Planetary stations:", body.planetaryStations?.map(s => s.stationDate) || []);
     console.log("[DEBUG] Synodic cycles (within 45d):", body.synodicCycles?.filter(s => s.daysUntilReturn <= 45).map(s => s.returnDate) || []);
