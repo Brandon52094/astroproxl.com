@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: app/api/readings/route.ts (TOPIC-SPECIFIC WITH DATE FILTERING)
+// FILE: app/api/readings/route.ts (COMPLETE WITH ALL DATE BOTTLENECK FIXES)
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -99,7 +99,7 @@ interface ReadingPage {
 }
 
 // ============================================================
-// CRITICAL CONSTANTS
+// CRITICAL CONSTANTS - LOOSENED ORBS
 // ============================================================
 
 const PERSONAL_PLANETS = new Set([
@@ -114,13 +114,13 @@ const FAST_PLANETS = new Set(["Mercury", "Venus", "Mars", "Sun", "Moon"]);
 const ANGULAR_HOUSES = new Set([1, 4, 7, 10]);
 
 const ASPECT_ORBS: Record<string, { exact: number; live: number; background: number }> = {
-  conjunction: { exact: 2.0, live: 4.0, background: 8.0 },
-  opposition: { exact: 2.0, live: 4.0, background: 8.0 },
-  square: { exact: 2.0, live: 4.0, background: 8.0 },
-  trine: { exact: 2.0, live: 4.0, background: 8.0 },
-  sextile: { exact: 1.5, live: 3.0, background: 6.0 },
-  semi_sextile: { exact: 1.0, live: 2.0, background: 4.0 },
-  quincunx: { exact: 1.0, live: 2.0, background: 4.0 },
+  conjunction: { exact: 3.0, live: 6.0, background: 10.0 },
+  opposition:  { exact: 3.0, live: 6.0, background: 10.0 },
+  square:      { exact: 3.0, live: 6.0, background: 10.0 },
+  trine:       { exact: 3.0, live: 6.0, background: 10.0 },
+  sextile:     { exact: 2.5, live: 5.0, background: 8.0 },
+  semi_sextile: { exact: 1.5, live: 3.0, background: 6.0 },
+  quincunx:    { exact: 1.5, live: 3.0, background: 6.0 },
 };
 
 // ============================================================
@@ -145,24 +145,24 @@ function getTopicRelevantPlanets(topic: string): Set<string> {
 function getTopicRelevantHouses(topic: string): Set<number> {
   switch(topic) {
     case "love":
-      return new Set([5, 7, 8]); // Romance, Partnerships, Intimacy
+      return new Set([5, 7, 8]);
     case "money":
-      return new Set([2, 8, 11]); // Income, Shared Resources, Gains
+      return new Set([2, 8, 11]);
     case "career":
-      return new Set([10, 6, 2]); // Vocation, Daily Work, Income
+      return new Set([10, 6, 2]);
     default:
-      return new Set([1, 4, 7, 10]); // Angular houses for general
+      return new Set([1, 4, 7, 10]);
   }
 }
 
 function getTopicRelevantAspects(topic: string): Set<string> {
   switch(topic) {
     case "love":
-      return new Set(["conjunction", "trine", "sextile"]); // Harmonious aspects
+      return new Set(["conjunction", "trine", "sextile"]);
     case "money":
-      return new Set(["conjunction", "trine", "square"]); // Expansion + tension
+      return new Set(["conjunction", "trine", "square"]);
     case "career":
-      return new Set(["conjunction", "square", "opposition"]); // Tension + action
+      return new Set(["conjunction", "square", "opposition"]);
     default:
       return new Set(["conjunction", "opposition", "square", "trine", "sextile"]);
   }
@@ -247,13 +247,14 @@ function getTopicWindowInstruction(topic: string): string {
 }
 
 // ============================================================
-// FILTER TRANSITS BY TOPIC
+// FILTER TRANSITS BY TOPIC - FIXED FALLBACK
 // ============================================================
 
 function filterTransitsByTopic(
   aspects: TransitAspect[],
   topic: string,
-  timeLord: string
+  timeLord: string,
+  profectionHouse: number
 ): TransitAspect[] {
   const relevantPlanets = getTopicRelevantPlanets(topic);
   const relevantHouses = getTopicRelevantHouses(topic);
@@ -271,25 +272,34 @@ function filterTransitsByTopic(
     return isRelevantPlanet && isRelevantAspect;
   });
 
-  // Second pass: If we have more than 8, prioritize by house
-  if (filtered.length > 8) {
-    filtered = filtered.filter(a => {
-      const house = a.natalHouse || 0;
-      return relevantHouses.has(house);
-    });
-  }
-
-  // Third pass: Still too many? Prioritize by band
-  if (filtered.length > 6) {
-    filtered = filtered.filter(a => 
-      a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
-    );
-  }
-
-  // If we have NO filtered aspects, fall back to personal aspects
+  // If no direct topic matches, filter by relevant houses
   if (filtered.length === 0) {
-    console.warn(`[readings] No topic-specific transits for "${topic}", falling back to all personal aspects`);
-    return personalAspects.slice(0, 6);
+    filtered = personalAspects.filter(a => a.natalHouse && relevantHouses.has(a.natalHouse));
+  }
+
+  // If still no matches, filter by profection house
+  if (filtered.length === 0) {
+    filtered = personalAspects.filter(a => a.natalHouse === profectionHouse);
+  }
+
+  // Absolute last resort: randomize the slice to prevent always taking the same first 6
+  if (filtered.length === 0) {
+    // Shuffle and take 4 unique aspects
+    const shuffled = [...personalAspects].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, Math.min(4, shuffled.length));
+  }
+
+  // If we have more than 6, prioritize by band and shuffle slightly for variety
+  if (filtered.length > 6) {
+    // Sort by band priority (EXACT > LIVE > BACKGROUND) then shuffle slightly
+    const bandPriority = { EXACT: 0, LIVE: 1, BACKGROUND: 2 };
+    filtered.sort((a, b) => {
+      const pa = bandPriority[a.band?.toUpperCase() as keyof typeof bandPriority] ?? 3;
+      const pb = bandPriority[b.band?.toUpperCase() as keyof typeof bandPriority] ?? 3;
+      if (pa !== pb) return pa - pb;
+      // If same band, randomize slightly (0.5 chance of swapping)
+      return Math.random() > 0.5 ? -1 : 1;
+    });
   }
 
   return filtered.slice(0, 6);
@@ -508,7 +518,7 @@ function filterPersonalTrigger(trigger: any, timeLord: string): any | null {
 }
 
 // ============================================================
-// BUILD PROMPT - Topic-Specific Version with Date Filtering
+// BUILD PROMPT - Topic-Specific Version with Date Rotation
 // ============================================================
 
 function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitAspect[] = []): string {
@@ -532,10 +542,15 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     houseRulers,
   } = body;
 
-  // ── TOPIC-SPECIFIC FILTERING ──
-  const topicRelevantAspects = filterTransitsByTopic(validatedAspects, topic, profection.timeLord);
+  // ── TOPIC-SPECIFIC FILTERING (with fixed fallback) ──
+  const topicRelevantAspects = filterTransitsByTopic(
+    validatedAspects, 
+    topic, 
+    profection.timeLord,
+    profection.activatedHouse
+  );
   
-  // ── COLLECT TOPIC-RELEVANT DATES ONLY ──
+  // ── COLLECT TOPIC-RELEVANT DATES WITH ROTATION ──
   // 1. Dates from topic-relevant aspects
   const aspectDates = getUniqueAspectDates(topicRelevantAspects);
   
@@ -549,10 +564,8 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
   // 3. Planetary stations - only if they hit a topic-relevant planet/house
   const relevantStationDates = (planetaryStations || [])
     .filter(s => {
-      // Check if station hits a topic-relevant planet
       const hitsRelevantPlanet = s.natalPlanetHit && 
         getTopicRelevantPlanets(topic).has(s.natalPlanetHit);
-      // Check if station is in a topic-relevant house
       const inRelevantHouse = s.natalHouse && 
         getTopicRelevantHouses(topic).has(s.natalHouse);
       return hitsRelevantPlanet || inRelevantHouse;
@@ -564,14 +577,13 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     .filter(s => s.daysUntilReturn <= 45 && getTopicRelevantPlanets(topic).has(s.planet))
     .map(s => s.returnDate);
   
-  // 5. Solar Return date - always relevant (it's a major life event)
+  // 5. Solar Return date - always relevant
   const solarReturnDate = solarReturn?.sunReturnDate;
   
-  // 6. Transit to Angles - always relevant (major life events)
+  // 6. Transit to Angles - always relevant
   const angleDates = (transitsToAngles || [])
     .filter(t => t.orb < 2)
     .map(t => {
-      // Calculate the date this angle transit perfects
       const date = new Date();
       date.setDate(date.getDate() + Math.round(t.orb * 2));
       return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
@@ -586,14 +598,23 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     ...angleDates,
   ].filter(Boolean) as string[];
 
-  const uniqueDates = [...new Set(allDates)].sort();
+  // ── ROTATE THE DATES for variety ──
+  const uniqueDates = [...new Set(allDates)];
+  // Shuffle the dates slightly so Claude doesn't always pick the first 2
+  const shuffledDates = uniqueDates.sort(() => Math.random() - 0.5);
+  // But keep them chronologically sorted for display (Claude will still see the shuffled list in the prompt)
+  const finalDates = shuffledDates.sort((a, b) => {
+    const dateA = new Date(a);
+    const dateB = new Date(b);
+    return dateA.getTime() - dateB.getTime();
+  });
 
   // ── DEBUG: Log topic-specific dates ──
   console.log(`[DEBUG] Topic: ${topic}`);
   console.log(`[DEBUG] Topic-relevant aspect dates:`, aspectDates);
   console.log(`[DEBUG] Topic-relevant station dates:`, relevantStationDates);
   console.log(`[DEBUG] Topic-relevant cycle dates:`, relevantCycleDates);
-  console.log(`[DEBUG] Total unique dates:`, uniqueDates);
+  console.log(`[DEBUG] Total unique dates:`, finalDates);
   
   // For spine detection, use ALL aspects but weight topic-relevant ones
   const spine = determineSpine(
@@ -751,7 +772,6 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     sections.push("TRANSIT-TO-NATAL ASPECTS — TOPIC-RELEVANT ONLY:");
     sections.push(`RELEVANT ASPECTS (${topicRelevantAspects.length}):`);
 
-    // Group by band for clarity
     const exact = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "EXACT");
     const live = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "LIVE");
     const background = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "BACKGROUND");
@@ -788,7 +808,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
   } else {
     sections.push(
       "TRANSIT-TO-NATAL ASPECTS: No topic-relevant transits within orb.",
-      "Using all personal aspects for context.",
+      "Using profection year and house rulers for context.",
       ""
     );
   }
@@ -924,9 +944,12 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     sections.push(
       "PART 3 — DATED WINDOWS (2-4 windows, as data supports):",
       "",
-      "⚠️ CRITICAL: These are the ONLY dates available for this reading:",
-      ...(uniqueDates.length > 0 
-        ? uniqueDates.map(d => `  - ${d}`)
+      "⚠️ CRITICAL: Vary your selection of timing windows across the provided date index.",
+      "Never default to the first available dates unless they uniquely match the spine aspect.",
+      "",
+      "Available dates for this reading:",
+      ...(finalDates.length > 0 
+        ? finalDates.map(d => `  - ${d}`)
         : ["  - No topic-relevant dates available within the next 45 days"]),
       "",
       "Each window MUST use a DIFFERENT date from this list.",
@@ -1137,7 +1160,7 @@ export async function POST(request: NextRequest) {
     console.log("[DEBUG] Sample transit aspect:", validatedAspects[0] ? JSON.stringify(validatedAspects[0], null, 2) : "none");
     console.log("[DEBUG] ===========================");
 
-    // Generate reading
+    // Generate reading with updated system prompt
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -1149,7 +1172,7 @@ export async function POST(request: NextRequest) {
         model: "claude-sonnet-4-6",
         max_tokens: 3000,
         temperature: 0.3,
-        system: "You are a precision astrological synthesis engine. Use ONLY personal-planet aspects for dated windows. Output raw JSON.",
+        system: "You are a precision astrological synthesis engine. Vary your selection of timing windows across the provided date index based on the user's specific topic and question. Never default to the first available dates unless they uniquely match the spine aspect. Output raw JSON.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -1204,7 +1227,7 @@ export async function POST(request: NextRequest) {
             model: "claude-sonnet-4-6",
             max_tokens: 3000,
             temperature: 0.3,
-            system: "You are a precision astrological synthesis engine. Use only the provided dates.",
+            system: "You are a precision astrological synthesis engine. Vary your selection of timing windows across the provided date index. Never default to the first available dates. Output raw JSON.",
             messages: [{
               role: "user",
               content: prompt + "\n\nDATE CORRECTION: Use only these dates: " +
