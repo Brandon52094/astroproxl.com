@@ -19,7 +19,7 @@ const DEFAULT_SYSTEM =
 
 export async function handleReading(request: NextRequest) {
   try {
-    console.error("DEPLOY_MARKER_2026_08_20_A");
+     console.error("DEPLOY_MARKER_2026_08_20_A");
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
