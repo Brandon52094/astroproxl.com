@@ -159,7 +159,7 @@ export default function ReadingResultsPage() {
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // ── Reply system state ──────────────────────────────────────────────────
+  // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
   const [replyCreditsRemaining, setReplyCreditsRemaining] = useState<number | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -320,9 +320,12 @@ export default function ReadingResultsPage() {
     return parts.map((part, i) => {
       const match = part.match(/\[\[DATE:\s*([^\]]+)\]\]/);
       if (match) {
+        // Check if it's a date range (has a dash or "to")
+        const dateText = match[1].trim();
+        const isRange = dateText.includes("-") || dateText.includes("to");
         return (
-          <span key={i} className="date-badge">
-            {match[1].trim()}
+          <span key={i} className={`date-badge ${isRange ? "date-range" : ""}`}>
+            {dateText}
           </span>
         );
       }
@@ -388,6 +391,11 @@ export default function ReadingResultsPage() {
           solarReturn: chart.chartData.solarReturn,
           moonPhase: chart.chartData.moonPhase,
           extendedPoints: chart.chartData.extendedPoints,
+          houseRulers: chart.chartData.houseRulers,
+          mutualReceptions: chart.chartData.mutualReceptions,
+          synodicCycles: chart.chartData.synodicCycles,
+          midpoints: chart.chartData.midpoints,
+          transitsToAngles: chart.chartData.transitsToAngles,
           conversationHistory: conversationHistory || undefined,
           freeRepliesUsed,
         }),
@@ -465,7 +473,7 @@ export default function ReadingResultsPage() {
       });
       const data = await res.json();
       if (data?.clientSecret) {
-        setClientSecret(data.clientSecret); // opens the embedded modal
+        setClientSecret(data.clientSecret);
       } else {
         setFollowupError(data?.error || "Couldn't start checkout. Please try again.");
         setIsPurchasing(false);
@@ -568,6 +576,12 @@ export default function ReadingResultsPage() {
           text-transform: uppercase;
           box-shadow: 0 0 18px rgba(251, 191, 36, 0.12);
           white-space: nowrap;
+        }
+        .date-badge.date-range {
+          background: linear-gradient(135deg, rgba(94, 234, 212, 0.18), rgba(45, 212, 191, 0.12));
+          border-color: rgba(94, 234, 212, 0.35);
+          color: #5eead4;
+          box-shadow: 0 0 18px rgba(94, 234, 212, 0.12);
         }
 
         .section-label {
@@ -841,7 +855,7 @@ export default function ReadingResultsPage() {
           </motion.h1>
         </div>
 
-        {/* ── THE READING — borderless sections on the starfield ── */}
+        {/* ── THE READING ── */}
         <motion.article
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -922,14 +936,23 @@ export default function ReadingResultsPage() {
                     className="overflow-hidden"
                   >
                     <div className="mt-3 space-y-2.5">
-                      {page.sources.map((src, i) => (
-                        <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
-                            {src.section}
-                          </p>
-                          <p className="mt-1 text-[12px] leading-5 text-slate-400">{src.placements}</p>
-                        </div>
-                      ))}
+                      {page.sources.map((src, i) => {
+                        // Check if the source contains a date
+                        const hasDate = src.placements.includes("exact on");
+                        return (
+                          <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
+                              {src.section}
+                              {hasDate && (
+                                <span className="ml-2 text-[9px] text-yellow-400/60">
+                                  ⚡ dated
+                                </span>
+                              )}
+                            </p>
+                            <p className="mt-1 text-[12px] leading-5 text-slate-400">{src.placements}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </motion.div>
                 )}
@@ -1100,9 +1123,6 @@ export default function ReadingResultsPage() {
                 options={{
                   clientSecret,
                   onComplete: () => {
-                    // Payment done. The webhook grants credits asynchronously,
-                    // so we mirror the old success path: lift the paywall and
-                    // show the confirmation. Credits refresh on the next render.
                     setClientSecret(null);
                     setIsPurchasing(false);
                     setJustPurchased(true);
