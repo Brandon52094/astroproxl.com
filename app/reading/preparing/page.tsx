@@ -11,10 +11,14 @@ const LOADING_MESSAGES = [
   "Mapping current transits to your chart…",
   "Calculating your profection year…",
   "Identifying your Time Lord…",
-  "Tracing the activated house themes…",
-  "Cross-referencing tropical and sidereal layers…",
-  "Synthesizing progressions and solar arcs…",
-  "Scanning for planetary station points…",
+  "Tracing house rulers and their connections…",
+  "Detecting mutual receptions between planets…",
+  "Assessing planetary dignities…",
+  "Calculating synodic cycles and returns…",
+  "Mapping sensitive midpoint activations…",
+  "Tracking lunar return cycles…",
+  "Cross-referencing eclipse activations…",
+  "Synthesizing transit angles…",
   "Finalizing your reading…",
 ];
 
@@ -41,7 +45,6 @@ function PreparingPageInner() {
 
   useEffect(() => {
     // Fix 1 — if user cancelled Stripe, send them back to intake immediately
-    // This closes the bypass where they could exit Stripe and get a free reading
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
       router.replace("/reading/intake");
@@ -59,7 +62,7 @@ function PreparingPageInner() {
       setMessageIndex((prev) =>
         prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
       );
-    }, 2300);
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -87,30 +90,47 @@ function PreparingPageInner() {
           return;
         }
 
-         const response = await fetch("/api/readings", {
+        // ── Build the request body with ALL chart data ──
+        const requestBody = {
+          topic: intake.topic,
+          question: intake.question,
+          timeframeType: intake.timeframeType,
+          timeframeValue: intake.timeframeValue,
+          birthDate: chart.birthDate,
+          birthTime: chart.birthTime,
+          birthPlace: chart.birthPlace,
+          
+          // Core chart data
+          tropical: chart.chartData.tropical,
+          sidereal: chart.chartData.sidereal,
+          transits: chart.chartData.transits,
+          transitAspects: chart.chartData.transitAspects,
+          profection: chart.chartData.profection,
+          progressions: chart.chartData.progressions,
+          solarArcs: chart.chartData.solarArcs,
+          upcomingTrigger: chart.chartData.upcomingTrigger,
+          planetaryStations: chart.chartData.planetaryStations,
+          solarReturn: chart.chartData.solarReturn,
+          moonPhase: chart.chartData.moonPhase,
+          extendedPoints: chart.chartData.extendedPoints,
+          
+          // ── NEW: Advanced calculations ──
+          // These come from the chart data if available
+          houseRulers: chart.chartData.houseRulers,
+          mutualReceptions: chart.chartData.mutualReceptions,
+          essentialDignities: chart.chartData.essentialDignities,
+          synodicCycles: chart.chartData.synodicCycles,
+          midpoints: chart.chartData.midpoints,
+          lunarReturn: chart.chartData.lunarReturn,
+          eclipseActivations: chart.chartData.eclipseActivations,
+          transitsToAngles: chart.chartData.transitsToAngles,
+          dispositorTree: chart.chartData.dispositorTree,
+        };
+
+        const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            topic: intake.topic,
-            question: intake.question,
-            timeframeType: intake.timeframeType,
-            timeframeValue: intake.timeframeValue,
-            birthDate: chart.birthDate,
-            birthTime: chart.birthTime,
-            birthPlace: chart.birthPlace,
-            tropical: chart.chartData.tropical,
-            sidereal: chart.chartData.sidereal,
-            transits: chart.chartData.transits,
-            transitAspects: chart.chartData.transitAspects,
-            profection: chart.chartData.profection,
-            progressions: chart.chartData.progressions,
-            solarArcs: chart.chartData.solarArcs,
-            upcomingTrigger: chart.chartData.upcomingTrigger,
-            planetaryStations: chart.chartData.planetaryStations,
-            solarReturn: chart.chartData.solarReturn,
-            moonPhase: chart.chartData.moonPhase,
-            extendedPoints: chart.chartData.extendedPoints,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         const data = await response.json();
@@ -128,7 +148,6 @@ function PreparingPageInner() {
         });
 
         // Fix 2 — replace instead of push so preparing never appears in history
-        // This prevents the back button on results from re-triggering the AI
         router.replace("/reading/results");
       } catch (err) {
         setError(
@@ -331,4 +350,4 @@ export default function PreparingPage() {
       <PreparingPageInner />
     </Suspense>
   );
-} 
+}
