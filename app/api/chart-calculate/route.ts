@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: app/api/chart-calculate/route.ts (COMPLETE UPDATED)
+// FILE: app/api/chart-calculate/route.ts (UPDATED WITH WHOLE SIGN HOUSES)
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -267,13 +267,62 @@ function isAnareticLongitude(longitude: number): boolean {
   return degreeInSign >= 29;
 }
 
+// ============================================================
+// ── NEW: Whole Sign House Calculation ──
+// ============================================================
+
+function getWholeSignHouseCusps(ascLongitude: number): number[] {
+  const ascSign = Math.floor(((ascLongitude % 360) + 360) % 360 / 30);
+  const cusps: number[] = [];
+  for (let i = 0; i < 12; i++) {
+    cusps.push((ascSign + i) * 30);
+  }
+  return cusps;
+}
+
+// ============================================================
+// ── House calculation functions ──
+// ============================================================
+
+// For natal interpretation: Use Placidus house cusps (already in calculatePlanets)
+// For predictive calculations: Use Whole Sign houses
+
+function getWholeSignHouse(planetLongitude: number, ascLongitude: number): number {
+  const ascSign = Math.floor(((ascLongitude % 360) + 360) % 360 / 30);
+  const planetSign = Math.floor((((planetLongitude % 360) + 360) % 360) / 30);
+  return ((planetSign - ascSign + 12) % 12) + 1;
+}
+
+function getPlacidusHouse(planetLongitude: number, houseCusps: number[]): number {
+  // Find which Placidus house cusp the planet is between
+  const normLong = ((planetLongitude % 360) + 360) % 360;
+  for (let i = 0; i < 12; i++) {
+    const cusp1 = ((houseCusps[i] % 360) + 360) % 360;
+    const cusp2 = ((houseCusps[(i + 1) % 12] % 360) + 360) % 360;
+    
+    // Handle wrap-around
+    if (cusp1 < cusp2) {
+      if (normLong >= cusp1 && normLong < cusp2) {
+        return i + 1;
+      }
+    } else {
+      // Wrap-around case (e.g., cusp1 = 350°, cusp2 = 10°)
+      if (normLong >= cusp1 || normLong < cusp2) {
+        return i + 1;
+      }
+    }
+  }
+  return 1; // Default to first house if not found
+}
+
 function calculatePlanets(
   jd: number, lat: number, lng: number, houseSystem: string, ayanamsa?: number
 ): {
   planets: Array<{ name: string; longitude: number; isRetrograde: boolean; longitudeSpeed: number }>;
   ascLongitude: number;
   mcLongitude: number;
-  houseCusps: number[];
+  houseCusps: number[]; // Placidus house cusps for natal interpretation
+  wholeSignCusps: number[]; // Whole Sign cusps for predictive calculations
 } {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const swisseph = require("swisseph");
@@ -298,10 +347,15 @@ function calculatePlanets(
   ];
   const iflag = ayanamsa !== undefined ? (4 | 65536 | 256) : (4 | 256);
   if (ayanamsa !== undefined) swisseph.swe_set_sid_mode(ayanamsa, 0, 0);
+  
+  // Calculate Placidus houses (for natal interpretation)
   const houses = swisseph.swe_houses(jd, lat, lng, "W");
   const ascLongitude = houses.ascendant;
   const mcLongitude = houses.mc;
   const houseCusps = houses.house;
+  
+  // Calculate Whole Sign houses (for predictive calculations)
+  const wholeSignCusps = getWholeSignHouseCusps(ascLongitude);
 
   const planets = PLANETS.map(({ id, name }) => {
     if (id === undefined || id === null) {
@@ -318,13 +372,7 @@ function calculatePlanets(
       longitudeSpeed: result.longitudeSpeed,
     };
   });
-  return { planets, ascLongitude, mcLongitude, houseCusps };
-}
-
-function getWholeSignHouse(planetLongitude: number, ascLongitude: number): number {
-  const ascSign = Math.floor(ascLongitude / 30);
-  const planetSign = Math.floor(planetLongitude / 30);
-  return ((planetSign - ascSign + 12) % 12) + 1;
+  return { planets, ascLongitude, mcLongitude, houseCusps, wholeSignCusps };
 }
 
 function calculateAspects(planets: Array<{ name: string; longitude: number }>): NormalizedChart["aspects"] {
@@ -357,15 +405,16 @@ function buildNormalizedChart(
   birthDate: string, birthTime: string, birthPlace: string,
   lat: number, lng: number, timezone: string
 ): NormalizedChart {
-  const { planets, ascLongitude, mcLongitude } = raw;
+  const { planets, ascLongitude, mcLongitude, houseCusps } = raw;
   const ascDeg = longitudeToSignDegree(ascLongitude);
   const mcDeg  = longitudeToSignDegree(mcLongitude);
   const icDeg  = longitudeToSignDegree((mcLongitude + 180) % 360);
   const dcDeg  = longitudeToSignDegree((ascLongitude + 180) % 360);
 
+  // Use Placidus houses for natal interpretation
   const planetPlacements = planets.map(({ name, longitude, isRetrograde }) => {
     const { sign, degree } = longitudeToSignDegree(longitude);
-    const house = getWholeSignHouse(longitude, ascLongitude);
+    const house = getPlacidusHouse(longitude, houseCusps);
     return {
       name,
       sign,
@@ -523,11 +572,18 @@ function calculatePlanetaryStations(natalRaw: ReturnType<typeof calculatePlanets
     { id: swisseph.SE_SATURN, name: "Saturn" }, { id: swisseph.SE_URANUS, name: "Uranus" },
     { id: swisseph.SE_NEPTUNE, name: "Neptune" }, { id: swisseph.SE_PLUTO, name: "Pluto" },
   ];
+  
+  // Use Whole Sign houses for station house placement (predictive)
   const natalTargets = [
-    ...natalRaw.planets.map(p => ({ name: p.name, longitude: p.longitude, house: getWholeSignHouse(p.longitude, natalRaw.ascLongitude) })),
+    ...natalRaw.planets.map(p => ({ 
+      name: p.name, 
+      longitude: p.longitude, 
+      house: getWholeSignHouse(p.longitude, natalRaw.ascLongitude) 
+    })),
     { name: "Ascendant", longitude: natalRaw.ascLongitude, house: 1 },
     { name: "Midheaven", longitude: natalRaw.mcLongitude, house: 10 },
   ];
+  
   const today = new Date();
   const stations: PlanetaryStationData[] = [];
   for (const planet of STATION_PLANETS) {
@@ -600,6 +656,8 @@ function calculateSolarReturn(
   const mcDeg = longitudeToSignDegree(srRaw.mcLongitude);
 
   const PLANET_NAMES = ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","North Node"];
+  
+  // Use Whole Sign houses for Solar Return (predictive)
   const planets = srRaw.planets
     .filter(p => PLANET_NAMES.includes(p.name))
     .map(({ name, longitude, isRetrograde }) => {
@@ -747,6 +805,7 @@ function calculateArabicLots(
     spiritLong = (ascLong + moonLong - sunLong + 360) % 360;
   }
 
+  // Use Whole Sign houses for Arabic Lots (predictive)
   const fortunePos = longitudeToSignDegree(fortuneLong);
   const spiritPos = longitudeToSignDegree(spiritLong);
 
@@ -771,7 +830,7 @@ function calculateArabicLots(
 // ============================================================
 
 /**
- * Convert house cusps from the raw calculation to the format expected by houseRulers
+ * Convert Placidus house cusps to the format expected by houseRulers
  */
 function buildHouseCuspMap(houseCusps: number[]): Record<number, string> {
   const houseCuspSigns: Record<number, string> = {};
@@ -849,13 +908,15 @@ export async function POST(req: NextRequest) {
         transitRaw.planets,
         tropicalRaw,
         longitudeToSignDegree,
-        getWholeSignHouse
+        getWholeSignHouse // Use Whole Sign houses for transit aspects (predictive)
       );
     } catch (e) {
       console.warn("[chart-calculate] Transit aspect calculation failed:", e);
     }
 
     const ascSign = tropicalChart.angles.asc?.sign ?? "Aries";
+    
+    // For profection, use Whole Sign houses (predictive)
     const natalPlanetsForProfection = tropicalRaw.planets.map(({ name, longitude }) => {
       const { sign } = longitudeToSignDegree(longitude);
       return { name, sign, house: getWholeSignHouse(longitude, tropicalRaw.ascLongitude) };
@@ -909,6 +970,7 @@ export async function POST(req: NextRequest) {
       const moonPlanet = tropicalRaw.planets.find((p) => p.name === "Moon");
 
       if (sunPlanet && moonPlanet) {
+        // Use Whole Sign houses for determining day/night chart (predictive)
         const sunHouse = getWholeSignHouse(sunPlanet.longitude, tropicalRaw.ascLongitude);
         const isDayChart = sunHouse >= 7 && sunHouse <= 12;
 
@@ -927,7 +989,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ============================================================
-    // ── NEW: GENERATE ALL 9 ADVANCED CALCULATIONS ──
+    // ── GENERATE ALL 9 ADVANCED CALCULATIONS ──
     // ============================================================
 
     let houseRulers: HouseRuler[] = [];
@@ -941,52 +1003,55 @@ export async function POST(req: NextRequest) {
     let dispositorTree: DispositorResult[] = [];
 
     try {
-      // 0. Normalize the raw longitude-based planets into { name, sign, degree, ... }
-      //    shape that all the advanced-calculation helpers actually expect.
-      //    tropicalRaw.planets only has { name, longitude, isRetrograde, longitudeSpeed } —
-      //    passing that directly into functions that expect sign/degree is what was
-      //    producing the type errors / crashes here.
+      // Normalize planets for dignity calculations
       const dignityPlanets = tropicalRaw.planets.map((p) => {
         const { sign, degree } = longitudeToSignDegree(p.longitude);
         return { name: p.name, sign, degree, isRetrograde: p.isRetrograde };
       });
 
-      // 1. Build house cusp map
+      // Build house cusp map from Placidus houses (for natal interpretation)
       const houseCuspMap = buildHouseCuspMap(tropicalRaw.houseCusps);
 
-      // 2. House Rulers (Most Important)
+      // 1. House Rulers (Most Important) - Uses Placidus for natal
       houseRulers = calculateHouseRulers(dignityPlanets, houseCuspMap);
 
-      // 3. Mutual Reception
+      // 2. Mutual Reception
       mutualReceptions = calculateMutualReception(dignityPlanets);
 
-      // 4. Essential Dignities
+      // 3. Essential Dignities
       essentialDignities = dignityPlanets.map((p) =>
         calculateEssentialDignity(p.name, p.sign)
       );
 
-      // 5. Synodic Cycles (Planetary Returns)
+      // 4. Synodic Cycles (Planetary Returns)
       synodicCycles = calculateSynodicCycles(dignityPlanets, now);
 
-      // 6. Midpoints
-      midpoints = calculateMidpoints(dignityPlanets, houseCuspMap);
+      // 5. Midpoints - Uses Whole Sign houses for midpoint house placement (predictive)
+      // Convert houseCuspMap to use Whole Sign cusps for midpoints
+      const wholeSignHouseMap: Record<number, string> = {};
+      for (let i = 0; i < 12; i++) {
+        const cuspLong = tropicalRaw.wholeSignCusps[i];
+        const { sign } = longitudeToSignDegree(cuspLong);
+        wholeSignHouseMap[i + 1] = sign;
+      }
+      midpoints = calculateMidpoints(dignityPlanets, wholeSignHouseMap);
 
-      // 7. Lunar Return
+      // 6. Lunar Return
       const transitMoon = transitRaw.planets.find((p) => p.name === "Moon");
       if (transitMoon) {
         const { sign: moonSign, degree: moonDegree } = longitudeToSignDegree(transitMoon.longitude);
         lunarReturn = calculateLunarReturn(moonSign, moonDegree, now);
       }
 
-      // 8. Eclipse Activation
+      // 7. Eclipse Activation
       const knownEclipses = getKnownEclipses(now);
       eclipseActivations = calculateEclipseActivation(dignityPlanets, knownEclipses);
 
-      // 9. Transit to Angles
+      // 8. Transit to Angles
       const angles = buildAngles(tropicalRaw.ascLongitude, tropicalRaw.mcLongitude);
       transitsToAngles = calculateTransitsToAngles(transits, angles);
 
-      // 10. Dispositor Tree
+      // 9. Dispositor Tree
       dispositorTree = calculateDispositorTree(dignityPlanets);
 
     } catch (e) {
