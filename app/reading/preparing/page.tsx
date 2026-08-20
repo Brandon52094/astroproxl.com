@@ -11,8 +11,12 @@ const LOADING_MESSAGES = [
   "Mapping current transits to your chart…",
   "Calculating your profection year…",
   "Identifying your Time Lord…",
-  "Tracing the activated house themes…",
-  "Cross-referencing tropical and sidereal layers…",
+  "Tracing house rulers and themes…",
+  "Checking for mutual reception patterns…",
+  "Scanning planetary returns (chapter markers)…",
+  "Mapping sensitive midpoint activations…",
+  "Checking transits to your angles…",
+  "Cross-referencing solar return for external events…",
   "Synthesizing progressions and solar arcs…",
   "Scanning for planetary station points…",
   "Finalizing your reading…",
@@ -41,7 +45,6 @@ function PreparingPageInner() {
 
   useEffect(() => {
     // Fix 1 — if user cancelled Stripe, send them back to intake immediately
-    // This closes the bypass where they could exit Stripe and get a free reading
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
       router.replace("/reading/intake");
@@ -59,7 +62,7 @@ function PreparingPageInner() {
       setMessageIndex((prev) =>
         prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
       );
-    }, 2300);
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -87,17 +90,23 @@ function PreparingPageInner() {
           return;
         }
 
-         const response = await fetch("/api/readings", {
+        // ── COMPLETE REQUEST BODY with all 20 data points ──
+        const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            // Core intake data
             topic: intake.topic,
             question: intake.question,
             timeframeType: intake.timeframeType,
             timeframeValue: intake.timeframeValue,
+            
+            // Birth data
             birthDate: chart.birthDate,
             birthTime: chart.birthTime,
             birthPlace: chart.birthPlace,
+            
+            // Core chart data (always present)
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
             transits: chart.chartData.transits,
@@ -110,6 +119,13 @@ function PreparingPageInner() {
             solarReturn: chart.chartData.solarReturn,
             moonPhase: chart.chartData.moonPhase,
             extendedPoints: chart.chartData.extendedPoints,
+            
+            // ── NEW: Essential Calculations from chart-calculate ──
+            houseRulers: chart.chartData.houseRulers,
+            mutualReceptions: chart.chartData.mutualReceptions,
+            synodicCycles: chart.chartData.synodicCycles,
+            midpoints: chart.chartData.midpoints,
+            transitsToAngles: chart.chartData.transitsToAngles,
           }),
         });
 
@@ -128,7 +144,6 @@ function PreparingPageInner() {
         });
 
         // Fix 2 — replace instead of push so preparing never appears in history
-        // This prevents the back button on results from re-triggering the AI
         router.replace("/reading/results");
       } catch (err) {
         setError(
@@ -331,4 +346,4 @@ export default function PreparingPage() {
       <PreparingPageInner />
     </Suspense>
   );
-} 
+}
