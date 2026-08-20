@@ -509,19 +509,3 @@ export function calculateDispositorTree(
 
   return results;
 }
-
-// ============================================================
-// TYPE EXPORTS
-// ============================================================
-
-export type {
-  HouseRuler,
-  MutualReception,
-  EssentialDignity,
-  SynodicCycle,
-  Midpoint,
-  LunarReturn,
-  EclipseActivation,
-  TransitToAngle,
-  DispositorResult,
-};

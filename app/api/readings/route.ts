@@ -343,6 +343,7 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     topic,
     question,
     tropical,
+    sidereal,
     profection,
     progressions,
     solarArcs,
