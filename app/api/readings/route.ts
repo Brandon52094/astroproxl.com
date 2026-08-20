@@ -1056,6 +1056,15 @@ export async function POST(request: NextRequest) {
     const prompt = buildReadingPrompt(body, validatedAspects);
     const dateIndex = buildValidDateIndex(body);
 
+// ── DEBUG: Log all available dates ──
+console.log("[DEBUG] === AVAILABLE DATES ===");
+console.log("[DEBUG] Dates from index:", dateIndex.dates.map(d => d.raw));
+console.log("[DEBUG] Upcoming trigger:", body.upcomingTrigger?.date || "none");
+console.log("[DEBUG] Planetary stations:", body.planetaryStations?.map(s => s.stationDate) || []);
+console.log("[DEBUG] Synodic cycles (within 45d):", body.synodicCycles?.filter(s => s.daysUntilReturn <= 45).map(s => s.returnDate) || []);
+console.log("[DEBUG] Transit aspects count:", validatedAspects.length);
+console.log("[DEBUG] Sample transit aspect:", validatedAspects[0] ? JSON.stringify(validatedAspects[0], null, 2) : "none");
+console.log("[DEBUG] ===========================");
     // Generate reading
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
