@@ -86,7 +86,7 @@ export async function handleReading(request: NextRequest) {
     const topic = getTopic(body.topic);
 
     const prompt = buildReadingPrompt(body, topic, validatedAspects);
-    const dateIndex = buildValidDateIndex(body);
+    const dateIndex = buildValidDateIndex(body, validatedAspects);
 
     console.log("[DEBUG] === AVAILABLE DATES ===");
     console.log("[DEBUG] Dates from index:", dateIndex.dates.map(d => d.raw));
