@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: app/api/readings/route.ts (TOPIC-SPECIFIC VERSION)
+// FILE: app/api/readings/route.ts (TOPIC-SPECIFIC WITH DATE FILTERING)
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -8,6 +8,7 @@ import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
 import { buildValidDateIndex, findUnsupportedMarkers } from "@/lib/validateReadingDates";
+import { getUniqueAspectDates } from "@/lib/transitAspects";
 
 // Import types for the 4 essential calculations
 import {
@@ -507,7 +508,7 @@ function filterPersonalTrigger(trigger: any, timeLord: string): any | null {
 }
 
 // ============================================================
-// BUILD PROMPT - Topic-Specific Version
+// BUILD PROMPT - Topic-Specific Version with Date Filtering
 // ============================================================
 
 function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitAspect[] = []): string {
@@ -533,6 +534,66 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
 
   // ── TOPIC-SPECIFIC FILTERING ──
   const topicRelevantAspects = filterTransitsByTopic(validatedAspects, topic, profection.timeLord);
+  
+  // ── COLLECT TOPIC-RELEVANT DATES ONLY ──
+  // 1. Dates from topic-relevant aspects
+  const aspectDates = getUniqueAspectDates(topicRelevantAspects);
+  
+  // 2. Upcoming trigger - only if it's topic-relevant
+  const isTriggerRelevant = upcomingTrigger && (
+    getTopicRelevantPlanets(topic).has(upcomingTrigger.transitPlanet) ||
+    getTopicRelevantPlanets(topic).has(upcomingTrigger.natalPlanet)
+  );
+  const triggerDate = isTriggerRelevant ? upcomingTrigger?.date : null;
+  
+  // 3. Planetary stations - only if they hit a topic-relevant planet/house
+  const relevantStationDates = (planetaryStations || [])
+    .filter(s => {
+      // Check if station hits a topic-relevant planet
+      const hitsRelevantPlanet = s.natalPlanetHit && 
+        getTopicRelevantPlanets(topic).has(s.natalPlanetHit);
+      // Check if station is in a topic-relevant house
+      const inRelevantHouse = s.natalHouse && 
+        getTopicRelevantHouses(topic).has(s.natalHouse);
+      return hitsRelevantPlanet || inRelevantHouse;
+    })
+    .map(s => s.stationDate);
+  
+  // 4. Synodic cycles - only returns for topic-relevant planets
+  const relevantCycleDates = (synodicCycles || [])
+    .filter(s => s.daysUntilReturn <= 45 && getTopicRelevantPlanets(topic).has(s.planet))
+    .map(s => s.returnDate);
+  
+  // 5. Solar Return date - always relevant (it's a major life event)
+  const solarReturnDate = solarReturn?.sunReturnDate;
+  
+  // 6. Transit to Angles - always relevant (major life events)
+  const angleDates = (transitsToAngles || [])
+    .filter(t => t.orb < 2)
+    .map(t => {
+      // Calculate the date this angle transit perfects
+      const date = new Date();
+      date.setDate(date.getDate() + Math.round(t.orb * 2));
+      return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    });
+
+  const allDates = [
+    ...aspectDates,
+    triggerDate,
+    ...relevantStationDates,
+    ...relevantCycleDates,
+    solarReturnDate,
+    ...angleDates,
+  ].filter(Boolean) as string[];
+
+  const uniqueDates = [...new Set(allDates)].sort();
+
+  // ── DEBUG: Log topic-specific dates ──
+  console.log(`[DEBUG] Topic: ${topic}`);
+  console.log(`[DEBUG] Topic-relevant aspect dates:`, aspectDates);
+  console.log(`[DEBUG] Topic-relevant station dates:`, relevantStationDates);
+  console.log(`[DEBUG] Topic-relevant cycle dates:`, relevantCycleDates);
+  console.log(`[DEBUG] Total unique dates:`, uniqueDates);
   
   // For spine detection, use ALL aspects but weight topic-relevant ones
   const spine = determineSpine(
@@ -700,7 +761,8 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
       for (const a of exact) {
         const rx = a.isRetrograde ? " Rx" : "";
         const motion = a.isApplying ? "APPLYING" : "SEPARATING";
-        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}`);
+        const dateStr = a.exactDate ? ` — exact on ${a.exactDate}` : "";
+        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}${dateStr}`);
       }
     }
 
@@ -709,14 +771,16 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
       for (const a of live) {
         const rx = a.isRetrograde ? " Rx" : "";
         const motion = a.isApplying ? "APPLYING" : "SEPARATING";
-        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}`);
+        const dateStr = a.exactDate ? ` — exact on ${a.exactDate}` : "";
+        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}${dateStr}`);
       }
     }
 
     if (background.length > 0) {
       sections.push(`  BACKGROUND (${background.length} — texture only):`);
       for (const a of background) {
-        sections.push(`    • ${a.transitPlanet} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb`);
+        const dateStr = a.exactDate ? ` — exact on ${a.exactDate}` : "";
+        sections.push(`    • ${a.transitPlanet} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb${dateStr}`);
       }
     }
 
@@ -860,10 +924,17 @@ function buildReadingPrompt(body: ReadingRequestBody, validatedAspects: TransitA
     sections.push(
       "PART 3 — DATED WINDOWS (2-4 windows, as data supports):",
       "",
+      "⚠️ CRITICAL: These are the ONLY dates available for this reading:",
+      ...(uniqueDates.length > 0 
+        ? uniqueDates.map(d => `  - ${d}`)
+        : ["  - No topic-relevant dates available within the next 45 days"]),
+      "",
+      "Each window MUST use a DIFFERENT date from this list.",
+      "Do NOT reuse the same date for multiple windows.",
+      "If there are fewer than 2 dates, give only what's available.",
+      "",
       "Each window format:",
       "  [[DATE: X]] — [one sentence on what activates] [one sentence on consequence]",
-      "",
-      "⚠️ CRITICAL: Use DIFFERENT dates for each window.",
       "",
       "TIMING RULES:",
       "  - Fast planets (Mercury, Venus, Mars, Sun, Moon): ±1 day window",
@@ -1056,15 +1127,16 @@ export async function POST(request: NextRequest) {
     const prompt = buildReadingPrompt(body, validatedAspects);
     const dateIndex = buildValidDateIndex(body);
 
-// ── DEBUG: Log all available dates ──
-console.log("[DEBUG] === AVAILABLE DATES ===");
-console.log("[DEBUG] Dates from index:", dateIndex.dates.map(d => d.raw));
-console.log("[DEBUG] Upcoming trigger:", body.upcomingTrigger?.date || "none");
-console.log("[DEBUG] Planetary stations:", body.planetaryStations?.map(s => s.stationDate) || []);
-console.log("[DEBUG] Synodic cycles (within 45d):", body.synodicCycles?.filter(s => s.daysUntilReturn <= 45).map(s => s.returnDate) || []);
-console.log("[DEBUG] Transit aspects count:", validatedAspects.length);
-console.log("[DEBUG] Sample transit aspect:", validatedAspects[0] ? JSON.stringify(validatedAspects[0], null, 2) : "none");
-console.log("[DEBUG] ===========================");
+    // ── DEBUG: Log all available dates ──
+    console.log("[DEBUG] === AVAILABLE DATES ===");
+    console.log("[DEBUG] Dates from index:", dateIndex.dates.map(d => d.raw));
+    console.log("[DEBUG] Upcoming trigger:", body.upcomingTrigger?.date || "none");
+    console.log("[DEBUG] Planetary stations:", body.planetaryStations?.map(s => s.stationDate) || []);
+    console.log("[DEBUG] Synodic cycles (within 45d):", body.synodicCycles?.filter(s => s.daysUntilReturn <= 45).map(s => s.returnDate) || []);
+    console.log("[DEBUG] Transit aspects count:", validatedAspects.length);
+    console.log("[DEBUG] Sample transit aspect:", validatedAspects[0] ? JSON.stringify(validatedAspects[0], null, 2) : "none");
+    console.log("[DEBUG] ===========================");
+
     // Generate reading
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
