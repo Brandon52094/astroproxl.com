@@ -407,7 +407,7 @@ export default function SignInPage() {
   colorBackground: "transparent",
   colorForeground: "#f8fafc",
   colorMutedForeground: "#cbd5e1",
-  colorInputBackground: "rgba(255,255,255,0.04)",
+  colorInput: "rgba(255,255,255,0.04)",
   colorInputForeground: "#ffffff",
   colorDanger: "#fb7185",
   borderRadius: "24px",
@@ -444,11 +444,11 @@ export default function SignInPage() {
                     formFieldSuccessText: "text-amber-200",
                     formContainer: "pt-6 px-6",
                   },
-                  layout: {
-                    socialButtonsPlacement: "top",
-                    socialButtonsVariant: "blockButton",
-                    shimmer: false,
-                  },
+                  options: {
+  socialButtonsPlacement: "top",
+  socialButtonsVariant: "blockButton",
+  shimmer: false,
+},
                 }}
               />
             </div>
