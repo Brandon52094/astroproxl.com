@@ -1,10 +1,26 @@
+// ============================================================
+// FILE: app/api/readings/followup/route.ts (COMPLETE UPDATED)
+// ============================================================
+
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
 
-// EDIT 1: Add isAnaretic to PlanetPlacement interface
+// ── NEW: Import advanced calculation types ──
+import {
+  type HouseRuler,
+  type MutualReception,
+  type EssentialDignity,
+  type SynodicCycle,
+  type Midpoint,
+  type LunarReturn,
+  type EclipseActivation,
+  type TransitToAngle,
+  type DispositorResult,
+} from "@/lib/astrologicalCalculations";
+
 interface PlanetPlacement {
   name: string;
   sign: string;
@@ -34,7 +50,6 @@ interface ProgressedPlanet {
   isRetrograde: boolean;
 }
 
-// EDIT 1: Add new interfaces
 interface SolarArcPlanet {
   name: string;
   sign: string;
@@ -105,6 +120,7 @@ interface MoonPhaseData {
   moonDegree: string;
 }
 
+// ── NEW: Extended FollowupRequestBody with all 10 calculations ──
 interface FollowupRequestBody {
   question: string;
   originalReading: string;
@@ -121,15 +137,20 @@ interface FollowupRequestBody {
   planetaryStations?: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
-  // EDIT 1: Add extendedPoints to request body
   extendedPoints?: ExtendedPoints;
   conversationHistory?: string;
-  /**
-   * How many free replies the client has already used on THIS reading.
-   * Tracked client-side (localStorage), reset to 0 on every new reading.
-   * The server trusts this for the free tier only — paid replies are
-   * server-authoritative via `replyCredits`.
-   */
+  
+  // ── NEW: All 10 advanced calculations ──
+  houseRulers?: HouseRuler[];
+  mutualReceptions?: MutualReception[];
+  essentialDignities?: EssentialDignity[];
+  synodicCycles?: SynodicCycle[];
+  midpoints?: Midpoint[];
+  lunarReturn?: LunarReturn;
+  eclipseActivations?: EclipseActivation[];
+  transitsToAngles?: TransitToAngle[];
+  dispositorTree?: DispositorResult[];
+  
   freeRepliesUsed?: number;
 }
 
@@ -156,10 +177,7 @@ function fmtSolarArc(p: SolarArcPlanet): string {
 }
 
 /**
- * Same calculated-aspect block as the main reading. The follow-up is exactly
- * where people push for specifics — "when?", "are you sure?", "what about
- * next week?" — so it is the LAST place we want the model estimating orbs
- * by eye. It gets the same finished answers the main reading got.
+ * Same calculated-aspect block as the main reading.
  */
 function fmtTransitAspects(aspects: TransitAspect[] | undefined): string {
   if (!aspects || aspects.length === 0) {
@@ -209,6 +227,16 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     solarReturn,
     moonPhase,
     conversationHistory,
+    // ── NEW: Advanced calculations ──
+    houseRulers,
+    mutualReceptions,
+    essentialDignities,
+    synodicCycles,
+    midpoints,
+    lunarReturn,
+    eclipseActivations,
+    transitsToAngles,
+    dispositorTree,
   } = body;
 
   const topicLabel =
@@ -222,7 +250,6 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
 
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
 
-  // EDIT 2: Rank and cap the natal aspects
   const MAJOR_BODIES = new Set([
     "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn",
     "Uranus","Neptune","Pluto","North Node","Ascendant","Midheaven",
@@ -334,7 +361,182 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
         ].join(NL)
       : "";
 
-  // EDIT 3: Build anaretic + extended-points blocks
+  // ── NEW: HOUSE RULERS BLOCK ──
+  const houseRulersBlock = (() => {
+    if (!houseRulers || houseRulers.length === 0) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "HOUSE RULERS (which planet drives each area of life)",
+      "═══════════════════════════════════════════",
+      "",
+      ...houseRulers.map((h) => `House ${h.house} (${h.sign}) → ruled by ${h.ruler}`),
+      "",
+      "ROLE: When a planet transits a house, look to that house's ruler for amplification.",
+      "Use this to connect multiple transits into a single coherent theme.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: MUTUAL RECEPTION BLOCK ──
+  const mutualReceptionBlock = (() => {
+    if (!mutualReceptions || mutualReceptions.length === 0) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "MUTUAL RECEPTION — AMPLIFIED CONNECTIONS",
+      "═══════════════════════════════════════════",
+      "",
+      ...mutualReceptions.map(
+        (m) => `⚡ ${m.description} → ${m.planetA} and ${m.planetB} are in each other's signs`
+      ),
+      "",
+      "ROLE: Mutual reception AMPLIFIES any transit involving either planet.",
+      "If a transit hits one of these planets, it is STRONGER than the orb suggests.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: ESSENTIAL DIGNITIES BLOCK ──
+  const essentialDignitiesBlock = (() => {
+    if (!essentialDignities || essentialDignities.length === 0) return "";
+    const strong = essentialDignities.filter((d) => d.strength >= 8);
+    const weak = essentialDignities.filter((d) => d.strength <= 3);
+    if (strong.length === 0 && weak.length === 0) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "ESSENTIAL DIGNITIES (how planets express)",
+      "═══════════════════════════════════════════",
+      "",
+      ...strong.map((d) => `💪 ${d.planet} in ${d.sign} — ${d.dignity} (strength: ${d.strength}/10)`),
+      ...weak.map((d) => `⚠️ ${d.planet} in ${d.sign} — ${d.dignity} (strength: ${d.strength}/10)`),
+      "",
+      "ROLE: Strong planets (10/8) express powerfully and naturally.",
+      "Weak planets (3/2) struggle to express their themes — their transits are more difficult.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: SYNODIC CYCLES BLOCK ──
+  const synodicCyclesBlock = (() => {
+    if (!synodicCycles || synodicCycles.length === 0) return "";
+    const relevant = synodicCycles.filter((s) => s.daysUntilReturn <= 45);
+    if (relevant.length === 0) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "SYNODIC CYCLES — MAJOR CHAPTER MARKERS",
+      "═══════════════════════════════════════════",
+      "",
+      ...relevant.map(
+        (s) => `${s.planet} return in ${s.daysUntilReturn} days (${s.returnDate})`
+      ),
+      "",
+      "ROLE: A planetary return is a MAJOR life chapter marker.",
+      "If a return is approaching in the next 45 days, it is a PRIMARY date anchor.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: MIDPOINTS BLOCK ──
+  const midpointsBlock = (() => {
+    if (!midpoints || midpoints.length === 0) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "MIDPOINTS — SENSITIVE POINTS",
+      "═══════════════════════════════════════════",
+      "",
+      ...midpoints.map(
+        (m) => `${m.pointA}/${m.pointB} midpoint: ${m.sign} ${m.degree}° (House ${m.house})`
+      ),
+      "",
+      "ROLE: Midpoints are sensitive points that can be activated by transits.",
+      "If a transit hits a midpoint, it triggers both planets simultaneously.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: LUNAR RETURN BLOCK ──
+  const lunarReturnBlock = (() => {
+    if (!lunarReturn) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "LUNAR RETURN — MONTHLY RESET",
+      "═══════════════════════════════════════════",
+      "",
+      `Next Lunar Return: ${lunarReturn.date} (${lunarReturn.daysUntil} days)`,
+      `Moon returns to ${lunarReturn.moonSign} ${lunarReturn.moonDegree}`,
+      "",
+      "ROLE: The Lunar Return is a monthly reset point — the start of a new emotional cycle.",
+      "If a question is about emotions, relationships, or home, this is a PRIMARY date anchor.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: ECLIPSE ACTIVATION BLOCK ──
+  const eclipseActivationsBlock = (() => {
+    if (!eclipseActivations || eclipseActivations.length === 0) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "ECLIPSE ACTIVATION — LONG-TERM THEMES",
+      "═══════════════════════════════════════════",
+      "",
+      ...eclipseActivations.map(
+        (e) =>
+          `${e.eclipseType} Eclipse on ${e.eclipseDate} at ${e.degree}° ${e.sign} — activating ${e.activatedPlanet} (${e.orb}° orb) for ${e.durationMonths} months`
+      ),
+      "",
+      "ROLE: Eclipses activate a point for 6-12 months.",
+      "If an eclipse hit a personal planet in your chart, that planet's themes are ONGOING.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: TRANSIT TO ANGLES BLOCK ──
+  const transitsToAnglesBlock = (() => {
+    if (!transitsToAngles || transitsToAngles.length === 0) return "";
+    return NL + [
+      "═══════════════════════════════════════════",
+      "TRANSIT TO ANGLES — MAJOR LIFE EVENTS",
+      "═══════════════════════════════════════════",
+      "",
+      ...transitsToAngles.map(
+        (t) =>
+          `${t.transitPlanet} ${t.aspectType} ${t.angle} (${t.angleSign} ${t.angleDegree}°) — ${t.orb}° orb, ${t.isApplying ? "APPLYING" : "SEPARATING"}`
+      ),
+      "",
+      "ROLE: Transits to angles are MAJOR life events. They OUTRANK all other personal-planet transits.",
+      "",
+      "Angle meanings:",
+      "  - Ascendant: Identity, body, how you present yourself",
+      "  - Midheaven: Career, public reputation, authority",
+      "  - Descendant: Relationships, partnerships, open enemies",
+      "  - Imum Coeli: Home, family, emotional foundation",
+      "",
+    ].join(NL);
+  })();
+
+  // ── NEW: DISPOSITOR TREE BLOCK ──
+  const dispositorTreeBlock = (() => {
+    if (!dispositorTree || dispositorTree.length === 0) return "";
+    const finalDispositors = dispositorTree.map((d) => d.finalDispositor);
+    const uniqueFinal = [...new Set(finalDispositors)];
+    return NL + [
+      "═══════════════════════════════════════════",
+      "DISPOSITOR TREE (Chain of Command)",
+      "═══════════════════════════════════════════",
+      "",
+      ...dispositorTree.map(
+        (d) =>
+          `${d.planet} in ${d.sign} → ruled by ${d.dispositor} → chain: ${d.chain.join(" → ")}`
+      ),
+      "",
+      `FINAL DISPOSITOR(S): ${uniqueFinal.join(", ")}`,
+      "",
+      "ROLE: The Final Dispositor is the planet that ultimately rules the entire chart.",
+      "It is the 'ultimate authority' — its transits and conditions set the tone for everything else.",
+      "",
+    ].join(NL);
+  })();
+
+  // ── ANARETIC BLOCK ──
   const anareticBlock = (() => {
     const anaretic = tropical.planets.filter((p) => p.isAnaretic);
     if (anaretic.length === 0) return "";
@@ -350,6 +552,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     ].join(NL);
   })();
 
+  // ── EXTENDED POINTS BLOCK ──
   const extendedPointsBlock = (() => {
     if (!body.extendedPoints) return "";
     const { arabicLots, declinations } = body.extendedPoints;
@@ -430,17 +633,26 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     stationsBlock,
     moonPhaseBlock,
     solarReturnBlock,
+    
+    // ── NEW: All 10 advanced calculation blocks ──
+    houseRulersBlock,
+    mutualReceptionBlock,
+    essentialDignitiesBlock,
+    synodicCyclesBlock,
+    midpointsBlock,
+    lunarReturnBlock,
+    eclipseActivationsBlock,
+    transitsToAnglesBlock,
+    dispositorTreeBlock,
+    
     "NATAL PLACEMENTS:",
     planetList,
-    // EDIT 4: Insert anaretic block here
     anareticBlock,
     "",
-    // EDIT 4: Updated natal aspects block with ranking
     "NATAL ASPECTS (ranked — major-body first, then by tightness; asteroid/Chiron/Lilith marked flavor):",
     aspectList || "None provided.",
     "ROLE: These never change. They are the pattern the transits are ACTIVATING.",
     "Aspects marked '[minor body — flavor only]' may color a description but may never anchor a claim.",
-    // EDIT 4: Insert extended points block here
     extendedPointsBlock,
     siderealBlock,
     "CURRENT TRANSIT POSITIONS:",
@@ -483,6 +695,10 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
   ].join(NL);
 }
 
+// ============================================================
+// POST HANDLER
+// ============================================================
+
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
@@ -490,9 +706,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // ── Parse + validate the body FIRST ─────────────────────────────────────
-    // We need `freeRepliesUsed` from the body to decide access, so parsing has
-    // to happen before the gate (in the old code it ran after).
+    // ── Parse + validate the body ──
     const body = (await request.json()) as FollowupRequestBody;
 
     if (
@@ -508,14 +722,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
-    // ── Reply-access gating ─────────────────────────────────────────────────
-    // Non-subscribers: 1 free reply per reading, then spend from replyCredits.
-    // Subscribers: 4 free replies per reading, then spend from replyCredits.
-    // HARD RULE: this route only ever reads/writes `replyCredits`. It never
-    // touches `credits` (readings) or `readingsCompleted`. Sending a reply must
-    // never advance the reading cycle or spend a reading credit.
-    const NONSUB_FREE_REPLIES = 1;   // regular reading includes 1 reply
-    const SUB_FREE_REPLIES = 4;      // subscriber free band
+    // ── Reply-access gating ──
+    const NONSUB_FREE_REPLIES = 1;
+    const SUB_FREE_REPLIES = 4;
 
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
@@ -525,9 +734,7 @@ export async function POST(request: NextRequest) {
     const replyCredits = Number(metadata?.replyCredits ?? 0);
     const freeRepliesUsed = Math.max(0, Number(body.freeRepliesUsed ?? 0));
 
-    // ── LAYER 1: crisis check ────────────────────────────────────────────────
-    // Before the reply gate and the model call, so a block never spends a reply
-    // and preempts the paywall — someone in crisis gets help, not a 402.
+    // ── LAYER 1: crisis check ──
     const risk = assessRisk(body?.question ?? "");
     if (risk.action === "block_crisis" || risk.action === "block_emergency") {
       const safe = getSafeResponse(risk);
@@ -539,7 +746,6 @@ export async function POST(request: NextRequest) {
         {
           title: safe.title,
           content: safe.answer + "\n\n" + safe.confirmation,
-          // Nothing was spent — the client must not decrement its reply counter.
           isSafeResponse: true,
           riskLevel: risk.level,
           replyMeta: {
@@ -553,19 +759,17 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
     }
-    // MEDIUM proceeds to the full answer; this rides along underneath it.
     const careNote = getCareNote(risk);
 
-    // Free band depends on subscriber status; past it, everyone spends replyCredits.
     const freeBand = isSubscribed ? SUB_FREE_REPLIES : NONSUB_FREE_REPLIES;
 
     let accessTier: "free" | "credit" | null;
     if (freeRepliesUsed < freeBand) {
-      accessTier = "free"; // within the free band (client-tracked)
+      accessTier = "free";
     } else if (replyCredits > 0) {
-      accessTier = "credit"; // paid reply from the pool
+      accessTier = "credit";
     } else {
-      accessTier = null; // out → prompt to buy
+      accessTier = null;
     }
 
     if (accessTier === null) {
@@ -574,14 +778,11 @@ export async function POST(request: NextRequest) {
           error: "You've used your free replies.",
           code: "NEEDS_REPLY_PACK",
           isSubscribed,
-          // Subscribers get the $2 discounted tail; non-subs buy the normal $2 pack.
           tailMode: isSubscribed ? "sub_reply_tail_regular" : "reply_pack",
         },
         { status: 402 }
       );
     }
-    // Note: deduction happens AFTER a successful generation, so a failed API
-    // call never burns a paid reply credit.
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -658,9 +859,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Spend a PAID reply credit — only on success, only for the credit tier ─
-    // Free replies are tracked client-side and reported via `freeRepliesUsed`.
-    // Subscribers are unlimited. Reading credits are never touched here.
+    // ── Spend a PAID reply credit ──
     let replyCreditsRemaining = replyCredits;
     if (accessTier === "credit") {
       replyCreditsRemaining = Math.max(0, replyCredits - 1);
@@ -685,10 +884,7 @@ export async function POST(request: NextRequest) {
       {
         title: parsed.title,
         content: parsed.content,
-        // null unless MEDIUM risk; client renders it quietly beneath the answer.
         careNote,
-        // The client uses this to update its free-reply counter and to know
-        // whether to show "replies remaining" vs. the paywall next time.
         replyMeta: {
           accessTier,
           usedFreeReply,
