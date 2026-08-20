@@ -45,7 +45,7 @@ export interface TransitAspect {
  * Uses binary search to find the exact date.
  */
 function calculateExactAspectDate(
-  transitPlanet: { name: string; longitude: number; longitudeSpeed: number }, // ← FIX: use longitudeSpeed
+  transitPlanet: { name: string; longitude: number; longitudeSpeed: number },
   natalLongitude: number,
   aspectAngle: number,
   startDate: Date,
@@ -138,9 +138,6 @@ function calculateExactAspectDate(
 /**
  * Cross every transiting body against every natal point.
  * Returns aspects within 6° orb, sorted tightest first.
- *
- * Orbs here are deliberately tighter than the natal-aspect orbs — a transit
- * at 7° off is not doing anything you can name a date for.
  */
 export function calculateTransitAspects(
   transitPlanets: Array<{ name: string; longitude: number; isRetrograde: boolean; longitudeSpeed: number }>,
@@ -164,9 +161,6 @@ export function calculateTransitAspects(
     { type: "sextile",     angle: 60,  maxOrb: 4 },
   ];
 
-  // Natal targets = every planet, plus the two angles. The angles matter:
-  // a transit on the Ascendant or Midheaven is one of the most concrete
-  // "something visible happens" signatures in the chart.
   const natalTargets = [
     ...natalRaw.planets.map((p) => ({
       name: p.name,
@@ -184,7 +178,6 @@ export function calculateTransitAspects(
     const tPos = longitudeToSignDegree(transit.longitude);
 
     for (const natal of natalTargets) {
-      // Angular separation, normalized to 0–180
       let diff = Math.abs(transit.longitude - natal.longitude);
       if (diff > 180) diff = 360 - diff;
 
@@ -192,13 +185,7 @@ export function calculateTransitAspects(
         const orb = Math.abs(diff - angle);
         if (orb > maxOrb) continue;
 
-        // ── Applying or separating? ──
-        // Project the transit forward by a small step at its current speed.
-        // If the orb shrinks, it's applying (building). If it grows, it's
-        // separating (releasing). Retrograde motion is handled automatically
-        // because longitudeSpeed is negative — this is exactly why the
-        // SEFLG_SPEED flag matters beyond just the Rx marker.
-        const step = 0.01; // ~15 minutes of motion
+        const step = 0.01;
         const futureLon = transit.longitude + transit.longitudeSpeed * step;
         let futureDiff = Math.abs(futureLon - natal.longitude);
         if (futureDiff > 180) futureDiff = 360 - futureDiff;
@@ -207,9 +194,8 @@ export function calculateTransitAspects(
 
         const natalPos = longitudeToSignDegree(natal.longitude);
 
-        // ── Calculate exact date when this aspect perfects ──
         const exactDateInfo = calculateExactAspectDate(
-          transit, // ← Now passing the full transit object with longitudeSpeed
+          transit,
           natal.longitude,
           angle,
           now,
@@ -233,19 +219,16 @@ export function calculateTransitAspects(
           daysUntilExact: exactDateInfo?.daysUntil || null,
         });
 
-        break; // one aspect type per planet pair — the closest one wins
+        break;
       }
     }
   }
 
-  // Tightest first. This ordering IS the priority order the prompt asks for.
   return aspects.sort((a, b) => a.orbDegrees - b.orbDegrees);
 }
 
 /**
- * Format for the prompt. Plain, terse, pre-sorted — the model reads this as
- * a finished answer, not a puzzle. Every number here is exact, which means
- * every number that lands in `sources` is exact too.
+ * Format for the prompt.
  */
 export function formatTransitAspects(aspects: TransitAspect[]): string {
   if (aspects.length === 0) {
@@ -275,19 +258,56 @@ export function formatTransitAspects(aspects: TransitAspect[]): string {
 }
 
 /**
- * Get all unique dates from transit aspects within the next 45 days.
- * This is used by the reading prompt to give the AI a list of valid dates.
+ * Get a diverse, chronologically spread set of unique dates from transit aspects 
+ * within the next 45 days, preventing date-clustering bottlenecks.
+ * 
+ * This fixes the "same 2 dates" problem by:
+ * 1. Keeping only the tightest aspect per date
+ * 2. Spreading dates at least 3 days apart
+ * 3. Returning up to 6 diverse dates
  */
 export function getUniqueAspectDates(aspects: TransitAspect[]): string[] {
-  const dates = aspects
-    .filter(a => a.exactDate !== null && a.daysUntilExact !== null && a.daysUntilExact <= 45)
-    .map(a => a.exactDate!)
-    .filter((date, index, self) => self.indexOf(date) === index);
-  
-  return dates.sort((a, b) => {
-    // Sort chronologically
-    const dateA = new Date(a);
-    const dateB = new Date(b);
-    return dateA.getTime() - dateB.getTime();
-  });
+  // Map all valid exact dates with their corresponding orbs
+  const dateMap = new Map<string, { orb: number; planet: string }>();
+
+  for (const a of aspects) {
+    if (!a.exactDate || a.daysUntilExact === null || a.daysUntilExact > 45 || a.daysUntilExact < 0) {
+      continue;
+    }
+
+    // If we already have this date, keep the one with the tighter orb
+    if (!dateMap.has(a.exactDate) || a.orbDegrees < dateMap.get(a.exactDate)!.orb) {
+      dateMap.set(a.exactDate, { orb: a.orbDegrees, planet: a.transitPlanet });
+    }
+  }
+
+  // Convert to an array of objects for sorting/filtering
+  const uniqueDateEntries = Array.from(dateMap.entries()).map(([date, meta]) => ({
+    dateStr: date,
+    dateObj: new Date(date),
+    ...meta,
+  }));
+
+  // Sort chronologically
+  uniqueDateEntries.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+
+  // Diversity filter: Ensure we don't pack all dates into the exact same 3-day window
+  const diverseDates: string[] = [];
+  let lastTime = 0;
+  const MIN_GAP_MS = 3 * 24 * 60 * 60 * 1000; // At least 3 days apart when possible
+
+  for (const entry of uniqueDateEntries) {
+    if (diverseDates.length === 0 || entry.dateObj.getTime() - lastTime >= MIN_GAP_MS) {
+      diverseDates.push(entry.dateStr);
+      lastTime = entry.dateObj.getTime();
+    }
+  }
+
+  // If diversity filter stripped too many, fallback to top chronological unique dates (up to 5)
+  if (diverseDates.length < 2 && uniqueDateEntries.length >= 2) {
+    return uniqueDateEntries.slice(0, 5).map(e => e.dateStr);
+  }
+
+  // Cap at 6 distinct, spread-out dates
+  return diverseDates.slice(0, 6);
 }
