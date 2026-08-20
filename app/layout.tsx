@@ -14,12 +14,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Next.js handles viewport settings through this dedicated export
+// ── FIX: Merge viewport config into one export ──
+// Next.js's Viewport type now supports interactiveWidget natively
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
   themeColor: "#040611",
+  interactiveWidget: "resizes-content", // ✅ Now properly set in one place
 };
 
 export const metadata: Metadata = {
@@ -42,8 +44,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased bg-[#040611]`}
     >
       <head>
-        {/* interactive-widget is kept here as a raw tag since Next.js viewport object doesn't fully map it natively yet */}
-        <meta name="viewport" content="interactive-widget=resizes-content" />
+        {/* 
+          ✅ REMOVED: The duplicate viewport meta tag 
+          The viewport is now fully configured via the exported `viewport` object above.
+          No manual meta tag needed anymore.
+        */}
         <link rel="manifest" href="/manifest.webmanifest" />
       </head>
       <body className="h-dvh overflow-hidden bg-[#040611] text-foreground">
