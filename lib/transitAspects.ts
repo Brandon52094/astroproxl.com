@@ -45,7 +45,7 @@ export interface TransitAspect {
  * Uses binary search to find the exact date.
  */
 function calculateExactAspectDate(
-  transitPlanet: { name: string; longitude: number; speed: number },
+  transitPlanet: { name: string; longitude: number; longitudeSpeed: number }, // ← FIX: use longitudeSpeed
   natalLongitude: number,
   aspectAngle: number,
   startDate: Date,
@@ -164,7 +164,9 @@ export function calculateTransitAspects(
     { type: "sextile",     angle: 60,  maxOrb: 4 },
   ];
 
-  // Natal targets = every planet, plus the two angles.
+  // Natal targets = every planet, plus the two angles. The angles matter:
+  // a transit on the Ascendant or Midheaven is one of the most concrete
+  // "something visible happens" signatures in the chart.
   const natalTargets = [
     ...natalRaw.planets.map((p) => ({
       name: p.name,
@@ -191,7 +193,12 @@ export function calculateTransitAspects(
         if (orb > maxOrb) continue;
 
         // ── Applying or separating? ──
-        const step = 0.01;
+        // Project the transit forward by a small step at its current speed.
+        // If the orb shrinks, it's applying (building). If it grows, it's
+        // separating (releasing). Retrograde motion is handled automatically
+        // because longitudeSpeed is negative — this is exactly why the
+        // SEFLG_SPEED flag matters beyond just the Rx marker.
+        const step = 0.01; // ~15 minutes of motion
         const futureLon = transit.longitude + transit.longitudeSpeed * step;
         let futureDiff = Math.abs(futureLon - natal.longitude);
         if (futureDiff > 180) futureDiff = 360 - futureDiff;
@@ -202,7 +209,7 @@ export function calculateTransitAspects(
 
         // ── Calculate exact date when this aspect perfects ──
         const exactDateInfo = calculateExactAspectDate(
-          transit,
+          transit, // ← Now passing the full transit object with longitudeSpeed
           natal.longitude,
           angle,
           now,
@@ -226,17 +233,19 @@ export function calculateTransitAspects(
           daysUntilExact: exactDateInfo?.daysUntil || null,
         });
 
-        break;
+        break; // one aspect type per planet pair — the closest one wins
       }
     }
   }
 
-  // Tightest first.
+  // Tightest first. This ordering IS the priority order the prompt asks for.
   return aspects.sort((a, b) => a.orbDegrees - b.orbDegrees);
 }
 
 /**
- * Format for the prompt. Plain, terse, pre-sorted.
+ * Format for the prompt. Plain, terse, pre-sorted — the model reads this as
+ * a finished answer, not a puzzle. Every number here is exact, which means
+ * every number that lands in `sources` is exact too.
  */
 export function formatTransitAspects(aspects: TransitAspect[]): string {
   if (aspects.length === 0) {
