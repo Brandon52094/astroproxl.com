@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Lock, Check, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SUB_TIERS, READING_PRICE, READING_FIRST_PRICE } from "@/lib/paywallConfig";
+import { SUB_TIERS, READING_PRICE } from "@/lib/paywallConfig";
 
 type CheckoutChoice =
   | { mode: "one_time" }
@@ -13,7 +13,6 @@ type CheckoutChoice =
 interface PaywallScreenProps {
   readingTitle: string;
   readingTeaser: string;
-  firstReadingUsed?: boolean; // controls the $4 vs $2 first-reading price
   onCheckout: (choice: CheckoutChoice) => Promise<void>;
   onDismiss: () => void;
 }
@@ -21,15 +20,13 @@ interface PaywallScreenProps {
 export default function PaywallScreen({
   readingTitle,
   readingTeaser,
-  firstReadingUsed = false,
   onCheckout,
   onDismiss,
 }: PaywallScreenProps) {
   const [selected, setSelected] = useState<CheckoutChoice>({ mode: "one_time" });
   const [loading, setLoading] = useState(false);
 
-  const readingPrice = firstReadingUsed ? READING_PRICE : READING_FIRST_PRICE;
-  const readingPriceLabel = `$${(readingPrice / 100).toFixed(0)}`;
+  const readingPriceLabel = `$${(READING_PRICE / 100).toFixed(0)}`;
   const base = SUB_TIERS.sub_base;
   const plus = SUB_TIERS.sub_plus;
 
@@ -118,7 +115,7 @@ export default function PaywallScreen({
               <div>
                 <p className="text-[14px] font-semibold text-white">This reading only</p>
                 <p className="text-[11px] text-slate-400">
-                  {firstReadingUsed ? "One-time · no commitment" : "First reading · 50% off"}
+                  One-time · no commitment
                 </p>
               </div>
             </div>

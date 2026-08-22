@@ -14,8 +14,7 @@ interface UserStatus {
   readingsCompleted: number;
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
-  canBypass: boolean;
-  firstPaidReadingUsed: boolean;
+  canBypass: boolean; 
   pwaFreeReadingUsed?: boolean;
 }
 
@@ -65,7 +64,6 @@ export default function PagerContainer() {
           onCooldown: data.onCooldown === true,
           cooldownExpiresAt: data.cooldownExpiresAt ?? null,
           canBypass: data.canBypass === true,
-          firstPaidReadingUsed: data.firstPaidReadingUsed === true,
           pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
         });
       } catch {
@@ -103,7 +101,6 @@ export default function PagerContainer() {
             onCooldown: status.onCooldown === true,
             cooldownExpiresAt: status.cooldownExpiresAt ?? null,
             canBypass: status.canBypass === true,
-            firstPaidReadingUsed: status.firstPaidReadingUsed === true,
             pwaFreeReadingUsed: status.pwaFreeReadingUsed === true,
           });
         }

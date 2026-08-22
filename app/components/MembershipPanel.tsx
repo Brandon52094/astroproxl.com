@@ -11,7 +11,6 @@ interface UserStatus {
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
-  firstPaidReadingUsed: boolean;
   pwaFreeReadingUsed?: boolean;
 }
 

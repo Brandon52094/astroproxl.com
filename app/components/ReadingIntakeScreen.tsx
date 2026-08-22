@@ -92,7 +92,6 @@ interface UserStatus {
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
-  firstPaidReadingUsed: boolean;
   pwaFreeReadingUsed?: boolean;
 }
 
@@ -208,14 +207,15 @@ export default function ReadingIntakeScreen({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
+  useEffect(() => {
+  if (propUserStatus) setUserStatus(propUserStatus);
+}, [propUserStatus]);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [showJxl, setShowJxl] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
-
   const clusterTopRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
@@ -330,7 +330,6 @@ setChartStatus("ready");
         onCooldown: data.onCooldown === true,
         cooldownExpiresAt: data.cooldownExpiresAt ?? null,
         canBypass: data.canBypass === true,
-        firstPaidReadingUsed: data.firstPaidReadingUsed === true,
         pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
       });
     } catch { }
@@ -361,8 +360,7 @@ setChartStatus("ready");
     const hasCredits = Number(userStatus?.credits ?? 0) > 0;
     const isSubscribed = userStatus?.isSubscribed === true;
     if (!hasCredits && !isSubscribed) {
-      const price = userStatus?.firstPaidReadingUsed ? "$4.00" : "$2.00";
-      return `${selectedAreaConfig.cta} — ${price}`;
+      return `${selectedAreaConfig.cta} — $4.00`;
     }
     return selectedAreaConfig.cta;
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
@@ -422,7 +420,6 @@ setChartStatus("ready");
             onCooldown: d.onCooldown === true,
             cooldownExpiresAt: d.cooldownExpiresAt ?? null,
             canBypass: d.canBypass === true,
-            firstPaidReadingUsed: d.firstPaidReadingUsed === true,
             pwaFreeReadingUsed: d.pwaFreeReadingUsed === true,
           };
           setUserStatus(status);
@@ -442,7 +439,7 @@ setChartStatus("ready");
         return;
       }
 
-      const readingValue = status.firstPaidReadingUsed ? 4.0 : 2.0;
+      const readingValue = 4.0;
       trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
 
       const checkoutRes = await fetch("/api/stripe/checkout", {

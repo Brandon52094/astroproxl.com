@@ -8,7 +8,7 @@
 // The model, in full:
 //
 //   NON-SUBSCRIBER (à la carte)
-//     • Regular reading:  $4, includes 1 reply.  First ever: 50% off ($2).
+//     • Regular reading:  $4, includes 1 reply.
 //     • JXL reading:      $6, includes 2 replies. First ever: 50% off ($3).
 //     • Regular reply-pack: $2 → 2 more replies on a regular reading.
 //     • JXL reply-pack:     $3 → 2 more replies on a JXL conversation.
@@ -33,7 +33,6 @@
 
 // ── Reading (regular) ─────────────────────────────────────────────────────────
 export const READING_PRICE = 400;            // $4.00 — every regular reading
-export const READING_FIRST_PRICE = 200;      // $2.00 — first ever (50% off)
 export const READING_INCLUDED_REPLIES = 1;   // free, uncounted toward the wall
 
 // ── Reply packs ───────────────────────────────────────────────────────────────
@@ -137,9 +136,6 @@ export function renewalCredits(currentBalance: number, planAmount: number): numb
 // Two independent one-time flags. Using the first regular-reading discount does
 // NOT consume the first JXL discount, and vice versa. The webhook stamps the
 // matching flag once the discounted purchase completes.
-export function readingUnitPrice(firstReadingDiscountUsed: boolean): number {
-  return firstReadingDiscountUsed ? READING_PRICE : READING_FIRST_PRICE;
-}
 
 export function subscriberExtraPrice(basePrice: number): number {
   // Once a subscriber's included credits are gone, everything is 50% off.
