@@ -12,7 +12,7 @@ import { getTopic } from "./topics";
 
 const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
 const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000;
-const CREDITS_PER_READING = 4;
+const CREDITS_PER_READING = 1;
 
 const DEFAULT_SYSTEM =
   "You are a precision astrological synthesis engine. Vary your selection of timing windows across the provided date index based on the user's specific topic and question. Never default to the first available dates unless they uniquely match the spine aspect. Output raw JSON.";

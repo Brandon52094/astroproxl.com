@@ -29,6 +29,12 @@ export interface StoredIntake {
   savedAt: string;
 }
 
+export interface StoredDraft {
+  area: string;
+  question: string;
+  savedAt: string;
+}
+
 export interface ReadingSource {
   section: string;
   placements: string;
@@ -57,6 +63,7 @@ const KEYS = {
   chart: "dfp_chart",
   intake: "dfp_intake",
   reading: "dfp_reading",
+  draftQuestion: "dfp_draft_question",
 } as const;
 
 function safeGet<T>(key: string): T | null {
@@ -119,6 +126,22 @@ export function clearIntake(): void {
   safeRemove(KEYS.intake);
 }
 
+export function saveDraftQuestion(area: string, question: string): boolean {
+  return safeSet(KEYS.draftQuestion, {
+    area,
+    question,
+    savedAt: new Date().toISOString(),
+  });
+}
+
+export function loadDraftQuestion(): StoredDraft | null {
+  return safeGet<StoredDraft>(KEYS.draftQuestion);
+}
+
+export function clearDraftQuestion(): void {
+  safeRemove(KEYS.draftQuestion);
+}
+
 export function saveReading(reading: StoredReading): boolean {
   return safeSet(KEYS.reading, reading);
 }
@@ -135,6 +158,7 @@ export function clearSession(): void {
   safeRemove(KEYS.chart);
   safeRemove(KEYS.intake);
   safeRemove(KEYS.reading);
+  safeRemove(KEYS.draftQuestion);
 }
 
 export function isChartFresh(): boolean {
@@ -242,22 +266,20 @@ export async function migrateChartV2(): Promise<boolean> {
     // don't set the flag, retry later.
     if (!response.ok || !data.success) return false;
 
-saveChart({
-  birthDate: chart.birthDate,
-  birthTime: chart.birthTime,
-  birthPlace: chart.birthPlace,
-  lat: chart.lat,
-  lng: chart.lng,
-  timezone: chart.timezone,
-  // Current location fields — required by StoredChart
-  currentLat: chart.currentLat ?? undefined,
-  currentLng: chart.currentLng ?? undefined,
-  currentPlace: chart.currentPlace ?? "",
-  currentTimezone: chart.currentTimezone ?? "",  // ADD THIS — missing property
-  chartData: data,
-});
-
-return true;
+    saveChart({
+      birthDate: chart.birthDate,
+      birthTime: chart.birthTime,
+      birthPlace: chart.birthPlace,
+      lat: chart.lat,
+      lng: chart.lng,
+      timezone: chart.timezone,
+      // Current location fields — required by StoredChart
+      currentLat: chart.currentLat ?? undefined,
+      currentLng: chart.currentLng ?? undefined,
+      currentPlace: chart.currentPlace ?? "",
+      currentTimezone: chart.currentTimezone ?? "",
+      chartData: data,
+    });
 
     markMigratedV2();
     return true;

@@ -158,6 +158,10 @@ function PreparingPageInner() {
         const data = await response.json();
 
         if (!response.ok || !data.reading) {
+          if (response.status === 403) {
+            router.replace("/reading/intake?openCredits=1");
+            return;
+          }
           throw new Error(data.error ?? "Failed to generate reading.");
         }
 

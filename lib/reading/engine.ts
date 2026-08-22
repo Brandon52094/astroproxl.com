@@ -125,17 +125,26 @@ function filterTransitsByTopic(
     PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === timeLord
   );
 
-  // First pass: relevant planets + aspects
+  // First pass: relevant HOUSE + aspect type. House match is the primary
+  // signal — the topic planet sets overlap heavily by design (Sun, Moon,
+  // Mercury, Venus, Mars, Jupiter, Saturn show up in nearly every topic),
+  // so filtering on planet name first let the same aspects qualify for
+  // love, money, and career alike. House placement is what actually tells
+  // topics apart.
   let filtered = personalAspects.filter(a => {
-    const isRelevantPlanet = relevantPlanets.has(a.transitPlanet) ||
-                             relevantPlanets.has(a.natalPlanet);
+    const isRelevantHouse = a.natalHouse != null && relevantHouses.has(a.natalHouse);
     const isRelevantAspect = relevantAspects.has(a.aspectType?.toLowerCase() || "");
-    return isRelevantPlanet && isRelevantAspect;
+    return isRelevantHouse && isRelevantAspect;
   });
 
-  // Fallback: relevant houses
+  // Fallback: relevant planets + aspects (previously the first pass)
   if (filtered.length === 0) {
-    filtered = personalAspects.filter(a => a.natalHouse && relevantHouses.has(a.natalHouse));
+    filtered = personalAspects.filter(a => {
+      const isRelevantPlanet = relevantPlanets.has(a.transitPlanet) ||
+                               relevantPlanets.has(a.natalPlanet);
+      const isRelevantAspect = relevantAspects.has(a.aspectType?.toLowerCase() || "");
+      return isRelevantPlanet && isRelevantAspect;
+    });
   }
 
   // Fallback: profection house
