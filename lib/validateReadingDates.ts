@@ -16,6 +16,13 @@
  *   3. transitAspects[].exactDate      — ephemeris-computed exact aspect dates
  */
 
+// Forward-looking window (days) for a transit aspect's exact date to still
+// count as a valid anchor. Must stay in sync with FORWARD_WINDOW_DAYS in
+// lib/reading/engine.ts — the two were widened together (45 → 60 days) so
+// that wider orbs surfacing real, further-out exact dates don't get rejected
+// here as "unsupported."
+const FORWARD_WINDOW_DAYS = 60;
+
 /** Minimal shape this module needs — a subset of JxlAskBody. */
 interface DateProvenanceInput {
   upcomingTrigger?: { date?: string | null } | null;
@@ -176,13 +183,13 @@ export function buildValidDateIndex(
 
   // Source 3 — transit-to-natal aspect exact dates (ephemeris-computed).
   // Only aspects that actually perfect within the forward window count:
-  // a real exactDate AND a non-negative daysUntilExact within 45 days.
+  // a real exactDate AND a non-negative daysUntilExact within the window.
   for (const a of aspects) {
     if (
       a?.exactDate &&
       a.daysUntilExact != null &&
       a.daysUntilExact >= 0 &&
-      a.daysUntilExact <= 45
+      a.daysUntilExact <= FORWARD_WINDOW_DAYS
     ) {
       add(a.exactDate, `aspect:${a.transitPlanet ?? "?"}-${a.natalPlanet ?? "?"}`);
     }

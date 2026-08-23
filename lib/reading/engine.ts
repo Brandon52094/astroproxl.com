@@ -97,15 +97,26 @@ const SLOW_PLANETS = new Set(["Saturn", "Uranus", "Neptune", "Pluto"]);
 const FAST_PLANETS = new Set(["Mercury", "Venus", "Mars", "Sun", "Moon"]);
 const ANGULAR_HOUSES = new Set([1, 4, 7, 10]);
 
+// Widened from the original bands — the tighter orbs were causing too many
+// topic-relevant slots to come up empty, forcing love/money/career readings
+// to fall back to the same shared (topic-blind) aspect pool and converge on
+// identical dates. Wider orbs give each topic more genuine, differentiated
+// material to draw from before it ever needs that shared fallback.
 const ASPECT_ORBS: Record<string, { exact: number; live: number; background: number }> = {
-  conjunction: { exact: 3.0, live: 6.0, background: 10.0 },
-  opposition:  { exact: 3.0, live: 6.0, background: 10.0 },
-  square:      { exact: 3.0, live: 6.0, background: 10.0 },
-  trine:       { exact: 3.0, live: 6.0, background: 10.0 },
-  sextile:     { exact: 2.5, live: 5.0, background: 8.0 },
-  semi_sextile: { exact: 1.5, live: 3.0, background: 6.0 },
-  quincunx:    { exact: 1.5, live: 3.0, background: 6.0 },
+  conjunction: { exact: 4.0, live: 8.0, background: 14.0 },
+  opposition:  { exact: 4.0, live: 8.0, background: 14.0 },
+  square:      { exact: 4.0, live: 8.0, background: 14.0 },
+  trine:       { exact: 4.0, live: 8.0, background: 14.0 },
+  sextile:     { exact: 3.5, live: 7.0, background: 12.0 },
+  semi_sextile: { exact: 2.0, live: 4.5, background: 9.0 },
+  quincunx:    { exact: 2.0, live: 4.5, background: 9.0 },
 };
+
+// Forward-looking window (days) for a transit's exact date to still count as
+// usable for a dated window. Must stay in sync with buildValidDateIndex's
+// window in lib/validateReadingDates.ts — widening one without the other
+// causes the model to surface dates the provenance validator then rejects.
+const FORWARD_WINDOW_DAYS = 60;
 
 // ============================================================
 // FILTER TRANSITS BY TOPIC  (now reads from TopicConfig)
@@ -438,7 +449,7 @@ export function buildReadingPrompt(
     .map(s => s.stationDate);
 
   const relevantCycleDates = (synodicCycles || [])
-    .filter(s => s.daysUntilReturn <= 45 && topic.relevantPlanets.has(s.planet))
+    .filter(s => s.daysUntilReturn <= FORWARD_WINDOW_DAYS && topic.relevantPlanets.has(s.planet))
     .map(s => s.returnDate);
 
   const solarReturnDate = solarReturn?.sunReturnDate;
@@ -572,7 +583,7 @@ export function buildReadingPrompt(
 
   // ── SYNODIC CYCLES ──
   if (synodicCycles && synodicCycles.length > 0) {
-    const relevantCycles = synodicCycles.filter((s) => s.daysUntilReturn <= 45);
+    const relevantCycles = synodicCycles.filter((s) => s.daysUntilReturn <= FORWARD_WINDOW_DAYS);
     if (relevantCycles.length > 0) {
       sections.push(
         "SYNODIC CYCLES (Chapter Markers):",
@@ -805,7 +816,7 @@ export function buildReadingPrompt(
       "Available dates for this reading:",
       ...(finalDates.length > 0
         ? finalDates.map(d => `  - ${d}`)
-        : ["  - No topic-relevant dates available within the next 45 days"]),
+        : [`  - No topic-relevant dates available within the next ${FORWARD_WINDOW_DAYS} days`]),
       "",
       "Each window MUST use a DIFFERENT date from this list.",
       "Do NOT reuse the same date for multiple windows.",
@@ -835,7 +846,7 @@ export function buildReadingPrompt(
     sections.push(
       "PART 3 — SKIPPED: No topic-relevant personal EXACT or LIVE transit aspects.",
       "",
-      `Replace Part 3 with: "There are no tight topic-relevant transit windows in the next 45 days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
+      `Replace Part 3 with: "There are no tight topic-relevant transit windows in the next ${FORWARD_WINDOW_DAYS} days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
       ""
     );
   }
