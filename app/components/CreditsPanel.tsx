@@ -30,6 +30,8 @@ export default function CreditsPanel({ onClose }: { onClose?: () => void }) {
   const [cart, setCart] = useState<Record<ProductId, number>>({ reading: 0, jxl: 0, replies: 0 });
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState<Balance | null>(null);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Pull the user's current credits for the line under checkout.
   React.useEffect(() => {
@@ -43,6 +45,17 @@ export default function CreditsPanel({ onClose }: { onClose?: () => void }) {
           replies: Number(d.replyCredits ?? 0) + Number(d.jxlReplyCredits ?? 0),
         });
       } catch { /* leave balance null; line just won't render */ }
+    })();
+  }, []);
+
+  // Pull (or auto-create) the user's referral code for the share section.
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/user/referral-code");
+        const d = await res.json();
+        if (d.code) setReferralCode(d.code);
+      } catch { /* leave null; section just won't render */ }
     })();
   }, []);
 
@@ -74,6 +87,16 @@ export default function CreditsPanel({ onClose }: { onClose?: () => void }) {
       const data = await res.json();
       if (data.url) window.location.href = data.url;
     } catch { /* toast */ } finally { setLoading(false); }
+  };
+
+  const handleCopyReferralLink = async () => {
+    if (!referralCode) return;
+    const link = `${window.location.origin}?ref=${referralCode}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard API can fail silently on some browsers; no-op */ }
   };
 
   const C = STYLES;
@@ -124,6 +147,24 @@ export default function CreditsPanel({ onClose }: { onClose?: () => void }) {
             <b style={C.balanceB}>{balance.jxl}</b> JXL, and{" "}
             <b style={C.balanceB}>{balance.replies}</b> {plural(balance.replies, "reply", "replies")}.
           </p>
+        )}
+
+        {/* ── REFERRAL ── */}
+        {referralCode && (
+          <div style={C.referralBox}>
+            <p style={C.referralHeading}>Give a reading, get a reading</p>
+            <p style={C.referralSub}>
+              Share your code — when a friend makes their first purchase, you get{" "}
+              <b style={C.balanceB}>1 free reading credit</b>, and they get{" "}
+              <b style={C.balanceB}>15% off</b>.
+            </p>
+            <div style={C.referralCodeRow}>
+              <span style={C.referralCode}>{referralCode}</span>
+              <button type="button" onClick={handleCopyReferralLink} style={C.referralCopyBtn}>
+                {copied ? "Copied!" : "Copy link"}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* ── MEMBERSHIP ── */}
@@ -263,6 +304,43 @@ const STYLES: Record<string, React.CSSProperties> = {
 
   balance: { textAlign: "center", fontSize: 10.5, lineHeight: 1.4, color: "#94a3b8", margin: "10px 2px 0", letterSpacing: "0.01em" },
   balanceB: { color: "#cbd5e1", fontWeight: 600 },
+
+  referralBox: {
+    marginTop: 18,
+    padding: "16px 14px",
+    borderRadius: 16,
+    border: "1px solid rgba(129,140,248,0.25)",
+    background: "rgba(129,140,248,0.05)",
+    textAlign: "center",
+  },
+  referralHeading: { fontSize: 14, fontWeight: 700, color: "#fff", margin: "0 0 6px" },
+  referralSub: { fontSize: 11.5, lineHeight: 1.4, color: "#94a3b8", margin: "0 0 12px" },
+  referralCodeRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  referralCode: {
+    fontSize: 15,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    color: "#c7d2fe",
+    fontFamily: "monospace",
+    padding: "6px 12px",
+    borderRadius: 8,
+    background: "rgba(0,0,0,0.3)",
+  },
+  referralCopyBtn: {
+    padding: "7px 14px",
+    borderRadius: 999,
+    border: "1px solid rgba(129,140,248,0.5)",
+    background: "rgba(129,140,248,0.14)",
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
 
   memDiv: { display: "flex", alignItems: "center", gap: 12, margin: "30px 0 16px" },
   memLine: { flex: 1, height: 1, background: "linear-gradient(90deg, transparent, rgba(251,191,36,0.2), transparent)" },
