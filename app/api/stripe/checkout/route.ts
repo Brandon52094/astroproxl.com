@@ -1,11 +1,41 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import Stripe from "stripe";
 import { SUB_TIERS, READING_PRICE, SUBSCRIBER_TAIL, BUNDLE_PACK } from "@/lib/paywallConfig";
 import { JXL_SESSION, JXL_REPLY_PACK } from "@/lib/jxlConfig";
+import { lookupReferralCode, REFERRAL_DISCOUNT_PERCENT } from "@/lib/referrals";
+import { db } from "@/lib/db";
+import { referralRedemptions } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const ONE_TIME_READING_CREDITS = 4;
+
+const REFERRAL_COOKIE = "aproxl_ref";
+
+function applyReferralDiscount(amountCents: number): number {
+  return Math.round(amountCents * (1 - REFERRAL_DISCOUNT_PERCENT));
+}
+
+async function resolveReferral(userId: string) {
+  const cookieStore = await cookies();
+  const code = cookieStore.get(REFERRAL_COOKIE)?.value;
+  if (!code) return null;
+
+  const lookup = await lookupReferralCode(code, userId);
+  if (!lookup) return null;
+
+  const alreadyRedeemed = await db
+    .select()
+    .from(referralRedemptions)
+    .where(eq(referralRedemptions.referredUserId, userId))
+    .limit(1);
+
+  if (alreadyRedeemed.length > 0) return null;
+
+  return lookup;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,8 +56,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "returnUrl is required" }, { status: 400 });
     }
 
-    // ── One-time reading — $4, no discounts ────────────────────────────────
+    const referral =
+      mode === "one_time" || mode === "subscription" || mode === "jxl_session" || mode === "cart"
+        ? await resolveReferral(userId)
+        : null;
+
     if (mode === "one_time") {
+      const unitAmount = referral ? applyReferralDiscount(READING_PRICE) : READING_PRICE;
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
@@ -36,9 +72,11 @@ export async function POST(request: NextRequest) {
             currency: "usd",
             product_data: {
               name: "Astrological Reading",
-              description: "One full personalized astrological reading",
+              description: referral
+                ? "One full personalized astrological reading — 15% referral discount applied"
+                : "One full personalized astrological reading",
             },
-            unit_amount: READING_PRICE,
+            unit_amount: unitAmount,
           },
           quantity: 1,
         }],
@@ -46,6 +84,7 @@ export async function POST(request: NextRequest) {
           userId,
           credits: ONE_TIME_READING_CREDITS,
           mode: "one_time",
+          ...(referral ? { referralCodeId: referral.codeId, referralOwnerUserId: referral.ownerUserId } : {}),
         },
         success_url: `${returnUrl}?payment=success&mode=one_time`,
         cancel_url: `${returnUrl}?payment=cancelled`,
@@ -53,10 +92,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Subscription — $12.99/mo or $16/mo ────────────────────────────────────
     if (mode === "subscription") {
-      // tier comes in from the client: "sub_base" or "sub_plus"
       const tier = SUB_TIERS[bundleTier === "sub_plus" ? "sub_plus" : "sub_base"];
+      const unitAmount = referral ? applyReferralDiscount(tier.price) : tier.price;
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -65,26 +103,30 @@ export async function POST(request: NextRequest) {
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: tier.name, description: tier.tagline },
-            unit_amount: tier.price,
+            product_data: {
+              name: tier.name,
+              description: referral ? `${tier.tagline} — 15% off your first month` : tier.tagline,
+            },
+            unit_amount: unitAmount,
             recurring: { interval: "month" },
           },
           quantity: 1,
         }],
-        // CRITICAL: userId must live on the SUBSCRIPTION, not just the session —
-        // renewals have no session, so the renewal webhook reads it from here.
         subscription_data: { metadata: { userId, tier: tier.key } },
-        metadata: { userId, tier: tier.key, mode: "subscription" },
+        metadata: {
+          userId,
+          tier: tier.key,
+          mode: "subscription",
+          ...(referral ? { referralCodeId: referral.codeId, referralOwnerUserId: referral.ownerUserId } : {}),
+        },
         success_url: `${returnUrl}?payment=success&mode=subscription`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Follow-up question ────────────────────────────────────────────────────
     if (mode === "followup") {
-      // Follow-up pricing from paywallConfig
-      const followupPrice = 200; // $2.00
+      const followupPrice = 200;
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
@@ -103,7 +145,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Reply pack (legacy — kept for backward compatibility) ────────────────
     if (mode === "reply_pack") {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -130,7 +171,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── JXL reply pack — $6.00 for 3 replies ──────────────────────────────────
     if (mode === "jxl_reply_pack") {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -157,10 +197,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Subscriber discounted reply tail — $2 regular / $3 JXL ──────────────
-    // CRITICAL: the 50% price is ONLY for verified subscribers. We check
-    // server-side against Clerk metadata — NEVER trust a client claim of
-    // subscriber status. A non-subscriber hitting this mode is rejected.
     if (mode === "sub_reply_tail_regular" || mode === "sub_reply_tail_jxl") {
       const client = await clerkClient();
       const buyer = await client.users.getUser(userId);
@@ -192,7 +228,6 @@ export async function POST(request: NextRequest) {
         metadata: {
           userId,
           mode,
-          // which pool the webhook credits, and how many
           replyCredits: mode === "sub_reply_tail_regular" ? tail.replies : 0,
           jxlReplyCredits: mode === "sub_reply_tail_jxl" ? tail.replies : 0,
         },
@@ -202,27 +237,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Ask JXL — one session, $6.00 → 3 replies ──────────────────────────────
     if (mode === "jxl_session") {
+      const unitAmount = referral ? applyReferralDiscount(JXL_SESSION.price) : JXL_SESSION.price;
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
         line_items: [{
           price_data: {
             currency: "usd",
-            product_data: { name: JXL_SESSION.name, description: JXL_SESSION.tagline },
-            unit_amount: JXL_SESSION.price,
+            product_data: {
+              name: JXL_SESSION.name,
+              description: referral ? `${JXL_SESSION.tagline} — 15% referral discount applied` : JXL_SESSION.tagline,
+            },
+            unit_amount: unitAmount,
           },
           quantity: 1,
         }],
-        metadata: { userId, mode: "jxl_session", jxlReplies: JXL_SESSION.replies },
+        metadata: {
+          userId,
+          mode: "jxl_session",
+          jxlReplies: JXL_SESSION.replies,
+          ...(referral ? { referralCodeId: referral.codeId, referralOwnerUserId: referral.ownerUserId } : {}),
+        },
         success_url: `${returnUrl}?payment=success&mode=jxl_session`,
         cancel_url: `${returnUrl}?payment=cancelled`,
       });
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Bundle pack — one-time, grants 2 regular + 1 JXL credit ─────────────
     if (mode === "bundle_pack") {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -241,8 +284,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           userId,
           mode: "bundle_pack",
-          credits: BUNDLE_PACK.credits,       // 2 regular
-          jxlCredits: BUNDLE_PACK.jxlCredits, // 1 JXL
+          credits: BUNDLE_PACK.credits,
+          jxlCredits: BUNDLE_PACK.jxlCredits,
         },
         success_url: `${returnUrl}?payment=success&mode=bundle_pack`,
         cancel_url: `${returnUrl}?payment=cancelled`,
@@ -250,16 +293,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url: session.url });
     }
 
-    // ── Cart — à-la-carte checkout from the Get Credits panel ──────────────────
-    // Client sends items: [{ mode, id, quantity }]. We NEVER trust a client price;
-    // each id maps to a server-side price + grant here. One line_item per product,
-    // and we pre-sum the grants into flat metadata so the webhook just reads three
-    // numbers and adds them (same pattern as bundle_pack).
     if (mode === "cart") {
       const cartItems: Array<{ id?: string; quantity?: number }> =
         Array.isArray(items) ? items : [];
 
-      // Server-side source of truth for price + what each unit grants.
       const CART_CATALOG: Record<
         string,
         { name: string; description: string; unit_amount: number;
@@ -276,13 +313,18 @@ export async function POST(request: NextRequest) {
       for (const item of cartItems) {
         const entry = item?.id ? CART_CATALOG[item.id] : undefined;
         const qty = Math.max(0, Math.floor(Number(item?.quantity ?? 0)));
-        if (!entry || qty <= 0) continue; // ignore anything not in the catalog
+        if (!entry || qty <= 0) continue;
+
+        const unitAmount = referral ? applyReferralDiscount(entry.unit_amount) : entry.unit_amount;
 
         line_items.push({
           price_data: {
             currency: "usd",
-            product_data: { name: entry.name, description: entry.description },
-            unit_amount: entry.unit_amount,
+            product_data: {
+              name: entry.name,
+              description: referral ? `${entry.description} — 15% referral discount applied` : entry.description,
+            },
+            unit_amount: unitAmount,
           },
           quantity: qty,
         });
@@ -306,6 +348,7 @@ export async function POST(request: NextRequest) {
           grantCredits: String(grantCredits),
           grantJxlCredits: String(grantJxlCredits),
           grantReplyCredits: String(grantReplyCredits),
+          ...(referral ? { referralCodeId: referral.codeId, referralOwnerUserId: referral.ownerUserId } : {}),
         },
         success_url: `${returnUrl}?payment=success&mode=cart`,
         cancel_url: `${returnUrl}?payment=cancelled`,
