@@ -256,7 +256,8 @@ const STYLES: Record<string, React.CSSProperties> = {
     background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
     color: "#f1f5f9",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    overflow: "hidden",
+    overflow: "auto",
+    WebkitOverflowScrolling: "touch",
   },
   back: {
     position: "fixed", top: "calc(12px + env(safe-area-inset-top))", left: 16, zIndex: 100,
