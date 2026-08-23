@@ -1,1 +1,0 @@
-postgresql://postgres:WXRWXGUbLVvgIecCYmoTxqXQodtLsfea@switchback.proxy.rlwy.net:22371/railway
