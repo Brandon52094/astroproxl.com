@@ -251,12 +251,14 @@ function ProductCard({ p, qty, onStep }: {
 /* ── Styles (plain objects — no styled-jsx, guaranteed to render) ── */
 const STYLES: Record<string, React.CSSProperties> = {
   root: {
-    position: "relative",
-    minHeight: "100dvh",
+    position: "fixed",
+    inset: 0,
+    zIndex: 50,
     background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
     color: "#f1f5f9",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    overflow: "auto",
+    overflowY: "auto",
+    overflowX: "hidden",
     WebkitOverflowScrolling: "touch",
   },
   back: {
