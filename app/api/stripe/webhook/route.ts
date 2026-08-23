@@ -3,8 +3,55 @@ import Stripe from "stripe";
 import { clerkClient } from "@clerk/nextjs/server";
 import { trackServerPurchase } from "@/lib/tiktokEvents";
 import { getSubTier, renewalCredits } from "@/lib/paywallConfig";
+import { recordRedemption, REFERRAL_REWARD_CREDITS } from "@/lib/referrals";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+async function processReferralReward(
+  session: Stripe.Checkout.Session,
+  client: Awaited<ReturnType<typeof clerkClient>>
+) {
+  const codeId = session.metadata?.referralCodeId;
+  const ownerUserId = session.metadata?.referralOwnerUserId;
+  const referredUserId = session.metadata?.userId;
+
+  if (!codeId || !ownerUserId || !referredUserId) return;
+
+  const isNewRedemption = await recordRedemption({
+    codeId,
+    referredUserId,
+    stripeSessionId: session.id,
+    rewardCreditsGranted: REFERRAL_REWARD_CREDITS,
+  });
+
+  if (!isNewRedemption) {
+    console.log(`[webhook] referral — session ${session.id} already redeemed, skipping reward.`);
+    return;
+  }
+
+  try {
+    const owner = await client.users.getUser(ownerUserId);
+    const ownerCredits = Number(owner.publicMetadata?.credits ?? 0);
+
+    await client.users.updateUserMetadata(ownerUserId, {
+      publicMetadata: {
+        ...owner.publicMetadata,
+        credits: ownerCredits + REFERRAL_REWARD_CREDITS,
+      },
+    });
+
+    console.log(
+      `[webhook] referral — granted ${REFERRAL_REWARD_CREDITS} credit(s) to referrer ${ownerUserId} for referring ${referredUserId}`
+    );
+  } catch (err) {
+    console.error("[webhook] CRITICAL — referral redemption recorded but reward grant failed.", {
+      ownerUserId,
+      referredUserId,
+      sessionId: session.id,
+      error: String(err),
+    });
+  }
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -29,9 +76,6 @@ export async function POST(request: NextRequest) {
 
   console.log("[webhook] event type:", event.type);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // INITIAL PURCHASE — checkout.session.completed
-  // ══════════════════════════════════════════════════════════════════════════
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.metadata?.userId;
@@ -63,8 +107,6 @@ export async function POST(request: NextRequest) {
       const currentJxlReplyCredits = Number(meta?.jxlReplyCredits ?? 0);
       const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
 
-      // ── Fire TikTok Purchase for every revenue-generating mode ──────────────
-      // event_id = session.id for automatic dedupe.
       await trackServerPurchase({
         email: userEmail,
         amountCents: session.amount_total ?? 0,
@@ -73,21 +115,18 @@ export async function POST(request: NextRequest) {
         platform: "pwa",
       });
 
-      // ── One-time regular reading (1 credit = 1 reading) ─────────────────────
       if (mode === "one_time") {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
             credits: currentCredits + 1,
             firstReadingUsed: true,
-            // Once true, the $2 first-reading price never applies again.
             firstPaidReadingUsed: true,
             lastPurchaseAt: new Date().toISOString(),
           },
         });
         console.log(`[webhook] one_time — +1 reading credit to ${userId}`);
 
-      // ── Subscription — grant reads the tier, not a hardcoded number ─────────
       } else if (mode === "subscription") {
         const stripeSubscriptionId = session.subscription as string;
         const tier = getSubTier(session.metadata?.tier);
@@ -97,11 +136,10 @@ export async function POST(request: NextRequest) {
             ...meta,
             firstReadingUsed: true,
             isSubscribed: true,
-            downloadUnlocked: true, // downloads free for everyone now; harmless to keep true
+            downloadUnlocked: true,
             subscriptionId: stripeSubscriptionId,
             subscriptionTier: tier.key,
             subscriptionStartedAt: new Date().toISOString(),
-            // Never set below current balance — protects any top-ups bought pre-sub.
             credits: renewalCredits(currentCredits, tier.readings),
             jxlCredits: renewalCredits(currentJxlCredits, tier.jxl),
             lastPurchaseAt: new Date().toISOString(),
@@ -112,19 +150,17 @@ export async function POST(request: NextRequest) {
           `${tier.readings} readings + ${tier.jxl} JXL.`
         );
 
-      // ── Ask JXL session — one flat product, grants 1 JXL credit ─────────────
       } else if (mode === "jxl_session") {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
             jxlCredits: currentJxlCredits + 1,
-            firstJxlUsed: true, // stamps out the $3 first-JXL discount
+            firstJxlUsed: true,
             lastPurchaseAt: new Date().toISOString(),
           },
         });
         console.log(`[webhook] jxl_session — +1 JXL credit to ${userId}`);
 
-      // ── Regular reading reply pack — $2 → 2 replies (regular pool ONLY) ─────
       } else if (mode === "reply_pack") {
         const grant = Number(session.metadata?.replyCredits ?? 2);
         await client.users.updateUserMetadata(userId, {
@@ -136,7 +172,6 @@ export async function POST(request: NextRequest) {
         });
         console.log(`[webhook] reply_pack — +${grant} regular reply credits to ${userId}`);
 
-      // ── JXL reply pack — $3 → 2 replies (JXL pool ONLY, never mixes) ────────
       } else if (mode === "jxl_reply_pack") {
         const grant = Number(session.metadata?.jxlReplyCredits ?? 2);
         await client.users.updateUserMetadata(userId, {
@@ -148,9 +183,6 @@ export async function POST(request: NextRequest) {
         });
         console.log(`[webhook] jxl_reply_pack — +${grant} JXL reply credits to ${userId}`);
 
-      // ── Subscriber discounted reply tail — grants into the persistent pool ──
-      // Reuses the same pools as the regular packs. The metadata carries the
-      // amount for exactly one pool (the other is 0), so we add both safely.
       } else if (mode === "sub_reply_tail_regular" || mode === "sub_reply_tail_jxl") {
         const regularGrant = Number(session.metadata?.replyCredits ?? 0);
         const jxlGrant = Number(session.metadata?.jxlReplyCredits ?? 0);
@@ -168,7 +200,6 @@ export async function POST(request: NextRequest) {
           `[webhook] ${mode} — granted ${regularGrant || jxlGrant} discounted tail replies to ${userId}`
         );
 
-      // ── Bundle pack — grant 2 regular + 1 JXL credit ───────────────────────
       } else if (mode === "bundle_pack") {
         const creditsToGrant = Number(session.metadata?.credits ?? 0);
         const jxlToGrant = Number(session.metadata?.jxlCredits ?? 0);
@@ -190,6 +221,8 @@ export async function POST(request: NextRequest) {
         console.log(`[webhook] followup — charged ${userId}.`);
       }
 
+      await processReferralReward(session, client);
+
     } catch (err) {
       console.error("[webhook] CRITICAL — Stripe charged but Clerk update failed.", {
         userId,
@@ -203,27 +236,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // MONTHLY RENEWAL — invoice.payment_succeeded
-  // ══════════════════════════════════════════════════════════════════════════
-  // This is the ONLY genuinely new branch. It resets a subscriber's credits to
-  // their plan amount each billing cycle (use-it-or-lose-it via renewalCredits,
-  // which never sets below the current balance so top-ups survive).
-  //
-  // Stripe sends this for BOTH the first invoice and every renewal. We skip the
-  // first one (billing_reason === "subscription_create") because the initial
-  // checkout.session.completed above already granted those credits — otherwise
-  // signup would double-grant.
   if (event.type === "invoice.payment_succeeded") {
     const invoice = event.data.object as Stripe.Invoice;
 
-    // Only subscription invoices matter here.
     const subId = (invoice as unknown as { subscription?: string }).subscription;
     if (!subId) {
       return NextResponse.json({ received: true });
     }
 
-    // Skip the very first invoice — checkout.session.completed handled it.
     if (invoice.billing_reason === "subscription_create") {
       console.log("[webhook] invoice — first invoice, skipping (handled at checkout).");
       return NextResponse.json({ received: true });
@@ -248,7 +268,6 @@ export async function POST(request: NextRequest) {
       await client.users.updateUserMetadata(userId, {
         publicMetadata: {
           ...meta,
-          // Reset UP to plan amount; never claw back a purchased balance.
           credits: renewalCredits(currentCredits, tier.readings),
           jxlCredits: renewalCredits(currentJxlCredits, tier.jxl),
           lastRenewalAt: new Date().toISOString(),
@@ -270,9 +289,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // CANCELLATION — customer.subscription.deleted
-  // ══════════════════════════════════════════════════════════════════════════
   if (event.type === "customer.subscription.deleted") {
     const subscription = event.data.object as Stripe.Subscription;
     const userId = subscription.metadata?.userId;
