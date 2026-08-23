@@ -10,7 +10,7 @@ import { referralRedemptions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-const ONE_TIME_READING_CREDITS = 4;
+const ONE_TIME_READING_CREDITS = 1;
 
 const REFERRAL_COOKIE = "aproxl_ref";
 
