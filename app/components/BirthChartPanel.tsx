@@ -146,6 +146,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
 
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [aspects, setAspects] = useState<NatalAspect[]>([]);
+  const [aspectsOpen, setAspectsOpen] = useState(false);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -399,30 +400,57 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
               </SkyCard>
             )}
 
-            {/* ── Major Aspects ── */}
+            {/* ── Major Aspects (collapsible, text, sorted by strength) ── */}
             {aspects.length > 0 && (
-              <SkyCard icon={Sparkles} label="Major Aspects">
-                <div className="flex flex-wrap gap-2">
-                  {aspects.map((asp, i) => {
-                    const glyphA = GLYPHS[asp.planetA] ?? "•";
-                    const glyphB = GLYPHS[asp.planetB] ?? "•";
-                    const aspectGlyph = ASPECT_GLYPHS[asp.type?.toLowerCase()] ?? "•";
-                    return (
-                      <div
-                        key={`${asp.planetA}-${asp.planetB}-${i}`}
-                        className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[13px]"
-                      >
-                        <span className="text-slate-300">{glyphA}</span>
-                        <span className="text-slate-500">{aspectGlyph}</span>
-                        <span className="text-slate-300">{glyphB}</span>
-                        <span className="ml-1 text-[11px] text-slate-500 tabular-nums">
-                          {asp.orbDegrees}°
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </SkyCard>
+              <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={() => setAspectsOpen((v) => !v)}
+                  className="flex w-full items-center justify-between p-4"
+                >
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
+                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                      Major Aspects
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2 text-slate-500">
+                    <span className="text-[11px] tabular-nums">{aspects.length}</span>
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        aspectsOpen && "rotate-90"
+                      )}
+                    />
+                  </span>
+                </button>
+
+                {aspectsOpen && (
+                  <div className="divide-y divide-white/5 px-4 pb-2">
+                    {[...aspects]
+                      .sort((a, b) => a.orbDegrees - b.orbDegrees)
+                      .map((asp, i) => {
+                        const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
+                        const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
+                        return (
+                          <div
+                            key={`${asp.planetA}-${asp.planetB}-${i}`}
+                            className="flex items-center justify-between py-2.5 text-[13px]"
+                          >
+                            <span className="text-slate-200">
+                              {nameA}{" "}
+                              <span className="italic text-slate-500">{asp.type}</span>{" "}
+                              {nameB}
+                            </span>
+                            <span className="text-[11px] text-slate-500 tabular-nums">
+                              {asp.orbDegrees}°
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* ── Element Balance — quick "about me" read ── */}
