@@ -42,6 +42,13 @@ interface NatalPlacement {
   house?: number;
 }
 
+interface NatalAspect {
+  type: string;
+  planetA: string;
+  planetB: string;
+  orbDegrees: number;
+}
+
 interface ProfectionData {
   profectionYear: number;
   age: number;
@@ -57,6 +64,14 @@ const GLYPHS: Record<string, string> = {
   Jupiter: `♃${T}`, Saturn: `♄${T}`, Uranus: `♅${T}`, Neptune: `♆${T}`,
   Pluto: `♇${T}`, "North Node": `☊${T}`, "South Node": `☋${T}`,
   Ascendant: `↑${T}`,
+};
+
+const ASPECT_GLYPHS: Record<string, string> = {
+  conjunction: `☌${T}`,
+  opposition: `☍${T}`,
+  square: `□${T}`,
+  trine: `△${T}`,
+  sextile: `⚹${T}`,
 };
 
 const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
@@ -130,6 +145,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
   const router = useRouter();
 
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
+  const [aspects, setAspects] = useState<NatalAspect[]>([]);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -140,7 +156,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
       if (!chart?.chartData) return false; // not ready yet
       const data = chart.chartData as unknown as {
         profection?: ProfectionData;
-        tropical?: { planets?: NatalPlacement[] };
+        tropical?: { planets?: NatalPlacement[]; aspects?: NatalAspect[] };
       };
       if (data.profection) setProfection(data.profection);
       const planets = data.tropical?.planets ?? [];
@@ -149,6 +165,8 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
           .filter((p) => NATAL_ORDER.includes(p.name))
           .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
       );
+      // Major aspects only — the five your engine computes
+      setAspects(data.tropical?.aspects ?? []);
       setIsLoading(false);
       return true; // loaded
     };
@@ -381,6 +399,32 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
               </SkyCard>
             )}
 
+            {/* ── Major Aspects ── */}
+            {aspects.length > 0 && (
+              <SkyCard icon={Sparkles} label="Major Aspects">
+                <div className="flex flex-wrap gap-2">
+                  {aspects.map((asp, i) => {
+                    const glyphA = GLYPHS[asp.planetA] ?? "•";
+                    const glyphB = GLYPHS[asp.planetB] ?? "•";
+                    const aspectGlyph = ASPECT_GLYPHS[asp.type?.toLowerCase()] ?? "•";
+                    return (
+                      <div
+                        key={`${asp.planetA}-${asp.planetB}-${i}`}
+                        className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[13px]"
+                      >
+                        <span className="text-slate-300">{glyphA}</span>
+                        <span className="text-slate-500">{aspectGlyph}</span>
+                        <span className="text-slate-300">{glyphB}</span>
+                        <span className="ml-1 text-[11px] text-slate-500 tabular-nums">
+                          {asp.orbDegrees}°
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </SkyCard>
+            )}
+
             {/* ── Element Balance — quick "about me" read ── */}
             {elementBalance.total > 0 && (
               <SkyCard icon={Sparkles} label="Element Balance">
@@ -424,23 +468,23 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
             )}
 
             {/* ── Recalculate — heals charts built by older engine versions ── */}
-<button
-  type="button"
-  onClick={() => router.push("/chart-data?recalculate=true")}
-  style={{
-    display: "block",
-    margin: "8px auto 20px",
-    background: "transparent",
-    border: "none",
-    color: "#64748b",
-    fontSize: "13px",
-    textDecoration: "underline",
-    textUnderlineOffset: "3px",
-    cursor: "pointer",
-  }}
->
-  Recalculate chart
-</button>
+            <button
+              type="button"
+              onClick={() => router.push("/chart-data?recalculate=true")}
+              style={{
+                display: "block",
+                margin: "8px auto 20px",
+                background: "transparent",
+                border: "none",
+                color: "#64748b",
+                fontSize: "13px",
+                textDecoration: "underline",
+                textUnderlineOffset: "3px",
+                cursor: "pointer",
+              }}
+            >
+              Recalculate chart
+            </button>
 
             {/* ── Full placements ── */}
             <SkyCard icon={Sparkles} label="All Placements">
