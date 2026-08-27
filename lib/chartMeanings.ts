@@ -4,7 +4,7 @@ export const PLANET_MEANING: Record<string, string> = {
   Mercury: "how you perceive, process, and transmit information — your mental wiring and communication style",
   Venus: "what you attract, how you relate, and what you find pleasurable — your values, aesthetic, and love language",
   Mars: "your drive, ambition, and how you pursue what you want — your assertiveness, sexuality, and capacity for conflict",
-  Jupiter: "where you're naturally lucky, expansive, and optimistic — your growth edge and what comes easily when you trust the process",
+  Jupiter: "where growth, expansion, confidence, and opportunity tend to develop — your capacity to broaden perspective and pursue what has room to grow",
   Saturn: "where you face limitation, build structure, and develop mastery — your greatest teacher and the source of your enduring strength",
   Uranus: "where you're radically individual, innovative, and unpredictable — the part of you that refuses to conform and craves liberation",
   Neptune: "where you dissolve boundaries, access intuition, and connect to the transcendent — your capacity for imagination, compassion, and idealism",

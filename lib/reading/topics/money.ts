@@ -5,8 +5,14 @@ export const money: TopicConfig = {
   label: "Money",
   // base (+ Pluto, Vesta for money)
   relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Pluto", "Vesta"]),
-  relevantHouses: new Set([2, 8, 11]),
-  relevantAspects: new Set(["conjunction", "trine", "square"]),
+  relevantHouses: new Set([2, 6, 8, 10, 11]),
+  relevantAspects: new Set([
+  "conjunction",
+  "opposition",
+  "square",
+  "trine",
+  "sextile",
+]),
   focusLine: "MONEY & FINANCES — Focus on Venus, Jupiter, Saturn, 2nd/8th/11th houses",
   windowInstruction: [
     "MONEY READING — Focus on these transits:",
@@ -20,7 +26,7 @@ export const money: TopicConfig = {
     "  - 11th House activations (gains, networks, financial opportunities)",
     "",
     "WINDOW INTERPRETATION:",
-    "  - Jupiter trine Venus → financial expansion, windfall",
+    "  - Jupiter trine Venus → financial expansion, favorable opportunity, or easier resource flow",
     "  - Saturn square Venus → financial constraints, budgeting required",
     "  - Pluto sextile Venus → financial transformation, investment opportunity",
     "  - Venus in 2nd → income increase, value recognition",

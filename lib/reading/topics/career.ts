@@ -6,7 +6,13 @@ export const career: TopicConfig = {
   // base (+ Uranus, Midheaven, Vesta, Pallas for career)
   relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Midheaven", "Vesta", "Pallas"]),
   relevantHouses: new Set([10, 6, 2]),
-  relevantAspects: new Set(["conjunction", "square", "opposition"]),
+  relevantAspects: new Set([
+  "conjunction",
+  "opposition",
+  "square",
+  "trine",
+  "sextile",
+]),
   focusLine: "CAREER & PROFESSION — Focus on Saturn, Sun, Mars, 10th/6th/2nd houses",
   windowInstruction: [
     "CAREER READING — Focus on these transits:",
@@ -21,8 +27,8 @@ export const career: TopicConfig = {
     "  - 6th House activations (daily work, routines, service)",
     "  - 2nd House activations (income from work, value)",
     "",
-    "WINDOW INTERPRETATION:",
-    "  - Saturn trine Sun → career recognition, authority role",
+    "INTERPRETIVE TENDENCIES — translate according to the full evidence:",
+    "  - Saturn trine Sun → increased responsibility, authority, recognition, or structural career progress",
     "  - Mars square Saturn → work pressure, ambition vs reality",
     "  - Jupiter sextile Sun → promotion, recognition, opportunity",
     "  - Uranus in 10th → career pivot, unexpected change",

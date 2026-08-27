@@ -207,14 +207,57 @@ function markMigratedV2(): void {
   }
 }
 
+/* ── V3 MIGRATION ──────────────────────────────────────────────────────────
+ *
+ * V3 recalculates cached charts after the prediction-engine hardening:
+ *
+ *   - corrected house systems (Placidus for natal, Whole Sign for predictive)
+ *   - exact transit timing (real UT binary search)
+ *   - exact angle timing (with precise dates)
+ *   - numeric predictive longitudes (progressions, solar arcs)
+ *   - updated advanced calculations (dignities, eclipses, dispositors)
+ *   - corrected applying/separating logic
+ *
+ * Old cached calculation objects must not continue feeding the new reading
+ * engine, or they will produce inconsistent results.
+ *
+ * Safety contract: same as V2 — runs once, validates inputs, safe on failure.
+ */
+
+const MIGRATION_V3_KEY = "dfp_chart_migrated_v3";
+
+function hasMigratedV3(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return localStorage.getItem(MIGRATION_V3_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markMigratedV3(): void {
+  try {
+    localStorage.setItem(MIGRATION_V3_KEY, "1");
+  } catch {
+    // silent
+  }
+}
+
 /** Validate that a stored chart has everything needed to recalc safely. */
 function chartInputsAreValid(chart: StoredChart | null): chart is StoredChart {
   if (!chart) return false;
+
   if (typeof chart.birthDate !== "string" || chart.birthDate.trim() === "") return false;
   if (typeof chart.birthTime !== "string" || chart.birthTime.trim() === "") return false;
+
+  if (typeof chart.timezone !== "string" || chart.timezone.trim() === "") return false;
+
   if (typeof chart.lat !== "number" || !Number.isFinite(chart.lat)) return false;
   if (typeof chart.lng !== "number" || !Number.isFinite(chart.lng)) return false;
-  if (chart.lat === 0 && chart.lng === 0) return false; // null-island guard
+
+  // null-island guard: reject only if BOTH are zero
+  if (chart.lat === 0 && chart.lng === 0) return false;
+
   return true;
 }
 
@@ -287,4 +330,78 @@ export async function migrateChartV2(): Promise<boolean> {
     // Network/parse failure — safe to retry next visit.
     return false;
   }
+}
+
+/**
+ * V3 migration — recalculates cached charts after the prediction-engine hardening.
+ *
+ * Call this once on app mount, after V2 migration (or in parallel).
+ * Resolves to true if it performed a migration, false otherwise.
+ * Never throws.
+ */
+export async function migrateChartV3(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (hasMigratedV3()) return false;
+
+  const chart = loadChart();
+
+  // No chart to migrate — mark done so we never re-check.
+  if (!chart) {
+    markMigratedV3();
+    return false;
+  }
+
+  // Incomplete/malformed inputs — DO NOT recalc, DO NOT set the flag.
+  if (!chartInputsAreValid(chart)) {
+    return false;
+  }
+
+  try {
+    const response = await fetch("/api/chart-calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        birthDate: chart.birthDate,
+        birthTime: chart.birthTime,
+        birthPlace: chart.birthPlace,
+        lat: chart.lat,
+        lng: chart.lng,
+        timezone: chart.timezone,
+        ...(typeof chart.currentLat === "number" && typeof chart.currentLng === "number"
+          ? { currentLat: chart.currentLat, currentLng: chart.currentLng }
+          : {}),
+      }),
+    });
+
+    const data = (await response.json()) as ChartCalculateResponse;
+
+    if (!response.ok || !data.success) return false;
+
+    saveChart({
+      birthDate: chart.birthDate,
+      birthTime: chart.birthTime,
+      birthPlace: chart.birthPlace,
+      lat: chart.lat,
+      lng: chart.lng,
+      timezone: chart.timezone,
+      currentLat: chart.currentLat ?? undefined,
+      currentLng: chart.currentLng ?? undefined,
+      currentPlace: chart.currentPlace ?? "",
+      currentTimezone: chart.currentTimezone ?? "",
+      chartData: data,
+    });
+
+    markMigratedV3();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run both migrations in sequence. Call once on app mount.
+ */
+export async function migrateChart(): Promise<void> {
+  await migrateChartV2();
+  await migrateChartV3();
 }
