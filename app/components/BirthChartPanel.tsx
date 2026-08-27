@@ -66,12 +66,17 @@ const GLYPHS: Record<string, string> = {
   Ascendant: `↑${T}`,
 };
 
-const ASPECT_GLYPHS: Record<string, string> = {
-  conjunction: `☌${T}`,
-  opposition: `☍${T}`,
-  square: `□${T}`,
-  trine: `△${T}`,
-  sextile: `⚹${T}`,
+// Aspect sections, ordered most-harmonious → most-tense.
+// rank sets display order; color fades green → amber → dark red.
+const ASPECT_META: Record<
+  string,
+  { header: string; rank: number; text: string; border: string; glow: string }
+> = {
+  trine:       { header: "Harmony",     rank: 1, text: "#6EE7B7", border: "rgba(52,211,153,0.55)",  glow: "rgba(16,185,129,0.20)" },
+  sextile:     { header: "Opportunity", rank: 2, text: "#A7F3D0", border: "rgba(110,231,183,0.45)", glow: "rgba(16,185,129,0.14)" },
+  conjunction: { header: "Intensity",   rank: 3, text: "#FCD34D", border: "rgba(251,191,36,0.45)",  glow: "rgba(245,158,11,0.16)" },
+  square:      { header: "Challenge",   rank: 4, text: "#FDBA74", border: "rgba(249,115,22,0.50)",  glow: "rgba(249,115,22,0.18)" },
+  opposition:  { header: "Tension",     rank: 5, text: "#F87171", border: "rgba(239,68,68,0.50)",   glow: "rgba(239,68,68,0.20)" },
 };
 
 const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
@@ -147,6 +152,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [aspects, setAspects] = useState<NatalAspect[]>([]);
   const [aspectsOpen, setAspectsOpen] = useState(false);
+  const [showWeaker, setShowWeaker] = useState(false);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -216,6 +222,29 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
     const dominant = ELEMENT_ORDER.reduce((top, el) => (counts[el] > counts[top] ? el : top), "Fire");
     return { counts, total, dominant };
   }, [natal]);
+
+  const STRONG_ORB = 4;
+
+  const groupedAspects = useMemo(() => {
+    const strong = aspects.filter((a) => a.orbDegrees <= STRONG_ORB);
+    const weak = aspects
+      .filter((a) => a.orbDegrees > STRONG_ORB)
+      .sort((a, b) => a.orbDegrees - b.orbDegrees);
+
+    // Bucket strong aspects by type, then order sections by rank.
+    const sections = Object.keys(ASPECT_META)
+      .map((type) => ({
+        type,
+        meta: ASPECT_META[type],
+        items: strong
+          .filter((a) => a.type?.toLowerCase() === type)
+          .sort((a, b) => a.orbDegrees - b.orbDegrees),
+      }))
+      .filter((s) => s.items.length > 0)
+      .sort((a, b) => a.meta.rank - b.meta.rank);
+
+    return { sections, weak };
+  }, [aspects]);
 
   const hasProfection =
     !!profection &&
@@ -400,59 +429,6 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
               </SkyCard>
             )}
 
-            {/* ── Major Aspects (collapsible, text, sorted by strength) ── */}
-            {aspects.length > 0 && (
-              <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm">
-                <button
-                  type="button"
-                  onClick={() => setAspectsOpen((v) => !v)}
-                  className="flex w-full items-center justify-between p-4"
-                >
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                      Major Aspects
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-2 text-slate-500">
-                    <span className="text-[11px] tabular-nums">{aspects.length}</span>
-                    <ChevronRight
-                      className={cn(
-                        "h-4 w-4 transition-transform",
-                        aspectsOpen && "rotate-90"
-                      )}
-                    />
-                  </span>
-                </button>
-
-                {aspectsOpen && (
-                  <div className="divide-y divide-white/5 px-4 pb-2">
-                    {[...aspects]
-                      .sort((a, b) => a.orbDegrees - b.orbDegrees)
-                      .map((asp, i) => {
-                        const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                        const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                        return (
-                          <div
-                            key={`${asp.planetA}-${asp.planetB}-${i}`}
-                            className="flex items-center justify-between py-2.5 text-[13px]"
-                          >
-                            <span className="text-slate-200">
-                              {nameA}{" "}
-                              <span className="italic text-slate-500">{asp.type}</span>{" "}
-                              {nameB}
-                            </span>
-                            <span className="text-[11px] text-slate-500 tabular-nums">
-                              {asp.orbDegrees}°
-                            </span>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ── Element Balance — quick "about me" read ── */}
             {elementBalance.total > 0 && (
               <SkyCard icon={Sparkles} label="Element Balance">
@@ -548,6 +524,119 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                 })}
               </div>
             </SkyCard>
+
+            {/* ── Major Aspects (collapsible, text, sorted by strength) ── */}
+            {aspects.length > 0 && (
+              <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={() => setAspectsOpen((v) => !v)}
+                  className="flex w-full items-center justify-between p-4"
+                >
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
+                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                      Major Aspects
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2 text-slate-500">
+                    <span className="text-[11px] tabular-nums">{aspects.length}</span>
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        aspectsOpen && "rotate-90"
+                      )}
+                    />
+                  </span>
+                </button>
+
+                {aspectsOpen && (
+                  <div className="px-4 pb-3">
+                    {groupedAspects.sections.map((section) => (
+                      <div key={section.type} className="mb-3 last:mb-1">
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <span
+                            className="h-1.5 w-1.5 rounded-full"
+                            style={{
+                              backgroundColor: section.meta.text,
+                              boxShadow: `0 0 6px ${section.meta.glow}`,
+                            }}
+                          />
+                          <span
+                            className="text-[10px] font-medium uppercase tracking-[0.16em]"
+                            style={{ color: section.meta.text }}
+                          >
+                            {section.meta.header}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-white/5">
+                          {section.items.map((asp, i) => {
+                            const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
+                            const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
+                            return (
+                              <div
+                                key={`${asp.planetA}-${asp.planetB}-${i}`}
+                                className="flex items-center justify-between py-2 text-[13px]"
+                              >
+                                <span className="text-slate-200">
+                                  {nameA}{" "}
+                                  <span className="italic text-slate-500">{asp.type}</span>{" "}
+                                  {nameB}
+                                </span>
+                                <span className="text-[11px] text-slate-500 tabular-nums">
+                                  {asp.orbDegrees}°
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+
+                    {groupedAspects.sections.length === 0 && (
+                      <p className="py-2 text-[12px] text-slate-500">
+                        No tight aspects within {STRONG_ORB}°.
+                      </p>
+                    )}
+
+                    {groupedAspects.weak.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowWeaker((v) => !v)}
+                          className="mt-1 w-full text-left text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                        >
+                          {showWeaker ? "Hide weaker aspects" : "Show weaker aspects"} →
+                        </button>
+                        {showWeaker && (
+                          <div className="mt-2 divide-y divide-white/5 opacity-70">
+                            {groupedAspects.weak.map((asp, i) => {
+                              const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
+                              const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
+                              return (
+                                <div
+                                  key={`weak-${asp.planetA}-${asp.planetB}-${i}`}
+                                  className="flex items-center justify-between py-2 text-[13px]"
+                                >
+                                  <span className="text-slate-400">
+                                    {nameA}{" "}
+                                    <span className="italic text-slate-600">{asp.type}</span>{" "}
+                                    {nameB}
+                                  </span>
+                                  <span className="text-[11px] text-slate-600 tabular-nums">
+                                    {asp.orbDegrees}°
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <p className="flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
               <span className="flex items-center gap-1">
