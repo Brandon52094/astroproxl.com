@@ -4,7 +4,7 @@ export const whatsComing: TopicConfig = {
   id: "general",
   label: "What's Coming",
   // base only — no topic narrowing
-  relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"]),
+  relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Chiron"]),
   relevantHouses: new Set([1, 4, 7, 10]),
   relevantAspects: new Set(["conjunction", "opposition", "square", "trine", "sextile"]),
   focusLine: "GENERAL — No topic filter, use all significant transits",

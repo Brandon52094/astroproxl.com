@@ -432,6 +432,9 @@ export function buildReadingPrompt(
   );
 
   // ── COLLECT TOPIC-RELEVANT DATES WITH ROTATION ──
+  // ── COLLECT TOPIC-RELEVANT DATES ──
+  // Topic-specific aspect dates lead. Universal dates (trigger/station) are
+  // fallback only. Synodic cycles are excluded — they're placeholder data.
   const aspectDates = getUniqueAspectDates(topicRelevantAspects);
 
   const isTriggerRelevant = upcomingTrigger && (
@@ -448,19 +451,6 @@ export function buildReadingPrompt(
     })
     .map(s => s.stationDate);
 
-  const relevantCycleDates = (synodicCycles || [])
-    .filter(s => s.daysUntilReturn <= FORWARD_WINDOW_DAYS && topic.relevantPlanets.has(s.planet))
-    .map(s => s.returnDate);
-
-    console.error(`ZZZ_MAP topic=${topic.id} | poolBreakdown=${JSON.stringify({
-  aspectDates: aspectDates,
-  triggerRelevant: isTriggerRelevant ? triggerDate : "BLOCKED(not topic-relevant)",
-  stationDates: relevantStationDates,
-  cycleDates: relevantCycleDates,
-})} | topicAspects=${JSON.stringify(topicRelevantAspects.map(a => `${a.transitPlanet} ${a.aspectType} ${a.natalPlanet} [${a.band}]`))}`);
-
-  const solarReturnDate = solarReturn?.sunReturnDate;
-
   const angleDates = (transitsToAngles || [])
     .filter(t => t.orb < 2)
     .map(t => {
@@ -469,18 +459,19 @@ export function buildReadingPrompt(
       return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
     });
 
-  const allDates = [
-    ...aspectDates,
-    triggerDate,
-    ...relevantStationDates,
-    ...relevantCycleDates,
-    solarReturnDate,
+  // PRIORITY ORDER: topic-specific aspect dates first, then topic-relevant
+  // trigger/station/angle dates as fallback. Synodic cycle dates excluded.
+  const prioritizedDates = [
+    ...aspectDates,                          // topic-specific — these lead
+    ...(triggerDate ? [triggerDate] : []),   // universal, but topic-gated
+    ...relevantStationDates,                 // universal, but topic-gated
     ...angleDates,
   ].filter(Boolean) as string[];
 
-  const uniqueDates = [...new Set(allDates)];
-  const shuffledDates = uniqueDates.sort(() => Math.random() - 0.5);
-  const finalDates = shuffledDates.sort((a, b) => {
+  const uniqueDates = [...new Set(prioritizedDates)];
+  // Keep chronological order but preserve the priority: dedupe already ran,
+  // so a stable chronological sort keeps the earliest of the prioritized set.
+  const finalDates = uniqueDates.sort((a, b) => {
     const dateA = new Date(a);
     const dateB = new Date(b);
     return dateA.getTime() - dateB.getTime();
@@ -489,7 +480,6 @@ export function buildReadingPrompt(
   console.log(`[DEBUG] Topic: ${topic.id}`);
   console.log(`[DEBUG] Topic-relevant aspect dates:`, aspectDates);
   console.log(`[DEBUG] Topic-relevant station dates:`, relevantStationDates);
-  console.log(`[DEBUG] Topic-relevant cycle dates:`, relevantCycleDates);
   console.log(`[DEBUG] Total unique dates:`, finalDates);
   console.log(`[DIAG] topic=${topic.id} | aspectDates=${JSON.stringify(aspectDates)} | finalDates=${JSON.stringify(finalDates)} | filteredAspectCount=${topicRelevantAspects.length}`);
 

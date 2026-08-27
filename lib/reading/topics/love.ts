@@ -4,7 +4,7 @@ export const love: TopicConfig = {
   id: "love",
   label: "Love",
   // base = Sun,Moon,Mercury,Venus,Mars,Jupiter,Saturn (+ North Node for love)
-  relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "North Node"]),
+  relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "North Node", "Juno", "Lilith"]),
   relevantHouses: new Set([5, 7, 8]),
   relevantAspects: new Set(["conjunction", "trine", "sextile"]),
   focusLine: "LOVE & RELATIONSHIPS — Focus on Venus, Mars, Moon, 5th/7th/8th houses",

@@ -4,7 +4,7 @@ export const money: TopicConfig = {
   id: "money",
   label: "Money",
   // base (+ Pluto for money)
-  relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Pluto"]),
+  relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Pluto", "Vesta"]),
   relevantHouses: new Set([2, 8, 11]),
   relevantAspects: new Set(["conjunction", "trine", "square"]),
   focusLine: "MONEY & FINANCES — Focus on Venus, Jupiter, Saturn, 2nd/8th/11th houses",
