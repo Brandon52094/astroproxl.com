@@ -409,10 +409,14 @@ if (a.orbDegrees <= orbs.exact) {
   continue;
 }
 
-valid.push({
-  ...a,
-  band,
-});
+ valid.push({
+      ...a,
+      band,
+    });
+  }
+
+  return valid;
+}
 
 // ============================================================
 // SPINE DETECTION
