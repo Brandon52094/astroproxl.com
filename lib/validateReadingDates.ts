@@ -182,15 +182,27 @@ export function buildValidDateIndex(
   }
 
   // Source 3 — transit-to-natal aspect exact dates (ephemeris-computed).
-  // Only aspects that actually perfect within the forward window count:
-  // a real exactDate AND a non-negative daysUntilExact within the window.
   for (const a of aspects) {
-    if (
-      a?.exactDate &&
-      a.daysUntilExact != null &&
-      a.daysUntilExact >= 0 &&
-      a.daysUntilExact <= FORWARD_WINDOW_DAYS
-    ) {
+    if (!a?.exactDate) continue;
+
+    // Trust exactDate directly. If daysUntilExact is present and out of the
+    // 45-day window, skip; if it's null, fall back to parsing the date and
+    // computing the gap ourselves so a null secondary field can't drop a
+    // genuinely valid date.
+    let withinWindow = false;
+    if (a.daysUntilExact != null) {
+      withinWindow = a.daysUntilExact >= 0 && a.daysUntilExact <= 45;
+    } else {
+      const parsed = parseLooseDate(a.exactDate);
+      if (parsed) {
+        const currentYear = new Date().getUTCFullYear();
+        const y = parsed.year ?? currentYear;
+        const gap = (Date.UTC(y, parsed.month - 1, parsed.day) - Date.now()) / MS_PER_DAY;
+        withinWindow = gap >= -1 && gap <= 45; // -1 tolerates "exact today"
+      }
+    }
+
+   if (withinWindow) {
       add(a.exactDate, `aspect:${a.transitPlanet ?? "?"}-${a.natalPlanet ?? "?"}`);
     }
   }
