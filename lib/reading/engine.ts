@@ -7,6 +7,10 @@ import type {
   Midpoint,
   TransitToAngle,
   HouseRuler,
+  EssentialDignity,
+  LunarReturn,
+  EclipseActivation,
+  DispositorResult,
 } from "@/lib/astrologicalCalculations";
 import type { TopicConfig } from "./topics/types";
 
@@ -25,7 +29,13 @@ export interface ReadingRequestBody {
     aspects: Array<{ type: string; planetA: string; planetB: string; orbDegrees: number }>;
   };
   sidereal: { planets: Array<{ name: string; sign: string; degree: string }> };
-  transits: Array<{ name: string; sign: string; degree: string; isRetrograde: boolean }>;
+  transits: Array<{
+    name: string;
+    sign: string;
+    degree: string;
+    longitude: number;
+    isRetrograde: boolean;
+  }>;
   transitAspects?: TransitAspect[];
   profection: {
     age: number;
@@ -35,9 +45,27 @@ export interface ReadingRequestBody {
     timeLordNatalSign: string;
     timeLordNatalHouse: number;
   };
-  progressions?: Array<{ name: string; sign: string; degree: string; isRetrograde: boolean }>;
-  solarArcs?: Array<{ name: string; sign: string; degree: string }>;
-  upcomingTrigger?: { date: string; transitPlanet: string; natalPlanet: string; aspect: string };
+  progressions?: Array<{
+    name: string;
+    sign: string;
+    degree: string;
+    longitude: number;
+    isRetrograde: boolean;
+  }>;
+  solarArcs?: Array<{
+    name: string;
+    natalPoint: string;
+    sign: string;
+    degree: string;
+    longitude: number;
+  }>;
+  upcomingTrigger?: {
+    date: string;
+    exactJulianDay: number;
+    transitPlanet: string;
+    natalPlanet: string;
+    aspect: string;
+  };
   planetaryStations?: Array<{
     planet: string;
     stationType: string;
@@ -72,8 +100,17 @@ export interface ReadingRequestBody {
   mutualReceptions?: MutualReception[];
   synodicCycles?: SynodicCycle[];
   midpoints?: Midpoint[];
-  transitsToAngles?: TransitToAngle[];
+  transitsToAngles?: Array<
+    TransitToAngle & {
+      exactDate?: string;
+      exactJulianDay?: number;
+    }
+  >;
   houseRulers?: HouseRuler[];
+  essentialDignities?: EssentialDignity[];
+  lunarReturn?: LunarReturn;
+  eclipseActivations?: EclipseActivation[];
+  dispositorTree?: DispositorResult[];
 }
 
 export interface ReadingPage {
@@ -97,19 +134,17 @@ const SLOW_PLANETS = new Set(["Saturn", "Uranus", "Neptune", "Pluto"]);
 const FAST_PLANETS = new Set(["Mercury", "Venus", "Mars", "Sun", "Moon"]);
 const ANGULAR_HOUSES = new Set([1, 4, 7, 10]);
 
-// Widened from the original bands — the tighter orbs were causing too many
-// topic-relevant slots to come up empty, forcing love/money/career readings
-// to fall back to the same shared (topic-blind) aspect pool and converge on
-// identical dates. Wider orbs give each topic more genuine, differentiated
-// material to draw from before it ever needs that shared fallback.
+// Discovery can be broad upstream, but the synthesis engine applies
+// conservative labels. "EXACT" should actually mean exact/tight.
+// Wider contacts remain available as context without becoming event anchors.
 const ASPECT_ORBS: Record<string, { exact: number; live: number; background: number }> = {
-  conjunction: { exact: 4.0, live: 8.0, background: 14.0 },
-  opposition:  { exact: 4.0, live: 8.0, background: 14.0 },
-  square:      { exact: 4.0, live: 8.0, background: 14.0 },
-  trine:       { exact: 4.0, live: 8.0, background: 14.0 },
-  sextile:     { exact: 3.5, live: 7.0, background: 12.0 },
-  semi_sextile: { exact: 2.0, live: 4.5, background: 9.0 },
-  quincunx:    { exact: 2.0, live: 4.5, background: 9.0 },
+  conjunction:   { exact: 0.5, live: 3.0, background: 6.0 },
+  opposition:    { exact: 0.5, live: 3.0, background: 6.0 },
+  square:        { exact: 0.5, live: 3.0, background: 6.0 },
+  trine:         { exact: 0.5, live: 3.0, background: 6.0 },
+  sextile:       { exact: 0.5, live: 2.5, background: 5.0 },
+  semi_sextile:  { exact: 0.4, live: 1.5, background: 3.0 },
+  quincunx:      { exact: 0.4, live: 1.5, background: 3.0 },
 };
 
 // Forward-looking window (days) for a transit's exact date to still count as
@@ -117,6 +152,172 @@ const ASPECT_ORBS: Record<string, { exact: number; live: number; background: num
 // window in lib/validateReadingDates.ts — widening one without the other
 // causes the model to surface dates the provenance validator then rejects.
 const FORWARD_WINDOW_DAYS = 60;
+
+const SIGN_INDEX: Record<string, number> = {
+  Aries: 0,
+  Taurus: 1,
+  Gemini: 2,
+  Cancer: 3,
+  Leo: 4,
+  Virgo: 5,
+  Libra: 6,
+  Scorpio: 7,
+  Sagittarius: 8,
+  Capricorn: 9,
+  Aquarius: 10,
+  Pisces: 11,
+};
+
+const PREDICTIVE_ASPECTS = [
+  { name: "conjunction", angle: 0 },
+  { name: "sextile", angle: 60 },
+  { name: "square", angle: 90 },
+  { name: "trine", angle: 120 },
+  { name: "opposition", angle: 180 },
+];
+
+const NATAL_ASPECT_PRIORITY: Record<string, number> = {
+  Sun: 1,
+  Moon: 1,
+  Ascendant: 1,
+  Midheaven: 1,
+
+  Mercury: 2,
+  Venus: 2,
+  Mars: 2,
+
+  Jupiter: 3,
+  Saturn: 3,
+  "North Node": 3,
+
+  Uranus: 4,
+  Neptune: 4,
+  Pluto: 4,
+};
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+function normalizeLongitude(longitude: number): number {
+  return ((longitude % 360) + 360) % 360;
+}
+
+function angularDistance(a: number, b: number): number {
+  let diff = Math.abs(normalizeLongitude(a) - normalizeLongitude(b));
+
+  if (diff > 180) {
+    diff = 360 - diff;
+  }
+
+  return diff;
+}
+
+function parseDegreeInSign(degree: string): number | null {
+  const match = degree.match(/(\d+(?:\.\d+)?)°(?:\s*(\d+(?:\.\d+)?)')?/);
+
+  if (!match) return null;
+
+  const degrees = Number(match[1]);
+  const minutes = Number(match[2] ?? 0);
+
+  return degrees + minutes / 60;
+}
+
+function placementToLongitude(sign: string, degree: string): number | null {
+  const signIndex = SIGN_INDEX[sign];
+  const degreeInSign = parseDegreeInSign(degree);
+
+  if (signIndex === undefined || degreeInSign === null) {
+    return null;
+  }
+
+  return normalizeLongitude(signIndex * 30 + degreeInSign);
+}
+
+function findPredictiveHit(
+  points: Array<{ name: string; longitude: number }>,
+  targetLongitude: number,
+  maxOrb = 1
+):
+  | {
+      pointName: string;
+      aspect: string;
+      orb: number;
+    }
+  | null {
+  let best: { pointName: string; aspect: string; orb: number } | null = null;
+
+  for (const point of points) {
+    const distance = angularDistance(point.longitude, targetLongitude);
+
+    for (const aspect of PREDICTIVE_ASPECTS) {
+      const orb = Math.abs(distance - aspect.angle);
+
+      if (orb <= maxOrb && (!best || orb < best.orb)) {
+        best = {
+          pointName: point.name,
+          aspect: aspect.name,
+          orb,
+        };
+      }
+    }
+  }
+
+  return best;
+}
+
+function scoreTransitAspect(
+  a: TransitAspect,
+  topic: TopicConfig,
+  timeLord: string,
+  profectionHouse: number
+): number {
+  let score = 0;
+
+  const band = a.band?.toUpperCase();
+
+  if (band === "EXACT") score += 50;
+  else if (band === "LIVE") score += 30;
+  else if (band === "BACKGROUND") score += 5;
+
+  if (a.natalHouse != null && topic.relevantHouses.has(a.natalHouse)) {
+    score += 35;
+  }
+
+  if (topic.relevantPlanets.has(a.natalPlanet)) {
+    score += 20;
+  }
+
+  if (topic.relevantPlanets.has(a.transitPlanet)) {
+    score += 15;
+  }
+
+  if (topic.relevantAspects.has(a.aspectType?.toLowerCase() || "")) {
+    score += 15;
+  }
+
+  if (a.natalPlanet === timeLord) {
+    score += 30;
+  }
+
+  if (a.natalHouse != null && a.natalHouse === profectionHouse) {
+    score += 20;
+  }
+
+  if (a.isApplying) {
+    score += 10;
+  }
+
+  if (SLOW_PLANETS.has(a.transitPlanet) && PERSONAL_PLANETS.has(a.natalPlanet)) {
+    score += 10;
+  }
+
+  // Within the same category, tighter always wins.
+  score -= a.orbDegrees;
+
+  return score;
+}
 
 // ============================================================
 // FILTER TRANSITS BY TOPIC  (now reads from TopicConfig)
@@ -132,55 +333,54 @@ function filterTransitsByTopic(
   const relevantHouses = topic.relevantHouses;
   const relevantAspects = topic.relevantAspects;
 
-  const personalAspects = aspects.filter(a =>
-    PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === timeLord
+  const personalAspects = aspects.filter(
+    (a) =>
+      PERSONAL_PLANETS.has(a.natalPlanet) ||
+      a.natalPlanet === timeLord
   );
 
-  // First pass: relevant HOUSE + aspect type. House match is the primary
-  // signal — the topic planet sets overlap heavily by design (Sun, Moon,
-  // Mercury, Venus, Mars, Jupiter, Saturn show up in nearly every topic),
-  // so filtering on planet name first let the same aspects qualify for
-  // love, money, and career alike. House placement is what actually tells
-  // topics apart.
-  let filtered = personalAspects.filter(a => {
-    const isRelevantHouse = a.natalHouse != null && relevantHouses.has(a.natalHouse);
-    const isRelevantAspect = relevantAspects.has(a.aspectType?.toLowerCase() || "");
+  let filtered = personalAspects.filter((a) => {
+    const isRelevantHouse =
+      a.natalHouse != null &&
+      relevantHouses.has(a.natalHouse);
+
+    const isRelevantAspect =
+      relevantAspects.has(a.aspectType?.toLowerCase() || "");
+
     return isRelevantHouse && isRelevantAspect;
   });
 
-  // Fallback: relevant planets + aspects (previously the first pass)
   if (filtered.length === 0) {
-    filtered = personalAspects.filter(a => {
-      const isRelevantPlanet = relevantPlanets.has(a.transitPlanet) ||
-                               relevantPlanets.has(a.natalPlanet);
-      const isRelevantAspect = relevantAspects.has(a.aspectType?.toLowerCase() || "");
+    filtered = personalAspects.filter((a) => {
+      const isRelevantPlanet =
+        relevantPlanets.has(a.transitPlanet) ||
+        relevantPlanets.has(a.natalPlanet);
+
+      const isRelevantAspect =
+        relevantAspects.has(a.aspectType?.toLowerCase() || "");
+
       return isRelevantPlanet && isRelevantAspect;
     });
   }
 
-  // Fallback: profection house
   if (filtered.length === 0) {
-    filtered = personalAspects.filter(a => a.natalHouse === profectionHouse);
+    filtered = personalAspects.filter(
+      (a) => a.natalHouse === profectionHouse
+    );
   }
 
-  // Last resort: shuffle and take up to 4
-  if (filtered.length === 0) {
-    const shuffled = [...personalAspects].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, Math.min(4, shuffled.length));
-  }
+  // Final fallback stays deterministic.
+  // We would rather return the strongest evidence repeatedly
+  // than a different answer because Math.random() fired differently.
+  const pool = filtered.length > 0 ? filtered : personalAspects;
 
-  // More than 6 → sort by band priority, slight shuffle for variety
-  if (filtered.length > 6) {
-    const bandPriority = { EXACT: 0, LIVE: 1, BACKGROUND: 2 };
-    filtered.sort((a, b) => {
-      const pa = bandPriority[a.band?.toUpperCase() as keyof typeof bandPriority] ?? 3;
-      const pb = bandPriority[b.band?.toUpperCase() as keyof typeof bandPriority] ?? 3;
-      if (pa !== pb) return pa - pb;
-      return Math.random() > 0.5 ? -1 : 1;
-    });
-  }
-
-  return filtered.slice(0, 6);
+  return [...pool]
+    .sort(
+      (a, b) =>
+        scoreTransitAspect(b, topic, timeLord, profectionHouse) -
+        scoreTransitAspect(a, topic, timeLord, profectionHouse)
+    )
+    .slice(0, 6);
 }
 
 // ============================================================
@@ -191,21 +391,30 @@ export function validateAndFilterAspects(aspects: TransitAspect[] | undefined): 
   if (!aspects?.length) return [];
 
   const valid: TransitAspect[] = [];
+
   for (const a of aspects) {
     const aspectType = a.aspectType?.toLowerCase() || "conjunction";
+
     const orbs = ASPECT_ORBS[aspectType] || ASPECT_ORBS.conjunction;
-    const band = a.band?.toUpperCase() || "";
 
-    let maxOrb: number;
-    if (band === "EXACT") maxOrb = orbs.exact;
-    else if (band === "LIVE") maxOrb = orbs.live;
-    else if (band === "BACKGROUND") maxOrb = orbs.background;
-    else continue;
+    let band: "EXACT" | "LIVE" | "BACKGROUND";
 
-    if (a.orbDegrees <= maxOrb) {
-      valid.push(a);
+    if (a.orbDegrees <= orbs.exact) {
+      band = "EXACT";
+    } else if (a.orbDegrees <= orbs.live) {
+      band = "LIVE";
+    } else if (a.orbDegrees <= orbs.background) {
+      band = "BACKGROUND";
+    } else {
+      continue;
     }
+
+    valid.push({
+      ...a,
+      band,
+    });
   }
+
   return valid;
 }
 
@@ -216,10 +425,24 @@ export function validateAndFilterAspects(aspects: TransitAspect[] | undefined): 
 function determineSpine(
   aspects: TransitAspect[],
   profection: any,
-  transitsToAngles: TransitToAngle[] | undefined,
-  progressions?: any[],
-  solarArcs?: any[]
-): { primary: string; priority: number; sources: string[]; temporalClass: string; selectedAspect?: any } {
+  transitsToAngles:
+    | Array<
+        TransitToAngle & {
+          exactDate?: string;
+          exactJulianDay?: number;
+        }
+      >
+    | undefined,
+  natalPlanets: ReadingRequestBody["tropical"]["planets"],
+  progressions?: ReadingRequestBody["progressions"],
+  solarArcs?: ReadingRequestBody["solarArcs"]
+): {
+  primary: string;
+  priority: number;
+  sources: string[];
+  temporalClass: string;
+  selectedAspect?: any;
+} {
   if (!aspects?.length) {
     return {
       primary: `${profection.activatedHouse}th House ${profection.activatedSign} Year — Time Lord: ${profection.timeLord}`,
@@ -253,13 +476,24 @@ function determineSpine(
 
   // CHECK 1: TRANSIT TO ANGLE
   if (transitsToAngles && transitsToAngles.length > 0) {
-    const exactAngles = transitsToAngles.filter((a) => a.orb < 2);
+    const exactAngles = transitsToAngles
+      .filter((a) => a.orb < 2)
+      .sort((a, b) => {
+        if (a.isApplying !== b.isApplying) {
+          return a.isApplying ? -1 : 1;
+        }
+
+        return a.orb - b.orb;
+      });
+
     if (exactAngles.length > 0) {
       const a = exactAngles[0];
       return {
         primary: `ANGLE ACTIVATION: ${a.transitPlanet} ${a.aspectType} ${a.angle} — major life event`,
         priority: 1,
-        sources: [`Transit ${a.transitPlanet} ${a.aspectType} ${a.angle} (${a.orb}° orb)`],
+        sources: [
+          `Transit ${a.transitPlanet} ${a.aspectType} ${a.angle} — ${a.orb}° orb${a.exactDate ? ` — exact on ${a.exactDate}` : ""}`,
+        ],
         temporalClass: a.isApplying ? "Immediate" : "Structural",
         selectedAspect: a,
       };
@@ -267,23 +501,51 @@ function determineSpine(
   }
 
   // CHECK 2: CRITICAL MASS
+  //
+  // A critical-mass hit means three independent predictive layers
+  // converge on the SAME natal target:
+  //   1. active transit
+  //   2. secondary progression
+  //   3. solar arc
+  //
+  // Progressions and solar arcs are evaluated numerically in 360° longitude,
+  // not by parsing display strings.
   for (const a of personal) {
-    const progHit = progressions?.some(
-      (p) =>
-        p.name === a.natalPlanet &&
-        Math.abs(parseFloat(p.degree) - parseFloat(a.natalDegree || "0")) < 2
+    const natalPlacement = natalPlanets.find((p) => p.name === a.natalPlanet);
+
+    if (!natalPlacement) continue;
+
+    const natalLongitude = placementToLongitude(natalPlacement.sign, natalPlacement.degree);
+
+    if (natalLongitude === null) continue;
+
+    const progHit = findPredictiveHit(
+      (progressions || []).map((p) => ({
+        name: p.name,
+        longitude: p.longitude,
+      })),
+      natalLongitude,
+      1.0
     );
-    const arcHit = solarArcs?.some(
-      (s) =>
-        s.name === a.natalPlanet &&
-        Math.abs(parseFloat(s.degree) - parseFloat(a.natalDegree || "0")) < 2
+
+    const arcHit = findPredictiveHit(
+      (solarArcs || []).map((s) => ({
+        name: s.name,
+        longitude: s.longitude,
+      })),
+      natalLongitude,
+      1.0
     );
 
     if (progHit && arcHit) {
       return {
-        primary: `CRITICAL MASS: Transit ${a.transitPlanet} + Progression + Solar Arc activating ${a.natalPlanet}`,
+        primary: `CRITICAL MASS: Transit ${a.transitPlanet} + Progression + Solar Arc converge on natal ${a.natalPlanet}`,
         priority: 2,
-        sources: [`Transit ${a.transitPlanet} ${a.aspectType} natal ${a.natalPlanet}`],
+        sources: [
+          `Transit ${a.transitPlanet} ${a.aspectType} natal ${a.natalPlanet} — ${a.orbDegrees}° orb`,
+          `Progression ${progHit.pointName} ${progHit.aspect} natal ${a.natalPlanet} — ${progHit.orb.toFixed(2)}° orb`,
+          `Solar Arc ${arcHit.pointName} ${arcHit.aspect} natal ${a.natalPlanet} — ${arcHit.orb.toFixed(2)}° orb`,
+        ],
         temporalClass: a.orbDegrees < 1 ? "Immediate" : "Structural",
         selectedAspect: a,
       };
@@ -421,6 +683,10 @@ export function buildReadingPrompt(
     midpoints,
     transitsToAngles,
     houseRulers,
+    essentialDignities,
+    lunarReturn,
+    eclipseActivations,
+    dispositorTree,
   } = body;
 
   // ── TOPIC-SPECIFIC FILTERING ──
@@ -431,62 +697,94 @@ export function buildReadingPrompt(
     profection.activatedHouse
   );
 
-  // ── COLLECT TOPIC-RELEVANT DATES WITH ROTATION ──
   // ── COLLECT TOPIC-RELEVANT DATES ──
-  // Topic-specific aspect dates lead. Universal dates (trigger/station) are
-  // fallback only. Synodic cycles are excluded — they're placeholder data.
-  const aspectDates = getUniqueAspectDates(topicRelevantAspects);
-
-  const isTriggerRelevant = upcomingTrigger && (
-    topic.relevantPlanets.has(upcomingTrigger.transitPlanet) ||
-    topic.relevantPlanets.has(upcomingTrigger.natalPlanet)
+  const activeTopicAspects = topicRelevantAspects.filter(
+    (a) =>
+      (a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE") &&
+      (PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord) &&
+      !!a.exactDate
   );
+
+  const aspectDates = getUniqueAspectDates(activeTopicAspects);
+
+  const isTriggerRelevant =
+    upcomingTrigger &&
+    (topic.relevantPlanets.has(upcomingTrigger.transitPlanet) ||
+      topic.relevantPlanets.has(upcomingTrigger.natalPlanet));
+
   const triggerDate = isTriggerRelevant ? upcomingTrigger?.date : null;
 
   const relevantStationDates = (planetaryStations || [])
-    .filter(s => {
-      const hitsRelevantPlanet = s.natalPlanetHit && topic.relevantPlanets.has(s.natalPlanetHit);
-      const inRelevantHouse = s.natalHouse && topic.relevantHouses.has(s.natalHouse);
-      return hitsRelevantPlanet || inRelevantHouse;
+    .filter((s) => {
+      if (!s.natalPlanetHit) {
+        return false;
+      }
+
+      const hitsPersonal =
+        PERSONAL_PLANETS.has(s.natalPlanetHit) ||
+        s.natalPlanetHit === profection.timeLord;
+
+      const topicRelevant =
+        topic.relevantPlanets.has(s.natalPlanetHit) ||
+        (s.natalHouse != null && topic.relevantHouses.has(s.natalHouse));
+
+      return hitsPersonal && topicRelevant;
     })
-    .map(s => s.stationDate);
+    .map((s) => s.stationDate);
+
+  const ANGLE_HOUSE_MAP: Record<string, number> = {
+    Ascendant: 1,
+    "Imum Coeli": 4,
+    Descendant: 7,
+    Midheaven: 10,
+  };
 
   const angleDates = (transitsToAngles || [])
-    .filter(t => t.orb < 2)
-    .map(t => {
-      const date = new Date();
-      date.setDate(date.getDate() + Math.round(t.orb * 2));
-      return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-    });
+    .filter((t) => {
+      if (t.orb >= 2 || !t.exactDate) {
+        return false;
+      }
+
+      if (topic.id === "general") {
+        return true;
+      }
+
+      const angleHouse = ANGLE_HOUSE_MAP[t.angle];
+
+      return angleHouse != null && topic.relevantHouses.has(angleHouse);
+    })
+    .map((t) => t.exactDate!)
+    .filter(Boolean);
 
   // PRIORITY ORDER: topic-specific aspect dates first, then topic-relevant
   // trigger/station/angle dates as fallback. Synodic cycle dates excluded.
   const prioritizedDates = [
-    ...aspectDates,                          // topic-specific — these lead
-    ...(triggerDate ? [triggerDate] : []),   // universal, but topic-gated
-    ...relevantStationDates,                 // universal, but topic-gated
+    ...aspectDates, // topic-specific — these lead
+    ...(triggerDate ? [triggerDate] : []), // universal, but topic-gated
+    ...relevantStationDates, // universal, but topic-gated
     ...angleDates,
   ].filter(Boolean) as string[];
 
-  const uniqueDates = [...new Set(prioritizedDates)];
-  // Keep chronological order but preserve the priority: dedupe already ran,
-  // so a stable chronological sort keeps the earliest of the prioritized set.
-  const finalDates = uniqueDates.sort((a, b) => {
-    const dateA = new Date(a);
-    const dateB = new Date(b);
-    return dateA.getTime() - dateB.getTime();
-  });
+  // Deduplicate while preserving evidence priority.
+  // The model may present chosen windows chronologically,
+  // but selection itself must follow astrological strength.
+  const finalDates = [...new Set(prioritizedDates)];
 
   console.log(`[DEBUG] Topic: ${topic.id}`);
   console.log(`[DEBUG] Topic-relevant aspect dates:`, aspectDates);
   console.log(`[DEBUG] Topic-relevant station dates:`, relevantStationDates);
   console.log(`[DEBUG] Total unique dates:`, finalDates);
-  console.log(`[DIAG] topic=${topic.id} | aspectDates=${JSON.stringify(aspectDates)} | finalDates=${JSON.stringify(finalDates)} | filteredAspectCount=${topicRelevantAspects.length}`);
+  console.log(
+    `[DIAG] topic=${topic.id} | aspectDates=${JSON.stringify(aspectDates)} | finalDates=${JSON.stringify(
+      finalDates
+    )} | filteredAspectCount=${topicRelevantAspects.length}`
+  );
 
   const spine = determineSpine(
     topicRelevantAspects.length > 0 ? topicRelevantAspects : validatedAspects,
     profection,
     transitsToAngles,
+    tropical.planets,
     progressions,
     solarArcs
   );
@@ -495,17 +793,12 @@ export function buildReadingPrompt(
     topicRelevantAspects.length > 0 ? topicRelevantAspects : validatedAspects,
     profection.timeLord
   );
-  const personalTrigger = filterPersonalTrigger(upcomingTrigger, profection.timeLord);
-
-  const hasActiveAspects = topicRelevantAspects.some(
-    (a) => a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
+  const personalTrigger = filterPersonalTrigger(
+    isTriggerRelevant ? upcomingTrigger : null,
+    profection.timeLord
   );
 
-  const hasPersonalActive = topicRelevantAspects.some(
-    (a) =>
-      (a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE") &&
-      (PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord)
-  );
+  const hasDatedEvidence = finalDates.length > 0;
 
   const sections: string[] = [];
 
@@ -547,6 +840,8 @@ export function buildReadingPrompt(
     `SPINE: ${spine.primary}`,
     `PRIORITY: ${spine.priority}`,
     `CLASS: ${spine.temporalClass}`,
+    "SPINE EVIDENCE:",
+    ...spine.sources.map((source) => `  ${source}`),
     ""
   );
 
@@ -578,12 +873,48 @@ export function buildReadingPrompt(
     );
   }
 
+  // ── ESSENTIAL DIGNITIES ──
+  if (essentialDignities && essentialDignities.length > 0) {
+    sections.push(
+      "ESSENTIAL DIGNITIES — EXPRESSION MODIFIER, NOT TIMING:",
+      ...essentialDignities.map((d) => `  ${JSON.stringify(d)}`),
+      ""
+    );
+  }
+
+  // ── LUNAR RETURN ──
+  if (lunarReturn) {
+    sections.push(
+      "LUNAR RETURN — SHORT-TERM CONFIRMATION, NOT A STANDALONE EVENT PREDICTION:",
+      `  ${JSON.stringify(lunarReturn)}`,
+      ""
+    );
+  }
+
+  // ── ECLIPSE ACTIVATIONS ──
+  if (eclipseActivations && eclipseActivations.length > 0) {
+    sections.push(
+      "ECLIPSE ACTIVATIONS — AMPLIFIER / DEVELOPMENT WINDOW:",
+      ...eclipseActivations.map((e) => `  ${JSON.stringify(e)}`),
+      ""
+    );
+  }
+
+  // ── DISPOSITOR TREE ──
+  if (dispositorTree && dispositorTree.length > 0) {
+    sections.push(
+      "DISPOSITOR TREE — INTERPRETIVE CONTEXT ONLY:",
+      ...dispositorTree.map((d) => `  ${JSON.stringify(d)}`),
+      ""
+    );
+  }
+
   // ── SYNODIC CYCLES ──
   if (synodicCycles && synodicCycles.length > 0) {
     const relevantCycles = synodicCycles.filter((s) => s.daysUntilReturn <= FORWARD_WINDOW_DAYS);
     if (relevantCycles.length > 0) {
       sections.push(
-        "SYNODIC CYCLES (Chapter Markers):",
+        "SYNODIC CYCLES — Context only until exact cycle timing is independently verified:",
         ...relevantCycles.map(
           (s) => `${s.planet} return in ${s.daysUntilReturn} days (${s.returnDate})`
         ),
@@ -608,7 +939,8 @@ export function buildReadingPrompt(
     sections.push(
       "TRANSIT TO ANGLES (Major Life Events):",
       ...transitsToAngles.map(
-        (t) => `  ${t.transitPlanet} ${t.aspectType} ${t.angle} (${t.angleSign} ${t.angleDegree}°) — ${t.orb}° orb`
+        (t) =>
+          `  ${t.transitPlanet} ${t.aspectType} ${t.angle} (${t.angleSign} ${t.angleDegree}°) — ${t.orb}° orb${t.isApplying ? ", APPLYING" : ", SEPARATING"}${t.exactDate ? ` — exact on ${t.exactDate}` : ""}`
       ),
       ""
     );
@@ -635,9 +967,9 @@ export function buildReadingPrompt(
     sections.push("TRANSIT-TO-NATAL ASPECTS — TOPIC-RELEVANT ONLY:");
     sections.push(`RELEVANT ASPECTS (${topicRelevantAspects.length}):`);
 
-    const exact = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "EXACT");
-    const live = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "LIVE");
-    const background = topicRelevantAspects.filter(a => a.band?.toUpperCase() === "BACKGROUND");
+    const exact = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "EXACT");
+    const live = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "LIVE");
+    const background = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "BACKGROUND");
 
     if (exact.length > 0) {
       sections.push(`  EXACT (${exact.length}):`);
@@ -645,7 +977,9 @@ export function buildReadingPrompt(
         const rx = a.isRetrograde ? " Rx" : "";
         const motion = a.isApplying ? "APPLYING" : "SEPARATING";
         const dateStr = a.exactDate ? ` — exact on ${a.exactDate}` : "";
-        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}${dateStr}`);
+        sections.push(
+          `    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}${dateStr}`
+        );
       }
     }
 
@@ -655,7 +989,9 @@ export function buildReadingPrompt(
         const rx = a.isRetrograde ? " Rx" : "";
         const motion = a.isApplying ? "APPLYING" : "SEPARATING";
         const dateStr = a.exactDate ? ` — exact on ${a.exactDate}` : "";
-        sections.push(`    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}${dateStr}`);
+        sections.push(
+          `    • ${a.transitPlanet}${rx} ${a.aspectType} ${a.natalPlanet} — ${a.orbDegrees}° orb, ${motion}${dateStr}`
+        );
       }
     }
 
@@ -706,8 +1042,8 @@ export function buildReadingPrompt(
 
   // ── SOLAR RETURN ──
   if (solarReturn) {
-    const timeLordInAngularHouse = solarReturn.timeLordSRHouse !== null &&
-      ANGULAR_HOUSES.has(solarReturn.timeLordSRHouse);
+    const timeLordInAngularHouse =
+      solarReturn.timeLordSRHouse !== null && ANGULAR_HOUSES.has(solarReturn.timeLordSRHouse);
 
     sections.push(
       "SOLAR RETURN — EXTERNAL/INTERNAL FILTER:",
@@ -758,25 +1094,32 @@ export function buildReadingPrompt(
   }
 
   // ── NATAL ASPECTS ──
-  const SPEED_PRIORITY: Record<string, number> = {
-    Moon: 10, Mercury: 9, Venus: 8, Sun: 7, Mars: 6,
-    Jupiter: 5, Saturn: 4, Uranus: 3, Neptune: 2, Pluto: 1,
-    "North Node": 5, Ascendant: 5, Midheaven: 5,
-  };
-
   const rankedAspects = tropical.aspects
     .slice()
     .sort((a, b) => {
-      const pa = SPEED_PRIORITY[a.planetA] ?? 99;
-      const pb = SPEED_PRIORITY[b.planetA] ?? 99;
-      if (pa !== pb) return pa - pb;
+      const priorityA = Math.min(
+        NATAL_ASPECT_PRIORITY[a.planetA] ?? 99,
+        NATAL_ASPECT_PRIORITY[a.planetB] ?? 99
+      );
+
+      const priorityB = Math.min(
+        NATAL_ASPECT_PRIORITY[b.planetA] ?? 99,
+        NATAL_ASPECT_PRIORITY[b.planetB] ?? 99
+      );
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
       return a.orbDegrees - b.orbDegrees;
     })
     .slice(0, 15);
 
   const aspectList = rankedAspects
     .map((a) => {
-      const isMajor = SPEED_PRIORITY[a.planetA] !== undefined ||
+      const isMajor =
+        NATAL_ASPECT_PRIORITY[a.planetA] !== undefined ||
+        NATAL_ASPECT_PRIORITY[a.planetB] !== undefined ||
         ["North Node", "Ascendant", "Midheaven"].includes(a.planetA);
       return isMajor
         ? `${a.planetA} ${a.type} ${a.planetB} — ${a.orbDegrees}° orb`
@@ -786,33 +1129,107 @@ export function buildReadingPrompt(
 
   sections.push("NATAL ASPECTS (major first, capped at 15):", aspectList || "None", "");
 
-  // ── PERSONAL PLANET FILTER HARD RULE ──
+  // ── PREDICTION STANDARD ──
   sections.push(
     "═══════════════════════════════════════════",
-    "PERSONAL PLANET FILTER FOR WINDOWS — HARD RULE",
+    "PREDICTION STANDARD — HARD RULE",
     "═══════════════════════════════════════════",
     "",
-    "You may ONLY create a dated window (Part 3) if the aspect involves at least one of these:",
-    "  - A personal planet: Sun, Moon, Mercury, Venus, Mars, Ascendant, Midheaven, Descendant, Imum Coeli, North Node",
-    "  - The Time Lord (even if not a personal planet)",
+    "You are not writing a generic horoscope.",
+    "You are identifying the strongest chart-supported development for the user's specific question.",
     "",
-    "Any aspect involving ONLY generational planets (Uranus, Neptune, Pluto) may NEVER be used as a date anchor.",
+    "When multiple predictive techniques converge, COMMIT to the interpretation.",
+    "State what changes, where it changes, and when the activation peaks.",
+    "Do not bury the forecast underneath astrological explanation.",
     "",
-    "If there are no personal-planet aspects in the EXACT or LIVE lists, then Part 3 must be skipped.",
+    "Never manufacture certainty to fill space.",
+    'If the chart does not contain a clean event signature, say: "No clean event signature is present in this window."',
+    "",
+    "DISTINGUISH:",
+    "EVENT — multiple predictive techniques converge on a concrete development.",
+    "ACTIVATION — a strong astrological trigger exists, but its external manifestation is not uniquely determined.",
+    "BACKGROUND — thematic context only; never present it as a concrete event prediction.",
+    "",
+    "DATE RULE:",
+    "Use an exact date only when that date was supplied by an exact-date calculation.",
+    "Otherwise describe the activation as a broader period without inventing a calendar date.",
+    "",
+    "For every major forecast:",
+    "1. State the development.",
+    "2. State the affected life area.",
+    "3. State the calculator-supported peak date/window if one exists.",
+    "4. State whether it initiates, culminates, reverses, resolves, or closes.",
+    "5. State the most useful response from the user.",
+    "",
+    "Specific beats dramatic.",
+    "Supported beats confident.",
+    "Convergence beats quantity.",
+    ""
+  );
+
+  // ── READING STRUCTURE ──
+  sections.push(
+    "═══════════════════════════════════════════",
+    "READING STRUCTURE",
+    "═══════════════════════════════════════════",
+    "",
+    "PART 1 — THE PREDICTION",
+    "Lead immediately with the strongest chart-supported development.",
+    "State the consequence in plain human language before explaining astrology.",
+    "",
+    "PART 2 — WHY THIS IS ACTIVE NOW",
+    "Explain the primary predictive evidence and how the techniques converge.",
+    "Do not repeat Part 1 in different words.",
+    "",
+    "PART 2B — HOW IT IS MOST LIKELY TO SHOW UP",
+    `Translate the astrology specifically into the ${topic.id} area.`,
+    "Separate what the chart clearly supports from manifestations that are merely possible.",
+    "",
+    "PART 3 — DATED WINDOWS",
+    "Use only calculator-supplied dates that pass the dated-window rules below.",
+    "",
+    "PART 4 — THE DIRECTIVE",
+    "Give practical action tied directly to the reading evidence.",
+    "",
+    "PART 5 — BOTTOM LINE",
+    "Close with 1-3 sentences stating the central development and the single most important thing to understand.",
+    ""
+  );
+
+  // ── DATED WINDOW ELIGIBILITY ──
+  sections.push(
+    "═══════════════════════════════════════════",
+    "DATED WINDOW ELIGIBILITY — HARD RULE",
+    "═══════════════════════════════════════════",
+    "",
+    "A dated window may ONLY be created from a calculator-supplied exact date.",
+    "",
+    "Eligible anchors:",
+    "  - EXACT or LIVE transit to a personal planet / Time Lord when exactDate is supplied",
+    "  - NEXT EXACT ASPECT involving a personal planet / Time Lord",
+    "  - Exact transit to a topic-relevant angle",
+    "  - Exact planetary station tightly activating a topic-relevant personal planet / Time Lord",
+    "",
+    "BACKGROUND aspects never create dated windows.",
+    "Solar Return, profection, dignity, dispositor, midpoint, and mutual reception data may confirm or describe an event but do NOT independently create a date.",
+    "",
+    "Never estimate an event date from an orb.",
+    "Never invent a date because the interpretation needs one.",
     ""
   );
 
   // ── PART 3 — DATED WINDOWS ──
-  if (hasActiveAspects && hasPersonalActive) {
+  if (hasDatedEvidence) {
     sections.push(
       "PART 3 — DATED WINDOWS (2-4 windows, as data supports):",
       "",
-      "⚠️ CRITICAL: Vary your selection of timing windows across the provided date index.",
-      "Never default to the first available dates unless they uniquely match the spine aspect.",
+      "⚠️ PRECISION RULE: Select timing windows deterministically from the strongest evidence.",
+      "Do NOT vary dates for novelty, variety, or stylistic differentiation.",
+      "Prefer, in order: spine activation → exact topic transit → exact trigger → exact station → exact angle activation.",
       "",
       "Available dates for this reading:",
       ...(finalDates.length > 0
-        ? finalDates.map(d => `  - ${d}`)
+        ? finalDates.map((d) => `  - ${d}`)
         : [`  - No topic-relevant dates available within the next ${FORWARD_WINDOW_DAYS} days`]),
       "",
       "Each window MUST use a DIFFERENT date from this list.",
@@ -828,20 +1245,20 @@ export function buildReadingPrompt(
       "  - Stations: ±2 day window around station date",
       "",
       "WINDOW SELECTION — ALWAYS FOLLOW THE TOPIC RULES ABOVE:",
-      "  1. Lead with the SPINE aspect identified above",
-      "  2. Prioritize topic-relevant planets and houses",
-      "  3. Add any CRITICAL MASS windows",
-      "  4. Add any Time Lord windows",
-      "  5. Add any Mutual Reception windows (amplified)",
-      "  6. Add any Synodic Cycle windows (chapter markers)",
-      "  7. Fill remaining with strongest topic-relevant aspects",
+      "  1. Exact dated SPINE activation, if one exists",
+      "  2. CRITICAL MASS activation with a calculator-supplied date",
+      "  3. Exact Time Lord activation",
+      "  4. Exact topic-relevant personal-planet transit",
+      "  5. Exact topic-relevant angle activation",
+      "  6. Exact relevant planetary station",
+      "  7. Remaining strongest calculator-dated topic activations",
       "",
-      "If fewer than 2 topic-relevant EXACT/LIVE aspects exist, give only what's available.",
+      "Mutual receptions, Solar Return, progressions, solar arcs, dignities, midpoints, dispositors, and profections may CONFIRM a window but may not manufacture a date.",
       ""
     );
   } else {
     sections.push(
-      "PART 3 — SKIPPED: No topic-relevant personal EXACT or LIVE transit aspects.",
+      "PART 3 — SKIPPED: No topic-relevant personal EXACT or LIVE transit aspects with calculator-supplied dates.",
       "",
       `Replace Part 3 with: "There are no tight topic-relevant transit windows in the next ${FORWARD_WINDOW_DAYS} days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
       ""
@@ -874,11 +1291,19 @@ export function buildReadingPrompt(
     "HOW TO USE THE CALCULATIONS",
     "═══════════════════════════════════════════",
     "",
-    "1. TRANSIT TO ANGLE → Major Life Event (OUTRANKS all)",
-    "2. SOLAR RETURN → External/Internal event filter",
-    "3. MUTUAL RECEPTION → Amplifier (makes transits stronger)",
-    "4. SYNODIC CYCLES → Chapter markers",
-    "5. MIDPOINTS → Sensitive point activators",
+    "1. TRANSIT TO ANGLE → Highest-priority external activation when tight and relevant",
+    "2. CRITICAL MASS → Transit + Progression + Solar Arc convergence",
+    "3. EXACT TRANSIT / NEXT EXACT ASPECT → Primary near-term timing",
+    "4. TIME LORD / PROFECTION → Determines which life storyline is emphasized",
+    "5. PLANETARY STATION → Amplifies a planet when tightly connected to the natal chart",
+    "6. SOLAR RETURN → Annual external/internal confirmation filter",
+    "7. ECLIPSE ACTIVATION → Amplifier / developmental window, not automatic event certainty",
+    "8. LUNAR RETURN → Short-term confirmation",
+    "9. MUTUAL RECEPTION → Amplifier, not an independent event",
+    "10. ESSENTIAL DIGNITY → Modifies how strongly/cleanly a planet expresses",
+    "11. MIDPOINTS → Sensitive-point context unless directly activated",
+    "12. DISPOSITOR TREE → Interpretive hierarchy/context",
+    "13. SYNODIC CYCLES → Context only until exact timing is independently verified",
     "",
     `For this reading (${topic.id.toUpperCase()}):`,
     `  - Priority planets: ${Array.from(relevantPlanets).join(", ")}`,
@@ -893,16 +1318,37 @@ export function buildReadingPrompt(
     "SOURCE VERIFICATION",
     "═══════════════════════════════════════════",
     "",
-    "For EVERY claim in Parts 1, 2, 3, and 4:",
-    "1. Find the supporting line from the TRANSIT ASPECTS block above",
-    "2. Copy that line VERBATIM into the 'placements' field",
-    "3. If you cannot find a line that EXACTLY supports a claim, DO NOT make that claim",
+    "Every ASTROLOGICAL claim in Parts 1, 2, 2B, 3, 4, and 5 must be traceable to evidence printed in this prompt.",
     "",
-    "Example sources entry:",
-    '{',
-    '  "section": "Part 1 — Spine",',
-    '  "placements": "[EXACT] Saturn Rx 24°35\' Cancer square natal Moon 21°56\' Virgo — 1.2° orb, APPLYING"',
-    '}',
+    "VALID EVIDENCE BLOCKS INCLUDE:",
+    "  - SPINE EVIDENCE",
+    "  - TRANSIT-TO-NATAL ASPECTS",
+    "  - TRANSIT TO ANGLES",
+    "  - NEXT EXACT ASPECT",
+    "  - PLANETARY STATIONS",
+    "  - PROGRESSIONS",
+    "  - SOLAR ARCS",
+    "  - PROFECTION YEAR",
+    "  - SOLAR RETURN",
+    "  - ECLIPSE ACTIVATIONS",
+    "  - LUNAR RETURN",
+    "  - MUTUAL RECEPTION",
+    "  - ESSENTIAL DIGNITIES",
+    "  - HOUSE RULERS",
+    "  - MIDPOINTS",
+    "  - DISPOSITOR TREE",
+    "",
+    "For each source entry:",
+    "1. Identify the technique that supports the statement.",
+    "2. Copy the supporting evidence line VERBATIM into the placements field.",
+    "3. Never cite a technique that does not actually support the claim.",
+    "4. If no printed evidence supports a concrete claim, DO NOT make the claim.",
+    "",
+    "Strong event predictions should use convergence when available:",
+    "  - at least one primary activation",
+    "  - plus one independent confirmation",
+    "",
+    "Behavioral advice in Part 4 does not require a separate astrological claim, but it must logically follow from the cited prediction/window.",
     ""
   );
 
@@ -932,10 +1378,10 @@ export function buildReadingPrompt(
     '      "content": "Part 1: ...\\n\\nPart 2: ...\\n\\nPart 2B: ...\\n\\nPart 3: ...\\n\\nPart 4: ...\\n\\nPart 5: ...",',
     '      "sources": [',
     '        { "section": "Part 1 — Spine", "placements": "...verbatim line..." }',
-    '      ]',
-    '    }',
-    '  ]',
-    '}'
+    "      ]",
+    "    }",
+    "  ]",
+    "}"
   );
 
   return sections.join("\n");

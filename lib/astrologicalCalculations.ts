@@ -2,7 +2,7 @@
 // FILE: lib/astrologicalCalculations.ts (FIXED & HARDENED)
 // ============================================================
 
-// ── SIGN RULERS ──
+// ── SIGN RULERS (Traditional — keep synchronized with chart-calculate) ──
 export const SIGN_RULERS: Record<string, string> = {
   Aries: "Mars",
   Taurus: "Venus",
@@ -11,9 +11,16 @@ export const SIGN_RULERS: Record<string, string> = {
   Leo: "Sun",
   Virgo: "Mercury",
   Libra: "Venus",
-  Scorpio: "Pluto",
+  Scorpio: "Mars",
   Sagittarius: "Jupiter",
   Capricorn: "Saturn",
+  Aquarius: "Saturn",
+  Pisces: "Jupiter",
+};
+
+// ── MODERN SIGN RULERS (interpretive context only) ──
+export const MODERN_SIGN_RULERS: Record<string, string> = {
+  Scorpio: "Pluto",
   Aquarius: "Uranus",
   Pisces: "Neptune",
 };
@@ -39,14 +46,15 @@ export const FALLS: Record<string, string> = {
   Saturn: "Aries",
 };
 
-export const DETRIMENTS: Record<string, string> = {
-  Sun: "Aquarius",
-  Moon: "Capricorn",
-  Mercury: "Sagittarius",
-  Venus: "Scorpio",
-  Mars: "Libra",
-  Jupiter: "Gemini",
-  Saturn: "Cancer",
+// Traditional planets with two domiciles can have two detriments
+export const DETRIMENTS: Record<string, string[]> = {
+  Sun: ["Aquarius"],
+  Moon: ["Capricorn"],
+  Mercury: ["Sagittarius", "Pisces"],
+  Venus: ["Aries", "Scorpio"],
+  Mars: ["Taurus", "Libra"],
+  Jupiter: ["Gemini", "Virgo"],
+  Saturn: ["Cancer", "Leo"],
 };
 
 // ── SIGN DEGREES ──
@@ -156,24 +164,80 @@ export interface DispositorResult {
 // HELPER UTILITIES
 // ============================================================
 
+/**
+ * Parse a degree string like "21°56'" or "21.5" into a numeric degree.
+ * Previously this was losing minutes — fixed.
+ */
 function parseDegreeString(degreeStr: string | number): number {
-  if (typeof degreeStr === "number") return degreeStr;
-  return parseFloat(degreeStr) || 0;
+  if (typeof degreeStr === "number") {
+    return degreeStr;
+  }
+
+  const match = degreeStr.match(/(\d+(?:\.\d+)?)°(?:\s*(\d+(?:\.\d+)?)')?/);
+
+  if (match) {
+    const degrees = Number(match[1]);
+    const minutes = Number(match[2] ?? 0);
+
+    return degrees + minutes / 60;
+  }
+
+  const fallback = Number.parseFloat(degreeStr);
+
+  return Number.isFinite(fallback) ? fallback : 0;
 }
 
 function getAbsoluteDegree(sign: string, degree: string | number): number {
-  const signStart = SIGN_START_DEGREES[sign] || 0;
+  const signStart = SIGN_START_DEGREES[sign] ?? 0;
   return signStart + parseDegreeString(degree);
 }
 
 function getSignAndDegree(absDegree: number): { sign: string; degree: number } {
-  const normalized = (absDegree + 360) % 360;
+  const normalized = ((absDegree % 360) + 360) % 360;
   const signIndex = Math.floor(normalized / 30) % 12;
   const signs = Object.keys(SIGN_START_DEGREES);
   return {
-    sign: signs[signIndex] || "Aries",
+    sign: signs[signIndex] ?? "Aries",
     degree: Math.round((normalized % 30) * 100) / 100,
   };
+}
+
+function angularDistance(a: number, b: number): number {
+  let diff = Math.abs(((a % 360) + 360) % 360 - ((b % 360) + 360) % 360);
+
+  if (diff > 180) {
+    diff = 360 - diff;
+  }
+
+  return diff;
+}
+
+function getAspectOrb(transitLongitude: number, targetLongitude: number, aspectAngle: number): number {
+  const distance = angularDistance(transitLongitude, targetLongitude);
+  return Math.abs(distance - aspectAngle);
+}
+
+/**
+ * Determine if a transit is applying to or separating from an aspect.
+ * This is the correct method, not `!isRetrograde`.
+ */
+function isAspectApplying(
+  transitLongitude: number,
+  targetLongitude: number,
+  aspectAngle: number,
+  isRetrograde: boolean
+): boolean {
+  const currentOrb = getAspectOrb(transitLongitude, targetLongitude, aspectAngle);
+
+  // Tiny movement in the planet's actual direction.
+  // We only need direction here, not timing.
+  const movement = isRetrograde ? -0.01 : 0.01;
+
+  const futureLongitude = ((transitLongitude + movement + 360) % 360);
+
+  const futureOrb = getAspectOrb(futureLongitude, targetLongitude, aspectAngle);
+
+  return futureOrb < currentOrb;
 }
 
 // ============================================================
@@ -239,7 +303,7 @@ export function calculateEssentialDignity(
   } else if (FALLS[planet] === sign) {
     dignity = "Fall";
     strength = 3;
-  } else if (DETRIMENTS[planet] === sign) {
+  } else if (DETRIMENTS[planet]?.includes(sign)) {
     dignity = "Detriment";
     strength = 2;
   }
@@ -260,7 +324,7 @@ export function calculateSynodicCycles(
 
 export function calculateMidpoints(
   planets: Array<{ name: string; sign: string; degree: string }>,
-  houseCusps: Record<number, string>
+  wholeSignHouseCusps: Record<number, string>
 ): Midpoint[] {
   const midpoints: Midpoint[] = [];
   const pairs = [
@@ -287,15 +351,10 @@ export function calculateMidpoints(
 
     const result = getSignAndDegree(mid);
 
+    // Use Whole Sign houses: find which house cusp matches the midpoint's sign
     let house = 1;
     for (let h = 1; h <= 12; h++) {
-      const houseSign = houseCusps[h];
-      if (!houseSign) continue;
-      const houseStart = SIGN_START_DEGREES[houseSign] || 0;
-      const nextHouseSign = houseCusps[(h % 12) + 1];
-      const nextStart = nextHouseSign ? SIGN_START_DEGREES[nextHouseSign] || 360 : 360;
-
-      if (mid >= houseStart && mid < nextStart) {
+      if (wholeSignHouseCusps[h] === result.sign) {
         house = h;
         break;
       }
@@ -313,21 +372,19 @@ export function calculateMidpoints(
   return midpoints;
 }
 
+/**
+ * DISABLED — A true Lunar Return requires solving for the exact future time
+ * when the transiting Moon returns to the natal Moon longitude.
+ *
+ * Do not approximate this as currentDate + 27 days.
+ * Re-enable only after an ephemeris-based return solver is implemented.
+ */
 export function calculateLunarReturn(
-  moonSign: string,
-  moonDegree: string,
-  currentDate: Date
-): LunarReturn {
-  const daysUntil = 27;
-  const returnDate = new Date(currentDate);
-  returnDate.setDate(returnDate.getDate() + daysUntil);
-
-  return {
-    date: returnDate.toISOString().split("T")[0],
-    moonSign,
-    moonDegree,
-    daysUntil,
-  };
+  _moonSign: string,
+  _moonDegree: string,
+  _currentDate: Date
+): LunarReturn | undefined {
+  return undefined;
 }
 
 export function calculateEclipseActivation(
@@ -337,11 +394,13 @@ export function calculateEclipseActivation(
   const activations: EclipseActivation[] = [];
 
   for (const eclipse of eclipses) {
+    const eclipseAbs = getAbsoluteDegree(eclipse.sign, eclipse.degree);
+
     for (const p of planets) {
       if (["Uranus", "Neptune", "Pluto"].includes(p.name)) continue;
 
       const planetAbs = getAbsoluteDegree(p.sign, p.degree);
-      let diff = Math.abs(planetAbs - eclipse.degree);
+      let diff = Math.abs(planetAbs - eclipseAbs);
       if (diff > 180) diff = 360 - diff;
 
       if (diff < 3) {
@@ -372,12 +431,16 @@ export function calculateTransitsToAngles(
       const transAbs = getAbsoluteDegree(transit.sign, transit.degree);
       const angleAbs = getAbsoluteDegree(angle.sign, angle.degree);
 
-      let diff = Math.abs(transAbs - angleAbs);
-      if (diff > 180) diff = 360 - diff;
+      const aspects = [
+        { name: "Conjunction", angle: 0 },
+        { name: "Opposition", angle: 180 },
+        { name: "Square", angle: 90 },
+        { name: "Trine", angle: 120 },
+        { name: "Sextile", angle: 60 },
+      ];
 
-      const aspects = [0, 180, 90];
       for (const aspect of aspects) {
-        const orb = Math.abs(diff - aspect);
+        const orb = Math.abs(angularDistance(transAbs, angleAbs) - aspect.angle);
         if (orb < 3) {
           results.push({
             angle: angle.name,
@@ -386,9 +449,9 @@ export function calculateTransitsToAngles(
             transitPlanet: transit.name,
             transitDegree: transAbs,
             transitSign: transit.sign,
-            aspectType: aspect === 0 ? "Conjunction" : aspect === 180 ? "Opposition" : "Square",
+            aspectType: aspect.name,
             orb: Math.round(orb * 100) / 100,
-            isApplying: !transit.isRetrograde,
+            isApplying: isAspectApplying(transAbs, angleAbs, aspect.angle, transit.isRetrograde),
           });
         }
       }

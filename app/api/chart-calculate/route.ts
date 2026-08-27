@@ -1,5 +1,5 @@
 // ============================================================
-// FILE: app/api/chart-calculate/route.ts (UPDATED WITH WHOLE SIGN HOUSES)
+// FILE: app/api/chart-calculate/route.ts (UPDATED WITH ALL FIXES)
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -44,34 +44,29 @@ export interface TransitPlanet {
   name: string;
   sign: string;
   degree: string;
+  longitude: number;
   isRetrograde: boolean;
-}
-
-export interface ProfectionData {
-  age: number;
-  profectionYear: number;
-  activatedHouse: number;
-  activatedSign: string;
-  timeLord: string;
-  timeLordNatalSign: string;
-  timeLordNatalHouse: number;
 }
 
 export interface ProgressedPlanet {
   name: string;
   sign: string;
   degree: string;
+  longitude: number;
   isRetrograde: boolean;
 }
 
 export interface SolarArcPlanet {
   name: string;
+  natalPoint: string;
   sign: string;
   degree: string;
+  longitude: number;
 }
 
 export interface UpcomingTriggerData {
   date: string;
+  exactJulianDay: number;
   transitPlanet: string;
   natalPlanet: string;
   aspect: string;
@@ -125,6 +120,11 @@ export interface ExtendedPoints {
   arabicLots: ArabicLot[];
 }
 
+export type TransitToAngleWithDate = TransitToAngle & {
+  exactDate?: string;
+  exactJulianDay?: number;
+};
+
 // ── NEW: Extended response with all 10 calculations ──
 export interface ChartCalculateResponse {
   success: boolean;
@@ -149,10 +149,20 @@ export interface ChartCalculateResponse {
   midpoints?: Midpoint[];
   lunarReturn?: LunarReturn;
   eclipseActivations?: EclipseActivation[];
-  transitsToAngles?: TransitToAngle[];
+  transitsToAngles?: TransitToAngleWithDate[];
   dispositorTree?: DispositorResult[];
 
   error?: string;
+}
+
+export interface ProfectionData {
+  age: number;
+  profectionYear: number;
+  activatedHouse: number;
+  activatedSign: string;
+  timeLord: string;
+  timeLordNatalSign: string;
+  timeLordNatalHouse: number;
 }
 
 const SIGNS = [
@@ -165,6 +175,240 @@ const SIGN_RULERS: Record<string, string> = {
   Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
   Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
 };
+
+// ── PRECISION HELPERS ──
+
+const ASPECT_ANGLE_MAP: Record<string, number> = {
+  conjunction: 0,
+  sextile: 60,
+  square: 90,
+  trine: 120,
+  opposition: 180,
+};
+
+function normalizeLongitude(longitude: number): number {
+  return ((longitude % 360) + 360) % 360;
+}
+
+function signedAngularDelta(a: number, b: number): number {
+  let diff = normalizeLongitude(a) - normalizeLongitude(b);
+
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+
+  return diff;
+}
+
+function angularDistance(a: number, b: number): number {
+  return Math.abs(signedAngularDelta(a, b));
+}
+
+function julianDayToDate(jd: number): Date {
+  return new Date((jd - 2440587.5) * 86400000);
+}
+
+function formatJulianDate(jd: number): string {
+  return julianDayToDate(jd).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function getSwissPlanetId(swisseph: any, name: string): number | null {
+  const map: Record<string, number> = {
+    Sun: swisseph.SE_SUN,
+    Moon: swisseph.SE_MOON,
+    Mercury: swisseph.SE_MERCURY,
+    Venus: swisseph.SE_VENUS,
+    Mars: swisseph.SE_MARS,
+    Jupiter: swisseph.SE_JUPITER,
+    Saturn: swisseph.SE_SATURN,
+    Uranus: swisseph.SE_URANUS,
+    Neptune: swisseph.SE_NEPTUNE,
+    Pluto: swisseph.SE_PLUTO,
+    "North Node": swisseph.SE_TRUE_NODE,
+  };
+
+  return map[name] ?? null;
+}
+
+/**
+ * Refines a rough Julian-day guess until a transiting planet reaches
+ * a specific absolute zodiac longitude.
+ *
+ * Uses the planet's actual instantaneous speed rather than converting
+ * degrees of orb into an assumed number of days.
+ */
+function refinePlanetToLongitude(
+  planetId: number,
+  targetLongitude: number,
+  jdGuess: number
+): number | null {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  let jd = jdGuess;
+
+  for (let i = 0; i < 20; i++) {
+    const result = swisseph.swe_calc_ut(jd, planetId, 4 | 256);
+
+    if (result.rflag < 0 || result.error) return null;
+
+    const error = signedAngularDelta(result.longitude, targetLongitude);
+
+    if (Math.abs(error) < 0.000001) {
+      return jd;
+    }
+
+    const speed = result.longitudeSpeed;
+
+    // Too close to stationary for Newton refinement to be trustworthy.
+    if (!Number.isFinite(speed) || Math.abs(speed) < 0.00001) {
+      return null;
+    }
+
+    let correction = error / speed;
+
+    // Prevent a bad initial guess from launching Newton iteration
+    // absurdly far away.
+    correction = Math.max(-10, Math.min(10, correction));
+
+    jd -= correction;
+  }
+
+  const finalResult = swisseph.swe_calc_ut(jd, planetId, 4 | 256);
+
+  if (
+    finalResult.rflag < 0 ||
+    finalResult.error ||
+    angularDistance(finalResult.longitude, targetLongitude) > 0.01
+  ) {
+    return null;
+  }
+
+  return jd;
+}
+
+function refineStationJulianDay(
+  planetId: number,
+  leftJD: number,
+  rightJD: number
+): number | null {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  let left = leftJD;
+  let right = rightJD;
+
+  let leftSpeed = swisseph.swe_calc_ut(left, planetId, 4 | 256).longitudeSpeed;
+  let rightSpeed = swisseph.swe_calc_ut(right, planetId, 4 | 256).longitudeSpeed;
+
+  if (!Number.isFinite(leftSpeed) || !Number.isFinite(rightSpeed)) {
+    return null;
+  }
+
+  if (leftSpeed * rightSpeed > 0) {
+    return null;
+  }
+
+  for (let i = 0; i < 40; i++) {
+    const mid = (left + right) / 2;
+    const result = swisseph.swe_calc_ut(mid, planetId, 4 | 256);
+    const midSpeed = result.longitudeSpeed;
+
+    if (!Number.isFinite(midSpeed)) return null;
+
+    if (Math.abs(midSpeed) < 0.0000001) {
+      return mid;
+    }
+
+    if (leftSpeed * midSpeed <= 0) {
+      right = mid;
+      rightSpeed = midSpeed;
+    } else {
+      left = mid;
+      leftSpeed = midSpeed;
+    }
+  }
+
+  return (left + right) / 2;
+}
+
+// ── HELPER: Attach exact dates to angle transits ──
+
+function attachExactDatesToAngleTransits(
+  aspects: TransitToAngle[],
+  natalRaw: ReturnType<typeof calculatePlanets>,
+  jdNow: number
+): TransitToAngleWithDate[] {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  const angleLongitudes: Record<string, number> = {
+    Ascendant: natalRaw.ascLongitude,
+    Midheaven: natalRaw.mcLongitude,
+    Descendant: normalizeLongitude(natalRaw.ascLongitude + 180),
+    "Imum Coeli": normalizeLongitude(natalRaw.mcLongitude + 180),
+  };
+
+  return aspects.map((aspect) => {
+    // A separating aspect's exact hit is behind us,
+    // not a future date anchor.
+    if (!aspect.isApplying) {
+      return { ...aspect };
+    }
+
+    const planetId = getSwissPlanetId(swisseph, aspect.transitPlanet);
+
+    const angleLongitude = angleLongitudes[aspect.angle];
+
+    const aspectAngle = ASPECT_ANGLE_MAP[aspect.aspectType.toLowerCase()];
+
+    if (planetId === null || angleLongitude === undefined || aspectAngle === undefined) {
+      return { ...aspect };
+    }
+
+    const targetLongitudes =
+      aspectAngle === 0 || aspectAngle === 180
+        ? [normalizeLongitude(angleLongitude + aspectAngle)]
+        : [
+            normalizeLongitude(angleLongitude + aspectAngle),
+            normalizeLongitude(angleLongitude - aspectAngle),
+          ];
+
+    const exactCandidates = targetLongitudes
+      .map((targetLongitude) =>
+        refinePlanetToLongitude(planetId, targetLongitude, jdNow)
+      )
+      .filter((jd): jd is number =>
+        jd !== null && jd >= jdNow - 0.001 && jd <= jdNow + 60
+      )
+      .filter((jd) => {
+        const result = swisseph.swe_calc_ut(jd, planetId, 4 | 256);
+
+        return targetLongitudes.some(
+          (target) => angularDistance(result.longitude, target) <= 0.01
+        );
+      })
+      .sort((a, b) => a - b);
+
+    if (!exactCandidates.length) {
+      return { ...aspect };
+    }
+
+    const exactJD = exactCandidates[0];
+
+    return {
+      ...aspect,
+      exactDate: formatJulianDate(exactJD),
+      exactJulianDay: exactJD,
+    };
+  });
+}
+
+// ── PARSE HELPERS ──
 
 function parseDateParts(birthDate: string): [number, number, number] {
   if (birthDate.includes("-")) {
@@ -241,9 +485,9 @@ function getUtcOffset(birthDate: string, birthTime: string, timezone: string): n
   try {
     const [year, month, day] = parseDateParts(birthDate);
     const [hour, minute] = parseTimeTo24h(birthTime);
-    const localDate = new Date(`${String(year).padStart(4,"0")}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}T${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}:00`);
+    const localDate = new Date(`${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
     const utcStr = localDate.toLocaleString("en-US", { timeZone: "UTC", hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-    const tzStr  = localDate.toLocaleString("en-US", { timeZone: timezone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const tzStr = localDate.toLocaleString("en-US", { timeZone: timezone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
     const parseMs = (s: string) => {
       const m = s.match(/(\d+)\/(\d+)\/(\d+),\s*(\d+):(\d+)/);
       if (!m) return 0;
@@ -268,7 +512,7 @@ function isAnareticLongitude(longitude: number): boolean {
 }
 
 // ============================================================
-// ── NEW: Whole Sign House Calculation ──
+// ── Whole Sign House Calculation ──
 // ============================================================
 
 function getWholeSignHouseCusps(ascLongitude: number): number[] {
@@ -299,7 +543,7 @@ function getPlacidusHouse(planetLongitude: number, houseCusps: number[]): number
   for (let i = 0; i < 12; i++) {
     const cusp1 = ((houseCusps[i] % 360) + 360) % 360;
     const cusp2 = ((houseCusps[(i + 1) % 12] % 360) + 360) % 360;
-    
+
     // Handle wrap-around
     if (cusp1 < cusp2) {
       if (normLong >= cusp1 && normLong < cusp2) {
@@ -327,33 +571,33 @@ function calculatePlanets(
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const swisseph = require("swisseph");
   const PLANETS = [
-    { id: swisseph.SE_SUN,       name: "Sun" },
-    { id: swisseph.SE_MOON,      name: "Moon" },
-    { id: swisseph.SE_MERCURY,   name: "Mercury" },
-    { id: swisseph.SE_VENUS,     name: "Venus" },
-    { id: swisseph.SE_MARS,      name: "Mars" },
-    { id: swisseph.SE_JUPITER,   name: "Jupiter" },
-    { id: swisseph.SE_SATURN,    name: "Saturn" },
-    { id: swisseph.SE_URANUS,    name: "Uranus" },
-    { id: swisseph.SE_NEPTUNE,   name: "Neptune" },
-    { id: swisseph.SE_PLUTO,     name: "Pluto" },
+    { id: swisseph.SE_SUN, name: "Sun" },
+    { id: swisseph.SE_MOON, name: "Moon" },
+    { id: swisseph.SE_MERCURY, name: "Mercury" },
+    { id: swisseph.SE_VENUS, name: "Venus" },
+    { id: swisseph.SE_MARS, name: "Mars" },
+    { id: swisseph.SE_JUPITER, name: "Jupiter" },
+    { id: swisseph.SE_SATURN, name: "Saturn" },
+    { id: swisseph.SE_URANUS, name: "Uranus" },
+    { id: swisseph.SE_NEPTUNE, name: "Neptune" },
+    { id: swisseph.SE_PLUTO, name: "Pluto" },
     { id: swisseph.SE_TRUE_NODE, name: "North Node" },
-    { id: swisseph.SE_CHIRON,    name: "Chiron" },
+    { id: swisseph.SE_CHIRON, name: "Chiron" },
     { id: swisseph.SE_MEAN_APOG, name: "Lilith" },
-    { id: swisseph.SE_CERES,     name: "Ceres" },
-    { id: swisseph.SE_PALLAS,    name: "Pallas" },
-    { id: swisseph.SE_JUNO,      name: "Juno" },
-    { id: swisseph.SE_VESTA,     name: "Vesta" },
+    { id: swisseph.SE_CERES, name: "Ceres" },
+    { id: swisseph.SE_PALLAS, name: "Pallas" },
+    { id: swisseph.SE_JUNO, name: "Juno" },
+    { id: swisseph.SE_VESTA, name: "Vesta" },
   ];
   const iflag = ayanamsa !== undefined ? (4 | 65536 | 256) : (4 | 256);
   if (ayanamsa !== undefined) swisseph.swe_set_sid_mode(ayanamsa, 0, 0);
-  
-  // Calculate Placidus houses (for natal interpretation)
-  const houses = swisseph.swe_houses(jd, lat, lng, "W");
+
+  // Calculate houses using the specified house system
+  const houses = swisseph.swe_houses(jd, lat, lng, houseSystem);
   const ascLongitude = houses.ascendant;
   const mcLongitude = houses.mc;
   const houseCusps = houses.house;
-  
+
   // Calculate Whole Sign houses (for predictive calculations)
   const wholeSignCusps = getWholeSignHouseCusps(ascLongitude);
 
@@ -376,12 +620,12 @@ function calculatePlanets(
 }
 
 function calculateAspects(planets: Array<{ name: string; longitude: number }>): NormalizedChart["aspects"] {
-  const ASPECT_TYPES: Array<{ type: "conjunction"|"opposition"|"square"|"trine"|"sextile"; angle: number; orb: number }> = [
-    { type: "conjunction", angle: 0,   orb: 8 },
-    { type: "opposition",  angle: 180, orb: 8 },
-    { type: "square",      angle: 90,  orb: 7 },
-    { type: "trine",       angle: 120, orb: 7 },
-    { type: "sextile",     angle: 60,  orb: 5 },
+  const ASPECT_TYPES: Array<{ type: "conjunction" | "opposition" | "square" | "trine" | "sextile"; angle: number; orb: number }> = [
+    { type: "conjunction", angle: 0, orb: 8 },
+    { type: "opposition", angle: 180, orb: 8 },
+    { type: "square", angle: 90, orb: 7 },
+    { type: "trine", angle: 120, orb: 7 },
+    { type: "sextile", angle: 60, orb: 5 },
   ];
   const aspects: NormalizedChart["aspects"] = [];
   for (let i = 0; i < planets.length; i++) {
@@ -407,9 +651,9 @@ function buildNormalizedChart(
 ): NormalizedChart {
   const { planets, ascLongitude, mcLongitude, houseCusps } = raw;
   const ascDeg = longitudeToSignDegree(ascLongitude);
-  const mcDeg  = longitudeToSignDegree(mcLongitude);
-  const icDeg  = longitudeToSignDegree((mcLongitude + 180) % 360);
-  const dcDeg  = longitudeToSignDegree((ascLongitude + 180) % 360);
+  const mcDeg = longitudeToSignDegree(mcLongitude);
+  const icDeg = longitudeToSignDegree((mcLongitude + 180) % 360);
+  const dcDeg = longitudeToSignDegree((ascLongitude + 180) % 360);
 
   // Use Placidus houses for natal interpretation
   const planetPlacements = planets.map(({ name, longitude, isRetrograde }) => {
@@ -466,20 +710,40 @@ function calculateProgressions(jdBirth: number, birthDate: string, lat: number, 
   const daysSinceLastBirthday = Math.floor((now.getTime() - lastBirthday.getTime()) / 86400000);
   const fractionalAge = age + daysSinceLastBirthday / 365.25;
   const jdProgressed = jdBirth + fractionalAge;
-  const raw = calculatePlanets(jdProgressed, lat, lng, "W");
-  const PLANET_NAMES = ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","North Node"];
+  const raw = calculatePlanets(jdProgressed, lat, lng, "P");
+  const PLANET_NAMES = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node"];
 
   const progressed: ProgressedPlanet[] = raw.planets
     .filter(p => PLANET_NAMES.includes(p.name))
     .map(({ name, longitude, isRetrograde }) => {
       const { sign, degree } = longitudeToSignDegree(longitude);
-      return { name, sign, degree: isRetrograde ? `${degree} Rx` : degree, isRetrograde };
+      return {
+        name,
+        sign,
+        degree: isRetrograde ? `${degree} Rx` : degree,
+        longitude: normalizeLongitude(longitude),
+        isRetrograde,
+      };
     });
 
   const pAsc = longitudeToSignDegree(raw.ascLongitude);
-  const pMc  = longitudeToSignDegree(raw.mcLongitude);
-  progressed.push({ name: "Ascendant", sign: pAsc.sign, degree: pAsc.degree, isRetrograde: false });
-  progressed.push({ name: "Midheaven", sign: pMc.sign,  degree: pMc.degree,  isRetrograde: false });
+  const pMc = longitudeToSignDegree(raw.mcLongitude);
+
+  progressed.push({
+    name: "Ascendant",
+    sign: pAsc.sign,
+    degree: pAsc.degree,
+    longitude: normalizeLongitude(raw.ascLongitude),
+    isRetrograde: false,
+  });
+
+  progressed.push({
+    name: "Midheaven",
+    sign: pMc.sign,
+    degree: pMc.degree,
+    longitude: normalizeLongitude(raw.mcLongitude),
+    isRetrograde: false,
+  });
 
   return progressed;
 }
@@ -502,65 +766,175 @@ function calculateSolarArcs(jdBirth: number, birthDate: string, lat: number, lng
   const progressedSunResult = swisseph.swe_calc_ut(jdProgressed, swisseph.SE_SUN, 4 | 256);
   let solarArc = progressedSunResult.longitude - natalSunResult.longitude;
   if (solarArc < 0) solarArc += 360;
-  const natalRaw = calculatePlanets(jdBirth, lat, lng, "W");
-  const PLANET_NAMES = ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","North Node"];
+  const natalRaw = calculatePlanets(jdBirth, lat, lng, "P");
+  const PLANET_NAMES = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node"];
   const solarArcPlanets: SolarArcPlanet[] = natalRaw.planets
     .filter(p => PLANET_NAMES.includes(p.name))
     .map(({ name, longitude }) => {
       const directedLongitude = (longitude + solarArc) % 360;
       const { sign, degree } = longitudeToSignDegree(directedLongitude);
-      return { name: `SA ${name}`, sign, degree };
+      return {
+        name: `SA ${name}`,
+        natalPoint: name,
+        sign,
+        degree,
+        longitude: normalizeLongitude(directedLongitude),
+      };
     });
-  solarArcPlanets.push({ name: "SA Ascendant", ...longitudeToSignDegree((natalRaw.ascLongitude + solarArc) % 360) });
-  solarArcPlanets.push({ name: "SA Midheaven", ...longitudeToSignDegree((natalRaw.mcLongitude + solarArc) % 360) });
+
+  const saAscLongitude = normalizeLongitude(natalRaw.ascLongitude + solarArc);
+  const saMcLongitude = normalizeLongitude(natalRaw.mcLongitude + solarArc);
+
+  solarArcPlanets.push({
+    name: "SA Ascendant",
+    natalPoint: "Ascendant",
+    ...longitudeToSignDegree(saAscLongitude),
+    longitude: saAscLongitude,
+  });
+
+  solarArcPlanets.push({
+    name: "SA Midheaven",
+    natalPoint: "Midheaven",
+    ...longitudeToSignDegree(saMcLongitude),
+    longitude: saMcLongitude,
+  });
+
   return solarArcPlanets;
 }
 
-function calculateUpcomingTrigger(natalRaw: ReturnType<typeof calculatePlanets>, lat: number, lng: number): UpcomingTriggerData | undefined {
-  const ASPECT_CONFIGS: Array<{ type: "conjunction"|"opposition"|"square"|"trine"|"sextile"; angle: number }> = [
-    { type: "conjunction", angle: 0 }, { type: "opposition", angle: 180 },
-    { type: "square", angle: 90 }, { type: "trine", angle: 120 }, { type: "sextile", angle: 60 },
+function calculateUpcomingTrigger(
+  natalRaw: ReturnType<typeof calculatePlanets>,
+  jdNow: number
+): UpcomingTriggerData | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  const TRANSIT_PLANETS = [
+    { id: swisseph.SE_SUN, name: "Sun" },
+    { id: swisseph.SE_MERCURY, name: "Mercury" },
+    { id: swisseph.SE_VENUS, name: "Venus" },
+    { id: swisseph.SE_MARS, name: "Mars" },
+    { id: swisseph.SE_JUPITER, name: "Jupiter" },
+    { id: swisseph.SE_SATURN, name: "Saturn" },
+    { id: swisseph.SE_URANUS, name: "Uranus" },
+    { id: swisseph.SE_NEPTUNE, name: "Neptune" },
+    { id: swisseph.SE_PLUTO, name: "Pluto" },
+    { id: swisseph.SE_TRUE_NODE, name: "North Node" },
   ];
 
-  const TRIGGER_WHITELIST = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node"];
-
   const natalTargets = natalRaw.planets
-    .filter(p => TRIGGER_WHITELIST.includes(p.name))
-    .map(p => ({ name: p.name, longitude: p.longitude }));
+    .filter((p) =>
+      [
+        "Sun",
+        "Moon",
+        "Mercury",
+        "Venus",
+        "Mars",
+        "Jupiter",
+        "Saturn",
+        "Uranus",
+        "Neptune",
+        "Pluto",
+        "North Node",
+      ].includes(p.name)
+    )
+    .map((p) => ({
+      name: p.name,
+      longitude: p.longitude,
+    }));
 
-  natalTargets.push({ name: "Ascendant", longitude: natalRaw.ascLongitude });
-  natalTargets.push({ name: "Midheaven", longitude: natalRaw.mcLongitude });
+  natalTargets.push(
+    {
+      name: "Ascendant",
+      longitude: natalRaw.ascLongitude,
+    },
+    {
+      name: "Midheaven",
+      longitude: natalRaw.mcLongitude,
+    }
+  );
 
-  const today = new Date();
-  for (let dayOffset = 0; dayOffset <= 30; dayOffset++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(today.getDate() + dayOffset);
-    const jdCheck = toJulianDay(checkDate.toISOString().slice(0, 10), "12:00", 0);
-    const transitRaw = calculatePlanets(jdCheck, lat, lng, "W");
+  const aspects = [
+    { type: "conjunction", angle: 0 },
+    { type: "sextile", angle: 60 },
+    { type: "square", angle: 90 },
+    { type: "trine", angle: 120 },
+    { type: "opposition", angle: 180 },
+  ];
 
-    const filteredTransits = transitRaw.planets.filter(p => TRIGGER_WHITELIST.includes(p.name));
+  const candidates: Array<UpcomingTriggerData & { jd: number }> = [];
 
-    for (const tPlanet of filteredTransits) {
-      if (tPlanet.name === "Moon") continue;
-      for (const nTarget of natalTargets) {
-        if (tPlanet.name === nTarget.name) continue;
-        let diff = Math.abs(tPlanet.longitude - nTarget.longitude);
-        if (diff > 180) diff = 360 - diff;
+  // Daily rough scan. Exact time is solved only after a candidate
+  // approaches the target longitude.
+  for (const transitPlanet of TRANSIT_PLANETS) {
+    for (let dayOffset = 0; dayOffset <= 30; dayOffset++) {
+      const jdGuess = jdNow + dayOffset;
 
-        for (const aspect of ASPECT_CONFIGS) {
-          if (Math.abs(diff - aspect.angle) <= 1.0) {
-            return {
-              date: checkDate.toLocaleDateString("en-US", { month: "long", day: "numeric" }),
-              transitPlanet: tPlanet.name,
-              natalPlanet: nTarget.name,
-              aspect: aspect.type
-            };
+      const transitResult = swisseph.swe_calc_ut(jdGuess, transitPlanet.id, 4 | 256);
+
+      if (transitResult.rflag < 0 || transitResult.error) continue;
+
+      for (const natalTarget of natalTargets) {
+        // Intentionally DO NOT exclude same-planet contacts.
+        // This allows Saturn returns, Jupiter returns, etc.
+
+        for (const aspect of aspects) {
+          const targetLongitudes =
+            aspect.angle === 0 || aspect.angle === 180
+              ? [normalizeLongitude(natalTarget.longitude + aspect.angle)]
+              : [
+                  normalizeLongitude(natalTarget.longitude + aspect.angle),
+                  normalizeLongitude(natalTarget.longitude - aspect.angle),
+                ];
+
+          for (const exactTarget of targetLongitudes) {
+            // Rough discovery only.
+            if (angularDistance(transitResult.longitude, exactTarget) > 1.25) {
+              continue;
+            }
+
+            const exactJD = refinePlanetToLongitude(transitPlanet.id, exactTarget, jdGuess);
+
+            if (exactJD === null) continue;
+
+            if (exactJD < jdNow - 0.001) continue;
+            if (exactJD > jdNow + 30.5) continue;
+
+            const exactResult = swisseph.swe_calc_ut(exactJD, transitPlanet.id, 4 | 256);
+
+            if (angularDistance(exactResult.longitude, exactTarget) > 0.01) {
+              continue;
+            }
+
+            candidates.push({
+              jd: exactJD,
+              date: formatJulianDate(exactJD),
+              exactJulianDay: exactJD,
+              transitPlanet: transitPlanet.name,
+              natalPlanet: natalTarget.name,
+              aspect: aspect.type,
+            });
           }
         }
       }
     }
   }
-  return undefined;
+
+  if (!candidates.length) {
+    return undefined;
+  }
+
+  candidates.sort((a, b) => a.jd - b.jd);
+
+  const earliest = candidates[0];
+
+  return {
+    date: earliest.date,
+    exactJulianDay: earliest.exactJulianDay,
+    transitPlanet: earliest.transitPlanet,
+    natalPlanet: earliest.natalPlanet,
+    aspect: earliest.aspect,
+  };
 }
 
 function calculatePlanetaryStations(natalRaw: ReturnType<typeof calculatePlanets>, lat: number, lng: number): PlanetaryStationData[] {
@@ -572,22 +946,23 @@ function calculatePlanetaryStations(natalRaw: ReturnType<typeof calculatePlanets
     { id: swisseph.SE_SATURN, name: "Saturn" }, { id: swisseph.SE_URANUS, name: "Uranus" },
     { id: swisseph.SE_NEPTUNE, name: "Neptune" }, { id: swisseph.SE_PLUTO, name: "Pluto" },
   ];
-  
+
   // Use Whole Sign houses for station house placement (predictive)
   const natalTargets = [
-    ...natalRaw.planets.map(p => ({ 
-      name: p.name, 
-      longitude: p.longitude, 
-      house: getWholeSignHouse(p.longitude, natalRaw.ascLongitude) 
+    ...natalRaw.planets.map(p => ({
+      name: p.name,
+      longitude: p.longitude,
+      house: getWholeSignHouse(p.longitude, natalRaw.ascLongitude)
     })),
     { name: "Ascendant", longitude: natalRaw.ascLongitude, house: 1 },
     { name: "Midheaven", longitude: natalRaw.mcLongitude, house: 10 },
   ];
-  
+
   const today = new Date();
   const stations: PlanetaryStationData[] = [];
   for (const planet of STATION_PLANETS) {
     let prevSpeed: number | null = null;
+    let prevJD: number | null = null;
     for (let dayOffset = 0; dayOffset <= 60; dayOffset++) {
       const checkDate = new Date(today);
       checkDate.setDate(today.getDate() + dayOffset);
@@ -595,24 +970,50 @@ function calculatePlanetaryStations(natalRaw: ReturnType<typeof calculatePlanets
       const result = swisseph.swe_calc_ut(jd, planet.id, 4 | 256);
       const speed = result.longitudeSpeed;
       const longitude = result.longitude;
-      if (prevSpeed !== null && ((prevSpeed > 0 && speed <= 0) || (prevSpeed < 0 && speed >= 0))) {
-        const stationType: "retrograde" | "direct" = speed <= 0 ? "retrograde" : "direct";
-        const { sign, degree } = longitudeToSignDegree(longitude);
+
+      if (prevSpeed !== null && prevJD !== null &&
+        ((prevSpeed > 0 && speed <= 0) || (prevSpeed < 0 && speed >= 0))
+      ) {
+        const exactStationJD = refineStationJulianDay(planet.id, prevJD, jd) ?? jd;
+
+        const stationResult = swisseph.swe_calc_ut(exactStationJD, planet.id, 4 | 256);
+        const stationSpeed = stationResult.longitudeSpeed;
+        const stationLongitude = stationResult.longitude;
+
+        const stationType: "retrograde" | "direct" =
+          prevSpeed > 0 && stationSpeed <= 0 ? "retrograde" : "direct";
+
+        const { sign, degree } = longitudeToSignDegree(stationLongitude);
+
         let natalPlanetHit: string | null = null;
         let orbDegrees: number | null = null;
         let natalHouse: number | null = null;
+
         for (const target of natalTargets) {
-          let diff = Math.abs(longitude - target.longitude);
+          let diff = Math.abs(stationLongitude - target.longitude);
           if (diff > 180) diff = 360 - diff;
+
           if (diff <= 3.0 && (orbDegrees === null || diff < orbDegrees)) {
             natalPlanetHit = target.name;
             orbDegrees = Math.round(diff * 10) / 10;
             natalHouse = target.house;
           }
         }
-        stations.push({ planet: planet.name, stationDate: checkDate.toLocaleDateString("en-US", { month: "long", day: "numeric" }), stationType, sign, degree, natalPlanetHit, orbDegrees, natalHouse });
+
+        stations.push({
+          planet: planet.name,
+          stationDate: formatJulianDate(exactStationJD),
+          stationType,
+          sign,
+          degree,
+          natalPlanetHit,
+          orbDegrees,
+          natalHouse,
+        });
       }
+
       prevSpeed = speed;
+      prevJD = jd;
     }
   }
   return stations;
@@ -636,27 +1037,19 @@ function calculateSolarReturn(
   const yearsSinceBirth = currentYear - jdToDate(jdBirth).getFullYear();
   const approxJD = jdBirth + yearsSinceBirth * 365.25;
 
-  let bestJD = approxJD;
-  let smallestDiff = 360;
+  const bestJD = refinePlanetToLongitude(swisseph.SE_SUN, natalSunLongitude, approxJD);
 
-  for (let offset = -3 * 24; offset <= 3 * 24; offset++) {
-    const jdCheck = approxJD + offset / 24;
-    const sunResult = swisseph.swe_calc_ut(jdCheck, swisseph.SE_SUN, 4 | 256);
-    let diff = Math.abs(sunResult.longitude - natalSunLongitude);
-    if (diff > 180) diff = 360 - diff;
-    if (diff < smallestDiff) {
-      smallestDiff = diff;
-      bestJD = jdCheck;
-    }
+  if (bestJD === null) {
+    throw new Error("Unable to solve exact Solar Return.");
   }
 
-  const srRaw = calculatePlanets(bestJD, srLat, srLng, "W");
+  const srRaw = calculatePlanets(bestJD, srLat, srLng, "P");
 
   const ascDeg = longitudeToSignDegree(srRaw.ascLongitude);
   const mcDeg = longitudeToSignDegree(srRaw.mcLongitude);
 
-  const PLANET_NAMES = ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","North Node"];
-  
+  const PLANET_NAMES = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node"];
+
   // Use Whole Sign houses for Solar Return (predictive)
   const planets = srRaw.planets
     .filter(p => PLANET_NAMES.includes(p.name))
@@ -669,7 +1062,12 @@ function calculateSolarReturn(
   const timeLordInSR = planets.find(p => p.name === timeLord);
 
   const srDate = new Date((bestJD - 2440587.5) * 86400000);
-  const sunReturnDate = srDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const sunReturnDate = srDate.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 
   return {
     sunReturnDate,
@@ -683,8 +1081,8 @@ function calculateSolarReturn(
 }
 
 const MOON_PHASE_NAMES: Array<{ maxAngle: number; name: string }> = [
-  { maxAngle: 11.25,  name: "New Moon" },
-  { maxAngle: 78.75,  name: "Waxing Crescent" },
+  { maxAngle: 11.25, name: "New Moon" },
+  { maxAngle: 78.75, name: "Waxing Crescent" },
   { maxAngle: 101.25, name: "First Quarter" },
   { maxAngle: 168.75, name: "Waxing Gibbous" },
   { maxAngle: 191.25, name: "Full Moon" },
@@ -876,8 +1274,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as ChartCalculateRequest;
     const { birthDate, birthTime, birthPlace, lat, lng, timezone, currentLat, currentLng } = body;
 
-    if (!birthDate || !birthTime || !lat || !lng) {
-      return NextResponse.json({ success: false, error: "birthDate, birthTime, lat, and lng are required." }, { status: 400 });
+    const hasBirthCoordinates =
+      typeof lat === "number" &&
+      Number.isFinite(lat) &&
+      typeof lng === "number" &&
+      Number.isFinite(lng);
+
+    if (!birthDate || !birthTime || !timezone || !hasBirthCoordinates) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "birthDate, birthTime, timezone, lat, and lng are required.",
+        },
+        { status: 400 }
+      );
     }
 
     const utcOffset = getUtcOffset(birthDate, birthTime, timezone);
@@ -890,16 +1300,23 @@ export async function POST(req: NextRequest) {
       0
     );
 
-    const tropicalRaw = calculatePlanets(jdBirth, lat, lng, "W");
+    // Use Placidus ("P") for all natal and transit calculations
+    const tropicalRaw = calculatePlanets(jdBirth, lat, lng, "P");
     const tropicalChart = buildNormalizedChart(tropicalRaw, birthDate, birthTime, birthPlace, lat, lng, timezone);
 
-    const siderealRaw = calculatePlanets(jdBirth, lat, lng, "W", swisseph.SE_SIDM_LAHIRI);
+    const siderealRaw = calculatePlanets(jdBirth, lat, lng, "P", swisseph.SE_SIDM_LAHIRI);
     const siderealChart = buildNormalizedChart(siderealRaw, birthDate, birthTime, birthPlace, lat, lng, timezone);
 
-    const transitRaw = calculatePlanets(jdNow, lat, lng, "W");
+    const transitRaw = calculatePlanets(jdNow, lat, lng, "P");
     const transits: TransitPlanet[] = transitRaw.planets.map(({ name, longitude, isRetrograde }) => {
       const { sign, degree } = longitudeToSignDegree(longitude);
-      return { name, sign, degree, isRetrograde };
+      return {
+        name,
+        sign,
+        degree,
+        longitude: normalizeLongitude(longitude),
+        isRetrograde,
+      };
     });
 
     let transitAspects: TransitAspect[] = [];
@@ -915,7 +1332,7 @@ export async function POST(req: NextRequest) {
     }
 
     const ascSign = tropicalChart.angles.asc?.sign ?? "Aries";
-    
+
     // For profection, use Whole Sign houses (predictive)
     const natalPlanetsForProfection = tropicalRaw.planets.map(({ name, longitude }) => {
       const { sign } = longitudeToSignDegree(longitude);
@@ -928,7 +1345,7 @@ export async function POST(req: NextRequest) {
 
     let upcomingTrigger: UpcomingTriggerData | undefined;
     try {
-      upcomingTrigger = calculateUpcomingTrigger(tropicalRaw, lat, lng);
+      upcomingTrigger = calculateUpcomingTrigger(tropicalRaw, jdNow);
     } catch (e) {
       console.warn("[chart-calculate] Upcoming trigger sweep failed:", e);
     }
@@ -944,9 +1361,16 @@ export async function POST(req: NextRequest) {
     try {
       const natalSun = tropicalRaw.planets.find(p => p.name === "Sun");
       if (natalSun) {
-        const srLat = currentLat ?? lat;
-        const srLng = currentLng ?? lng;
-        const useCurrentLocation = !!(currentLat && currentLng);
+        const hasCurrentLocation =
+          typeof currentLat === "number" &&
+          Number.isFinite(currentLat) &&
+          typeof currentLng === "number" &&
+          Number.isFinite(currentLng);
+
+        const srLat = hasCurrentLocation ? currentLat : lat;
+        const srLng = hasCurrentLocation ? currentLng : lng;
+        const useCurrentLocation = hasCurrentLocation;
+
         solarReturn = calculateSolarReturn(jdBirth, natalSun.longitude, srLat, srLng, useCurrentLocation, profection.timeLord);
       }
     } catch (e) {
@@ -970,8 +1394,8 @@ export async function POST(req: NextRequest) {
       const moonPlanet = tropicalRaw.planets.find((p) => p.name === "Moon");
 
       if (sunPlanet && moonPlanet) {
-        // Use Whole Sign houses for determining day/night chart (predictive)
-        const sunHouse = getWholeSignHouse(sunPlanet.longitude, tropicalRaw.ascLongitude);
+        // Use Placidus houses for determining day/night chart (sect is horizon-based)
+        const sunHouse = getPlacidusHouse(sunPlanet.longitude, tropicalRaw.houseCusps);
         const isDayChart = sunHouse >= 7 && sunHouse <= 12;
 
         const arabicLots = calculateArabicLots(
@@ -999,7 +1423,7 @@ export async function POST(req: NextRequest) {
     let midpoints: Midpoint[] = [];
     let lunarReturn: LunarReturn | undefined;
     let eclipseActivations: EclipseActivation[] = [];
-    let transitsToAngles: TransitToAngle[] = [];
+    let transitsToAngles: TransitToAngleWithDate[] = [];
     let dispositorTree: DispositorResult[] = [];
 
     try {
@@ -1047,9 +1471,10 @@ export async function POST(req: NextRequest) {
       const knownEclipses = getKnownEclipses(now);
       eclipseActivations = calculateEclipseActivation(dignityPlanets, knownEclipses);
 
-      // 8. Transit to Angles
+      // 8. Transit to Angles - with exact dates attached
       const angles = buildAngles(tropicalRaw.ascLongitude, tropicalRaw.mcLongitude);
-      transitsToAngles = calculateTransitsToAngles(transits, angles);
+      const rawAngleTransits = calculateTransitsToAngles(transits, angles);
+      transitsToAngles = attachExactDatesToAngleTransits(rawAngleTransits, tropicalRaw, jdNow);
 
       // 9. Dispositor Tree
       dispositorTree = calculateDispositorTree(dignityPlanets);

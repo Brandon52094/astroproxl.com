@@ -1,35 +1,67 @@
 /**
  * validateReadingDates.ts
  *
- * Provenance guard for JXL. THE DATE RULE says the model may return at most one
- * date, and only if it traces to a date the ephemeris actually calculated. The
- * model is *told* this — this file *enforces* it after the fact.
+ * Provenance guard for JXL.
  *
- * What this guarantees: every date that survives into a window or a dated
- * directive matches a date you supplied, within a small tolerance.
- * What this does NOT do: judge whether the interpretation is correct, or force
- * the model to use the data. It only catches invented dates.
+ * THE DATE RULE:
+ * The model may return one or more dated windows, but EVERY emitted date
+ * must trace to an exact date calculated and supplied by the astrology engine.
  *
- * Valid date sources (mirrors THE DATE RULE exactly):
- *   1. upcomingTrigger.date            — the NEXT EXACT ASPECT
- *   2. planetaryStations[].stationDate — ONLY when the station has a natal hit
- *   3. transitAspects[].exactDate      — ephemeris-computed exact aspect dates
+ * This file enforces that rule after generation.
+ *
+ * What this guarantees:
+ * every date that survives into a window or dated directive matches an
+ * approved calculator-supplied date.
+ *
+ * What this does NOT do:
+ * judge whether the interpretation itself is correct.
+ *
+ * Valid date sources:
+ *   1. upcomingTrigger.date
+ *      — exact transit-to-natal aspect
+ *
+ *   2. planetaryStations[].stationDate
+ *      — only when the station has a natal hit
+ *
+ *   3. transitAspects[].exactDate
+ *      — ephemeris-computed exact transit dates
+ *
+ *   4. transitsToAngles[].exactDate
+ *      — calculator-computed exact angle contacts
  */
 
-// Forward-looking window (days) for a transit aspect's exact date to still
-// count as a valid anchor. Must stay in sync with FORWARD_WINDOW_DAYS in
-// lib/reading/engine.ts — the two were widened together (45 → 60 days) so
-// that wider orbs surfacing real, further-out exact dates don't get rejected
-// here as "unsupported."
+// Forward-looking limit for exact calculator-supplied date anchors.
+// Keep synchronized with FORWARD_WINDOW_DAYS in lib/reading/engine.ts.
+// Discovery may happen outside this window, but the model may not create
+// a dated prediction from an activation beyond this horizon.
 const FORWARD_WINDOW_DAYS = 60;
 
 /** Minimal shape this module needs — a subset of JxlAskBody. */
 interface DateProvenanceInput {
-  upcomingTrigger?: { date?: string | null } | null;
+  upcomingTrigger?: {
+    date?: string | null;
+    exactJulianDay?: number | null;
+    transitPlanet?: string;
+    natalPlanet?: string;
+    aspect?: string;
+  } | null;
+
   planetaryStations?: Array<{
     planet?: string;
     stationDate?: string | null;
     natalPlanetHit?: string | null;
+    natalHouse?: number | null;
+    orbDegrees?: number | null;
+  }> | null;
+
+  transitsToAngles?: Array<{
+    transitPlanet?: string;
+    angle?: string;
+    aspectType?: string;
+    orb?: number | null;
+    isApplying?: boolean;
+    exactDate?: string | null;
+    exactJulianDay?: number | null;
   }> | null;
 }
 
@@ -63,11 +95,16 @@ export interface ValidDateIndex {
 
 const MS_PER_DAY = 86_400_000;
 
-/** Default match tolerance. 0 would demand the model echo the ephemeris date to
- *  the day; 2 forgives the model rounding a station by a day while still
- *  catching a fabricated date, which is never within 2 days by accident.
- *  Tighten to 1 or 0 if you want maximum strictness. */
-const DEFAULT_TOLERANCE_DAYS = 2;
+/**
+ * Exact calculator dates should be echoed exactly.
+ *
+ * Ranges remain supported: a marker such as
+ * [[DATE: August 20-August 24]]
+ * passes when an approved exact anchor falls inside that range.
+ *
+ * For single-date markers, however, no ±day drift is allowed.
+ */
+const DEFAULT_TOLERANCE_DAYS = 0;
 
 const MONTHS: Record<string, number> = {
   january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
@@ -154,8 +191,6 @@ function minDayDiff(a: ParsedDate, b: ParsedDate): number {
  * Collect every date the model is ALLOWED to anchor to, tagged by source.
  * Stations without a natal hit are excluded — per THE DATE RULE they are not a
  * valid anchor.
- * 
- * UPDATED: Now accepts aspects array and includes ephemeris-computed exact dates.
  */
 export function buildValidDateIndex(
   body: DateProvenanceInput,
@@ -185,26 +220,55 @@ export function buildValidDateIndex(
   for (const a of aspects) {
     if (!a?.exactDate) continue;
 
-    // Trust exactDate directly. If daysUntilExact is present and out of the
-    // 45-day window, skip; if it's null, fall back to parsing the date and
-    // computing the gap ourselves so a null secondary field can't drop a
-    // genuinely valid date.
     let withinWindow = false;
+
     if (a.daysUntilExact != null) {
-      withinWindow = a.daysUntilExact >= 0 && a.daysUntilExact <= 45;
+      withinWindow = a.daysUntilExact >= 0 && a.daysUntilExact <= FORWARD_WINDOW_DAYS;
     } else {
       const parsed = parseLooseDate(a.exactDate);
+
       if (parsed) {
-        const currentYear = new Date().getUTCFullYear();
-        const y = parsed.year ?? currentYear;
-        const gap = (Date.UTC(y, parsed.month - 1, parsed.day) - Date.now()) / MS_PER_DAY;
-        withinWindow = gap >= -1 && gap <= 45; // -1 tolerates "exact today"
+        const now = new Date();
+
+        const todayUTC = Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        );
+
+        const year = parsed.year ?? now.getUTCFullYear();
+
+        const anchorUTC = Date.UTC(
+          year,
+          parsed.month - 1,
+          parsed.day
+        );
+
+        const gap = (anchorUTC - todayUTC) / MS_PER_DAY;
+
+        withinWindow = gap >= 0 && gap <= FORWARD_WINDOW_DAYS;
       }
     }
 
-   if (withinWindow) {
+    if (withinWindow) {
       add(a.exactDate, `aspect:${a.transitPlanet ?? "?"}-${a.natalPlanet ?? "?"}`);
     }
+  }
+
+  // Source 4 — exact transit-to-angle contacts.
+  //
+  // Only calculator-supplied exact dates qualify.
+  // The route only attaches exactDate to future/applying contacts;
+  // separating contacts therefore cannot manufacture future anchors.
+  for (const t of body.transitsToAngles ?? []) {
+    if (!t?.exactDate) continue;
+
+    // Keep this consistent with the engine's angle activation threshold.
+    if (typeof t.orb === "number" && t.orb >= 2) {
+      continue;
+    }
+
+    add(t.exactDate, `angle:${t.transitPlanet ?? "?"}-${t.angle ?? "?"}`);
   }
 
   return { dates, unparseableSupplied };
