@@ -15,30 +15,35 @@ const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000;
 const CREDITS_PER_READING = 1;
 
 const DEFAULT_SYSTEM =
-  "You are a precision astrological synthesis engine. Vary your selection of timing windows across the provided date index based on the user's specific topic and question. Never default to the first available dates unless they uniquely match the spine aspect. Output raw JSON.";
+  "You are a precision astrological synthesis engine. Follow the supplied calculation hierarchy and evidence rules exactly. Select timing windows deterministically from the strongest topic-relevant calculator-supported evidence. Never invent, approximate, diversify, or substitute dates for variety. If the evidence does not support a dated window, do not create one. Output raw JSON only.";
+
+const RETRY_SYSTEM =
+  "You are a precision astrological synthesis engine correcting an invalid reading. Preserve all supported interpretation, but remove or replace every unsupported date. Use ONLY calculator-supported dates explicitly provided in the correction instruction. Do not invent, approximate, shift, diversify, or substitute dates. If no valid date supports a window, remove that window. Output raw JSON only.";
 
 export async function handleReading(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = (await request.json()) as ReadingRequestBody;
 
-    // Crisis check
-    const risk = assessRisk(body?.question ?? "");
+    // ── VALIDATE REQUEST STRUCTURE ──
+    if (!body || typeof body.question !== "string") {
+      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    }
+
+    // ── CRISIS CHECK ──
+    const risk = assessRisk(body.question);
     if (risk.action === "block_crisis" || risk.action === "block_emergency") {
       const safe = getSafeResponse(risk);
       return NextResponse.json({
         reading: {
           id: crypto.randomUUID(),
-          pages: [{
-            pageNumber: 1,
-            title: safe.title,
-            content: safe.answer + "\n\n" + safe.confirmation,
-            sources: [],
-          }],
+          pages: [
+            {
+              pageNumber: 1,
+              title: safe.title,
+              content: safe.answer + "\n\n" + safe.confirmation,
+              sources: [],
+            },
+          ],
           topic: body?.topic ?? "general",
           question: body?.question ?? "",
           status: "complete",
@@ -48,7 +53,23 @@ export async function handleReading(request: NextRequest) {
       });
     }
 
-    // Eligibility check
+    // ── VALIDATE REQUIRED FIELDS ──
+    if (
+      !body.topic ||
+      !body.question.trim() ||
+      !body.tropical ||
+      !body.transits ||
+      !body.profection
+    ) {
+      return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+    }
+
+    // ── ELIGIBILITY CHECK ──
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
@@ -69,35 +90,70 @@ export async function handleReading(request: NextRequest) {
       return NextResponse.json({ error: "Insufficient credits. Purchase more or subscribe." }, { status: 403 });
     }
 
-    if (!body.topic || !body.question || !body.tropical || !body.transits || !body.profection) {
-      return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
-    }
-
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
 
-    // Validate aspects
+    // ── VALIDATE ASPECTS ──
     const validatedAspects = validateAndFilterAspects(body.transitAspects);
-    body.transitAspects = validatedAspects;
 
-    // Resolve the topic module (love / money / career / whatsComing)
+    // ── BUILD NORMALIZED REQUEST ──
+    const readingBody: ReadingRequestBody = {
+      ...body,
+      transitAspects: validatedAspects,
+    };
+
+    // ── RESOLVE TOPIC ──
     const topic = getTopic(body.topic);
 
-    const prompt = buildReadingPrompt(body, topic, validatedAspects);
-    const dateIndex = buildValidDateIndex(body, validatedAspects);
+    // ── BUILD PROMPT & DATE INDEX ──
+    const prompt = buildReadingPrompt(readingBody, topic, validatedAspects);
+    const dateIndex = buildValidDateIndex(readingBody, validatedAspects);
 
-    console.log("[DEBUG] === AVAILABLE DATES ===");
-    console.log(`[IDX] count=${dateIndex.dates.length} raw=${JSON.stringify(dateIndex.dates.map(d => d.raw))} sources=${JSON.stringify(dateIndex.dates.map(d => d.source))}`);
-    console.log("[DEBUG] Upcoming trigger:", body.upcomingTrigger?.date || "none");
-    console.log("[DEBUG] Planetary stations:", body.planetaryStations?.map(s => s.stationDate) || []);
-    console.log("[DEBUG] Synodic cycles (within 45d):", body.synodicCycles?.filter(s => s.daysUntilReturn <= 45).map(s => s.returnDate) || []);
-    console.log("[DEBUG] Transit aspects count:", validatedAspects.length);
-    console.log("[DEBUG] Sample transit aspect:", validatedAspects[0] ? JSON.stringify(validatedAspects[0], null, 2) : "none");
-    console.log("[DEBUG] ===========================");
+    // ── DEBUG LOGGING ──
+    console.log("[DEBUG] === DATE PROVENANCE INDEX ===");
+    console.log(`[IDX] count=${dateIndex.dates.length}`);
+    console.log(
+      "[IDX] anchors:",
+      dateIndex.dates.map((d) => ({
+        date: d.raw,
+        source: d.source,
+      }))
+    );
+    console.log("[DEBUG] Transit aspects:", validatedAspects.length);
+    console.log(
+      "[DEBUG] Exact dated transit aspects:",
+      validatedAspects
+        .filter((a) => a.exactDate)
+        .map((a) => ({
+          transit: a.transitPlanet,
+          aspect: a.aspectType,
+          natal: a.natalPlanet,
+          date: a.exactDate,
+          applying: a.isApplying,
+          orb: a.orbDegrees,
+        }))
+    );
+    console.log(
+      "[DEBUG] Exact angle dates:",
+      readingBody.transitsToAngles
+        ?.filter((a) => a.exactDate)
+        .map((a) => ({
+          transit: a.transitPlanet,
+          angle: a.angle,
+          aspect: a.aspectType,
+          date: a.exactDate,
+        })) ?? []
+    );
+    console.log("[DEBUG] Upcoming trigger:", readingBody.upcomingTrigger?.date ?? "none");
+    console.log(
+      "[DEBUG] Planetary stations with dates:",
+      readingBody.planetaryStations?.filter((s) => s.stationDate).map((s) => s.stationDate) ?? []
+    );
+    console.log("[DEBUG] =============================");
 
-    // Generate reading. topic.* overrides are unset today → identical behavior.
+    // ── GENERATE READING ──
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -108,7 +164,7 @@ export async function handleReading(request: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: topic.maxTokens ?? 4000,
-        temperature: topic.temperature ?? 0.7,
+        temperature: topic.temperature ?? 0.35,
         system: topic.system ?? DEFAULT_SYSTEM,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -126,6 +182,7 @@ export async function handleReading(request: NextRequest) {
       return NextResponse.json({ error: "No response from reading engine." }, { status: 502 });
     }
 
+    // ── PARSE RESPONSE ──
     try {
       let cleaned = rawText.trim();
       if (cleaned.startsWith("```")) cleaned = cleaned.slice(cleaned.indexOf("\n") + 1);
@@ -147,8 +204,30 @@ export async function handleReading(request: NextRequest) {
       let pages = parsed.pages;
       let unsupported = pages.flatMap((pg) => findUnsupportedMarkers(pg.content ?? "", dateIndex));
 
+      // ── RETRY ON UNSUPPORTED DATES ──
       if (unsupported.length > 0) {
         console.warn(`[readings] Unsupported dates: ${unsupported.join(" | ")}`);
+
+        const approvedDates =
+          dateIndex.dates.length > 0
+            ? dateIndex.dates.map((d) => `  - ${d.raw} [${d.source}]`).join("\n")
+            : "  - NONE";
+
+        const correctionMessage =
+          prompt +
+          "\n\n═══════════════════════════════════════════" +
+          "\nDATE PROVENANCE CORRECTION — HARD RULE" +
+          "\n═══════════════════════════════════════════" +
+          "\nThe previous response contained unsupported dates." +
+          "\n\nThe ONLY approved date anchors are:" +
+          "\n" +
+          approvedDates +
+          "\n\nRewrite the reading while preserving supported interpretation." +
+          "\nRemove every unsupported dated window." +
+          "\nDo not move an event to the nearest approved date." +
+          "\nDo not add a date merely because one is available." +
+          "\nA date may be used only when the corresponding astrological evidence actually supports that claim." +
+          "\nIf there are no approved dates, the corrected reading must contain no [[DATE: ...]] markers.";
 
         const retryResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -160,14 +239,9 @@ export async function handleReading(request: NextRequest) {
           body: JSON.stringify({
             model: "claude-sonnet-4-6",
             max_tokens: 3000,
-            temperature: 0.3,
-            system: "You are a precision astrological synthesis engine. Vary your selection of timing windows across the provided date index. Never default to the first available dates. Output raw JSON.",
-            messages: [{
-              role: "user",
-              content: prompt + "\n\nDATE CORRECTION: Use only these dates: " +
-                dateIndex.dates.map((d) => d.raw).join(", ") +
-                "\nRewrite using ONLY these dates. Drop any unsupported windows.",
-            }],
+            temperature: 0.1,
+            system: RETRY_SYSTEM,
+            messages: [{ role: "user", content: correctionMessage }],
           }),
         });
 
@@ -205,22 +279,23 @@ export async function handleReading(request: NextRequest) {
         return NextResponse.json({ error: "Could not verify timing. Please try again." }, { status: 422 });
       }
 
-      return NextResponse.json({
-        reading: {
-          id: crypto.randomUUID(),
-          pages,
-          topic: body.topic,
-          question: body.question,
-          status: "complete",
+      return NextResponse.json(
+        {
+          reading: {
+            id: crypto.randomUUID(),
+            pages,
+            topic: body.topic,
+            question: body.question,
+            status: "complete",
+          },
+          careNote: getCareNote(risk),
         },
-        careNote: getCareNote(risk),
-      }, { status: 201 });
-
+        { status: 201 }
+      );
     } catch (parseErr) {
       console.error("[readings] Parse error:", parseErr);
       return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
     }
-
   } catch (error) {
     console.error("[readings] Error:", error);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });

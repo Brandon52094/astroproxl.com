@@ -7,6 +7,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
 import type { TransitAspect } from "@/lib/transitAspects";
+import {
+  buildValidDateIndex,
+  findUnsupportedMarkers,
+} from "@/lib/validateReadingDates";
+import {
+  validateAndFilterAspects,
+} from "@/lib/reading/engine";
 
 // ── NEW: Import advanced calculation types ──
 import {
@@ -40,6 +47,7 @@ interface TransitPlanet {
   name: string;
   sign: string;
   degree: string;
+  longitude: number;
   isRetrograde: boolean;
 }
 
@@ -47,13 +55,16 @@ interface ProgressedPlanet {
   name: string;
   sign: string;
   degree: string;
+  longitude: number;
   isRetrograde: boolean;
 }
 
 interface SolarArcPlanet {
   name: string;
+  natalPoint: string;
   sign: string;
   degree: string;
+  longitude: number;
 }
 
 interface DeclinationData {
@@ -85,6 +96,7 @@ interface ProfectionData {
 
 interface UpcomingTrigger {
   date: string;
+  exactJulianDay: number;
   transitPlanet: string;
   natalPlanet: string;
   aspect: string;
@@ -120,6 +132,11 @@ interface MoonPhaseData {
   moonDegree: string;
 }
 
+type DatedTransitToAngle = TransitToAngle & {
+  exactDate?: string;
+  exactJulianDay?: number;
+};
+
 // ── NEW: Extended FollowupRequestBody with all 10 calculations ──
 interface FollowupRequestBody {
   question: string;
@@ -148,7 +165,7 @@ interface FollowupRequestBody {
   midpoints?: Midpoint[];
   lunarReturn?: LunarReturn;
   eclipseActivations?: EclipseActivation[];
-  transitsToAngles?: TransitToAngle[];
+  transitsToAngles?: DatedTransitToAngle[];
   dispositorTree?: DispositorResult[];
   
   freeRepliesUsed?: number;
@@ -185,24 +202,24 @@ function fmtTransitAspects(aspects: TransitAspect[] | undefined): string {
   }
 
   const lines = [
-    "TRANSIT-TO-NATAL ASPECTS — CALCULATED, EXACT, SORTED TIGHTEST FIRST",
-    "These are given to you. Do NOT compute aspects yourself. Do NOT use any aspect not on this list.",
-    "If it is not here, it is not happening, and you may not mention it.",
+    "TRANSIT-TO-NATAL ASPECTS — CALCULATED AND VALIDATED",
+    "These aspects are supplied by code. Never compute or invent another aspect.",
     "",
-    "EXACT = under 1° orb — firing right now.",
-    "LIVE = under 3° orb — active, lead with these.",
-    "BACKGROUND = 3-6° orb — context only, never a date anchor.",
-    "APPLYING = still tightening, the event is building. SEPARATING = the peak has passed.",
+    "EXACT = ≤0.5°.",
+    "LIVE = active within the configured aspect-specific live orb.",
+    "BACKGROUND = contextual support only; never an independent event or date anchor.",
+    "APPLYING = currently tightening. SEPARATING = currently moving away.",
     "",
   ];
 
   for (const a of aspects) {
     const motion = a.isApplying ? "APPLYING" : "SEPARATING";
     const rx = a.isRetrograde ? " Rx" : "";
+    const exact = a.exactDate ? ` — next exact hit: ${a.exactDate}` : "";
     lines.push(
       `[${a.band.toUpperCase()}] Transit ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
       `${a.aspectType} natal ${a.natalPlanet} ${a.natalSign} ${a.natalDegree} ` +
-      `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}`
+      `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}${exact}`
     );
   }
 
@@ -298,7 +315,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
   const upcomingTriggerBlock = upcomingTrigger
     ? NL +
       "NEXT EXACT ASPECT (ephemeris-calculated — primary timing anchor):" + NL +
-      `${upcomingTrigger.transitPlanet} ${upcomingTrigger.aspect} natal ${upcomingTrigger.natalPlanet} — exact within 1° on ${upcomingTrigger.date}` +
+      `${upcomingTrigger.transitPlanet} ${upcomingTrigger.aspect} natal ${upcomingTrigger.natalPlanet} — exact on ${upcomingTrigger.date}` +
       NL
     : "";
 
@@ -340,8 +357,9 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
           ? `Time Lord (${profection.timeLord}) falls in SR ${solarReturn.timeLordInSR}.`
           : "",
         "SR Planets: " + solarReturn.planets.map((p) => `${p.name} ${p.sign} H${p.house}`).join(", "),
-        "ROLE — FILTER RULE: A transit must be reflected in Solar Return themes to trigger a major external",
-        "event. Use SR to CONFIRM or DOWNGRADE. No SR support means the shift is internal, not an event.",
+        "ROLE: Solar Return is an annual confirmation layer.",
+        "Use it to strengthen or contextualize an independently established predictive signal.",
+        "Do not require Solar Return confirmation for every external event, and do not create a date from the Solar Return alone.",
         "",
       ]
         .filter(Boolean)
@@ -361,7 +379,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
         ].join(NL)
       : "";
 
-  // ── NEW: HOUSE RULERS BLOCK ──
+  // ── HOUSE RULERS BLOCK ──
   const houseRulersBlock = (() => {
     if (!houseRulers || houseRulers.length === 0) return "";
     return NL + [
@@ -377,7 +395,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     ].join(NL);
   })();
 
-  // ── NEW: MUTUAL RECEPTION BLOCK ──
+  // ── MUTUAL RECEPTION BLOCK ──
   const mutualReceptionBlock = (() => {
     if (!mutualReceptions || mutualReceptions.length === 0) return "";
     return NL + [
@@ -389,13 +407,13 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
         (m) => `⚡ ${m.description} → ${m.planetA} and ${m.planetB} are in each other's signs`
       ),
       "",
-      "ROLE: Mutual reception AMPLIFIES any transit involving either planet.",
-      "If a transit hits one of these planets, it is STRONGER than the orb suggests.",
+      "ROLE: Mutual reception may deepen the interpretation when either planet is independently activated.",
+      "It does not change the calculated orb, create an event, or create a date.",
       "",
     ].join(NL);
   })();
 
-  // ── NEW: ESSENTIAL DIGNITIES BLOCK ──
+  // ── ESSENTIAL DIGNITIES BLOCK ──
   const essentialDignitiesBlock = (() => {
     if (!essentialDignities || essentialDignities.length === 0) return "";
     const strong = essentialDignities.filter((d) => d.strength >= 8);
@@ -415,27 +433,10 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     ].join(NL);
   })();
 
-  // ── NEW: SYNODIC CYCLES BLOCK ──
-  const synodicCyclesBlock = (() => {
-    if (!synodicCycles || synodicCycles.length === 0) return "";
-    const relevant = synodicCycles.filter((s) => s.daysUntilReturn <= 45);
-    if (relevant.length === 0) return "";
-    return NL + [
-      "═══════════════════════════════════════════",
-      "SYNODIC CYCLES — MAJOR CHAPTER MARKERS",
-      "═══════════════════════════════════════════",
-      "",
-      ...relevant.map(
-        (s) => `${s.planet} return in ${s.daysUntilReturn} days (${s.returnDate})`
-      ),
-      "",
-      "ROLE: A planetary return is a MAJOR life chapter marker.",
-      "If a return is approaching in the next 45 days, it is a PRIMARY date anchor.",
-      "",
-    ].join(NL);
-  })();
+  // ── SYNODIC CYCLES BLOCK (DISABLED) ──
+  const synodicCyclesBlock = "";
 
-  // ── NEW: MIDPOINTS BLOCK ──
+  // ── MIDPOINTS BLOCK ──
   const midpointsBlock = (() => {
     if (!midpoints || midpoints.length === 0) return "";
     return NL + [
@@ -453,24 +454,10 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     ].join(NL);
   })();
 
-  // ── NEW: LUNAR RETURN BLOCK ──
-  const lunarReturnBlock = (() => {
-    if (!lunarReturn) return "";
-    return NL + [
-      "═══════════════════════════════════════════",
-      "LUNAR RETURN — MONTHLY RESET",
-      "═══════════════════════════════════════════",
-      "",
-      `Next Lunar Return: ${lunarReturn.date} (${lunarReturn.daysUntil} days)`,
-      `Moon returns to ${lunarReturn.moonSign} ${lunarReturn.moonDegree}`,
-      "",
-      "ROLE: The Lunar Return is a monthly reset point — the start of a new emotional cycle.",
-      "If a question is about emotions, relationships, or home, this is a PRIMARY date anchor.",
-      "",
-    ].join(NL);
-  })();
+  // ── LUNAR RETURN BLOCK (DISABLED) ──
+  const lunarReturnBlock = "";
 
-  // ── NEW: ECLIPSE ACTIVATION BLOCK ──
+  // ── ECLIPSE ACTIVATION BLOCK ──
   const eclipseActivationsBlock = (() => {
     if (!eclipseActivations || eclipseActivations.length === 0) return "";
     return NL + [
@@ -489,7 +476,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     ].join(NL);
   })();
 
-  // ── NEW: TRANSIT TO ANGLES BLOCK ──
+  // ── TRANSIT TO ANGLES BLOCK ──
   const transitsToAnglesBlock = (() => {
     if (!transitsToAngles || transitsToAngles.length === 0) return "";
     return NL + [
@@ -497,23 +484,19 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
       "TRANSIT TO ANGLES — MAJOR LIFE EVENTS",
       "═══════════════════════════════════════════",
       "",
-      ...transitsToAngles.map(
-        (t) =>
-          `${t.transitPlanet} ${t.aspectType} ${t.angle} (${t.angleSign} ${t.angleDegree}°) — ${t.orb}° orb, ${t.isApplying ? "APPLYING" : "SEPARATING"}`
-      ),
+      ...transitsToAngles.map((t) => {
+        const exact = t.exactDate ? ` — exact on ${t.exactDate}` : "";
+        return `${t.transitPlanet} ${t.aspectType} ${t.angle} (${t.angleSign} ${t.angleDegree}°) — ${t.orb}° orb, ${t.isApplying ? "APPLYING" : "SEPARATING"}${exact}`;
+      }),
       "",
-      "ROLE: Transits to angles are MAJOR life events. They OUTRANK all other personal-planet transits.",
-      "",
-      "Angle meanings:",
-      "  - Ascendant: Identity, body, how you present yourself",
-      "  - Midheaven: Career, public reputation, authority",
-      "  - Descendant: Relationships, partnerships, open enemies",
-      "  - Imum Coeli: Home, family, emotional foundation",
+      "ROLE: Tight, topic-relevant angle activations are high-priority predictive evidence.",
+      "An angle contact may describe a major external development, but do not call every angle transit an event.",
+      "Only calculator-supplied exactDate values may create a dated window.",
       "",
     ].join(NL);
   })();
 
-  // ── NEW: DISPOSITOR TREE BLOCK ──
+  // ── DISPOSITOR TREE BLOCK ──
   const dispositorTreeBlock = (() => {
     if (!dispositorTree || dispositorTree.length === 0) return "";
     const finalDispositors = dispositorTree.map((d) => d.finalDispositor);
@@ -530,8 +513,8 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
       "",
       `FINAL DISPOSITOR(S): ${uniqueFinal.join(", ")}`,
       "",
-      "ROLE: The Final Dispositor is the planet that ultimately rules the entire chart.",
-      "It is the 'ultimate authority' — its transits and conditions set the tone for everything else.",
+      "ROLE: Dispositor chains provide interpretive context only.",
+      "They may clarify how a natal theme expresses, but never outrank an exact predictive activation or create timing.",
       "",
     ].join(NL);
   })();
@@ -610,6 +593,14 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     "never in decimal places.",
     "",
     "═══════════════════════════════════════════",
+    "DATE PROVENANCE — HARD RULE",
+    "═══════════════════════════════════════════",
+    "Any specific calendar date or date range MUST use [[DATE: ...]].",
+    "Only use a calendar date when it is explicitly supplied by an exact-date calculation above.",
+    "If no calculator-supported date answers the question, answer without a calendar date.",
+    "Never estimate a date from an orb, Moon phase, progression, Solar Return, dignity, midpoint, or general theme.",
+    "",
+    "═══════════════════════════════════════════",
     "QUESTION + CONTEXT",
     "═══════════════════════════════════════════",
     `TOPIC: ${topicLabel}`,
@@ -634,7 +625,7 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     moonPhaseBlock,
     solarReturnBlock,
     
-    // ── NEW: All 10 advanced calculation blocks ──
+    // ── NEW: All advanced calculation blocks ──
     houseRulersBlock,
     mutualReceptionBlock,
     essentialDignitiesBlock,
@@ -675,14 +666,24 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     "The ORIGINAL READING is prior context only. The chart blocks are your evidence.",
     "",
     "If they ask WHY → identify the tightest natal aspect or calculated transit driving it.",
-    "If they ask WHEN → answer from the calculated aspects, the next exact aspect, stations, and moon phase.",
+    "If they ask WHEN → use ONLY calculator-supplied exact dates from validated transit aspects, the next exact trigger, relevant natal-hit stations, or exact topic-relevant angle contacts.",
+    "Moon phase may describe the quality of an already-supported period but never creates the date.",
     "If they ask WHAT TO DO → one concrete action tied to the nearest valid window.",
     "If they ask about a specific planet, house, or date → stay on that thread and go deeper there only.",
     "",
     "ONLY calculated aspects. Never invent one. Never manufacture a date.",
     "An APPLYING aspect is building — speak of it as coming. A SEPARATING one has peaked — speak of it as passing.",
-    "No degrees, no orbs, no jargon. No hedging. No generic spiritual filler. No copy-pasting the original reading.",
-    "'You' in every sentence. No passive voice. Outcomes as facts.",
+    "",
+    "Be direct when the evidence converges. Do not manufacture certainty when it does not.",
+    "",
+    "DISTINGUISH:",
+    "EVENT — multiple independent predictive techniques support a concrete development.",
+    "ACTIVATION — a strong trigger is present, but its external manifestation is not uniquely determined.",
+    "BACKGROUND — contextual theme only.",
+    "",
+    "No degrees, no orbs, no unnecessary jargon, and no generic spiritual filler.",
+    "",
+    "'You' in every sentence. No passive voice.",
     "3-5 compact paragraphs maximum. No headers.",
     "End with one sentence that either closes the loop or opens the next natural question.",
     "",
@@ -721,6 +722,17 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
+
+    // ── VALIDATE ASPECTS ──
+    const validatedAspects = validateAndFilterAspects(body.transitAspects);
+
+    const normalizedBody: FollowupRequestBody = {
+      ...body,
+      transitAspects: validatedAspects,
+    };
+
+    // ── BUILD DATE INDEX ──
+    const dateIndex = buildValidDateIndex(normalizedBody, validatedAspects);
 
     // ── Reply-access gating ──
     const NONSUB_FREE_REPLIES = 1;
@@ -789,7 +801,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
 
-    const prompt = buildFollowupPrompt(body);
+    const prompt = buildFollowupPrompt(normalizedBody);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -801,6 +813,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1400,
+        temperature: 0.3,
         system:
           "You are a precision astrologer answering a follow-up question after an initial reading, for a real " +
           "person who may know nothing about astrology. Write so they understand every sentence. " +
@@ -855,6 +868,19 @@ export async function POST(request: NextRequest) {
       console.error("[followup] Raw response end:", rawText.slice(-200));
       return NextResponse.json(
         { error: "Failed to parse response. Please try again." },
+        { status: 422 }
+      );
+    }
+
+    // ── VALIDATE DATES ──
+    const unsupported = findUnsupportedMarkers(parsed.content ?? "", dateIndex);
+
+    if (unsupported.length > 0) {
+      console.error(`[followup] Unsupported dates: ${unsupported.join(" | ")}`);
+      return NextResponse.json(
+        {
+          error: "Could not verify the timing in this reply. Please try again.",
+        },
         { status: 422 }
       );
     }

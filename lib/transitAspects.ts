@@ -35,25 +35,96 @@ export interface TransitAspect {
   transitDegree: string;
   isApplying: boolean;      // still tightening — the event is building
   isRetrograde: boolean;    // transiting planet is retrograde
-  band: "exact" | "live" | "background";  // exact <1°, live <3°, background <6°
+  band: "exact" | "live" | "background";  // exact ≤0.5°, live ≤3°, background ≤6°
   exactDate: string | null; // When this aspect perfects (e.g., "August 25, 2026")
+  exactJulianDay: number | null; // Julian day of exact perfection
   daysUntilExact: number | null; // Days until the aspect perfects
+}
+
+// ── HELPER FUNCTIONS ──
+
+function normalizeLongitude(longitude: number): number {
+  return ((longitude % 360) + 360) % 360;
+}
+
+function signedAngularDelta(longitude: number, target: number): number {
+  let diff = normalizeLongitude(longitude) - normalizeLongitude(target);
+
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+
+  return diff;
+}
+
+function dateToJulianDayUT(date: Date): number {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  const hour =
+    date.getUTCHours() +
+    date.getUTCMinutes() / 60 +
+    date.getUTCSeconds() / 3600 +
+    date.getUTCMilliseconds() / 3600000;
+
+  return swisseph.swe_julday(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+    hour,
+    swisseph.SE_GREG_CAL
+  );
+}
+
+function julianDayToDate(jd: number): Date {
+  return new Date((jd - 2440587.5) * 86400000);
+}
+
+function classifyAspectBand(
+  type: TransitAspect["aspectType"],
+  orb: number
+): TransitAspect["band"] {
+  const liveLimit = type === "sextile" ? 2.5 : 3.0;
+  const backgroundLimit = type === "sextile" ? 5.0 : 6.0;
+
+  if (orb <= 0.5) {
+    return "exact";
+  }
+
+  if (orb <= liveLimit) {
+    return "live";
+  }
+
+  if (orb <= backgroundLimit) {
+    return "background";
+  }
+
+  return "background";
 }
 
 /**
  * Calculate when an aspect will perfect (reach exact orb).
- * Uses binary search to find the exact date.
+ * Uses binary search with real UT time to find the exact date.
+ * Handles both branches of aspects (e.g., square to 10° Aries can
+ * perfect at either 10° Cancer or 10° Capricorn).
  */
 function calculateExactAspectDate(
-  transitPlanet: { name: string; longitude: number; longitudeSpeed: number },
+  transitPlanet: {
+    name: string;
+    longitude: number;
+    longitudeSpeed: number;
+  },
   natalLongitude: number,
   aspectAngle: number,
   startDate: Date,
-  maxDays: number = 45
-): { date: string; daysUntil: number } | null {
+  maxDays: number = 60
+): {
+  date: string;
+  daysUntil: number;
+  exactJulianDay: number;
+} | null {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const swisseph = require("swisseph");
-  
+
   const PLANET_IDS: Record<string, number> = {
     Sun: swisseph.SE_SUN,
     Moon: swisseph.SE_MOON,
@@ -65,79 +136,153 @@ function calculateExactAspectDate(
     Uranus: swisseph.SE_URANUS,
     Neptune: swisseph.SE_NEPTUNE,
     Pluto: swisseph.SE_PLUTO,
+    "North Node": swisseph.SE_TRUE_NODE,
   };
 
   const planetId = PLANET_IDS[transitPlanet.name];
-  if (!planetId) return null;
 
-  // Target longitude: natal + aspect angle (normalized to 0-360)
-  let targetLon = (natalLongitude + aspectAngle) % 360;
-  if (targetLon < 0) targetLon += 360;
+  if (planetId == null) {
+    return null;
+  }
 
-  // Binary search for the exact date
-  let lo = 0;
-  let hi = maxDays;
-  let bestDate = startDate;
-  let bestDiff = Infinity;
+  const jdStart = dateToJulianDayUT(startDate);
+  const jdEnd = jdStart + maxDays;
 
-  for (let i = 0; i < 30; i++) { // 30 iterations = ~1 second precision
-    const mid = (lo + hi) / 2;
-    const checkDate = new Date(startDate);
-    checkDate.setDate(startDate.getDate() + mid);
-    
-    const jd = swisseph.swe_julday(
-      checkDate.getFullYear(),
-      checkDate.getMonth() + 1,
-      checkDate.getDate(),
-      12, // Noon
-      swisseph.SE_GREG_CAL
-    );
-    
-    const result = swisseph.swe_calc_ut(jd, planetId, 4 | 256);
-    let diff = Math.abs(result.longitude - targetLon);
-    if (diff > 180) diff = 360 - diff;
-    
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestDate = checkDate;
+  // Conjunction/opposition have one unique zodiac target.
+  // Square/trine/sextile have ± branches.
+  const targets =
+    aspectAngle === 0 || aspectAngle === 180
+      ? [normalizeLongitude(natalLongitude + aspectAngle)]
+      : [
+          normalizeLongitude(natalLongitude + aspectAngle),
+          normalizeLongitude(natalLongitude - aspectAngle),
+        ];
+
+  // Faster bodies need a smaller scan step so we
+  // don't jump over an exact crossing.
+  const scanStep =
+    transitPlanet.name === "Moon"
+      ? 0.0625 // 1.5 hours
+      : ["Mercury", "Venus", "Sun"].includes(transitPlanet.name)
+      ? 0.125 // 3 hours
+      : transitPlanet.name === "Mars"
+      ? 0.25
+      : 0.5;
+
+  let earliestJD: number | null = null;
+
+  for (const target of targets) {
+    let leftJD = jdStart;
+
+    let leftResult = swisseph.swe_calc_ut(leftJD, planetId, 4 | 256);
+
+    if (leftResult.rflag < 0 || leftResult.error) {
+      continue;
     }
-    
-    // Check if we're getting closer or farther
-    const nextDate = new Date(startDate);
-    nextDate.setDate(startDate.getDate() + mid + 0.5);
-    const nextJd = swisseph.swe_julday(
-      nextDate.getFullYear(),
-      nextDate.getMonth() + 1,
-      nextDate.getDate(),
-      12,
-      swisseph.SE_GREG_CAL
-    );
-    const nextResult = swisseph.swe_calc_ut(nextJd, planetId, 4 | 256);
-    let nextDiff = Math.abs(nextResult.longitude - targetLon);
-    if (nextDiff > 180) nextDiff = 360 - nextDiff;
-    
-    if (nextDiff < diff) {
-      lo = mid;
-    } else {
-      hi = mid;
+
+    let leftError = signedAngularDelta(leftResult.longitude, target);
+
+    // Already essentially exact.
+    if (Math.abs(leftError) < 0.00001) {
+      if (earliestJD === null || leftJD < earliestJD) {
+        earliestJD = leftJD;
+      }
+
+      continue;
+    }
+
+    for (let rightJD = leftJD + scanStep; rightJD <= jdEnd + 0.000001; rightJD += scanStep) {
+      const rightResult = swisseph.swe_calc_ut(rightJD, planetId, 4 | 256);
+
+      if (rightResult.rflag < 0 || rightResult.error) {
+        leftJD = rightJD;
+        continue;
+      }
+
+      const rightError = signedAngularDelta(rightResult.longitude, target);
+
+      /*
+       * A sign change means the planet crossed
+       * the target longitude between the two times.
+       *
+       * Ignore ±180° discontinuities in the signed
+       * angular representation.
+       */
+      const crossed =
+        leftError === 0 ||
+        rightError === 0 ||
+        (leftError * rightError < 0 && Math.abs(rightError - leftError) < 180);
+
+      if (crossed) {
+        let lo = leftJD;
+        let hi = rightJD;
+        let loError = leftError;
+
+        // ~40 bisections is substantially finer
+        // than the precision required here.
+        for (let i = 0; i < 40; i++) {
+          const mid = (lo + hi) / 2;
+
+          const midResult = swisseph.swe_calc_ut(mid, planetId, 4 | 256);
+
+          if (midResult.rflag < 0 || midResult.error) {
+            break;
+          }
+
+          const midError = signedAngularDelta(midResult.longitude, target);
+
+          if (Math.abs(midError) < 0.000001) {
+            lo = mid;
+            hi = mid;
+            break;
+          }
+
+          if (loError * midError <= 0) {
+            hi = mid;
+          } else {
+            lo = mid;
+            loError = midError;
+          }
+        }
+
+        const exactJD = (lo + hi) / 2;
+
+        if (exactJD >= jdStart && (earliestJD === null || exactJD < earliestJD)) {
+          earliestJD = exactJD;
+        }
+
+        // This target's first upcoming crossing
+        // is the one we care about.
+        break;
+      }
+
+      leftJD = rightJD;
+      leftError = rightError;
     }
   }
 
-  // Check if we found a date within reasonable orb
-  if (bestDiff > 5) return null;
+  if (earliestJD === null) {
+    return null;
+  }
 
-  const daysUntil = Math.round((bestDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysUntil < 0 || daysUntil > maxDays) return null;
+  const exactDate = julianDayToDate(earliestJD);
+  const daysUntil = Math.max(0, Math.floor(earliestJD - jdStart));
 
   return {
-    date: bestDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+    date: exactDate.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    }),
     daysUntil,
+    exactJulianDay: earliestJD,
   };
 }
 
 /**
  * Cross every transiting body against every natal point.
- * Returns aspects within 6° orb, sorted tightest first.
+ * Returns aspects within orb, sorted tightest first.
  */
 export function calculateTransitAspects(
   transitPlanets: Array<{ name: string; longitude: number; isRetrograde: boolean; longitudeSpeed: number }>,
@@ -154,11 +299,11 @@ export function calculateTransitAspects(
     angle: number;
     maxOrb: number;
   }> = [
-    { type: "conjunction", angle: 0,   maxOrb: 6 },
-    { type: "opposition",  angle: 180, maxOrb: 6 },
-    { type: "square",      angle: 90,  maxOrb: 5 },
-    { type: "trine",       angle: 120, maxOrb: 5 },
-    { type: "sextile",     angle: 60,  maxOrb: 4 },
+    { type: "conjunction", angle: 0, maxOrb: 6 },
+    { type: "opposition", angle: 180, maxOrb: 6 },
+    { type: "square", angle: 90, maxOrb: 6 },
+    { type: "trine", angle: 120, maxOrb: 6 },
+    { type: "sextile", angle: 60, maxOrb: 5 },
   ];
 
   const natalTargets = [
@@ -185,6 +330,7 @@ export function calculateTransitAspects(
         const orb = Math.abs(diff - angle);
         if (orb > maxOrb) continue;
 
+        // Determine applying/separating using actual longitude speed
         const step = 0.01;
         const futureLon = transit.longitude + transit.longitudeSpeed * step;
         let futureDiff = Math.abs(futureLon - natal.longitude);
@@ -199,7 +345,7 @@ export function calculateTransitAspects(
           natal.longitude,
           angle,
           now,
-          45
+          60
         );
 
         aspects.push({
@@ -214,9 +360,10 @@ export function calculateTransitAspects(
           transitDegree: tPos.degree,
           isApplying,
           isRetrograde: transit.isRetrograde,
-          band: orb < 1 ? "exact" : orb < 3 ? "live" : "background",
-          exactDate: exactDateInfo?.date || null,
-          daysUntilExact: exactDateInfo?.daysUntil || null,
+          band: classifyAspectBand(type, orb),
+          exactDate: exactDateInfo?.date ?? null,
+          exactJulianDay: exactDateInfo?.exactJulianDay ?? null,
+          daysUntilExact: exactDateInfo?.daysUntil ?? null,
         });
 
         break;
@@ -236,10 +383,12 @@ export function formatTransitAspects(aspects: TransitAspect[]): string {
   }
 
   const lines: string[] = [
-    "TRANSIT-TO-NATAL ASPECTS (calculated, exact, sorted tightest first —",
-    "this is your activation priority. Do NOT compute these yourself; they are given.)",
-    "EXACT = under 1° orb. LIVE = under 3°. BACKGROUND = 3-6°, context only.",
-    "APPLYING = still tightening, the event is building. SEPARATING = peak has passed.",
+    "TRANSIT-TO-NATAL ASPECTS (ephemeris-calculated, sorted tightest first —",
+    "do not recompute these in the model.)",
+    "EXACT = ≤0.5°.",
+    "LIVE = active within the configured aspect-specific live orb.",
+    "BACKGROUND = context only and never an independent event-date anchor.",
+    "APPLYING = tightening toward perfection. SEPARATING = moving away from perfection.",
     "",
   ];
 
@@ -249,8 +398,8 @@ export function formatTransitAspects(aspects: TransitAspect[]): string {
     const dateStr = a.exactDate ? ` — exact on ${a.exactDate}` : "";
     lines.push(
       `[${a.band.toUpperCase()}] Transit ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
-      `${a.aspectType} natal ${a.natalPlanet} ${a.natalSign} ${a.natalDegree} ` +
-      `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}${dateStr}`
+        `${a.aspectType} natal ${a.natalPlanet} ${a.natalSign} ${a.natalDegree} ` +
+        `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}${dateStr}`
     );
   }
 
@@ -258,56 +407,33 @@ export function formatTransitAspects(aspects: TransitAspect[]): string {
 }
 
 /**
- * Get a diverse, chronologically spread set of unique dates from transit aspects 
- * within the next 45 days, preventing date-clustering bottlenecks.
- * 
- * This fixes the "same 2 dates" problem by:
- * 1. Keeping only the tightest aspect per date
- * 2. Spreading dates at least 3 days apart
- * 3. Returning up to 6 diverse dates
+ * Get unique dates from transit aspects within the next 60 days.
+ *
+ * Preserves the incoming evidence order.
+ * The engine already supplies aspects in its deterministic strength/topic order.
+ * Do not re-randomize, spread, or artificially diversify the dates here.
  */
 export function getUniqueAspectDates(aspects: TransitAspect[]): string[] {
-  // Map all valid exact dates with their corresponding orbs
-  const dateMap = new Map<string, { orb: number; planet: string }>();
+  const seen = new Set<string>();
+  const dates: string[] = [];
 
   for (const a of aspects) {
-    if (!a.exactDate || a.daysUntilExact === null || a.daysUntilExact > 45 || a.daysUntilExact < 0) {
+    if (
+      !a.exactDate ||
+      a.daysUntilExact === null ||
+      a.daysUntilExact < 0 ||
+      a.daysUntilExact > 60
+    ) {
       continue;
     }
 
-    // If we already have this date, keep the one with the tighter orb
-    if (!dateMap.has(a.exactDate) || a.orbDegrees < dateMap.get(a.exactDate)!.orb) {
-      dateMap.set(a.exactDate, { orb: a.orbDegrees, planet: a.transitPlanet });
+    if (seen.has(a.exactDate)) {
+      continue;
     }
+
+    seen.add(a.exactDate);
+    dates.push(a.exactDate);
   }
 
-  // Convert to an array of objects for sorting/filtering
-  const uniqueDateEntries = Array.from(dateMap.entries()).map(([date, meta]) => ({
-    dateStr: date,
-    dateObj: new Date(date),
-    ...meta,
-  }));
-
-  // Sort chronologically
-  uniqueDateEntries.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-
-  // Diversity filter: Ensure we don't pack all dates into the exact same 3-day window
-  const diverseDates: string[] = [];
-  let lastTime = 0;
-  const MIN_GAP_MS = 3 * 24 * 60 * 60 * 1000; // At least 3 days apart when possible
-
-  for (const entry of uniqueDateEntries) {
-    if (diverseDates.length === 0 || entry.dateObj.getTime() - lastTime >= MIN_GAP_MS) {
-      diverseDates.push(entry.dateStr);
-      lastTime = entry.dateObj.getTime();
-    }
-  }
-
-  // If diversity filter stripped too many, fallback to top chronological unique dates (up to 5)
-  if (diverseDates.length < 2 && uniqueDateEntries.length >= 2) {
-    return uniqueDateEntries.slice(0, 5).map(e => e.dateStr);
-  }
-
-  // Cap at 6 distinct, spread-out dates
-  return diverseDates.slice(0, 6);
+  return dates.slice(0, 6);
 }

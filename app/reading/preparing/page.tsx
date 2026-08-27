@@ -12,13 +12,14 @@ const LOADING_MESSAGES = [
   "Calculating your profection year…",
   "Identifying your Time Lord…",
   "Tracing house rulers and themes…",
-  "Checking for mutual reception patterns…",
-  "Scanning planetary returns (chapter markers)…",
+  "Checking mutual reception patterns…",
   "Mapping sensitive midpoint activations…",
   "Checking transits to your angles…",
-  "Cross-referencing solar return for external events…",
+  "Cross-referencing your solar return…",
   "Synthesizing progressions and solar arcs…",
-  "Scanning for planetary station points…",
+  "Scanning planetary station points…",
+  "Checking eclipse activations…",
+  "Weighing the strongest timing signals…",
   "Finalizing your reading…",
 ];
 
@@ -128,30 +129,47 @@ function PreparingPageInner() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            // ── USER QUESTION ──
             topic: intake.topic,
             question: intake.question,
             timeframeType: intake.timeframeType,
             timeframeValue: intake.timeframeValue,
+
+            // ── BIRTH DATA ──
             birthDate: chart.birthDate,
             birthTime: chart.birthTime,
             birthPlace: chart.birthPlace,
+
+            // ── CORE CHART ──
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
+
+            // ── CURRENT SKY ──
             transits: chart.chartData.transits,
             transitAspects: chart.chartData.transitAspects,
+
+            // ── PRIMARY PREDICTIVE TECHNIQUES ──
             profection: chart.chartData.profection,
             progressions: chart.chartData.progressions,
             solarArcs: chart.chartData.solarArcs,
             upcomingTrigger: chart.chartData.upcomingTrigger,
             planetaryStations: chart.chartData.planetaryStations,
             solarReturn: chart.chartData.solarReturn,
+
+            // ── SHORT-TERM / SUPPORTING DATA ──
             moonPhase: chart.chartData.moonPhase,
             extendedPoints: chart.chartData.extendedPoints,
+
+            // ── ADVANCED CALCULATIONS ──
             houseRulers: chart.chartData.houseRulers,
             mutualReceptions: chart.chartData.mutualReceptions,
+            essentialDignities: chart.chartData.essentialDignities,
             synodicCycles: chart.chartData.synodicCycles,
             midpoints: chart.chartData.midpoints,
+            lunarReturn: chart.chartData.lunarReturn,
+            eclipseActivations: chart.chartData.eclipseActivations,
             transitsToAngles: chart.chartData.transitsToAngles,
+            dispositorTree: chart.chartData.dispositorTree,
           }),
         });
 
