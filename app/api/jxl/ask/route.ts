@@ -8,6 +8,9 @@ import {
   JXL_CONVERSATION_CAP_MESSAGE,
 } from "@/lib/jxlConfig";
 import { buildValidDateIndex, checkDateSupported } from "@/lib/validateReadingDates";
+import {
+  validateAndFilterAspects,
+} from "@/lib/reading/engine";
 
 /**
  * JXL — "ask anything" route.
@@ -713,6 +716,14 @@ export async function POST(request: NextRequest) {
     // MEDIUM: reading proceeds in full; this rides along with the response.
     const careNote = getCareNote(risk);
 
+    // ── VALIDATE AND NORMALIZE ASPECTS ──
+    const validatedAspects = validateAndFilterAspects(earlyBody.transitAspects);
+
+    const normalizedBody: JxlAskBody = {
+      ...earlyBody,
+      transitAspects: validatedAspects,
+    };
+
     // ── JXL access model ───────────────────────────────────────────────────
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
@@ -776,15 +787,12 @@ export async function POST(request: NextRequest) {
     const isFinalTurn = turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;
     // ── End access model ───────────────────────────────────────────────────
 
-    // Already parsed above for the crisis check — the request stream can only
-    // be read once, so reuse it rather than calling request.json() again.
-    const body = earlyBody;
-
-    if (!body.question || !body.tropical?.planets || !body.profection || !body.transits) {
+    // ── VALIDATE REQUIRED FIELDS ──
+    if (!normalizedBody.question || !normalizedBody.tropical?.planets || !normalizedBody.profection || !normalizedBody.transits) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
-    if (body.question.trim().length < 2) {
+    if (normalizedBody.question.trim().length < 2) {
       return NextResponse.json(
         { error: "We didn't catch that. Hold the button and try again." },
         { status: 400 }
@@ -796,7 +804,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
 
-    const prompt = buildJxlPrompt(body, isFinalTurn);
+    // ── BUILD DATE INDEX ──
+    const dateIndex = buildValidDateIndex(normalizedBody, validatedAspects);
+
+    const prompt = buildJxlPrompt(normalizedBody, isFinalTurn);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -895,7 +906,6 @@ export async function POST(request: NextRequest) {
     // supplied (the next exact aspect, or a station with a natal hit). A date
     // that doesn't trace is dropped — a window loses its whole entry (a window
     // is its date), a directive loses its date and downgrades to DROP below.
-    const dateIndex = buildValidDateIndex(body);
     const dateViolations: string[] = [];
 
     // Placeholder dates the model sometimes emits instead of omitting a date.
@@ -990,7 +1000,7 @@ export async function POST(request: NextRequest) {
         careNote,
         isSafeResponse: false,
         riskLevel: risk.level,
-        replyNumber: (body.conversationHistory?.length ?? 0) + 1,
+        replyNumber: (earlyBody.conversationHistory?.length ?? 0) + 1,
         repliesPerSession: REPLIES_PER_SESSION,
       },
       { status: 200 }
