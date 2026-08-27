@@ -452,6 +452,13 @@ export function buildReadingPrompt(
     .filter(s => s.daysUntilReturn <= FORWARD_WINDOW_DAYS && topic.relevantPlanets.has(s.planet))
     .map(s => s.returnDate);
 
+    console.error(`ZZZ_MAP topic=${topic.id} | poolBreakdown=${JSON.stringify({
+  aspectDates: aspectDates,
+  triggerRelevant: isTriggerRelevant ? triggerDate : "BLOCKED(not topic-relevant)",
+  stationDates: relevantStationDates,
+  cycleDates: relevantCycleDates,
+})} | topicAspects=${JSON.stringify(topicRelevantAspects.map(a => `${a.transitPlanet} ${a.aspectType} ${a.natalPlanet} [${a.band}]`))}`);
+
   const solarReturnDate = solarReturn?.sunReturnDate;
 
   const angleDates = (transitsToAngles || [])
