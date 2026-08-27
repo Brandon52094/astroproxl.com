@@ -397,26 +397,22 @@ export function validateAndFilterAspects(aspects: TransitAspect[] | undefined): 
 
     const orbs = ASPECT_ORBS[aspectType] || ASPECT_ORBS.conjunction;
 
-    let band: "EXACT" | "LIVE" | "BACKGROUND";
+    let band: TransitAspect["band"];
 
-    if (a.orbDegrees <= orbs.exact) {
-      band = "EXACT";
-    } else if (a.orbDegrees <= orbs.live) {
-      band = "LIVE";
-    } else if (a.orbDegrees <= orbs.background) {
-      band = "BACKGROUND";
-    } else {
-      continue;
-    }
-
-    valid.push({
-      ...a,
-      band,
-    });
-  }
-
-  return valid;
+if (a.orbDegrees <= orbs.exact) {
+  band = "exact";
+} else if (a.orbDegrees <= orbs.live) {
+  band = "live";
+} else if (a.orbDegrees <= orbs.background) {
+  band = "background";
+} else {
+  continue;
 }
+
+valid.push({
+  ...a,
+  band,
+});
 
 // ============================================================
 // SPINE DETECTION
