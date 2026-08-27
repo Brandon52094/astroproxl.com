@@ -31,7 +31,6 @@ import {
 
 const REPLIES_PER_SESSION = JXL_MAX_REPLIES_PER_CONVERSATION;
 
-// EDIT 2: Add isAnaretic to PlanetPlacement interface
 interface PlanetPlacement {
   name: string;
   sign: string;
@@ -61,7 +60,6 @@ interface ProgressedPlanet {
   isRetrograde: boolean;
 }
 
-// EDIT 2: Add new interfaces
 interface SolarArcPlanet {
   name: string;
   sign: string;
@@ -153,7 +151,6 @@ interface JxlAskBody {
   planetaryStations?: PlanetaryStationData[];
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
-  // EDIT 2: Add extendedPoints to JxlAskBody
   extendedPoints?: ExtendedPoints;
 }
 
@@ -194,9 +191,9 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
     "These are given to you. Do NOT compute aspects yourself. Do NOT use any aspect",
     "that is not in this list. If it is not here, it is not happening.",
     "",
-    "EXACT = under 1° orb — this is firing right now.",
-    "LIVE = under 3° orb — active, lead with these.",
-    "BACKGROUND = 3-6° orb — context only, never a date anchor.",
+    "EXACT = precision band assigned by the validated reading engine — firing now.",
+    "LIVE = active band assigned by the validated reading engine — lead with these.",
+    "BACKGROUND = context only — never a date anchor.",
     "APPLYING = still tightening, the event is building toward them.",
     "SEPARATING = the peak has already passed; speak of it in past tense.",
     "",
@@ -205,10 +202,12 @@ function fmtTransitAspects(aspects: TransitAspect[]): string {
   for (const a of aspects) {
     const motion = a.isApplying ? "APPLYING" : "SEPARATING";
     const rx = a.isRetrograde ? " Rx" : "";
+    const exactTiming = a.exactDate ? ` — calculator exact date: ${a.exactDate}` : "";
+
     lines.push(
       `[${a.band.toUpperCase()}] Transit ${a.transitPlanet}${rx} ${a.transitSign} ${a.transitDegree} ` +
       `${a.aspectType} natal ${a.natalPlanet} ${a.natalSign} ${a.natalDegree} ` +
-      `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}`
+      `(House ${a.natalHouse ?? "—"}) — ${a.orbDegrees}° orb, ${motion}${exactTiming}`
     );
   }
 
@@ -255,9 +254,10 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     planetaryStations && planetaryStations.length > 0
       ? NL +
         [
-          "PLANETARY STATIONS (next 60 days — crystallization points, valid date anchors):",
-          "ROLE: Stations with natal hits outrank ordinary transits. A planet stationing on a natal point",
-          "forces an unavoidable crystallization of that house theme.",
+          "PLANETARY STATIONS (next 60 days):",
+          "ROLE: A station is a valid date anchor ONLY when the calculator confirms a natal hit.",
+          "With a natal hit, it can strongly amplify timing around that natal point or house.",
+          "Without a natal hit, treat it as background context only. A station never guarantees an event by itself.",
           ...planetaryStations.map((s) => {
             const hit = s.natalPlanetHit
               ? ` — stations within ${s.orbDegrees}° of natal ${s.natalPlanetHit} (House ${s.natalHouse})`
@@ -271,11 +271,11 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
   const moonPhaseBlock = moonPhase
     ? NL +
       [
-        "MOON PHASE (timing texture — shapes WHEN, never what):",
+        "MOON PHASE (timing texture only — never a date source):",
         `${moonPhase.phaseName}, ${moonPhase.illuminationPercent}% illuminated. Moon in ${moonPhase.moonSign}.`,
         `Next ${moonPhase.nextEventName} in ${moonPhase.daysUntilNextEvent} days.`,
-        "ROLE: Waxing supports initiating and building. Waning supports closing, releasing, and cutting.",
-        "Use to choose which window to push toward — never as a date anchor on its own.",
+        "ROLE: Use this only to describe whether the current phase favors building, culmination, or release.",
+        "Never use it to create, choose, move, or strengthen a calendar date.",
         "",
       ].join(NL)
     : "";
@@ -290,8 +290,8 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
           ? `Time Lord (${profection.timeLord}) falls in SR ${solarReturn.timeLordInSR}.`
           : "",
         "SR Planets: " + solarReturn.planets.map((p) => `${p.name} ${p.sign} H${p.house}`).join(", "),
-        "ROLE — FILTER RULE: A transit must be reflected in Solar Return themes to trigger a major external",
-        "event. Use SR to CONFIRM or DOWNGRADE. No SR support means the shift is internal, not an event.",
+        "ROLE: Use the Solar Return as annual context and confirmation only.",
+        "It may strengthen an already-supported theme, but it cannot create, veto, or date an event by itself.",
         "",
       ]
         .filter(Boolean)
@@ -304,8 +304,8 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
         [
           "SECONDARY PROGRESSIONS (current — inner development):",
           ...progressions.map(fmtProgression),
-          "ROLE: The transit is the event; the progression is the person it is happening to. Use these to",
-          "explain WHY something is landing the way it is.",
+          "ROLE: Progressions describe internal development and longer-form personal context.",
+          "They may confirm why an active transit is landing strongly, but they cannot create or date an event by themselves.",
           "",
         ].join(NL)
       : "";
@@ -316,8 +316,8 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
         [
           "SOLAR ARC DIRECTIONS (long-arc structural timing):",
           ...solarArcs.map(fmtSolarArc),
-          "ROLE: Only meaningful within 1° of a natal planet or angle — then it marks a multi-year structural",
-          "shift underneath the moment. Otherwise ignore entirely.",
+          "ROLE: These are structural background context only unless a calculated Solar Arc contact is explicitly supplied.",
+          "Do not calculate or infer a Solar Arc aspect from these raw positions, and never use them as a date source.",
           "",
         ].join(NL)
       : "";
@@ -336,7 +336,6 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
 
   const planetList = tropical.planets.map(fmtPlanet).join(NL);
 
-  // EDIT 4: JXL-specific anaretic block — explicitly NOT a date source
   const anareticBlock = (() => {
     const anaretic = tropical.planets.filter((p) => p.isAnaretic);
     if (anaretic.length === 0) return "";
@@ -352,7 +351,6 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     ].join(NL);
   })();
 
-  // EDIT 4: Extended points block — supporting signal only
   const extendedPointsBlock = (() => {
     if (!body.extendedPoints) return "";
     const { arabicLots, declinations } = body.extendedPoints;
@@ -377,7 +375,6 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     return NL + lines.join(NL);
   })();
 
-  // EDIT 3: Rank and cap the natal aspects
   const MAJOR_BODIES = new Set([
     "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn",
     "Uranus","Neptune","Pluto","North Node","Ascendant","Midheaven",
@@ -455,20 +452,22 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "═══════════════════════════════════════════",
     "THE DATE RULE — READ THIS TWICE",
     "═══════════════════════════════════════════",
-    "You may return AT MOST ONE date, and ONLY if it traces directly to one of these three sources:",
+    "Every specific date you return must trace directly to a calculator-supplied exact date from:",
     "  1. The NEXT EXACT ASPECT block, if one was supplied.",
     "  2. A PLANETARY STATION with a natal hit.",
-    "  3. An EXACT or LIVE calculated aspect that has a real timing implication.",
+    "  3. An EXACT or LIVE calculated aspect that includes a calculator exact date.",
     "",
-    "If none of those exist, or none of them genuinely bears on what they asked about, return",
-    "  \"date\": null",
-    "and write the answer with no date in it at all.",
+    "Specific calendar dates may appear ONLY in windows[].date or directives[].date.",
+    "Do not place calendar dates inside the title, answer, window body, directive body, confirmation, or sources.",
     "",
-    "A null date is a CORRECT and COMMON answer. Many real questions — 'why does this keep happening',",
+    "If none of those genuinely bears on what they asked about, return no dated windows and use no",
+    "dated directives.",
+    "",
+    "Zero dates is a CORRECT and COMMON answer. Many real questions — 'why does this keep happening',",
     "'why do I feel like this', 'what is actually going on here' — have no date and do not need one.",
-    "NEVER manufacture a date. NEVER round a vague transit into a specific day to fill the slot.",
-    "NEVER give a date range in this field — one specific date only, or null.",
-    "An invented date is the single worst thing you can do here. Omitting one costs nothing.",
+    "NEVER manufacture, approximate, round, diversify, or substitute a date.",
+    "NEVER turn an orb into a calendar date.",
+    "Every emitted date must already exist in the supplied calculator data.",
     "",
     "═══════════════════════════════════════════",
     "CHART DATA",
@@ -484,15 +483,12 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     solarReturnBlock,
     "NATAL PLACEMENTS:",
     planetList,
-    // EDIT 4: Insert JXL-specific anaretic block
     anareticBlock,
     "",
-    // EDIT 4: Updated natal aspects block with ranking
     "NATAL ASPECTS (ranked — major-body first, then by tightness; asteroid/Chiron/Lilith marked flavor):",
     aspectList || "None provided.",
     "ROLE: These never change. They are the pattern the transits are ACTIVATING.",
     "Aspects marked '[minor body — flavor only]' may color a description but may never anchor a claim.",
-    // EDIT 4: Insert extended points block
     extendedPointsBlock,
     siderealBlock,
     "CURRENT TRANSIT POSITIONS:",
@@ -531,20 +527,25 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "pointed at the same sky. Your job is to find where they AGREE and build the answer on that agreement.",
     "",
     "Work through this silently before writing:",
-    "1. SPINE. Take the single tightest EXACT or LIVE transit-to-natal aspect that bears on what they asked.",
-    "   This is the backbone. Note its planet, the natal point it hits, and the house it touches.",
+    "1. SPINE. Choose the strongest VALIDATED signal that directly bears on what they asked.",
+    "   Prefer an exact calculator-dated trigger or natal-hit station when it is genuinely relevant;",
+    "   otherwise use the tightest EXACT or LIVE transit-to-natal aspect.",
+    "   If no strong signal directly bears on the question, do not manufacture an event spine.",
     "2. ROOT. Find the tightest MAJOR-body natal aspect the spine lands on — the fixed wiring being activated.",
     "   This is why it lands on THEM, not on anyone having a hard week.",
     "3. AMPLIFIERS. Check every other layer against the spine. Ask each ONE question: does it point at the same",
     "   planet, house, or theme?",
     "   - Spine's planet is the Time Lord, or its house is the profected house? → this is the headline of the year.",
     "   - A progression (esp. progressed Moon/Sun/Ascendant) names the same chapter? → this is WHY it lands this way.",
-    "   - The Solar Return reflects the theme? → it is a real external event. If not → it is internal; do not inflate it.",
-    "   - A station falls on the same natal point or house? → the timing is forced and unavoidable; it outranks ordinary transits.",
+    "   - The Solar Return reflects the same theme? → use it as confirmation only; it can strengthen, never create or veto an event.",
+    "   - A natal-hit station reinforces the same point or house? → timing is strongly amplified; it does not guarantee an outcome.",
     "   - Sidereal agrees? → say it with more force. Disagrees? → soften that specific claim.",
     "   - Moon phase, lots, anaretic, or out-of-bounds reinforce it? → let them sharpen the consequence, not add a topic.",
-    "4. WEIGHT. A claim three converging layers support is stated as fact, with force. A claim only one layer",
-    "   supports is stated lightly or dropped. Where two layers CONTRADICT, say the picture is mixed — do not force certainty.",
+    "4. CLASSIFY. Decide what level the evidence actually supports:",
+    "   - EVENT: multiple independent techniques converge on one concrete development.",
+    "   - ACTIVATION: a strong trigger is present, but its manifestation is not uniquely determined.",
+    "   - BACKGROUND: theme or context only; no concrete event claim.",
+    "   Match the language to that level. Be direct, but never stronger than the evidence.",
     "5. DISCARD. Anything that does not connect to the spine is dropped. You were given the whole chart to FIND",
     "   the convergence, not to list it. An unused layer is not a failure; a reading that name-drops every layer is.",
     "",
@@ -577,7 +578,8 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "WINDOWS — 0, 1, or 2. Governed entirely by THE DATE RULE above.",
     "  Give a window ONLY when a calculated aspect, a station, or the next exact aspect supplies a real",
     "  date that genuinely bears on what they asked. Each window is one specific date plus ONE OR TWO",
-    "  sentences: what activates, and the concrete consequence. Fact, not possibility.",
+    "  sentences: what activates and the strongest manifestation the evidence actually supports.",
+    "  Match the wording to EVENT or ACTIVATION strength; a dated activation does not automatically guarantee one outcome.",
     "  If a window involves the Time Lord, say so — it outranks the others.",
     "  A window where nothing happens is not a window, it is filler. One real window beats two padded ones.",
     "  ZERO windows is correct and common. Return an empty array and let the answer stand on its own.",
@@ -606,8 +608,8 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "  continue. If you know it, say it now. This rule outranks every stylistic instruction.",
     "- Never mention replies, sessions, credits, purchases, subscriptions, or the app itself.",
     "- Only calculated aspects. Never invent one. Never manufacture a date.",
-    "- 'You' in every sentence. No passive voice. Outcomes as facts, not possibilities.",
-    "- No degrees, no orbs, no jargon anywhere in the output.",
+    "- Speak directly as 'you'. Be decisive, but match certainty to EVENT, ACTIVATION, or BACKGROUND.",
+    "- No degrees, no orbs, or jargon in reader-facing fields. Technical language is allowed only in sources.",
     "- No hedging words. No generic spiritual filler. No horoscope phrasing.",
     "- Do not diagnose medical or psychiatric conditions. Do not give legal, medical, or financial",
     "  instructions. Speak to the situation and the pattern, not to a diagnosis.",
@@ -680,18 +682,11 @@ export async function POST(request: NextRequest) {
     }
 
     // ── LAYER 1: tiered risk assessment ────────────────────────────────────
-    // Runs BEFORE the access gate and before the model call, so blocking costs
-    // the person nothing and never spends a reply.
-    //
-    // Only CRITICAL and HIGH block. MEDIUM proceeds to a full reading and
-    // carries a care note appended underneath — someone in a hard season still
-    // gets the answer, the window, and the directive. See lib/crisisDetection.ts.
     const earlyBody = (await request.json()) as JxlAskBody;
     const risk = assessRisk(earlyBody?.question ?? "");
 
     if (risk.action === "block_crisis" || risk.action === "block_emergency") {
       const safe = getSafeResponse(risk);
-      // Signals are category/level labels only — never the person's words.
       console.warn(
         `[jxl/ask] Layer 1 block — level=${risk.level} action=${risk.action} ` +
         `conf=${risk.confidence} signals=${risk.signals.join("|")}`
@@ -705,7 +700,6 @@ export async function POST(request: NextRequest) {
           confirmation: safe.confirmation,
           isSafeResponse: true,
           riskLevel: risk.level,
-          // Not counted as a reply — the client must not decrement anything.
           replyNumber: null,
           repliesPerSession: REPLIES_PER_SESSION,
         },
@@ -713,7 +707,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // MEDIUM: reading proceeds in full; this rides along with the response.
     const careNote = getCareNote(risk);
 
     // ── VALIDATE AND NORMALIZE ASPECTS ──
@@ -737,10 +730,8 @@ export async function POST(request: NextRequest) {
     const turnCount = historyLen + 1;
     const isNewSession = historyLen === 0;
 
-    // Free band: subscribers 4, non-subscribers 2 (their included replies).
     const freeReplies = isSubscribed ? 4 : 2;
 
-    // ── The 8-reply safety wall — absolute, counts every turn, fresh per convo ──
     if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
       return NextResponse.json(
         { error: JXL_CONVERSATION_CAP_MESSAGE, code: "JXL_CONVERSATION_CAP" },
@@ -751,8 +742,6 @@ export async function POST(request: NextRequest) {
     let metaUpdate: Record<string, unknown> | null = null;
 
     if (isNewSession) {
-      // JXL is credits-only. First-JXL 50% off is handled at checkout.
-      // Zero jxlCredits → paywall.
       if (jxlCredits > 0) {
         metaUpdate = { jxlCredits: jxlCredits - 1 };
       } else {
@@ -762,10 +751,8 @@ export async function POST(request: NextRequest) {
         );
       }
     } else if (turnCount <= freeReplies) {
-      // CONTINUING within the free band — no charge.
       metaUpdate = null;
     } else {
-      // CONTINUING past the free band — spend from the UNIFIED reply pool.
       if (replyCredits > 0) {
         metaUpdate = { replyCredits: replyCredits - 1 };
       } else {
@@ -774,9 +761,6 @@ export async function POST(request: NextRequest) {
             error: "You've used your free replies.",
             code: "NEEDS_REPLY_PACK",
             isSubscribed,
-            // One pool now. Non-subs buy the à-la-carte replies pack
-            // (reply_pack → replyCredits); subs get the discounted tail,
-            // which also lands in replyCredits via sub_reply_tail_regular.
             tailMode: isSubscribed ? "sub_reply_tail_regular" : "reply_pack",
           },
           { status: 402 }
@@ -785,7 +769,6 @@ export async function POST(request: NextRequest) {
     }
 
     const isFinalTurn = turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;
-    // ── End access model ───────────────────────────────────────────────────
 
     // ── VALIDATE REQUIRED FIELDS ──
     if (!normalizedBody.question || !normalizedBody.tropical?.planets || !normalizedBody.profection || !normalizedBody.transits) {
@@ -819,6 +802,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 3600,
+        temperature: 0.3,
         system:
 "You are a precision astrologer answering a real person who just spoke aloud about a specific " +
 "situation in their life. This is the PREMIUM reading — it should be the deepest, most insightful " +
@@ -827,7 +811,8 @@ export async function POST(request: NextRequest) {
 "The transit aspects are calculated and given to you: never compute or invent one. A specific date " +
 "is allowed ONLY when it traces to a calculated transit, station, or aspect in the data you were " +
 "given; if no calculated date supports it, do not name one — a null date is correct and common. " +
-"CRITICAL: no degrees, no orbs, and no astrological jargon anywhere in your output. This is a spoken " +
+"CRITICAL: no degrees, no orbs, and no astrological jargon in reader-facing fields. The sources array " +
+"is the only exception and may use technical chart language for verification. This is a spoken " +
 "conversation, not a technical readout — but it must be as substantial and layered as a full reading. " +
 "Precision lives in the sharpness of the consequence, not in decimal places. " +
 "DEPTH IS THE PRODUCT. Do not keep it short. Develop your answer fully: (1) address their actual " +
@@ -839,8 +824,8 @@ export async function POST(request: NextRequest) {
 "specific situation wherever it genuinely leads. Use that freedom to go deeper, not shorter. " +
 "Answer completely. Never withhold the useful part, never end on a hook, never reference sessions, " +
 "replies, or purchases. If the person is in real distress, care for them first and set the format aside. " +
-"Speak directly to them as 'you'. State outcomes as facts. Rich, warm, direct, and complete — the kind " +
-"of answer someone feels was worth paying more for. " +
+"Speak directly to them as 'you'. Be decisive, but match certainty to EVENT, ACTIVATION, or BACKGROUND. " +
+"Rich, warm, direct, and complete — the kind of answer someone feels was worth paying more for. " +
 "Output ONLY raw valid JSON — no markdown, no code fences, no preamble.",
         messages: [{ role: "user", content: prompt }],
       }),
@@ -902,39 +887,27 @@ export async function POST(request: NextRequest) {
     }
 
     // ── DATE PROVENANCE GUARD ──────────────────────────────────────────────
-    // Every date the model emits must trace to a date the ephemeris actually
-    // supplied (the next exact aspect, or a station with a natal hit). A date
-    // that doesn't trace is dropped — a window loses its whole entry (a window
-    // is its date), a directive loses its date and downgrades to DROP below.
     const dateViolations: string[] = [];
 
-    // Placeholder dates the model sometimes emits instead of omitting a date.
-    // Anything on this list is treated as "no date", so the UI never renders a
-    // chip reading "TBD" or "null".
     const isPlaceholder = (d: unknown): boolean => {
       if (typeof d !== "string") return true;
       const t = d.trim().toLowerCase();
       return t === "" || ["null", "none", "n/a", "na", "tbd", "unknown"].includes(t);
     };
 
-    // Windows: max 2, must have a real date AND a body, AND that date must
-    // trace to supplied data.
     const windows = (Array.isArray(parsed.windows) ? parsed.windows : [])
       .filter((w) => !isPlaceholder(w?.date) && typeof w?.body === "string" && w.body.trim())
       .filter((w) => {
         const chk = checkDateSupported(w!.date as string, dateIndex);
         if (!chk.supported) {
           dateViolations.push(`window date "${String(w!.date)}" not traceable to supplied data`);
-          return false; // a window is its date — drop it entirely
+          return false;
         }
         return true;
       })
       .slice(0, 2)
       .map((w) => ({ date: (w!.date as string).trim(), body: (w!.body as string).trim() }));
 
-    // Directives: max 2. EXECUTE and LOCK require a real date — if the model
-    // returns one without, or with a date that doesn't trace to supplied data,
-    // downgrade it to DROP rather than showing a dateless "execute by".
     const directives = (Array.isArray(parsed.directives) ? parsed.directives : [])
       .filter((d) => typeof d?.body === "string" && d.body.trim())
       .slice(0, 2)
@@ -954,9 +927,6 @@ export async function POST(request: NextRequest) {
         };
       });
 
-    // Sources: each needs both a label and the placement detail. No cap — an
-    // honest answer lists everything it leaned on — but drop empties so the UI
-    // never shows a blank row.
     const sources = (Array.isArray(parsed.sources) ? parsed.sources : [])
       .filter(
         (s) =>
@@ -974,15 +944,12 @@ export async function POST(request: NextRequest) {
       console.warn(`[jxl/ask] supplied dates failed to parse (format bug?): ${dateIndex.unparseableSupplied.join(" ; ")}`);
     }
 
-    // Charge only now — the reading succeeded. Every failure path above already
-    // returned without touching metadata.
     if (metaUpdate) {
       try {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: { ...metadata, ...metaUpdate },
         });
       } catch (writeErr) {
-        // They already have their answer; never fail the response on the write.
         console.error("[jxl/ask] metadata write failed post-reading:", writeErr);
       }
     }
@@ -995,8 +962,6 @@ export async function POST(request: NextRequest) {
         directives,
         sources,
         confirmation: parsed.confirmation ?? "",
-        // Present only on MEDIUM risk. The client renders it quietly beneath
-        // the reading — never as a warning, never as an interruption.
         careNote,
         isSafeResponse: false,
         riskLevel: risk.level,
