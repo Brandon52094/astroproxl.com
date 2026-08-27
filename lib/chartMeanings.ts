@@ -1,0 +1,45 @@
+export const PLANET_MEANING: Record<string, string> = {
+  Sun: "your core identity, conscious purpose, and the essence of who you are becoming — what you're learning to express and embody",
+  Moon: "your emotional world, instinctual responses, and what you need to feel safe — often hidden even from yourself until triggered",
+  Mercury: "how you perceive, process, and transmit information — your mental wiring and communication style",
+  Venus: "what you attract, how you relate, and what you find pleasurable — your values, aesthetic, and love language",
+  Mars: "your drive, ambition, and how you pursue what you want — your assertiveness, sexuality, and capacity for conflict",
+  Jupiter: "where you're naturally lucky, expansive, and optimistic — your growth edge and what comes easily when you trust the process",
+  Saturn: "where you face limitation, build structure, and develop mastery — your greatest teacher and the source of your enduring strength",
+  Uranus: "where you're radically individual, innovative, and unpredictable — the part of you that refuses to conform and craves liberation",
+  Neptune: "where you dissolve boundaries, access intuition, and connect to the transcendent — your capacity for imagination, compassion, and idealism",
+  Pluto: "where you undergo death-and-rebirth cycles, confront power, and excavate hidden truths — your deepest evolutionary drive",
+  Ascendant: "your instinctive response to new situations and first impressions — the interface between your inner world and the outer world",
+  "North Node": "your evolutionary direction — the unfamiliar territory you're meant to grow into, even when it feels uncomfortable",
+  "South Node": "your comfort zone and past patterns — the familiar skills and tendencies you must learn to balance rather than over-rely upon",
+};
+
+export const SIGN_MEANING: Record<string, string> = {
+  Aries: "initiating, impulsive, and courageously direct — acts first, thinks later, and thrives on challenge",
+  Taurus: "steady, sensual, and deeply grounded — builds slowly, values security, and resists change that feels unnecessary",
+  Gemini: "curious, witty, and intellectually restless — thrives on variety, connection, and the endless exchange of ideas",
+  Cancer: "nurturing, emotionally attuned, and protectively maternal — feels deeply, clings to the familiar, and creates sanctuary",
+  Leo: "warm, dramatic, and magnetically expressive — craves recognition, leads with heart, and radiates creative vitality",
+  Virgo: "meticulous, analytical, and service-oriented — finds meaning in refinement, order, and practical help",
+  Libra: "harmonious, socially graceful, and aesthetically refined — seeks balance, partnership, and beauty in all things",
+  Scorpio: "intense, probing, and fiercely loyal — dives into emotional depths, trusts slowly, and transforms through crisis",
+  Sagittarius: "adventurous, philosophical, and bluntly honest — seeks truth, expansion, and experiences that broaden perspective",
+  Capricorn: "ambitious, disciplined, and strategically patient — builds empires, respects tradition, and earns authority through persistence",
+  Aquarius: "visionary, unconventional, and intellectually detached — sees the collective future, values freedom, and questions everything",
+  Pisces: "dreamy, empathetic, and spiritually porous — dissolves boundaries, absorbs emotional energy, and connects to the mystical",
+};
+
+export const HOUSE_MEANING: Record<string, string> = {
+  "1": "the self — your body, personality, and instinctive approach to life's beginnings",
+  "2": "personal resources — your money, values, self-worth, and what you hold onto",
+  "3": "communication — your mind, siblings, daily exchanges, and local environment",
+  "4": "home and roots — your family, emotional foundation, ancestry, and private life",
+  "5": "creativity and pleasure — your self-expression, romance, children, and play",
+  "6": "service and health — your work, habits, routines, and physical wellbeing",
+  "7": "partnerships — your committed relationships, open enemies, and one-on-one connections",
+  "8": "transformation — your intimacy, shared resources, psychological depth, and rebirth",
+  "9": "expansion — your higher education, philosophy, travel, and search for meaning",
+  "10": "career and reputation — your public image, authority, life direction, and legacy",
+  "11": "community — your friendships, networks, social causes, and hopes for the future",
+  "12": "the unconscious — your solitude, spirituality, hidden patterns, and what you keep private",
+};
