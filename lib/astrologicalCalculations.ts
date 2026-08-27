@@ -248,26 +248,14 @@ export function calculateEssentialDignity(
 }
 
 export function calculateSynodicCycles(
-  planets: Array<{ name: string; sign: string; degree: string }>,
-  currentDate: Date
+  _planets: Array<{ name: string; sign: string; degree: string }>,
+  _currentDate: Date
 ): SynodicCycle[] {
-  const cycles: SynodicCycle[] = [];
-
-  for (const p of planets) {
-    if (["Uranus", "Neptune", "Pluto"].includes(p.name)) continue;
-    const orbitalPeriod = SYNODIC_PERIODS[p.name];
-    if (!orbitalPeriod) continue;
-
-    // For simplicity in quick scanning, we check upcoming returns within a 45-day cycle window or track full periods
-    // Real returns use ephemeris search, but here we output active cycle markers if applicable
-    cycles.push({
-      planet: p.name,
-      returnDate: new Date(currentDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      daysUntilReturn: 30, // Fallback placeholder safely handled by downstream filters
-    });
-  }
-
-  return cycles;
+  // DISABLED: the previous implementation fabricated data — it returned
+  // "today + 30 days" as the return date for every planet, producing
+  // meaningless, identical dates. Until a real ephemeris return-search is
+  // implemented, return nothing so no fake cycle data reaches the prompt.
+  return [];
 }
 
 export function calculateMidpoints(
