@@ -6,6 +6,11 @@ import { Sparkles, Compass, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
+import {
+  PLANET_MEANING,
+  SIGN_MEANING,
+  HOUSE_MEANING,
+} from "@/lib/chartMeanings";
 
 /**
  * YOUR BIRTH CHART — sibling panel to Today's Sky.
@@ -153,6 +158,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
   const [aspects, setAspects] = useState<NatalAspect[]>([]);
   const [aspectsOpen, setAspectsOpen] = useState(false);
   const [showWeaker, setShowWeaker] = useState(false);
+  const [openPlacement, setOpenPlacement] = useState<string | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -490,40 +496,173 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
               Recalculate chart
             </button>
 
-            {/* ── Full placements ── */}
-            <SkyCard icon={Sparkles} label="All Placements">
-              <div className="divide-y divide-white/5">
-                {natal.map((planet) => {
+            {/* ── Full placements — tap to explore ── */}
+            <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles
+                    className="h-3.5 w-3.5 text-slate-400"
+                    strokeWidth={2.2}
+                  />
+                  <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                    All Placements
+                  </span>
+                </div>
+
+                <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                  Tap to Explore
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {natal.map((planet, index) => {
                   const element = elementOf(planet.sign);
                   const colors = element ? ELEMENT_COLORS[element] : null;
-                  const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
+                  const displayName =
+                    planet.name === "Ascendant" ? "Rising" : planet.name;
+
+                  const isOpen = openPlacement === planet.name;
+
                   return (
-                    <div key={planet.name} className="flex items-center justify-between py-2.5 text-[13px]">
-                      <span className="flex items-center gap-2 text-slate-300">
-                        <span className="w-6 text-center text-base text-slate-500">
+                    <div
+                      key={planet.name}
+                      className={cn(
+                        index < natal.length - 1 &&
+                          "border-b border-white/5 pb-3"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenPlacement((current) =>
+                            current === planet.name ? null : planet.name
+                          )
+                        }
+                        aria-expanded={isOpen}
+                        className="flex w-full items-center gap-3 text-left"
+                      >
+                        <span
+                          className={cn(
+                            "w-8 shrink-0 text-center text-xl transition-colors",
+                            isOpen ? "text-slate-200" : "text-slate-500"
+                          )}
+                          style={
+                            isOpen && colors
+                              ? {
+                                  color: colors.text,
+                                  textShadow: `0 0 10px ${colors.glow}`,
+                                }
+                              : undefined
+                          }
+                        >
                           {GLYPHS[planet.name] ?? "•"}
                         </span>
-                        {displayName}
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <span className="text-slate-200 tabular-nums">
-                          {planet.sign} {planet.degree}
+
+                        <span
+                          className={cn(
+                            "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
+                            isOpen ? "text-white" : "text-slate-300"
+                          )}
+                        >
+                          {displayName}
+                        </span>
+
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 text-[15px] transition-colors",
+                            isOpen ? "text-white" : "text-slate-300"
+                          )}
+                        >
+                          {planet.sign}
+                        </span>
+
+                        <span
+                          className={cn(
+                            "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
+                            isOpen ? "text-slate-300" : "text-slate-400"
+                          )}
+                        >
+                          {planet.degree}
+
                           {planet.house ? (
-                            <span className="ml-1 text-[11px] text-slate-500">· {ordinal(planet.house)}</span>
+                            <span className="ml-1 text-slate-500">
+                              · {ordinal(planet.house)}
+                            </span>
                           ) : null}
                         </span>
-                        {colors && (
-                          <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: colors.bar, boxShadow: `0 0 6px ${colors.glow}` }}
-                          />
-                        )}
-                      </span>
+                      </button>
+
+                      <motion.div
+                        initial={false}
+                        animate={{
+                          height: isOpen ? "auto" : 0,
+                          opacity: isOpen ? 1 : 0,
+                        }}
+                        transition={{
+                          duration: shouldReduceMotion ? 0 : 0.22,
+                          ease: "easeOut",
+                        }}
+                        className="overflow-hidden"
+                      >
+                        <div className="ml-11 pt-3">
+                          <div
+                            className="border-l pl-3"
+                            style={{
+                              borderColor:
+                                colors?.border ?? "rgba(255,255,255,0.10)",
+                            }}
+                          >
+                            <p
+                              className="text-[10px] font-medium uppercase tracking-[0.16em]"
+                              style={{
+                                color: colors?.text ?? "#94A3B8",
+                              }}
+                            >
+                              {planet.name === "Ascendant"
+                                ? `${planet.sign} Rising`
+                                : `${planet.name} in ${planet.sign}`}
+                            </p>
+
+                            {PLANET_MEANING[planet.name] && (
+                              <div className="mt-2">
+                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                  The Planet
+                                </p>
+                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                  {PLANET_MEANING[planet.name]}
+                                </p>
+                              </div>
+                            )}
+
+                            {SIGN_MEANING[planet.sign] && (
+                              <div className="mt-3">
+                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                  The Sign
+                                </p>
+                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                  {SIGN_MEANING[planet.sign]}
+                                </p>
+                              </div>
+                            )}
+
+                            {planet.house && HOUSE_MEANING[String(planet.house)] && (
+                              <div className="mt-3">
+                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                  The {ordinal(planet.house)} House
+                                </p>
+                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                  {HOUSE_MEANING[String(planet.house)]}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
                     </div>
                   );
                 })}
               </div>
-            </SkyCard>
+            </div>
 
             {/* ── Major Aspects (collapsible, text, sorted by strength) ── */}
             {aspects.length > 0 && (
