@@ -498,19 +498,9 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
 
             {/* ── Full placements — tap to explore ── */}
             <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles
-                    className="h-3.5 w-3.5 text-slate-400"
-                    strokeWidth={2.2}
-                  />
-                  <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                    All Placements
-                  </span>
-                </div>
-
-                <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                  Tap to Explore
+              <div className="mb-4 text-center">
+                <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                  Tap Each Placement To Learn
                 </span>
               </div>
 
@@ -542,17 +532,18 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                         className="flex w-full items-center gap-3 text-left"
                       >
                         <span
-                          className={cn(
-                            "w-8 shrink-0 text-center text-xl transition-colors",
-                            isOpen ? "text-slate-200" : "text-slate-500"
-                          )}
+                          className="w-8 shrink-0 text-center text-xl transition-all"
                           style={
-                            isOpen && colors
+                            colors
                               ? {
                                   color: colors.text,
-                                  textShadow: `0 0 10px ${colors.glow}`,
+                                  textShadow: isOpen
+                                    ? `0 0 10px ${colors.glow}`
+                                    : "none",
                                 }
-                              : undefined
+                              : {
+                                  color: "#64748b",
+                                }
                           }
                         >
                           {GLYPHS[planet.name] ?? "•"}
@@ -604,7 +595,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                         }}
                         className="overflow-hidden"
                       >
-                        <div className="ml-11 pt-3">
+                        <div className="pt-3 pl-1">
                           <div
                             className="border-l pl-3"
                             style={{
