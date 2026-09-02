@@ -85,10 +85,8 @@ export async function POST(request: NextRequest) {
       | "jxl_session"
       | "followup"
       | "reply_pack"
-      | "jxl_reply_pack"
-      | "sub_reply_tail_regular"
-      | "sub_reply_tail_jxl"
       | "bundle_pack"
+      | "cart"
       | undefined;
 
     if (!userId || !mode) {
@@ -104,7 +102,6 @@ export async function POST(request: NextRequest) {
 
       const currentCredits = Number(meta?.credits ?? 0);
       const currentReplyCredits = Number(meta?.replyCredits ?? 0);
-      const currentJxlReplyCredits = Number(meta?.jxlReplyCredits ?? 0);
       const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
 
       await trackServerPurchase({
@@ -162,7 +159,7 @@ export async function POST(request: NextRequest) {
         console.log(`[webhook] jxl_session — +1 JXL credit to ${userId}`);
 
       } else if (mode === "reply_pack") {
-        const grant = Number(session.metadata?.replyCredits ?? 2);
+        const grant = Number(session.metadata?.replyCredits ?? 3);
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
@@ -170,35 +167,7 @@ export async function POST(request: NextRequest) {
             lastPurchaseAt: new Date().toISOString(),
           },
         });
-        console.log(`[webhook] reply_pack — +${grant} regular reply credits to ${userId}`);
-
-      } else if (mode === "jxl_reply_pack") {
-        const grant = Number(session.metadata?.jxlReplyCredits ?? 2);
-        await client.users.updateUserMetadata(userId, {
-          publicMetadata: {
-            ...meta,
-            jxlReplyCredits: currentJxlReplyCredits + grant,
-            lastPurchaseAt: new Date().toISOString(),
-          },
-        });
-        console.log(`[webhook] jxl_reply_pack — +${grant} JXL reply credits to ${userId}`);
-
-      } else if (mode === "sub_reply_tail_regular" || mode === "sub_reply_tail_jxl") {
-        const regularGrant = Number(session.metadata?.replyCredits ?? 0);
-        const jxlGrant = Number(session.metadata?.jxlReplyCredits ?? 0);
-
-        await client.users.updateUserMetadata(userId, {
-          publicMetadata: {
-            ...meta,
-            replyCredits: currentReplyCredits + regularGrant,
-            jxlReplyCredits: currentJxlReplyCredits + jxlGrant,
-            lastPurchaseAt: new Date().toISOString(),
-          },
-        });
-
-        console.log(
-          `[webhook] ${mode} — granted ${regularGrant || jxlGrant} discounted tail replies to ${userId}`
-        );
+        console.log(`[webhook] reply_pack — +${grant} universal reply credits to ${userId}`);
 
       } else if (mode === "bundle_pack") {
         const creditsToGrant = Number(session.metadata?.credits ?? 0);
@@ -215,6 +184,50 @@ export async function POST(request: NextRequest) {
 
         console.log(
           `[webhook] bundle_pack — granted ${creditsToGrant} readings + ${jxlToGrant} JXL to ${userId}`
+        );
+
+      } else if (mode === "cart") {
+        const readingGrant = Math.max(
+          0,
+          Number(session.metadata?.grantCredits ?? 0)
+        );
+
+        const jxlGrant = Math.max(
+          0,
+          Number(session.metadata?.grantJxlCredits ?? 0)
+        );
+
+        const replyGrant = Math.max(
+          0,
+          Number(session.metadata?.grantReplyCredits ?? 0)
+        );
+
+        await client.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            ...meta,
+            credits: currentCredits + readingGrant,
+            jxlCredits: currentJxlCredits + jxlGrant,
+            replyCredits: currentReplyCredits + replyGrant,
+            ...(readingGrant > 0
+              ? {
+                  firstReadingUsed: true,
+                  firstPaidReadingUsed: true,
+                }
+              : {}),
+            ...(jxlGrant > 0
+              ? {
+                  firstJxlUsed: true,
+                }
+              : {}),
+            lastPurchaseAt: new Date().toISOString(),
+          },
+        });
+
+        console.log(
+          `[webhook] cart — ${userId}: ` +
+            `+${readingGrant} reading(s), ` +
+            `+${jxlGrant} JXL, ` +
+            `+${replyGrant} universal reply/replies`
         );
 
       } else if (mode === "followup") {

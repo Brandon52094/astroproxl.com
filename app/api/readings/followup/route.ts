@@ -735,16 +735,39 @@ export async function POST(request: NextRequest) {
     const dateIndex = buildValidDateIndex(normalizedBody, validatedAspects);
 
     // ── Reply-access gating ──
-    const NONSUB_FREE_REPLIES = 1;
-    const SUB_FREE_REPLIES = 4;
+    //
+    // Every REGULAR READING includes 2 replies.
+    // Those replies belong to that specific reading.
+    //
+    // After the 2 included replies are used,
+    // the user can keep that same conversation going
+    // by spending universal replyCredits.
+    //
+    // XL members have unlimited replies and therefore
+    // do not consume included replies or replyCredits.
+    //
+
+    const INCLUDED_READING_REPLIES = 2;
 
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
     const isSubscribed = metadata?.isSubscribed === true;
-    const replyCredits = Number(metadata?.replyCredits ?? 0);
-    const freeRepliesUsed = Math.max(0, Number(body.freeRepliesUsed ?? 0));
+
+    // Universal purchased replies.
+    // These can continue either a Regular Reading or JXL conversation.
+    const replyCredits = Math.max(
+      0,
+      Number(metadata?.replyCredits ?? 0)
+    );
+
+    // Number of INCLUDED replies already used
+    // on THIS specific regular reading.
+    const includedRepliesUsed = Math.max(
+      0,
+      Number(body.freeRepliesUsed ?? 0)
+    );
 
     // ── LAYER 1: crisis check ──
     const risk = assessRisk(body?.question ?? "");
@@ -762,22 +785,54 @@ export async function POST(request: NextRequest) {
           riskLevel: risk.level,
           replyMeta: {
             accessTier: null,
-            usedFreeReply: false,
-            freeRepliesRemaining: Math.max(0, (isSubscribed ? SUB_FREE_REPLIES : NONSUB_FREE_REPLIES) - freeRepliesUsed),
+            usedIncludedReply: false,
+            includedRepliesRemaining: isSubscribed
+              ? null
+              : Math.max(
+                  0,
+                  INCLUDED_READING_REPLIES - includedRepliesUsed
+                ),
             replyCreditsRemaining: replyCredits,
             isSubscribed,
+            unlimitedReplies: isSubscribed,
           },
         },
         { status: 200 }
       );
     }
+
     const careNote = getCareNote(risk);
 
-    const freeBand = isSubscribed ? SUB_FREE_REPLIES : NONSUB_FREE_REPLIES;
+    /*
+      ACCESS ORDER
 
-    let accessTier: "free" | "credit" | null;
-    if (freeRepliesUsed < freeBand) {
-      accessTier = "free";
+      1. XL member
+           → unlimited
+
+      2. Reading still has one of its 2 included replies
+           → use included reply
+
+      3. Included replies exhausted but user has
+         purchased universal replies
+           → use 1 replyCredit
+
+      4. Neither available
+           → ask them to purchase replies
+    */
+
+    let accessTier:
+      | "member"
+      | "included"
+      | "credit"
+      | null;
+
+    if (isSubscribed) {
+      accessTier = "member";
+    } else if (
+      includedRepliesUsed <
+      INCLUDED_READING_REPLIES
+    ) {
+      accessTier = "included";
     } else if (replyCredits > 0) {
       accessTier = "credit";
     } else {
@@ -787,10 +842,15 @@ export async function POST(request: NextRequest) {
     if (accessTier === null) {
       return NextResponse.json(
         {
-          error: "You've used your free replies.",
-          code: "NEEDS_REPLY_PACK",
-          isSubscribed,
-          tailMode: isSubscribed ? "sub_reply_tail_regular" : "reply_pack",
+          error:
+            "You've used the 2 replies included with this reading.",
+
+          code: "NEEDS_REPLY_CREDITS",
+
+          isSubscribed: false,
+
+          includedRepliesRemaining: 0,
+          replyCreditsRemaining: 0,
         },
         { status: 402 }
       );
@@ -885,38 +945,83 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Spend a PAID reply credit ──
-    let replyCreditsRemaining = replyCredits;
+    // ── Spend a UNIVERSAL purchased reply ──
+    //
+    // Only spend from the user's global reply wallet
+    // after this reading's 2 included replies are gone.
+    //
+    // Members never spend reply credits here.
+    //
+
+    let replyCreditsRemaining =
+      replyCredits;
+
     if (accessTier === "credit") {
-      replyCreditsRemaining = Math.max(0, replyCredits - 1);
-      await client.users.updateUserMetadata(userId, {
-        publicMetadata: {
-          ...metadata,
-          replyCredits: replyCreditsRemaining,
-        },
-      });
+      replyCreditsRemaining =
+        Math.max(
+          0,
+          replyCredits - 1
+        );
+
+      await client.users.updateUserMetadata(
+        userId,
+        {
+          publicMetadata: {
+            ...metadata,
+
+            replyCredits:
+              replyCreditsRemaining,
+          },
+        }
+      );
+
       console.log(
-        `[followup] spent 1 reply credit for ${userId}. Remaining: ${replyCreditsRemaining}`
+        `[followup] spent 1 universal reply credit for ${userId}. ` +
+          `Remaining: ${replyCreditsRemaining}`
       );
     }
 
-    const usedFreeReply = accessTier === "free";
-    const freeRepliesRemaining = Math.max(
-      0,
-      freeBand - (freeRepliesUsed + (usedFreeReply ? 1 : 0))
-    );
+    /*
+      An included reply belongs to this reading.
+
+      We return that fact to the client so the reading's
+      own freeRepliesUsed / included-reply count can advance.
+    */
+
+    const usedIncludedReply =
+      accessTier === "included";
+
+    const includedRepliesRemaining =
+      isSubscribed
+        ? null
+        : Math.max(
+            0,
+            INCLUDED_READING_REPLIES -
+              (
+                includedRepliesUsed +
+                (usedIncludedReply ? 1 : 0)
+              )
+          );
 
     return NextResponse.json(
       {
         title: parsed.title,
         content: parsed.content,
         careNote,
+
         replyMeta: {
           accessTier,
-          usedFreeReply,
-          freeRepliesRemaining,
+
+          usedIncludedReply,
+
+          includedRepliesRemaining,
+
           replyCreditsRemaining,
+
           isSubscribed,
+
+          unlimitedReplies:
+            isSubscribed,
         },
       },
       { status: 200 }

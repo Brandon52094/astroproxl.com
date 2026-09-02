@@ -730,43 +730,60 @@ export async function POST(request: NextRequest) {
     const turnCount = historyLen + 1;
     const isNewSession = historyLen === 0;
 
-    const freeReplies = isSubscribed ? 4 : 2;
+    const INCLUDED_JXL_REPLIES = 3;
 
-    if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
-      return NextResponse.json(
-        { error: JXL_CONVERSATION_CAP_MESSAGE, code: "JXL_CONVERSATION_CAP" },
-        { status: 402 }
-      );
-    }
+// Hard wall: 8 TOTAL replies in this JXL conversation.
+if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
+  return NextResponse.json(
+    {
+      error: JXL_CONVERSATION_CAP_MESSAGE,
+      code: "JXL_CONVERSATION_CAP",
+    },
+    { status: 402 }
+  );
+}
 
-    let metaUpdate: Record<string, unknown> | null = null;
+let metaUpdate: Record<string, unknown> | null = null;
 
-    if (isNewSession) {
-      if (jxlCredits > 0) {
-        metaUpdate = { jxlCredits: jxlCredits - 1 };
-      } else {
-        return NextResponse.json(
-          { error: "You need a JXL credit to start a session.", code: "NO_JXL_ACCESS" },
-          { status: 402 }
-        );
-      }
-    } else if (turnCount <= freeReplies) {
-      metaUpdate = null;
-    } else {
-      if (replyCredits > 0) {
-        metaUpdate = { replyCredits: replyCredits - 1 };
-      } else {
-        return NextResponse.json(
-          {
-            error: "You've used your free replies.",
-            code: "NEEDS_REPLY_PACK",
-            isSubscribed,
-            tailMode: isSubscribed ? "sub_reply_tail_regular" : "reply_pack",
-          },
-          { status: 402 }
-        );
-      }
-    }
+if (isNewSession) {
+  // Starting a fresh JXL conversation consumes 1 JXL credit.
+  if (jxlCredits > 0) {
+    metaUpdate = {
+      jxlCredits: jxlCredits - 1,
+    };
+  } else {
+    return NextResponse.json(
+      {
+        error: "You need a JXL credit to start a session.",
+        code: "NO_JXL_ACCESS",
+      },
+      { status: 402 }
+    );
+  }
+} else if (isSubscribed) {
+  // Subscribers feel unlimited inside the conversation.
+  // The 8-reply hard wall above still applies.
+  metaUpdate = null;
+} else if (turnCount <= INCLUDED_JXL_REPLIES) {
+  // Replies 1–3 are included with the JXL purchase.
+  metaUpdate = null;
+} else if (replyCredits > 0) {
+  // Replies 4–8 use the universal reply wallet.
+  metaUpdate = {
+    replyCredits: replyCredits - 1,
+  };
+} else {
+  return NextResponse.json(
+    {
+      error: "You've used the 3 replies included with this JXL.",
+      code: "NEEDS_REPLY_CREDITS",
+      isSubscribed: false,
+      includedRepliesRemaining: 0,
+      replyCreditsRemaining: 0,
+    },
+    { status: 402 }
+  );
+}
 
     const isFinalTurn = turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;
 
