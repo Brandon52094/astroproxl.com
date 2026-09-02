@@ -110,8 +110,10 @@ function getReplySavings(quantity: number) {
 
 export default function CreditsPanel({
   onClose,
+  embedded = false,
 }: {
   onClose?: () => void;
+  embedded?: boolean;
 }) {
   const [cart, setCart] = useState<Record<ProductId, number>>({
     jxl: 0,
@@ -224,18 +226,24 @@ export default function CreditsPanel({
   const C = STYLES;
 
   return (
-    <div style={C.root}>
+    <div
+      style={{
+        ...C.root,
+        ...(embedded ? C.rootEmbedded : {}),
+      }}
+    >
       <StarfieldBackground />
 
-      {/* Back */}
-      <button
-        type="button"
-        onClick={onClose}
-        style={C.back}
-      >
-        <ChevronLeft size={16} />
-        Back
-      </button>
+      {!embedded && (
+        <button
+          type="button"
+          onClick={onClose}
+          style={C.back}
+        >
+          <ChevronLeft size={16} />
+          Back
+        </button>
+      )}
 
       <div style={C.container}>
 
@@ -494,6 +502,16 @@ const STYLES: Record<
     overflowY: "auto",
     overflowX: "hidden",
     WebkitOverflowScrolling: "touch",
+  },
+
+  rootEmbedded: {
+    position: "relative",
+    inset: "auto",
+    zIndex: "auto",
+    width: "100%",
+    minHeight: "100%",
+    height: "auto",
+    overflowY: "visible",
   },
 
   back: {
