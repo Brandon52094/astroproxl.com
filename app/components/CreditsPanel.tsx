@@ -132,13 +132,7 @@ export default function CreditsPanel({
         setBalance({
           readings: Number(d.credits ?? 0),
           jxl: Number(d.jxlCredits ?? 0),
-
-          // Temporary compatibility:
-          // once backend migration is complete,
-          // this becomes simply d.replyCredits.
-          replies:
-            Number(d.replyCredits ?? 0) +
-            Number(d.jxlReplyCredits ?? 0),
+          replies: Number(d.replyCredits ?? 0),
         });
       } catch {
         // Balance line simply stays hidden.
@@ -249,10 +243,21 @@ export default function CreditsPanel({
             GET CREDITS
         ───────────────────────────── */}
 
-        <div style={C.titleRow}>
-          <span style={C.titleLine} />
-          <span style={C.title}>GET CREDITS</span>
-          <span style={C.titleLine} />
+        <div style={C.creditHeader}>
+          <div style={C.title}>GET CREDITS</div>
+
+          {balance && (
+            <p style={C.balance}>
+              You currently have{" "}
+              <b style={C.balanceStrong}>{balance.readings}</b>{" "}
+              {plural(balance.readings, "reading")},{" "}
+              <b style={C.balanceStrong}>{balance.jxl}</b> JXL, and{" "}
+              <b style={C.balanceStrong}>{balance.replies}</b>{" "}
+              {plural(balance.replies, "reply", "replies")}.
+            </p>
+          )}
+
+          <div style={C.headerDivider} />
         </div>
 
         <div style={C.products}>
@@ -261,6 +266,13 @@ export default function CreditsPanel({
               key={product.id}
               product={product}
               quantity={cart[product.id]}
+              inventory={
+                product.id === "jxl"
+                  ? balance?.jxl ?? 0
+                  : product.id === "reading"
+                  ? balance?.readings ?? 0
+                  : balance?.replies ?? 0
+              }
               onStep={step}
               replySavings={
                 product.id === "replies"
@@ -274,8 +286,7 @@ export default function CreditsPanel({
         {/* TOTAL */}
 
         <div style={C.totalRow}>
-          <span>TOTAL</span>
-
+          TOTAL :{" "}
           <span style={C.totalPrice}>
             ${total.toFixed(2)}
           </span>
@@ -302,26 +313,6 @@ export default function CreditsPanel({
         >
           {loading ? "…" : "CHECKOUT"}
         </button>
-
-        {/* CURRENT BALANCE */}
-
-        {balance && (
-          <p style={C.balance}>
-            You currently have{" "}
-            <b style={C.balanceStrong}>
-              {balance.readings}
-            </b>{" "}
-            {plural(balance.readings, "reading")},{" "}
-            <b style={C.balanceStrong}>
-              {balance.jxl}
-            </b>{" "}
-            JXL, and{" "}
-            <b style={C.balanceStrong}>
-              {balance.replies}
-            </b>{" "}
-            {plural(balance.replies, "reply", "replies")}.
-          </p>
-        )}
 
         {/* ─────────────────────────────
             MEMBERSHIP
@@ -389,11 +380,13 @@ export default function CreditsPanel({
 function CreditSelector({
   product,
   quantity,
+  inventory,
   onStep,
   replySavings,
 }: {
   product: Product;
   quantity: number;
+  inventory: number;
   onStep: (id: ProductId, amount: number) => void;
   replySavings: number;
 }) {
@@ -446,11 +439,11 @@ function CreditSelector({
         )}
       </div>
 
-      {/* Quantity circle + Plus */}
+      {/* Inventory badge + Plus */}
 
       <div style={STYLES.selectorRight}>
-        <div style={STYLES.quantityCircle}>
-          {quantity}
+        <div style={STYLES.inventoryCircle}>
+          {inventory}
         </div>
 
         <button
@@ -535,18 +528,8 @@ const STYLES: Record<
 
   /* HEADER */
 
-  titleRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
+  creditHeader: {
     marginBottom: 24,
-  },
-
-  titleLine: {
-    height: 1,
-    flex: 1,
-    background:
-      "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
   },
 
   title: {
@@ -554,7 +537,16 @@ const STYLES: Record<
     fontWeight: 700,
     letterSpacing: "0.12em",
     color: "#fff",
-    whiteSpace: "nowrap",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+
+  headerDivider: {
+    height: 1,
+    width: "100%",
+    background:
+      "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
+    marginTop: 14,
   },
 
   /* PRODUCT SELECTORS */
@@ -566,15 +558,16 @@ const STYLES: Record<
   },
 
   selector: {
+    position: "relative",
     minHeight: 82,
     display: "grid",
-    gridTemplateColumns: "52px 1fr 92px",
+    gridTemplateColumns: "52px 1fr 72px",
     alignItems: "stretch",
     border: `1px solid ${BORDER}`,
     borderRadius: 18,
     background:
       "linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
-    overflow: "hidden",
+    overflow: "visible",
     boxShadow:
       "0 10px 35px rgba(0,0,0,0.16)",
   },
@@ -629,45 +622,44 @@ const STYLES: Record<
   },
 
   selectorRight: {
-    display: "grid",
-    gridTemplateColumns: "42px 50px",
-    alignItems: "stretch",
-    borderLeft: `1px solid ${BORDER}`,
-  },
-
-  quantityCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: "50%",
-    alignSelf: "center",
-    justifySelf: "center",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    border:
-      "1px solid rgba(251,191,36,0.55)",
-    background:
-      "rgba(251,191,36,0.08)",
+    borderLeft: `1px solid ${BORDER}`,
+  },
+
+  inventoryCircle: {
+    position: "absolute",
+    top: -10,
+    right: -8,
+    width: 27,
+    height: 27,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: "1px solid rgba(251,191,36,0.65)",
+    background: "#07101d",
     color: "#fde68a",
     fontSize: 11,
     fontWeight: 700,
+    zIndex: 4,
   },
 
   /* TOTAL / CHECKOUT */
 
   totalRow: {
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    margin: "24px 4px 4px",
-    fontSize: 18,
+    textAlign: "center",
+    margin: "20px 0 0",
+    fontSize: 14,
     fontWeight: 700,
-    letterSpacing: "0.06em",
+    letterSpacing: "0.16em",
+    color: "#f8fafc",
   },
 
   totalPrice: {
     color: "#fde68a",
-    fontSize: 24,
+    fontSize: 14,
   },
 
   savingsLine: {
@@ -681,7 +673,7 @@ const STYLES: Record<
     width: "74%",
     minHeight: 48,
     display: "block",
-    margin: "16px auto 0",
+    margin: "12px auto 0",
     borderRadius: 999,
     cursor: "pointer",
     border:
@@ -704,7 +696,7 @@ const STYLES: Record<
     fontSize: 10.5,
     lineHeight: 1.45,
     color: "#7f8ba3",
-    margin: "12px 2px 0",
+    margin: "4px 2px 0",
   },
 
   balanceStrong: {
@@ -718,7 +710,7 @@ const STYLES: Record<
 
   membershipFrame: {
     position: "relative",
-    marginTop: 72,
+    marginTop: 34,
     padding:
       "56px 34px 70px",
     minHeight: 430,

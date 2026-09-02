@@ -4,7 +4,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
-import MembershipPanel from "./MembershipPanel";
+import CreditsPanel from "./CreditsPanel";
 import { migrateChartV2 } from "@/lib/chartStore";
 
 // ── Simplified to match ReadingIntakeScreen ───────────────────────────────────
@@ -21,9 +21,9 @@ interface UserStatus {
 /**
  * PAGER — four panels:
  *
- *   [0: Reading Intake (main)] ⇄ [1: Birth Chart] ⇄ [2: Today's Sky] ⇄ [3: Membership]
+ *   [0: Reading Intake (main)] ⇄ [1: Birth Chart] ⇄ [2: Today's Sky] ⇄ [3: Credits]
  *
- * The loop wraps: one more left from Membership returns to the main screen.
+ * The loop wraps: one more left from Credits returns to the main screen.
  *
  * The infinite-loop clone technique: a clone of the last panel sits before the
  * first, and a clone of the first sits after the last. When a transition lands
@@ -267,9 +267,9 @@ export default function PagerContainer() {
             height: "100%",
           }}
         >
-          {/* ── CLONE: Membership (before the real first panel) ── */}
+          {/* ── CLONE: Credits (before the real first panel) ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
-            <MembershipPanel userStatus={userStatus} onSwipeRight={goToPrevious} />
+            <CreditsPanel />
           </div>
 
           {/* ── PANEL 0: Reading Intake (main) ── */}
@@ -287,9 +287,9 @@ export default function PagerContainer() {
             <TodaySkyPanel userStatus={userStatus} />
           </div>
 
-          {/* ── PANEL 3: Membership ── */}
+          {/* ── PANEL 3: Credits ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
-            <MembershipPanel userStatus={userStatus} onSwipeRight={goToPrevious} />
+            <CreditsPanel />
           </div>
 
           {/* ── CLONE: Reading Intake (after the real last panel) ── */}
