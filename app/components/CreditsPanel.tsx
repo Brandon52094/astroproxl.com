@@ -26,13 +26,13 @@ const PRODUCTS: Product[] = [
   },
   {
     id: "reading",
-    title: "Regular Reading",
+    title: "General Readings",
     desc: "Includes 2 replies",
     price: 10.0,
   },
   {
     id: "replies",
-    title: "Replies",
+    title: "More Replies",
     desc: "Works with any reading",
     price: 1.0,
   },
@@ -75,6 +75,18 @@ const MEMBERSHIP_FEATURES = [
       "Send your ideas, requests, and feedback directly to us.",
   },
 ];
+
+const MEMBERSHIP_PRICING = {
+  monthly: {
+    price: 19.99,
+    suffix: "/mo",
+  },
+  yearly: {
+    price: 199.99,
+    suffix: "/yr",
+    savings: "Save about 17% vs monthly",
+  },
+} as const;
 
 /* ─────────────────────────────────────────────
    Automated reply pricing
@@ -123,6 +135,7 @@ export default function CreditsPanel({
 
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState<Balance | null>(null);
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
 
   /* Current balances */
   React.useEffect(() => {
@@ -211,16 +224,9 @@ export default function CreditsPanel({
   /* ── Membership entry ── */
 
   const handleGetAccess = () => {
-    /*
-      NEXT STEP:
-      Route this into MembershipPanel or your new
-      monthly/yearly XL Access selector.
-
-      We intentionally do NOT send the user into
-      the old $12 / $16 subscription checkout here.
-    */
-
-    console.log("Open XL Access membership");
+    // NEXT STEP: Wire this to Stripe subscription checkout
+    // with monthly ($19.99) or yearly ($199.99) pricing.
+    console.log(`XL Access selected: ${billingCycle}`);
   };
 
   const C = STYLES;
@@ -248,25 +254,182 @@ export default function CreditsPanel({
       <div style={C.container}>
 
         {/* ─────────────────────────────
+            MEMBERSHIP
+        ───────────────────────────── */}
+
+        <section style={C.membershipFrame}>
+
+          <div style={C.leftBracket}>
+            <span style={C.leftBracketTop} />
+            <span style={C.leftBracketBottom} />
+          </div>
+
+          <div style={C.rightBracket}>
+            <span style={C.rightBracketTop} />
+            <span style={C.rightBracketBottom} />
+          </div>
+
+          <div style={C.membershipTitle}>
+            MEMBERSHIP
+          </div>
+
+          <div style={C.membershipContent}>
+            {MEMBERSHIP_FEATURES.map((feature) => (
+              <div
+                key={feature.title}
+                style={C.featureRow}
+              >
+                <div style={C.featureName}>
+                  {feature.title}
+                </div>
+
+                <div style={C.featureCopy}>
+                  {feature.copy}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGetAccess}
+            style={C.getAccess}
+          >
+            SUBSCRIBE
+          </button>
+        </section>
+
+
+        {/* ─────────────────────────────
+            BILLING
+        ───────────────────────────── */}
+
+        <div style={C.billingWrap}>
+
+          <div style={C.billingToggleRow}>
+
+            <button
+              type="button"
+              onClick={() => setBillingCycle("monthly")}
+              style={{
+                ...C.billingLabel,
+                ...(billingCycle === "monthly"
+                  ? C.billingLabelActive
+                  : {}),
+              }}
+            >
+              Monthly
+            </button>
+
+            <button
+              type="button"
+              aria-pressed={billingCycle === "yearly"}
+              onClick={() =>
+                setBillingCycle((current) =>
+                  current === "monthly"
+                    ? "yearly"
+                    : "monthly"
+                )
+              }
+              style={{
+                ...C.billingSwitch,
+                ...(billingCycle === "yearly"
+                  ? C.billingSwitchOn
+                  : {}),
+              }}
+            >
+              <span
+                style={{
+                  ...C.billingKnob,
+                  ...(billingCycle === "yearly"
+                    ? C.billingKnobOn
+                    : {}),
+                }}
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setBillingCycle("yearly")}
+              style={{
+                ...C.billingLabel,
+                ...(billingCycle === "yearly"
+                  ? C.billingLabelActive
+                  : {}),
+              }}
+            >
+              Yearly
+            </button>
+
+          </div>
+
+          <div style={C.billingPrice}>
+            $
+            {MEMBERSHIP_PRICING[
+              billingCycle
+            ].price.toFixed(2)}
+
+            <span style={C.billingSuffix}>
+              {
+                MEMBERSHIP_PRICING[
+                  billingCycle
+                ].suffix
+              }
+            </span>
+          </div>
+
+          {billingCycle === "yearly" && (
+            <div style={C.billingSavings}>
+              {
+                MEMBERSHIP_PRICING.yearly
+                  .savings
+              }
+            </div>
+          )}
+        </div>
+
+
+        {/* ─────────────────────────────
             GET CREDITS
         ───────────────────────────── */}
 
         <div style={C.creditHeader}>
-          <div style={C.title}>GET CREDITS</div>
+          <div style={C.title}>
+            GET CREDITS
+          </div>
 
           {balance && (
             <p style={C.balance}>
               You currently have{" "}
-              <b style={C.balanceStrong}>{balance.readings}</b>{" "}
-              {plural(balance.readings, "reading")},{" "}
-              <b style={C.balanceStrong}>{balance.jxl}</b> JXL, and{" "}
-              <b style={C.balanceStrong}>{balance.replies}</b>{" "}
-              {plural(balance.replies, "reply", "replies")}.
+              <b style={C.balanceStrong}>
+                {balance.readings}
+              </b>{" "}
+              {plural(
+                balance.readings,
+                "reading"
+              )}
+              ,{" "}
+              <b style={C.balanceStrong}>
+                {balance.jxl}
+              </b>{" "}
+              JXL, and{" "}
+              <b style={C.balanceStrong}>
+                {balance.replies}
+              </b>{" "}
+              {plural(
+                balance.replies,
+                "reply",
+                "replies"
+              )}
+              .
             </p>
           )}
-
-          <div style={C.headerDivider} />
         </div>
+
+
+        {/* ─────────────────────────────
+            PRODUCTS
+        ───────────────────────────── */}
 
         <div style={C.products}>
           {PRODUCTS.map((product) => (
@@ -291,91 +454,45 @@ export default function CreditsPanel({
           ))}
         </div>
 
-        {/* TOTAL */}
-
-        <div style={C.totalRow}>
-          TOTAL :{" "}
-          <span style={C.totalPrice}>
-            ${total.toFixed(2)}
-          </span>
-        </div>
-
-        {replySavings > 0 && (
-          <div style={C.savingsLine}>
-            Reply savings: ${replySavings.toFixed(2)}
-          </div>
-        )}
-
-        {/* CHECKOUT */}
-
-        <button
-          type="button"
-          onClick={handleCheckout}
-          disabled={total <= 0 || loading}
-          style={{
-            ...C.checkout,
-            ...(total <= 0 || loading
-              ? C.checkoutDisabled
-              : {}),
-          }}
-        >
-          {loading ? "…" : "CHECKOUT"}
-        </button>
 
         {/* ─────────────────────────────
-            MEMBERSHIP
-
-            Exactly TWO large brackets:
-            1 left
-            1 right
+            CHECKOUT
         ───────────────────────────── */}
 
-        <section style={C.membershipFrame}>
+        <div style={C.checkoutWrap}>
 
-          {/* LEFT LARGE BRACKET */}
-          <div style={C.leftBracket}>
-            <span style={C.leftBracketTop} />
-            <span style={C.leftBracketBottom} />
-          </div>
+          {replySavings > 0 && (
+            <div style={C.savingsLine}>
+              Reply savings: $
+              {replySavings.toFixed(2)}
+            </div>
+          )}
 
-          {/* RIGHT LARGE BRACKET */}
-          <div style={C.rightBracket}>
-            <span style={C.rightBracketTop} />
-            <span style={C.rightBracketBottom} />
-          </div>
-
-          {/* Top opening */}
-          <div style={C.membershipTitle}>
-            MEMBERSHIP
-          </div>
-
-          {/* Feature matrix */}
-          <div style={C.membershipContent}>
-            {MEMBERSHIP_FEATURES.map((feature) => (
-              <div
-                key={feature.title}
-                style={C.featureRow}
-              >
-                <div style={C.featureName}>
-                  {feature.title}
-                </div>
-
-                <div style={C.featureCopy}>
-                  {feature.copy}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Bottom opening */}
           <button
             type="button"
-            onClick={handleGetAccess}
-            style={C.getAccess}
+            onClick={handleCheckout}
+            disabled={
+              total <= 0 || loading
+            }
+            style={{
+              ...C.checkout,
+              ...(total <= 0 || loading
+                ? C.checkoutDisabled
+                : {}),
+            }}
           >
-            GET ACCESS
+            {loading ? "…" : "CHECKOUT"}
           </button>
-        </section>
+
+          <div style={C.totalRow}>
+            TOTAL:{" "}
+            <span style={C.totalPrice}>
+              ${total.toFixed(2)}
+            </span>
+          </div>
+
+        </div>
+
       </div>
     </div>
   );
@@ -406,12 +523,17 @@ function CreditSelector({
 
   return (
     <div style={STYLES.selector}>
-      {/* Minus */}
+
+      <div style={STYLES.inventoryCircle}>
+        {inventory}
+      </div>
 
       <button
         type="button"
         aria-label={`Remove ${product.title}`}
-        onClick={() => onStep(product.id, -1)}
+        onClick={() =>
+          onStep(product.id, -1)
+        }
         disabled={quantity <= 0}
         style={{
           ...STYLES.selectorAction,
@@ -423,46 +545,48 @@ function CreditSelector({
         <Minus size={18} />
       </button>
 
-      {/* Center */}
 
       <div style={STYLES.selectorCenter}>
+
         <div style={STYLES.selectorTitle}>
           {product.title}
         </div>
 
         <div style={STYLES.selectorMeta}>
-          {product.desc}
-        </div>
-
-        <div style={STYLES.selectorPrice}>
           {isReplies && quantity > 0
-            ? `$${displayedPrice.toFixed(2)} selected`
-            : `$${product.price.toFixed(2)}`}
+            ? `${product.desc} · $${displayedPrice.toFixed(
+                2
+              )} selected`
+            : `${product.desc} · $${product.price.toFixed(
+                2
+              )}`}
         </div>
 
-        {isReplies && replySavings > 0 && (
-          <div style={STYLES.selectorSavings}>
-            You save ${replySavings.toFixed(2)}
-          </div>
-        )}
+        {isReplies &&
+          replySavings > 0 && (
+            <div
+              style={
+                STYLES.selectorSavings
+              }
+            >
+              You save $
+              {replySavings.toFixed(2)}
+            </div>
+          )}
       </div>
 
-      {/* Inventory badge + Plus */}
 
-      <div style={STYLES.selectorRight}>
-        <div style={STYLES.inventoryCircle}>
-          {inventory}
-        </div>
+      <button
+        type="button"
+        aria-label={`Add ${product.title}`}
+        onClick={() =>
+          onStep(product.id, 1)
+        }
+        style={STYLES.selectorAction}
+      >
+        <Plus size={20} />
+      </button>
 
-        <button
-          type="button"
-          aria-label={`Add ${product.title}`}
-          onClick={() => onStep(product.id, 1)}
-          style={STYLES.selectorAction}
-        >
-          <Plus size={20} />
-        </button>
-      </div>
     </div>
   );
 }
@@ -485,6 +609,12 @@ const GOLD = "rgba(251,191,36,0.72)";
 const GOLD_SOFT = "rgba(251,191,36,0.18)";
 const BORDER = "rgba(148,163,184,0.24)";
 const PANEL = "#050816";
+
+// ── Shadow system ──
+const SHADOW_DEEP = "0 10px 26px rgba(0,0,0,0.42), 0 3px 8px rgba(0,0,0,0.28)";
+const SHADOW_GOLD = "0 10px 26px rgba(0,0,0,0.42), 0 0 18px rgba(251,191,36,0.10)";
+const SHADOW_TEXT = "0 4px 10px rgba(0,0,0,0.75)";
+const SHADOW_DROP_GOLD = "drop-shadow(0 6px 7px rgba(0,0,0,0.55))";
 
 const STYLES: Record<
   string,
@@ -530,6 +660,7 @@ const STYLES: Record<
     fontSize: 13,
     cursor: "pointer",
     backdropFilter: "blur(8px)",
+    boxShadow: SHADOW_DEEP,
   },
 
   container: {
@@ -544,191 +675,13 @@ const STYLES: Record<
     boxSizing: "border-box",
   },
 
-  /* HEADER */
-
-  creditHeader: {
-    marginBottom: 24,
-  },
-
-  title: {
-    fontSize: 18,
-    fontWeight: 700,
-    letterSpacing: "0.12em",
-    color: "#fff",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-
-  headerDivider: {
-    height: 1,
-    width: "100%",
-    background:
-      "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
-    marginTop: 14,
-  },
-
-  /* PRODUCT SELECTORS */
-
-  products: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-
-  selector: {
-    position: "relative",
-    minHeight: 82,
-    display: "grid",
-    gridTemplateColumns: "52px 1fr 72px",
-    alignItems: "stretch",
-    border: `1px solid ${BORDER}`,
-    borderRadius: 18,
-    background:
-      "linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
-    overflow: "visible",
-    boxShadow:
-      "0 10px 35px rgba(0,0,0,0.16)",
-  },
-
-  selectorAction: {
-    border: "none",
-    background: "transparent",
-    color: "#f8fafc",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    padding: 0,
-  },
-
-  selectorActionDisabled: {
-    opacity: 0.22,
-    cursor: "default",
-  },
-
-  selectorCenter: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    padding: "12px 10px",
-    minWidth: 0,
-  },
-
-  selectorTitle: {
-    fontSize: 15,
-    fontWeight: 700,
-    color: "#fff",
-    marginBottom: 3,
-  },
-
-  selectorMeta: {
-    fontSize: 10.5,
-    color: "#94a3b8",
-    lineHeight: 1.3,
-  },
-
-  selectorPrice: {
-    fontSize: 11,
-    color: "#d8dee9",
-    marginTop: 4,
-  },
-
-  selectorSavings: {
-    fontSize: 9.5,
-    color: "#fbbf24",
-    marginTop: 2,
-  },
-
-  selectorRight: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderLeft: `1px solid ${BORDER}`,
-  },
-
-  inventoryCircle: {
-    position: "absolute",
-    top: -10,
-    right: -8,
-    width: 27,
-    height: 27,
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    border: "1px solid rgba(251,191,36,0.65)",
-    background: "#07101d",
-    color: "#fde68a",
-    fontSize: 11,
-    fontWeight: 700,
-    zIndex: 4,
-  },
-
-  /* TOTAL / CHECKOUT */
-
-  totalRow: {
-    textAlign: "center",
-    margin: "20px 0 0",
-    fontSize: 14,
-    fontWeight: 700,
-    letterSpacing: "0.16em",
-    color: "#f8fafc",
-  },
-
-  totalPrice: {
-    color: "#fde68a",
-    fontSize: 14,
-  },
-
-  savingsLine: {
-    textAlign: "right",
-    fontSize: 10.5,
-    color: "#fbbf24",
-    margin: "0 4px 10px",
-  },
-
-  checkout: {
-    width: "74%",
-    minHeight: 48,
-    display: "block",
-    margin: "12px auto 0",
-    borderRadius: 999,
-    cursor: "pointer",
-    border:
-      "1px solid rgba(129,140,248,0.55)",
-    background:
-      "rgba(129,140,248,0.13)",
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: 700,
-    letterSpacing: "0.1em",
-  },
-
-  checkoutDisabled: {
-    opacity: 0.36,
-    cursor: "default",
-  },
-
-  balance: {
-    textAlign: "center",
-    fontSize: 10.5,
-    lineHeight: 1.45,
-    color: "#7f8ba3",
-    margin: "4px 2px 0",
-  },
-
-  balanceStrong: {
-    color: "#cbd5e1",
-    fontWeight: 600,
-  },
-
   /* ─────────────────────────────────
      MEMBERSHIP FRAME
   ───────────────────────────────── */
 
   membershipFrame: {
     position: "relative",
-    marginTop: 34,
+    marginTop: 0,
     padding:
       "56px 34px 70px",
     minHeight: 430,
@@ -744,6 +697,7 @@ const STYLES: Record<
     width: 54,
     borderLeft: `1.5px solid ${GOLD}`,
     pointerEvents: "none",
+    filter: SHADOW_DROP_GOLD,
   },
 
   leftBracketTop: {
@@ -774,6 +728,7 @@ const STYLES: Record<
     width: 54,
     borderRight: `1.5px solid ${GOLD}`,
     pointerEvents: "none",
+    filter: SHADOW_DROP_GOLD,
   },
 
   rightBracketTop: {
@@ -809,6 +764,7 @@ const STYLES: Record<
     fontWeight: 700,
     letterSpacing: "0.18em",
     whiteSpace: "nowrap",
+    textShadow: SHADOW_TEXT,
   },
 
   /* FEATURE MATRIX */
@@ -832,6 +788,7 @@ const STYLES: Record<
     lineHeight: 1.3,
     fontWeight: 700,
     color: "#f8fafc",
+    textShadow: SHADOW_TEXT,
   },
 
   featureCopy: {
@@ -859,8 +816,269 @@ const STYLES: Record<
     fontWeight: 700,
     letterSpacing: "0.08em",
     cursor: "pointer",
-    boxShadow:
-      `0 0 24px ${GOLD_SOFT}`,
+    boxShadow: SHADOW_GOLD,
     whiteSpace: "nowrap",
+  },
+
+  /* ─────────────────────────────────
+     BILLING
+  ───────────────────────────────── */
+
+  billingWrap: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+    margin: "20px 0 28px",
+  },
+
+  billingToggleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  billingLabel: {
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#64748b",
+    letterSpacing: "0.05em",
+    cursor: "pointer",
+  },
+
+  billingLabelActive: {
+    color: "#fde68a",
+    textShadow: SHADOW_TEXT,
+  },
+
+  billingSwitch: {
+    width: 44,
+    height: 24,
+    borderRadius: 999,
+    padding: 0,
+    cursor: "pointer",
+    border: `1px solid ${BORDER}`,
+    background: "rgba(255,255,255,0.06)",
+    position: "relative",
+    boxShadow: SHADOW_DEEP,
+  },
+
+  billingSwitchOn: {
+    borderColor:
+      "rgba(251,191,36,0.45)",
+    background:
+      "rgba(251,191,36,0.12)",
+  },
+
+  billingKnob: {
+    position: "absolute",
+    top: 2,
+    left: 2,
+    width: 18,
+    height: 18,
+    borderRadius: "50%",
+    background: "#fde68a",
+    transition: "left 0.2s ease",
+  },
+
+  billingKnobOn: {
+    left: 22,
+  },
+
+  billingPrice: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: "#fff",
+    textShadow: SHADOW_TEXT,
+  },
+
+  billingSuffix: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: 500,
+    marginLeft: 2,
+  },
+
+  billingSavings: {
+    fontSize: 10,
+    color: "#fbbf24",
+    textShadow: SHADOW_TEXT,
+  },
+
+  /* ─────────────────────────────────
+     GET CREDITS
+  ───────────────────────────────── */
+
+  creditHeader: {
+    margin: "4px 0 20px",
+  },
+
+  title: {
+    fontSize: 16,
+    fontWeight: 700,
+    letterSpacing: "0.12em",
+    color: "#e2e8f0",
+    textAlign: "center",
+    marginBottom: 6,
+    textShadow: SHADOW_TEXT,
+  },
+
+  balance: {
+    textAlign: "center",
+    fontSize: 10.5,
+    lineHeight: 1.45,
+    color: "#7f8ba3",
+    margin: "4px 2px 0",
+  },
+
+  balanceStrong: {
+    color: "#cbd5e1",
+    fontWeight: 600,
+  },
+
+  /* ─────────────────────────────────
+     PRODUCTS
+  ───────────────────────────────── */
+
+  products: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+  },
+
+  selector: {
+    position: "relative",
+    minHeight: 84,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    padding: "14px 20px",
+    border: `1px solid ${BORDER}`,
+    borderRadius: 22,
+    background:
+      "linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
+    boxShadow: SHADOW_DEEP,
+  },
+
+  selectorAction: {
+    border: "none",
+    background: "transparent",
+    color: "#f8fafc",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 6,
+    flexShrink: 0,
+  },
+
+  selectorActionDisabled: {
+    opacity: 0.22,
+    cursor: "default",
+  },
+
+  selectorCenter: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 3,
+  },
+
+  selectorTitle: {
+    fontSize: 18,
+    fontWeight: 800,
+    letterSpacing: "0.03em",
+    color: "#fff",
+    textTransform: "uppercase",
+    textShadow: SHADOW_TEXT,
+  },
+
+  selectorMeta: {
+    fontSize: 11,
+    color: "#94a3b8",
+  },
+
+  selectorSavings: {
+    fontSize: 9.5,
+    color: "#fbbf24",
+    textShadow: SHADOW_TEXT,
+  },
+
+  inventoryCircle: {
+    position: "absolute",
+    top: -10,
+    right: -8,
+    width: 27,
+    height: 27,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border:
+      "1px solid rgba(251,191,36,0.65)",
+    background: "#07101d",
+    color: "#fde68a",
+    fontSize: 11,
+    fontWeight: 700,
+    zIndex: 4,
+    boxShadow: SHADOW_DEEP,
+  },
+
+  /* ─────────────────────────────────
+     CHECKOUT
+  ───────────────────────────────── */
+
+  checkoutWrap: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    marginTop: 22,
+    gap: 8,
+  },
+
+  checkout: {
+    height: 46,
+    padding: "0 24px",
+    minWidth: 154,
+    borderRadius: 10,
+    border: `1px solid ${GOLD}`,
+    background: PANEL,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    cursor: "pointer",
+    boxShadow: SHADOW_GOLD,
+    whiteSpace: "nowrap",
+  },
+
+  checkoutDisabled: {
+    opacity: 0.36,
+    cursor: "default",
+    boxShadow: "none",
+  },
+
+  totalRow: {
+    fontSize: 11,
+    color: "#64748b",
+  },
+
+  totalPrice: {
+    color: "#cbd5e1",
+    fontWeight: 600,
+    fontSize: 11,
+  },
+
+  savingsLine: {
+    fontSize: 10.5,
+    color: "#fbbf24",
+    textShadow: SHADOW_TEXT,
   },
 };
