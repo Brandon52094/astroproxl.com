@@ -34,6 +34,253 @@ type ParsedSection =
   | { kind: "directive"; directive: "DROP" | "EXECUTE" | "LOCK"; label: string; date: string | null; body: string }
   | { kind: "closing"; body: string };
 
+// ─── 1. ResultsStarfield Component ────────────────────────────────
+
+function ResultsStarfield() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    type PStar = { x: number; y: number; r: number };
+    type TStar = {
+      x: number;
+      y: number;
+      r: number;
+      ph: number;
+      sp: number;
+    };
+    type Shooter = {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      life: number;
+      maxLife: number;
+      len: number;
+    };
+
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    const resize = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    resize();
+    window.addEventListener("resize", resize);
+
+    // Three depth layers.
+    const parallax: PStar[][] = [];
+    const counts = [26, 16, 9];
+    const speeds = [0.04, 0.09, 0.16];
+    const sizes = [0.5, 0.8, 1.2];
+    const alphas = [0.28, 0.5, 0.75];
+
+    for (let layer = 0; layer < 3; layer++) {
+      const stars: PStar[] = [];
+
+      for (let i = 0; i < counts[layer]; i++) {
+        stars.push({
+          x: Math.random(),
+          y: Math.random(),
+          r: Math.random() * sizes[layer] + 0.3,
+        });
+      }
+
+      parallax.push(stars);
+    }
+
+    // Independent twinkling stars.
+    const twinkling: TStar[] = [];
+
+    for (let i = 0; i < 34; i++) {
+      twinkling.push({
+        x: Math.random(),
+        y: Math.random(),
+        r: Math.random() * 1.1 + 0.4,
+        ph: Math.random() * Math.PI * 2,
+        sp: Math.random() * 0.025 + 0.008,
+      });
+    }
+
+    // Rare shooting stars.
+    const shooters: Shooter[] = [];
+    let tick = 0;
+    let nextShoot = 360;
+
+    let raf = 0;
+
+    const frame = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Parallax stars.
+      for (let layer = 0; layer < 3; layer++) {
+        for (const star of parallax[layer]) {
+          star.x -= speeds[layer] / w;
+
+          if (star.x < 0) {
+            star.x = 1;
+            star.y = Math.random();
+          }
+
+          ctx.fillStyle = `rgba(219,234,254,${alphas[layer]})`;
+          ctx.beginPath();
+          ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Twinkling stars.
+      for (const star of twinkling) {
+        star.ph += star.sp;
+
+        const twinkle = (Math.sin(star.ph) + 1) / 2;
+
+        ctx.fillStyle = `rgba(226,232,240,${0.2 + twinkle * 0.6})`;
+        ctx.beginPath();
+        ctx.arc(
+          star.x * w,
+          star.y * h,
+          star.r * (0.7 + twinkle * 0.4),
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+
+      // Shooting stars.
+      tick++;
+
+      if (tick >= nextShoot) {
+        shooters.push({
+          x: Math.random() * w * 0.7,
+          y: Math.random() * h * 0.35,
+          vx: Math.random() * 2 + 3,
+          vy: Math.random() * 1.5 + 1.5,
+          life: 0,
+          maxLife: 60 + Math.random() * 20,
+          len: Math.random() * 40 + 50,
+        });
+
+        nextShoot = tick + 360 + Math.random() * 240;
+      }
+
+      for (let i = shooters.length - 1; i >= 0; i--) {
+        const shooter = shooters[i];
+
+        shooter.x += shooter.vx;
+        shooter.y += shooter.vy;
+        shooter.life++;
+
+        let fade = 1;
+
+        if (shooter.life < 10) {
+          fade = shooter.life / 10;
+        } else if (shooter.life > shooter.maxLife - 15) {
+          fade = Math.max(
+            0,
+            (shooter.maxLife - shooter.life) / 15
+          );
+        }
+
+        const magnitude = Math.sqrt(
+          shooter.vx * shooter.vx + shooter.vy * shooter.vy
+        );
+
+        const tailX =
+          shooter.x - (shooter.vx / magnitude) * shooter.len;
+        const tailY =
+          shooter.y - (shooter.vy / magnitude) * shooter.len;
+
+        const gradient = ctx.createLinearGradient(
+          shooter.x,
+          shooter.y,
+          tailX,
+          tailY
+        );
+
+        gradient.addColorStop(
+          0,
+          `rgba(226,232,240,${0.9 * fade})`
+        );
+        gradient.addColorStop(1, "rgba(147,197,253,0)");
+
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = "round";
+
+        ctx.beginPath();
+        ctx.moveTo(shooter.x, shooter.y);
+        ctx.lineTo(tailX, tailY);
+        ctx.stroke();
+
+        ctx.fillStyle = `rgba(255,255,255,${0.95 * fade})`;
+        ctx.beginPath();
+        ctx.arc(shooter.x, shooter.y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (
+          shooter.life >= shooter.maxLife ||
+          shooter.x > w + 60 ||
+          shooter.y > h + 60
+        ) {
+          shooters.splice(i, 1);
+        }
+      }
+
+      raf = requestAnimationFrame(frame);
+    };
+
+    frame();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      className="results-starfield"
+    />
+  );
+}
+
+// ─── 2. Parser ──────────────────────────────────────────────────────
+
+const INTERNAL_PART_RE =
+  /^\s*Part\s*(1|2|2B|3|4|5)\s*[:—–-]\s*/i;
+
+const HUMAN_HEADERS = [
+  "Where You Are Now",
+  "Why This Is Active",
+  "Why This Is Active Now",
+  "How This Is Most Likely To Show Up",
+  "Dated Windows",
+  "The Directive",
+  "Bottom Line",
+];
+
 const DATE_LEAD_RE = /^\s*\[\[DATE:\s*([^\]]+)\]\]\s*[—–-]?\s*/;
 const DROP_RE = /^\s*DROP\s*:\s*/i;
 const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
@@ -48,6 +295,63 @@ function hashKey(s: string): string {
 function extractDateText(raw: string): string {
   const m = raw.match(/\[\[DATE:\s*([^\]]+)\]\]/);
   return m ? m[1].trim() : raw.trim();
+}
+
+function cleanInternalPartLabel(text: string): string {
+  return text.replace(INTERNAL_PART_RE, "").trim();
+}
+
+function splitHumanHeader(
+  paragraph: string
+): { label: string | null; body: string } {
+  const cleaned = cleanInternalPartLabel(paragraph);
+
+  for (const header of HUMAN_HEADERS) {
+    const exact = new RegExp(
+      `^${header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
+      "i"
+    );
+
+    if (exact.test(cleaned)) {
+      return {
+        label: header,
+        body: "",
+      };
+    }
+
+    const withColon = new RegExp(
+      `^${header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:—–-]\\s*([\\s\\S]+)$`,
+      "i"
+    );
+
+    const colonMatch = cleaned.match(withColon);
+
+    if (colonMatch) {
+      return {
+        label: header,
+        body: colonMatch[1].trim(),
+      };
+    }
+
+    const withLineBreak = new RegExp(
+      `^${header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n+([\\s\\S]+)$`,
+      "i"
+    );
+
+    const lineMatch = cleaned.match(withLineBreak);
+
+    if (lineMatch) {
+      return {
+        label: header,
+        body: lineMatch[1].trim(),
+      };
+    }
+  }
+
+  return {
+    label: null,
+    body: cleaned,
+  };
 }
 
 function splitWindowNote(body: string): { note: string | null; rest: string } {
@@ -67,85 +371,146 @@ function parseReadingSections(content: string): ParsedSection[] | null {
   if (paragraphs.length < 2) return null;
 
   const sections: ParsedSection[] = [];
-  let phase: "opening" | "windows" | "directives" | "closing" = "opening";
-  const openingParas: string[] = [];
 
-  for (const para of paragraphs) {
+  let phase:
+    | "opening"
+    | "windows"
+    | "directives"
+    | "closing" = "opening";
+
+  let pendingLabel: string | null = null;
+
+  for (const rawParagraph of paragraphs) {
+    const parsedHeader = splitHumanHeader(rawParagraph);
+
+    // Standalone human-facing heading.
+    if (parsedHeader.label && !parsedHeader.body) {
+      const label = parsedHeader.label;
+
+      if (label === "Dated Windows") {
+        phase = "windows";
+        pendingLabel = null;
+        continue;
+      }
+
+      if (label === "The Directive") {
+        phase = "directives";
+        pendingLabel = null;
+        continue;
+      }
+
+      if (label === "Bottom Line") {
+        phase = "closing";
+        pendingLabel = "Bottom Line";
+        continue;
+      }
+
+      pendingLabel = label;
+      continue;
+    }
+
+    const para = parsedHeader.body || cleanInternalPartLabel(rawParagraph);
+    const labelFromParagraph = parsedHeader.label;
+
+    if (!para) continue;
+
     const isWindow = DATE_LEAD_RE.test(para);
     const isDrop = DROP_RE.test(para);
     const isExecute = EXECUTE_RE.test(para);
     const isLock = LOCK_RE.test(para);
     const isDirective = isDrop || isExecute || isLock;
 
-    if (phase === "opening" && !isWindow && !isDirective) {
-      openingParas.push(para);
-      continue;
-    }
-
-    if (phase === "opening") {
-      if (openingParas.length > 0) {
-        sections.push({ kind: "opening", label: "Where you are now", body: openingParas[0] });
-        if (openingParas.length > 1) {
-          sections.push({ kind: "opening", label: "The root", body: openingParas.slice(1).join("\n\n") });
-        }
-      }
-      phase = "windows";
-    }
-
     if (isDirective) {
       phase = "directives";
+      pendingLabel = null;
+
       if (isDrop) {
-        sections.push({ kind: "directive", directive: "DROP", label: "Drop", date: null, body: para.replace(DROP_RE, "") });
+        sections.push({
+          kind: "directive",
+          directive: "DROP",
+          label: "Drop",
+          date: null,
+          body: para.replace(DROP_RE, "").trim(),
+        });
       } else if (isExecute) {
-        const m = para.match(EXECUTE_RE);
+        const match = para.match(EXECUTE_RE);
+
         sections.push({
           kind: "directive",
           directive: "EXECUTE",
           label: "Execute by",
-          date: m ? extractDateText(m[1]) : null,
-          body: para.replace(EXECUTE_RE, ""),
+          date: match ? extractDateText(match[1]) : null,
+          body: para.replace(EXECUTE_RE, "").trim(),
         });
       } else {
-        const m = para.match(LOCK_RE);
+        const match = para.match(LOCK_RE);
+
         sections.push({
           kind: "directive",
           directive: "LOCK",
           label: "Lock in by",
-          date: m ? extractDateText(m[1]) : null,
-          body: para.replace(LOCK_RE, ""),
+          date: match ? extractDateText(match[1]) : null,
+          body: para.replace(LOCK_RE, "").trim(),
         });
       }
+
       continue;
     }
 
     if (isWindow && phase !== "closing") {
       phase = "windows";
-      const m = para.match(DATE_LEAD_RE);
+      pendingLabel = null;
+
+      const match = para.match(DATE_LEAD_RE);
       const rawBody = para.replace(DATE_LEAD_RE, "");
       const { note, rest } = splitWindowNote(rawBody);
-      sections.push({ kind: "window", date: m ? m[1].trim() : "", note, body: rest });
+
+      sections.push({
+        kind: "window",
+        date: match ? match[1].trim() : "",
+        note,
+        body: rest.trim(),
+      });
+
       continue;
     }
 
-    if (phase === "directives" || phase === "closing") {
+    if (
+      phase === "closing" ||
+      labelFromParagraph === "Bottom Line"
+    ) {
       phase = "closing";
-      sections.push({ kind: "closing", body: para });
+
+      sections.push({
+        kind: "closing",
+        body: para,
+      });
+
+      pendingLabel = null;
       continue;
     }
 
-    const last = sections[sections.length - 1];
-    if (last && last.kind === "window") {
-      last.body += "\n\n" + para;
-    } else {
-      sections.push({ kind: "opening", label: "", body: para });
-    }
+    // Normal reading prose.
+    sections.push({
+      kind: "opening",
+      label:
+        labelFromParagraph ||
+        pendingLabel ||
+        (sections.length === 0 ? "Where You Are Now" : ""),
+      body: para,
+    });
+
+    pendingLabel = null;
   }
 
-  if (phase === "opening") return null;
+  const hasStructure =
+    sections.some((s) => s.kind === "window") ||
+    sections.some((s) => s.kind === "directive");
 
-  const hasStructure = sections.some((s) => s.kind === "window" || s.kind === "directive");
   return hasStructure ? sections : null;
 }
+
+// ─── 3. Main Component ─────────────────────────────────────────────
 
 export default function ReadingResultsPage() {
   const router = useRouter();
@@ -159,6 +524,9 @@ export default function ReadingResultsPage() {
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // ── Bottom Line focus state ──
+  const [bottomLineFocused, setBottomLineFocused] = useState(false);
+
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
   const [replyCreditsRemaining, setReplyCreditsRemaining] = useState<number | null>(null);
@@ -169,6 +537,7 @@ export default function ReadingResultsPage() {
   const [tailMode, setTailMode] = useState<"reply_pack" | "sub_reply_tail_regular">("reply_pack");
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
+  const bottomLineRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
 
   const readingKey = useMemo(() => {
@@ -308,12 +677,51 @@ export default function ReadingResultsPage() {
     fetchCredits();
   }, [followups.length]);
 
+  // ─── page + parsedSections (moved BEFORE Bottom Line effect) ───
+
   const page = reading?.pages?.[0] ?? null;
 
   const parsedSections = useMemo(
     () => (page?.content ? parseReadingSections(page.content) : null),
     [page?.content]
   );
+
+  // ─── Bottom Line focus observer ────────────────────────────────
+
+  useEffect(() => {
+    const element = bottomLineRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setBottomLineFocused(entry.isIntersecting);
+      },
+      {
+        root: null,
+        threshold: 0,
+        rootMargin: "-38% 0px -38% 0px",
+      }
+    );
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [parsedSections]);
+
+  // ─── Group sections ─────────────────────────────────────────────
+
+  const proseSections =
+    parsedSections?.filter((section) => section.kind === "opening") ?? [];
+
+  const actionSections =
+    parsedSections?.filter(
+      (section) =>
+        section.kind === "window" ||
+        section.kind === "directive"
+    ) ?? [];
+
+  const closingSections =
+    parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
   const renderContentWithBadges = (content: string) => {
     const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
@@ -372,39 +780,38 @@ export default function ReadingResultsPage() {
         .join("\n\n");
 
       const response = await fetch("/api/readings/followup", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    question,
-    originalReading: page.content,
-    originalTitle: page.title,
-    topic: reading.topic,
-    tropical: chart.chartData.tropical,
-    sidereal: chart.chartData.sidereal,
-    transits: chart.chartData.transits,
-    transitAspects: chart.chartData.transitAspects,
-    profection: chart.chartData.profection,
-    progressions: chart.chartData.progressions,
-    solarArcs: chart.chartData.solarArcs,
-    upcomingTrigger: chart.chartData.upcomingTrigger,
-    planetaryStations: chart.chartData.planetaryStations,
-    solarReturn: chart.chartData.solarReturn,
-    moonPhase: chart.chartData.moonPhase,
-    extendedPoints: chart.chartData.extendedPoints,
-    houseRulers: chart.chartData.houseRulers,
-    mutualReceptions: chart.chartData.mutualReceptions,
-    synodicCycles: chart.chartData.synodicCycles,
-    midpoints: chart.chartData.midpoints,
-    transitsToAngles: chart.chartData.transitsToAngles,
-    // ── NEW FIELDS ──
-    essentialDignities: chart.chartData.essentialDignities,
-    lunarReturn: chart.chartData.lunarReturn,
-    eclipseActivations: chart.chartData.eclipseActivations,
-    dispositorTree: chart.chartData.dispositorTree,
-    conversationHistory: conversationHistory || undefined,
-    freeRepliesUsed,
-  }),
-});
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          originalReading: page.content,
+          originalTitle: page.title,
+          topic: reading.topic,
+          tropical: chart.chartData.tropical,
+          sidereal: chart.chartData.sidereal,
+          transits: chart.chartData.transits,
+          transitAspects: chart.chartData.transitAspects,
+          profection: chart.chartData.profection,
+          progressions: chart.chartData.progressions,
+          solarArcs: chart.chartData.solarArcs,
+          upcomingTrigger: chart.chartData.upcomingTrigger,
+          planetaryStations: chart.chartData.planetaryStations,
+          solarReturn: chart.chartData.solarReturn,
+          moonPhase: chart.chartData.moonPhase,
+          extendedPoints: chart.chartData.extendedPoints,
+          houseRulers: chart.chartData.houseRulers,
+          mutualReceptions: chart.chartData.mutualReceptions,
+          synodicCycles: chart.chartData.synodicCycles,
+          midpoints: chart.chartData.midpoints,
+          transitsToAngles: chart.chartData.transitsToAngles,
+          essentialDignities: chart.chartData.essentialDignities,
+          lunarReturn: chart.chartData.lunarReturn,
+          eclipseActivations: chart.chartData.eclipseActivations,
+          dispositorTree: chart.chartData.dispositorTree,
+          conversationHistory: conversationHistory || undefined,
+          freeRepliesUsed,
+        }),
+      });
 
       const data = await response.json();
       if (!response.ok) {
@@ -505,10 +912,6 @@ export default function ReadingResultsPage() {
     );
   }
 
-  const firstOpeningIndex = parsedSections
-    ? parsedSections.findIndex((s) => s.kind === "opening")
-    : -1;
-
   const isSubscribed = credits?.isSubscribed === true;
   const freeBand = isSubscribed ? 4 : 1;
   const freeRemainingClient = Math.max(0, freeBand - freeRepliesUsed);
@@ -525,7 +928,7 @@ export default function ReadingResultsPage() {
       style={{
         position: "relative",
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #0a0e27 0%, #0d1235 45%, #0a0e27 100%)",
+        background: "linear-gradient(180deg, #0a0e27 0%, #0d1235 18%, #0a0e27 34%, #07091d 52%, #040510 70%, #010207 86%, #000000 100%)",
         color: "#e2e8f0",
         fontFamily: "var(--font-sans, ui-sans-serif, system-ui)",
         overflowX: "hidden",
@@ -538,31 +941,30 @@ export default function ReadingResultsPage() {
           height: auto !important;
           min-height: 100vh;
         }
-        
-        .results-bg {
+
+        /* ─── Starfield ──────────────────────────────────────────────────── */
+        .results-starfield {
           position: fixed;
           inset: 0;
-          overflow: hidden;
+          width: 100vw;
+          height: 100vh;
           pointer-events: none;
           z-index: 0;
         }
-        .star { position: absolute; border-radius: 9999px; background: white; }
-        @keyframes starTwinkle {
-          0%, 100% { opacity: 0.25; transform: scale(1); }
-          50% { opacity: 0.85; transform: scale(1.5); }
-        }
 
+        /* ─── Reading sections ──────────────────────────────────────────── */
         .reading-title {
           font-family: var(--font-display, Georgia, serif);
           font-weight: 600;
           letter-spacing: -0.01em;
           line-height: 1.15;
         }
+
         .reading-body {
           font-family: var(--font-display, Georgia, serif);
           font-size: 16px;
           line-height: 1.9;
-          color: #cbd5e1;
+          color: #e2e8f0;
           white-space: pre-wrap;
         }
 
@@ -589,97 +991,321 @@ export default function ReadingResultsPage() {
           box-shadow: 0 0 18px rgba(94, 234, 212, 0.12);
         }
 
+        .section-block {
+          position: relative;
+          margin-top: 32px;
+          padding-top: 30px;
+          border-top: 1px solid rgba(255, 255, 255, 0.075);
+          transition:
+            filter 0.5s ease,
+            opacity 0.5s ease,
+            transform 0.5s ease;
+        }
+
+        .section-block.first {
+          margin-top: 0;
+          padding-top: 0;
+          border-top: none;
+        }
+
         .section-label {
           font-family: var(--font-sans, ui-sans-serif);
           font-size: 11px;
-          font-weight: 600;
+          font-weight: 650;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: rgba(45, 212, 191, 0.9);
-        }
-        .section-block {
-          border-top: 1px solid rgba(255, 255, 255, 0.07);
-          margin-top: 24px;
-          padding-top: 20px;
-        }
-        .section-block.first {
-          border-top: none;
-          margin-top: 0;
-          padding-top: 0;
+          color: rgba(94, 234, 212, 0.9);
         }
 
-        .window-card {
-          background: rgba(20, 25, 55, 0.42);
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          border-radius: 20px;
-          padding: 16px 18px;
-          margin-top: 14px;
-          backdrop-filter: blur(8px);
-        }
-        .window-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .window-note { font-family: var(--font-sans, ui-sans-serif); font-size: 12px; color: #64748b; }
-        .window-body {
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 15px;
-          line-height: 1.8;
-          color: #cbd5e1;
-          white-space: pre-wrap;
-          margin-top: 8px;
+        .section-block.opening-feature {
+          text-align: center;
+          padding-left: 12px;
+          padding-right: 12px;
         }
 
-        .directive-strip { padding: 10px 0 10px 14px; margin-top: 14px; border-radius: 0; }
-        .directive-strip.drop { border-left: 2px solid #f87171; }
-        .directive-strip.execute { border-left: 2px solid #2dd4bf; }
-        .directive-strip.lock { border-left: 2px solid #fbbf24; }
-        .directive-label {
+        .section-block.opening-feature .section-label {
+          text-align: center;
+        }
+
+        .section-block.opening-feature .reading-body {
+          max-width: 470px;
+          margin-left: auto;
+          margin-right: auto;
+          text-align: center;
+        }
+
+        .action-zone {
+          margin-top: 34px;
+          padding-top: 30px;
+          border-top: 1px solid rgba(255, 255, 255, 0.075);
+          transition:
+            filter 0.5s ease,
+            opacity 0.5s ease,
+            transform 0.5s ease;
+        }
+
+        .action-zone-heading {
+          margin-bottom: 13px;
+          text-align: center;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.92);
+        }
+
+        .action-zone-frame {
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 26px;
+          padding: 10px;
+          background: rgba(5, 8, 24, 0.2);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.025),
+            0 22px 70px rgba(0, 0, 0, 0.12);
+          backdrop-filter: blur(5px);
+        }
+
+        .action-card {
+          position: relative;
+          border: 1px solid rgba(255, 255, 255, 0.075);
+          border-radius: 18px;
+          padding: 16px 17px;
+          background: rgba(17, 22, 51, 0.46);
+        }
+
+        .action-card + .action-card {
+          margin-top: 9px;
+        }
+
+        .action-card.window {
+          border-color: rgba(94, 234, 212, 0.15);
+        }
+
+        .action-card.drop {
+          border-color: rgba(248, 113, 113, 0.2);
+        }
+
+        .action-card.execute {
+          border-color: rgba(45, 212, 191, 0.2);
+        }
+
+        .action-card.lock {
+          border-color: rgba(251, 191, 36, 0.2);
+        }
+
+        .action-card-head {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .action-card-label {
           font-family: var(--font-sans, ui-sans-serif);
           font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.16em;
           text-transform: uppercase;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
         }
-        .directive-strip.drop .directive-label { color: #f87171; }
-        .directive-strip.execute .directive-label { color: #2dd4bf; }
-        .directive-strip.lock .directive-label { color: #fbbf24; }
-        .directive-body {
+
+        .action-card.window .action-card-label {
+          color: #5eead4;
+        }
+
+        .action-card.drop .action-card-label {
+          color: #f87171;
+        }
+
+        .action-card.execute .action-card-label {
+          color: #2dd4bf;
+        }
+
+        .action-card.lock .action-card-label {
+          color: #fbbf24;
+        }
+
+        .action-card-note {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 12px;
+          color: #64748b;
+        }
+
+        .action-card-body {
+          margin-top: 8px;
           font-family: var(--font-display, Georgia, serif);
-          font-size: 14px;
-          line-height: 1.75;
+          font-size: 15px;
+          line-height: 1.8;
           color: #cbd5e1;
-          margin-top: 5px;
           white-space: pre-wrap;
+        }
+
+        .bottom-line-wrap {
+          position: relative;
+          margin-top: 46px;
+          padding: 42px 14px 36px;
+          text-align: center;
+          transition:
+            transform 0.55s ease,
+            opacity 0.55s ease;
+        }
+
+        .bottom-line-wrap::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 16%;
+          right: 16%;
+          height: 1px;
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(94, 234, 212, 0.28),
+              transparent
+            );
+        }
+
+        .bottom-line-label {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.9);
         }
 
         .closing-line {
+          max-width: 490px;
+          margin: 13px auto 0;
           font-family: var(--font-display, Georgia, serif);
-          font-size: 16px;
-          line-height: 1.8;
-          color: #e8e6ef;
+          font-size: 17px;
+          line-height: 1.85;
+          color: #f1f5f9;
           font-style: italic;
           text-align: center;
-          margin-top: 30px;
-          padding-top: 4px;
           white-space: pre-wrap;
         }
 
+        .reading-focusable {
+          transition:
+            filter 0.55s ease,
+            opacity 0.55s ease,
+            transform 0.55s ease;
+        }
+
+        .reading-article.bottom-focus .reading-focusable {
+          filter: blur(4px);
+          opacity: 0.3;
+          transform: scale(0.995);
+        }
+
+        .reading-article.bottom-focus .bottom-line-wrap {
+          transform: scale(1.015);
+        }
+
+        /* ─── Astrological Sources ──────────────────────────────────────── */
+
+        .sources-wrap {
+          margin-top: 34px;
+          padding-top: 22px;
+          border-top: 1px solid rgba(255, 255, 255, 0.07);
+          text-align: center;
+          transition:
+            filter 0.5s ease,
+            opacity 0.5s ease;
+        }
+
         .sources-toggle {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: #64748b;
+          position: relative;
+          overflow: hidden;
+          margin: 0 auto;
+          padding: 8px 14px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          padding: 0;
+          justify-content: center;
+          gap: 7px;
+
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+
+          color: #94a3b8;
+          transition:
+            color 0.25s ease,
+            text-shadow 0.25s ease;
         }
-        .sources-toggle:hover { color: #94a3b8; }
+
+        .sources-toggle::before {
+          content: "";
+          position: absolute;
+          top: -50%;
+          bottom: -50%;
+          width: 34%;
+          left: -45%;
+          transform: skewX(-18deg);
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(191, 219, 254, 0.26),
+              rgba(94, 234, 212, 0.38),
+              transparent
+            );
+          filter: blur(4px);
+          animation: sourceStarlight 5.4s ease-in-out infinite;
+          pointer-events: none;
+        }
+
+        .sources-toggle:hover {
+          color: #cbd5e1;
+          text-shadow: 0 0 18px rgba(94, 234, 212, 0.28);
+        }
+
+        .sources-toggle.open {
+          color: #bae6fd;
+          text-shadow: 0 0 18px rgba(94, 234, 212, 0.24);
+        }
+
+        .sources-chevron {
+          transition:
+            transform 0.3s ease,
+            filter 0.3s ease;
+        }
+
+        .sources-toggle.open .sources-chevron {
+          transform: rotate(180deg);
+          filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.5));
+        }
+
+        @keyframes sourceStarlight {
+          0%, 68% {
+            left: -45%;
+            opacity: 0;
+          }
+
+          74% {
+            opacity: 1;
+          }
+
+          92% {
+            left: 115%;
+            opacity: 0.85;
+          }
+
+          100% {
+            left: 115%;
+            opacity: 0;
+          }
+        }
+
+        /* ─── Follow-up styles ──────────────────────────────────────────── */
 
         .followup-input {
           width: 100%;
@@ -709,6 +1335,7 @@ export default function ReadingResultsPage() {
           font-size: 13px;
           text-align: center;
         }
+
         .paywall-card {
           background: rgba(20, 25, 55, 0.5);
           border: 1px solid rgba(251, 191, 36, 0.28);
@@ -770,10 +1397,12 @@ export default function ReadingResultsPage() {
           background: linear-gradient(180deg, rgba(10, 14, 39, 0) 0%, rgba(10, 14, 39, 0.94) 40%);
           z-index: 40;
         }
+
         @keyframes downloadPulse {
           0%, 100% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.4), 0 0 22px rgba(251, 191, 36, 0.18); }
           50% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.7), 0 0 34px rgba(251, 191, 36, 0.32); }
         }
+
         .download-btn {
           width: 56px;
           height: 56px;
@@ -788,6 +1417,7 @@ export default function ReadingResultsPage() {
           cursor: pointer;
           flex-shrink: 0;
         }
+
         .done-btn {
           flex: 1;
           height: 56px;
@@ -800,28 +1430,25 @@ export default function ReadingResultsPage() {
           cursor: pointer;
           box-shadow: 0 0 40px rgba(94, 234, 212, 0.35);
         }
+
+        /* ─── Reduced motion ────────────────────────────────────────────── */
+
         @media (prefers-reduced-motion: reduce) {
-          .star, .download-btn { animation: none !important; }
+          .download-btn,
+          .sources-toggle::before {
+            animation: none !important;
+          }
+
+          .reading-article.bottom-focus .reading-focusable {
+            filter: none;
+            opacity: 1;
+            transform: none;
+          }
         }
       `}</style>
 
-      {/* ── Fixed starfield behind everything ── */}
-      <div className="results-bg" aria-hidden="true">
-        {Array.from({ length: 46 }).map((_, i) => (
-          <span
-            key={i}
-            className="star"
-            style={{
-              left: `${(i * 37) % 100}%`,
-              top: `${(i * 19 + 13) % 100}%`,
-              width: i % 7 === 0 ? 3 : 1.5,
-              height: i % 7 === 0 ? 3 : 1.5,
-              animation: `starTwinkle ${2.4 + (i % 5) * 0.5}s ease-in-out infinite`,
-              animationDelay: `${(i * 0.37) % 4}s`,
-            }}
-          />
-        ))}
-      </div>
+      {/* ─── Fixed starfield behind everything ── */}
+      <ResultsStarfield />
 
       <div
         className="relative z-10 mx-auto w-full max-w-[560px] px-5 pt-14"
@@ -864,97 +1491,224 @@ export default function ReadingResultsPage() {
         <motion.article
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
+          transition={{
+            duration: 0.45,
+            delay: 0.08,
+            ease: "easeOut",
+          }}
+          className={`reading-article ${
+            bottomLineFocused ? "bottom-focus" : ""
+          }`}
         >
           {parsedSections ? (
-            parsedSections.map((section, i) => {
-              if (section.kind === "opening") {
+            <>
+              {/* ── Main interpretation ── */}
+              {proseSections.map((section, i) => {
+                const isOpening =
+                  i === 0 ||
+                  section.label.toLowerCase() ===
+                    "where you are now";
+
                 return (
-                  <div key={i} className={`section-block ${i === firstOpeningIndex ? "first" : ""}`}>
-                    {section.label && <p className="section-label">{section.label}</p>}
-                    <p className="reading-body" style={{ marginTop: section.label ? 10 : 0 }}>
+                  <div
+                    key={`prose-${i}`}
+                    className={[
+                      "section-block",
+                      "reading-focusable",
+                      i === 0 ? "first" : "",
+                      isOpening ? "opening-feature" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {section.label && (
+                      <p className="section-label">
+                        {section.label}
+                      </p>
+                    )}
+
+                    <p
+                      className="reading-body"
+                      style={{
+                        marginTop: section.label ? 10 : 0,
+                      }}
+                    >
                       {renderContentWithBadges(section.body)}
                     </p>
                   </div>
                 );
-              }
+              })}
 
-              if (section.kind === "window") {
-                return (
-                  <div key={i} className="window-card">
-                    <div className="window-head">
-                      <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
-                      <span className="date-badge">{section.date}</span>
-                      {section.note && <span className="window-note">— {section.note}</span>}
-                    </div>
-                    <p className="window-body">{renderContentWithBadges(section.body)}</p>
+              {/* ── Timing & Direction ── */}
+              {actionSections.length > 0 && (
+                <section className="action-zone reading-focusable">
+                  <p className="action-zone-heading">
+                    Timing &amp; Direction
+                  </p>
+
+                  <div className="action-zone-frame">
+                    {actionSections.map((section, i) => {
+                      if (section.kind === "window") {
+                        return (
+                          <div
+                            key={`action-${i}`}
+                            className="action-card window"
+                          >
+                            <div className="action-card-head">
+                              <CalendarDays
+                                className="h-4 w-4 text-teal-300/80"
+                                aria-hidden="true"
+                              />
+
+                              <span className="action-card-label">
+                                Dated Window
+                              </span>
+
+                              <span className="date-badge">
+                                {section.date}
+                              </span>
+
+                              {section.note && (
+                                <span className="action-card-note">
+                                  — {section.note}
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="action-card-body">
+                              {renderContentWithBadges(
+                                section.body
+                              )}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      const variant =
+                        section.directive === "DROP"
+                          ? "drop"
+                          : section.directive === "EXECUTE"
+                            ? "execute"
+                            : "lock";
+
+                      const visibleLabel =
+                        section.directive === "DROP"
+                          ? "Drop"
+                          : section.directive === "EXECUTE"
+                            ? "Execute"
+                            : "Lock In";
+
+                      return (
+                        <div
+                          key={`action-${i}`}
+                          className={`action-card ${variant}`}
+                        >
+                          <div className="action-card-head">
+                            <span className="action-card-label">
+                              {visibleLabel}
+                            </span>
+
+                            {section.date && (
+                              <span className="date-badge">
+                                {section.date}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="action-card-body">
+                            {renderContentWithBadges(
+                              section.body
+                            )}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              }
+                </section>
+              )}
 
-              if (section.kind === "directive") {
-                const variant =
-                  section.directive === "DROP" ? "drop" : section.directive === "EXECUTE" ? "execute" : "lock";
-                return (
-                  <div key={i} className={`directive-strip ${variant}`}>
-                    <p className="directive-label">
-                      {section.label}
-                      {section.date && <span className="date-badge">{section.date}</span>}
+              {/* ── Bottom Line focus moment ── */}
+              {closingSections.length > 0 && (
+                <div
+                  ref={bottomLineRef}
+                  className="bottom-line-wrap"
+                >
+                  <p className="bottom-line-label">
+                    Bottom Line
+                  </p>
+
+                  {closingSections.map((section, i) => (
+                    <p key={i} className="closing-line">
+                      {renderContentWithBadges(
+                        section.body
+                      )}
                     </p>
-                    <p className="directive-body">{renderContentWithBadges(section.body)}</p>
-                  </div>
-                );
-              }
-
-              return (
-                <p key={i} className="closing-line">
-                  {renderContentWithBadges(section.body)}
-                </p>
-              );
-            })
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
-            <div className="reading-body">{renderContentWithBadges(page.content)}</div>
+            <div className="reading-body">
+              {renderContentWithBadges(page.content)}
+            </div>
           )}
 
-          {/* ── Sources dropdown ── */}
+          {/* ── Astrological Sources ── */}
           {page.sources && page.sources.length > 0 && (
-            <div className="mt-8 border-t border-white/[0.07] pt-4">
+            <div className="sources-wrap reading-focusable">
               <button
                 type="button"
-                className="sources-toggle"
+                className={`sources-toggle ${
+                  showSources ? "open" : ""
+                }`}
                 onClick={() => setShowSources((s) => !s)}
                 aria-expanded={showSources}
               >
-                Astrological sources
+                <span>Astrological Sources</span>
+
                 <ChevronDown
-                  className="h-3.5 w-3.5 transition-transform duration-200"
-                  style={{ transform: showSources ? "rotate(180deg)" : undefined }}
+                  className="sources-chevron h-3.5 w-3.5"
                 />
               </button>
+
               <AnimatePresence>
                 {showSources && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
+                    animate={{
+                      height: "auto",
+                      opacity: 1,
+                    }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: "easeOut" }}
-                    className="overflow-hidden"
+                    transition={{
+                      duration: 0.22,
+                      ease: "easeOut",
+                    }}
+                    className="overflow-hidden text-left"
                   >
                     <div className="mt-3 space-y-2.5">
                       {page.sources.map((src, i) => {
-                        // Check if the source contains a date
-                        const hasDate = src.placements.includes("exact on");
+                        const hasDate =
+                          src.placements.includes("exact on");
+
                         return (
-                          <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
+                          <div
+                            key={i}
+                            className="rounded-xl bg-black/25 px-3.5 py-2.5"
+                          >
                             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
                               {src.section}
+
                               {hasDate && (
                                 <span className="ml-2 text-[9px] text-yellow-400/60">
                                   ⚡ dated
                                 </span>
                               )}
                             </p>
-                            <p className="mt-1 text-[12px] leading-5 text-slate-400">{src.placements}</p>
+
+                            <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                              {src.placements}
+                            </p>
                           </div>
                         );
                       })}

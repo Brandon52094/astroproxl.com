@@ -1283,20 +1283,25 @@ export function buildReadingPrompt(
       ""
     );
   }
-
   // ── PART 4 — DIRECTIVE ──
   sections.push(
-    "PART 4 — THE DIRECTIVE (1-3 items, hard 3-sentence ceiling each):",
+    "PART 4 — THE DIRECTIVE",
     "",
-    "DROP: The behavior to stop immediately (ALWAYS available, no date needed)",
+    "Tell the user what to DO with this reading.",
+    "The directive must follow directly from the prediction and should feel specific to the user's actual situation.",
     "",
-    "EXECUTE BY [[DATE: ...]]: A specific action for the tightest window (only if window exists)",
-    "  - Must be tied to a topic-relevant window from Part 3",
+    "Give 1-3 concrete actions, decisions, behaviors, or things to watch for.",
+    "Prioritize the action that gives the user the strongest position under the current astrology.",
     "",
-    "LOCK IN BY [[DATE: ...]]: A structural commitment (only for slow planet windows)",
-    "  - Must be tied to a topic-relevant slow planet window",
+    "When a valid dated window exists, connect an action to that window when doing so is genuinely useful.",
+    "Use [[DATE: ...]] only when the date is an approved calculator-supplied date from Part 3.",
+    "Do not force a date onto advice that does not need one.",
     "",
-    "If no dated windows exist, DROP alone is a complete directive.",
+    "Include something to stop, avoid, or reconsider only when the reading actually identifies a relevant risk or counterproductive behavior.",
+    "Do not force DROP / EXECUTE / LOCK IN labels.",
+    "",
+    "Be practical and direct.",
+    "Do not give generic advice that could apply to anyone.",
     ""
   );
 
