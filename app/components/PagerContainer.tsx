@@ -268,8 +268,11 @@ export default function PagerContainer() {
           }}
         >
           {/* ── CLONE: Credits (before the real first panel) ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
-            <CreditsPanel />
+          <div
+            className="min-w-full h-full flex-shrink-0 overflow-y-auto"
+            aria-hidden="true"
+          >
+            <CreditsPanel embedded />
           </div>
 
           {/* ── PANEL 0: Reading Intake (main) ── */}
@@ -289,7 +292,7 @@ export default function PagerContainer() {
 
           {/* ── PANEL 3: Credits ── */}
           <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
-            <CreditsPanel />
+            <CreditsPanel embedded />
           </div>
 
           {/* ── CLONE: Reading Intake (after the real last panel) ── */}
