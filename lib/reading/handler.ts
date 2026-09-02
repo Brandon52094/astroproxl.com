@@ -1,3 +1,4 @@
+import { generateOpenAIText } from "@/lib/ai/openai";
 import { NextRequest, NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { assessRisk, getSafeResponse, getCareNote } from "@/lib/crisisDetection";
@@ -90,11 +91,6 @@ export async function handleReading(request: NextRequest) {
       return NextResponse.json({ error: "Insufficient credits. Purchase more or subscribe." }, { status: 403 });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: "API configuration error." }, { status: 500 });
-    }
-
     // ── VALIDATE ASPECTS ──
     const validatedAspects = validateAndFilterAspects(body.transitAspects);
 
@@ -153,33 +149,21 @@ export async function handleReading(request: NextRequest) {
     );
     console.log("[DEBUG] =============================");
 
-    // ── GENERATE READING ──
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: topic.maxTokens ?? 4000,
-        temperature: topic.temperature ?? 0.35,
+        // ── GENERATE READING WITH GPT-5.6 LUNA ──
+    let rawText: string;
+
+    try {
+      rawText = await generateOpenAIText({
         system: topic.system ?? DEFAULT_SYSTEM,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("[readings] Claude error:", err);
-      return NextResponse.json({ error: "Failed to generate reading." }, { status: 502 });
-    }
-
-    const data = await response.json();
-    const rawText = data.content?.[0]?.text;
-    if (!rawText) {
-      return NextResponse.json({ error: "No response from reading engine." }, { status: 502 });
+        prompt,
+        maxTokens: topic.maxTokens ?? 4000,
+      });
+    } catch (error) {
+      console.error("[readings] OpenAI Luna error:", error);
+      return NextResponse.json(
+        { error: "Failed to generate reading." },
+        { status: 502 }
+      );
     }
 
     // ── PARSE RESPONSE ──
@@ -204,13 +188,15 @@ export async function handleReading(request: NextRequest) {
       let pages = parsed.pages;
       let unsupported = pages.flatMap((pg) => findUnsupportedMarkers(pg.content ?? "", dateIndex));
 
-      // ── RETRY ON UNSUPPORTED DATES ──
+            // ── RETRY ON UNSUPPORTED DATES ──
       if (unsupported.length > 0) {
         console.warn(`[readings] Unsupported dates: ${unsupported.join(" | ")}`);
 
         const approvedDates =
           dateIndex.dates.length > 0
-            ? dateIndex.dates.map((d) => `  - ${d.raw} [${d.source}]`).join("\n")
+            ? dateIndex.dates
+                .map((d) => `  - ${d.raw} [${d.source}]`)
+                .join("\n")
             : "  - NONE";
 
         const correctionMessage =
@@ -229,56 +215,74 @@ export async function handleReading(request: NextRequest) {
           "\nA date may be used only when the corresponding astrological evidence actually supports that claim." +
           "\nIf there are no approved dates, the corrected reading must contain no [[DATE: ...]] markers.";
 
-        const retryResponse = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-6",
-            max_tokens: 3000,
-            temperature: 0.1,
+        try {
+          const retryText = await generateOpenAIText({
             system: RETRY_SYSTEM,
-            messages: [{ role: "user", content: correctionMessage }],
-          }),
-        });
+            prompt: correctionMessage,
+            maxTokens: 3000,
+          });
 
-        if (retryResponse.ok) {
-          const retryData = await retryResponse.json();
-          const retryText = retryData.content?.[0]?.text;
           if (retryText) {
             let retryCleaned = retryText.trim();
-            if (retryCleaned.startsWith("```")) retryCleaned = retryCleaned.slice(retryCleaned.indexOf("\n") + 1);
-            if (retryCleaned.endsWith("```")) retryCleaned = retryCleaned.slice(0, retryCleaned.lastIndexOf("```"));
+
+            if (retryCleaned.startsWith("```")) {
+              retryCleaned = retryCleaned.slice(
+                retryCleaned.indexOf("\n") + 1
+              );
+            }
+
+            if (retryCleaned.endsWith("```")) {
+              retryCleaned = retryCleaned.slice(
+                0,
+                retryCleaned.lastIndexOf("```")
+              );
+            }
+
             retryCleaned = retryCleaned.trim();
 
             const start2 = retryCleaned.indexOf("{");
             const end2 = retryCleaned.lastIndexOf("}");
+
             if (start2 !== -1 && end2 !== -1) {
               retryCleaned = retryCleaned.slice(start2, end2 + 1);
             }
 
-            const retryParsed = JSON.parse(retryCleaned) as { pages: ReadingPage[] };
+            const retryParsed = JSON.parse(retryCleaned) as {
+              pages: ReadingPage[];
+            };
+
             if (retryParsed.pages?.length) {
               const stillBad = retryParsed.pages.flatMap((pg) =>
                 findUnsupportedMarkers(pg.content ?? "", dateIndex)
               );
+
               if (stillBad.length === 0) {
                 pages = retryParsed.pages;
                 unsupported = [];
               }
             }
           }
+        } catch (retryError) {
+          console.error(
+            "[readings] Luna correction retry failed:",
+            retryError
+          );
         }
       }
 
+      // ── FINAL DATE PROVENANCE CHECK ──
       if (unsupported.length > 0) {
-        console.error(`[readings] Date provenance FAILED: ${unsupported.join(" | ")}`);
-        return NextResponse.json({ error: "Could not verify timing. Please try again." }, { status: 422 });
+        console.error(
+          `[readings] Date provenance FAILED: ${unsupported.join(" | ")}`
+        );
+
+        return NextResponse.json(
+          { error: "Could not verify timing. Please try again." },
+          { status: 422 }
+        );
       }
 
+      // ── SUCCESS ──
       return NextResponse.json(
         {
           reading: {
@@ -294,10 +298,18 @@ export async function handleReading(request: NextRequest) {
       );
     } catch (parseErr) {
       console.error("[readings] Parse error:", parseErr);
-      return NextResponse.json({ error: "Failed to parse reading. Please try again." }, { status: 422 });
+
+      return NextResponse.json(
+        { error: "Failed to parse reading. Please try again." },
+        { status: 422 }
+      );
     }
   } catch (error) {
     console.error("[readings] Error:", error);
-    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
   }
 }
