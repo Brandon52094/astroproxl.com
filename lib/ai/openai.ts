@@ -22,7 +22,7 @@ export async function generateOpenAIText({
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
+      model: "gpt-5.6-terra",
       instructions: system,
       input: prompt,
       max_output_tokens: maxTokens,
