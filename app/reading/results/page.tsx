@@ -744,7 +744,7 @@ export default function ReadingResultsPage() {
       {
         root: null,
         threshold: 0,
-        rootMargin: "-38% 0px -38% 0px",
+        rootMargin: "-34% 0px -34% 0px",
       }
     );
 
@@ -998,7 +998,7 @@ export default function ReadingResultsPage() {
       style={{
         position: "relative",
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #0a0e27 0%, #0d1235 18%, #0a0e27 34%, #07091d 52%, #040510 70%, #010207 86%, #000000 100%)",
+        background: "linear-gradient(180deg, #0a0e27 0%, #0b1030 12%, #080c24 24%, #050718 36%, #02030c 48%, #000000 60%, #000000 100%)",
         color: "#e2e8f0",
         fontFamily: "var(--font-sans, ui-sans-serif, system-ui)",
         overflowX: "hidden",
@@ -1031,6 +1031,7 @@ export default function ReadingResultsPage() {
         }
 
         .reading-body {
+          width: 100%;
           font-family: var(--font-display, Georgia, serif);
           font-size: 16px;
           line-height: 1.9;
@@ -1067,9 +1068,9 @@ export default function ReadingResultsPage() {
           padding-top: 30px;
           border-top: 1px solid rgba(255, 255, 255, 0.075);
           transition:
-            filter 0.5s ease,
-            opacity 0.5s ease,
-            transform 0.5s ease;
+            filter 0.72s ease,
+            opacity 0.72s ease,
+            transform 0.72s ease;
         }
 
         .section-block.first {
@@ -1098,7 +1099,8 @@ export default function ReadingResultsPage() {
         }
 
         .section-block.opening-feature .reading-body {
-          max-width: 470px;
+          width: 100%;
+          max-width: none;
           margin-left: auto;
           margin-right: auto;
           text-align: center;
@@ -1109,7 +1111,7 @@ export default function ReadingResultsPage() {
         .prediction-feature {
           position: relative;
           margin-top: 4px;
-          padding: 28px 18px 30px;
+          padding: 28px 8px 30px;
           text-align: center;
         }
 
@@ -1138,7 +1140,7 @@ export default function ReadingResultsPage() {
         }
 
         .prediction-lead {
-          max-width: 500px;
+          max-width: 560px;
           margin: 14px auto 0;
           font-family: var(--font-display, Georgia, serif);
           font-size: 21px;
@@ -1148,7 +1150,7 @@ export default function ReadingResultsPage() {
         }
 
         .prediction-support {
-          max-width: 470px;
+          max-width: 540px;
           margin: 16px auto 0;
           font-family: var(--font-display, Georgia, serif);
           font-size: 15px;
@@ -1158,6 +1160,7 @@ export default function ReadingResultsPage() {
         }
 
         .context-section {
+          width: 100%;
           margin-top: 34px;
           padding-top: 28px;
           border-top: 1px solid rgba(255, 255, 255, 0.07);
@@ -1168,13 +1171,15 @@ export default function ReadingResultsPage() {
         }
 
         .context-section .reading-body {
+          width: 100%;
           margin-top: 10px;
         }
 
         .manifestation-feature {
           position: relative;
+          width: 100%;
           margin-top: 34px;
-          padding: 22px 20px;
+          padding: 22px 16px;
           border: 1px solid rgba(94, 234, 212, 0.14);
           border-radius: 22px;
           background:
@@ -1224,9 +1229,9 @@ export default function ReadingResultsPage() {
           padding-top: 30px;
           border-top: 1px solid rgba(255, 255, 255, 0.075);
           transition:
-            filter 0.5s ease,
-            opacity 0.5s ease,
-            transform 0.5s ease;
+            filter 0.72s ease,
+            opacity 0.72s ease,
+            transform 0.72s ease;
         }
 
         .action-zone-heading {
@@ -1327,12 +1332,12 @@ export default function ReadingResultsPage() {
 
         .bottom-line-wrap {
           position: relative;
-          margin-top: 46px;
-          padding: 42px 14px 36px;
+          margin-top: 54px;
+          padding: 52px 10px 48px;
           text-align: center;
           transition:
-            transform 0.55s ease,
-            opacity 0.55s ease;
+            transform 0.72s ease,
+            opacity 0.72s ease;
         }
 
         .bottom-line-wrap::before {
@@ -1361,32 +1366,33 @@ export default function ReadingResultsPage() {
         }
 
         .closing-line {
-          max-width: 490px;
-          margin: 13px auto 0;
+          max-width: 540px;
+          margin: 15px auto 0;
           font-family: var(--font-display, Georgia, serif);
-          font-size: 17px;
-          line-height: 1.85;
-          color: #f1f5f9;
+          font-size: 18px;
+          line-height: 1.8;
+          color: #f8fafc;
           font-style: italic;
           text-align: center;
           white-space: pre-wrap;
+          text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
         }
 
         .reading-focusable {
           transition:
-            filter 0.55s ease,
-            opacity 0.55s ease,
-            transform 0.55s ease;
+            filter 0.72s ease,
+            opacity 0.72s ease,
+            transform 0.72s ease;
         }
 
         .reading-article.bottom-focus .reading-focusable {
-          filter: blur(4px);
-          opacity: 0.3;
-          transform: scale(0.995);
+          filter: blur(6px);
+          opacity: 0.2;
+          transform: scale(0.992);
         }
 
         .reading-article.bottom-focus .bottom-line-wrap {
-          transform: scale(1.015);
+          transform: scale(1.025);
         }
 
         /* ─── Astrological Sources ──────────────────────────────────────── */
@@ -1397,8 +1403,8 @@ export default function ReadingResultsPage() {
           border-top: 1px solid rgba(255, 255, 255, 0.07);
           text-align: center;
           transition:
-            filter 0.5s ease,
-            opacity 0.5s ease;
+            filter 0.72s ease,
+            opacity 0.72s ease;
         }
 
         .sources-toggle {
@@ -1636,7 +1642,7 @@ export default function ReadingResultsPage() {
       <ResultsStarfield />
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[560px] px-5 pt-14"
+        className="relative z-10 mx-auto w-full max-w-[620px] px-4 pt-14"
         style={{ 
           paddingBottom: "calc(160px + env(safe-area-inset-bottom))",
           minHeight: "calc(100vh - 40px)",
