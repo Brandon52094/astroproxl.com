@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, Minus, Plus } from "lucide-react";
 import StarfieldBackground from "./StarfieldBackground";
 
@@ -50,41 +50,39 @@ interface Balance {
 
 const MEMBERSHIP_FEATURES = [
   {
-    title: "Commission Eligible",
-    copy:
-      "Earn 1–5% recurring commission when someone you refer becomes a member.",
-  },
-  {
-    title: "Members-Only Features",
-    copy:
-      "Unlock experiences and tools only XL members can access.",
-  },
-  {
     title: "Unlimited Readings & Replies",
-    copy:
-      "Regular readings and replies, whenever you want. Unlimited averages may change.",
+    copy: "Unlimited access to JXL & General Readings with replies.",
   },
   {
-    title: "No Cooldowns",
-    copy:
-      "Start another reading whenever you're ready.",
+    title: "Commission Eligible (request only)",
+    copy: "Earn 1–5% recurring commission with subscription referrals.",
+  },
+  {
+    title: "Members-Only Features (beta)",
+    copy: "Unlock experiences and tools only XL members can access.",
+  },
+  {
+    title: "Save Your Readings (beta)",
+    copy: "Save your reading synopsis so you don't forget.",
+  },
+  {
+    title: "Lowered Cooldowns",
+    copy: "More readings, less cooldowns.",
   },
   {
     title: "Member Feedback Box",
-    copy:
-      "Send your ideas, requests, and feedback directly to us.",
+    copy: "Send your ideas, requests, and feedback directly to us.",
   },
 ];
 
 const MEMBERSHIP_PRICING = {
   monthly: {
-    price: 19.99,
+    price: 20,
     suffix: "/mo",
   },
   yearly: {
-    price: 199.99,
+    price: 200,
     suffix: "/yr",
-    savings: "Save about 17% vs monthly",
   },
 } as const;
 
@@ -116,6 +114,10 @@ function getReplySavings(quantity: number) {
   return normalPrice - actualPrice;
 }
 
+function plural(n: number, one: string, many?: string) {
+  return n === 1 ? one : many ?? `${one}s`;
+}
+
 /* ─────────────────────────────────────────────
    Component
 ───────────────────────────────────────────── */
@@ -138,7 +140,7 @@ export default function CreditsPanel({
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
 
   /* Current balances */
-  React.useEffect(() => {
+  useEffect(() => {
     (async () => {
       try {
         const res = await fetch("/api/user/credits");
@@ -155,12 +157,12 @@ export default function CreditsPanel({
     })();
   }, []);
 
-  const step = (id: ProductId, amount: number) => {
+  const step = useCallback((id: ProductId, amount: number) => {
     setCart((current) => ({
       ...current,
       [id]: Math.max(0, current[id] + amount),
     }));
-  };
+  }, []);
 
   const replySavings = useMemo(
     () => getReplySavings(cart.replies),
@@ -174,6 +176,16 @@ export default function CreditsPanel({
 
     return jxlTotal + readingTotal + repliesTotal;
   }, [cart]);
+
+  const inventoryFor = useCallback(
+    (id: ProductId): number => {
+      if (!balance) return 0;
+      if (id === "jxl") return balance.jxl;
+      if (id === "reading") return balance.readings;
+      return balance.replies;
+    },
+    [balance]
+  );
 
   /* ── Credit checkout ── */
 
@@ -225,8 +237,9 @@ export default function CreditsPanel({
 
   const handleGetAccess = () => {
     // NEXT STEP: Wire this to Stripe subscription checkout
-    // with monthly ($19.99) or yearly ($199.99) pricing.
+    // with monthly ($20) or yearly ($200) pricing.
     console.log(`XL Access selected: ${billingCycle}`);
+    alert(`Subscribe pressed — ${billingCycle}`);
   };
 
   const C = STYLES;
@@ -247,7 +260,6 @@ export default function CreditsPanel({
           style={C.back}
         >
           <ChevronLeft size={16} />
-          Back
         </button>
       )}
 
@@ -281,7 +293,7 @@ export default function CreditsPanel({
                 : C.membershipPriceInactive),
             }}
           >
-            $19.99 / mo
+            $20.00
           </button>
 
           <button
@@ -294,7 +306,7 @@ export default function CreditsPanel({
                 : C.membershipPriceInactive),
             }}
           >
-            $199.99 / yr
+            $200.00
           </button>
 
           <div style={C.membershipTitle}>
@@ -307,13 +319,12 @@ export default function CreditsPanel({
                 key={feature.title}
                 style={C.featureRow}
               >
-                <div style={C.featureName}>
+                <span style={C.featureName}>
                   {feature.title}
-                </div>
-
-                <div style={C.featureCopy}>
+                </span>
+                <span style={C.featureCopy}>
                   {feature.copy}
-                </div>
+                </span>
               </div>
             ))}
           </div>
@@ -324,6 +335,7 @@ export default function CreditsPanel({
             style={C.getAccess}
           >
             SUBSCRIBE
+            <span style={C.shimmerSweep} />
           </button>
         </section>
 
@@ -391,14 +403,6 @@ export default function CreditsPanel({
 
           </div>
 
-          {billingCycle === "yearly" && (
-            <div style={C.billingSavings}>
-              {
-                MEMBERSHIP_PRICING.yearly
-                  .savings
-              }
-            </div>
-          )}
         </div>
 
 
@@ -407,36 +411,13 @@ export default function CreditsPanel({
         ───────────────────────────── */}
 
         <div style={C.creditHeader}>
-          <div style={C.title}>
-            GET CREDITS
+          <div style={C.titleRow}>
+            <div style={C.titleLine} />
+            <div style={C.title}>
+              GET CREDITS
+            </div>
+            <div style={C.titleLine} />
           </div>
-
-          {balance && (
-            <p style={C.balance}>
-              You currently have{" "}
-              <b style={C.balanceStrong}>
-                {balance.readings}
-              </b>{" "}
-              {plural(
-                balance.readings,
-                "reading"
-              )}
-              ,{" "}
-              <b style={C.balanceStrong}>
-                {balance.jxl}
-              </b>{" "}
-              JXL, and{" "}
-              <b style={C.balanceStrong}>
-                {balance.replies}
-              </b>{" "}
-              {plural(
-                balance.replies,
-                "reply",
-                "replies"
-              )}
-              .
-            </p>
-          )}
         </div>
 
 
@@ -445,26 +426,65 @@ export default function CreditsPanel({
         ───────────────────────────── */}
 
         <div style={C.products}>
-          {PRODUCTS.map((product) => (
-            <CreditSelector
-              key={product.id}
-              product={product}
-              quantity={cart[product.id]}
-              inventory={
-                product.id === "jxl"
-                  ? balance?.jxl ?? 0
-                  : product.id === "reading"
-                  ? balance?.readings ?? 0
-                  : balance?.replies ?? 0
-              }
-              onStep={step}
-              replySavings={
-                product.id === "replies"
-                  ? replySavings
-                  : 0
-              }
-            />
-          ))}
+          {PRODUCTS.map((product) => {
+            const quantity = cart[product.id];
+            const isReplies = product.id === "replies";
+            const displayedPrice = isReplies
+              ? getReplyPrice(quantity || 1)
+              : product.price;
+            const savings = isReplies ? getReplySavings(quantity) : 0;
+
+            return (
+              <div
+                key={product.id}
+                style={C.selector}
+              >
+                <div style={C.inventoryCircle}>
+                  {inventoryFor(product.id) + quantity}
+                </div>
+
+                <button
+                  type="button"
+                  aria-label={`Remove ${product.title}`}
+                  onClick={() => step(product.id, -1)}
+                  disabled={quantity <= 0}
+                  style={{
+                    ...C.selectorAction,
+                    ...(quantity <= 0
+                      ? C.selectorActionDisabled
+                      : {}),
+                  }}
+                >
+                  <Minus size={18} />
+                </button>
+
+                <div style={C.selectorCenter}>
+                  <div style={C.selectorTitle}>
+                    {product.title}
+                  </div>
+                  <div style={C.selectorMeta}>
+                    {isReplies && quantity > 0
+                      ? `${product.desc} · $${displayedPrice.toFixed(2)} selected`
+                      : `${product.desc} · $${product.price.toFixed(2)}`}
+                  </div>
+                  {isReplies && savings > 0 && (
+                    <div style={C.selectorSavings}>
+                      You save ${savings.toFixed(2)}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  aria-label={`Add ${product.title}`}
+                  onClick={() => step(product.id, 1)}
+                  style={C.selectorAction}
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+            );
+          })}
         </div>
 
 
@@ -474,29 +494,6 @@ export default function CreditsPanel({
 
         <div style={C.checkoutWrap}>
 
-          {replySavings > 0 && (
-            <div style={C.savingsLine}>
-              Reply savings: $
-              {replySavings.toFixed(2)}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleCheckout}
-            disabled={
-              total <= 0 || loading
-            }
-            style={{
-              ...C.checkout,
-              ...(total <= 0 || loading
-                ? C.checkoutDisabled
-                : {}),
-            }}
-          >
-            {loading ? "…" : "CHECKOUT"}
-          </button>
-
           <div style={C.totalRow}>
             TOTAL:{" "}
             <span style={C.totalPrice}>
@@ -504,114 +501,75 @@ export default function CreditsPanel({
             </span>
           </div>
 
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   Credit selector
-───────────────────────────────────────────── */
-
-function CreditSelector({
-  product,
-  quantity,
-  inventory,
-  onStep,
-  replySavings,
-}: {
-  product: Product;
-  quantity: number;
-  inventory: number;
-  onStep: (id: ProductId, amount: number) => void;
-  replySavings: number;
-}) {
-  const isReplies = product.id === "replies";
-
-  const displayedPrice = isReplies
-    ? getReplyPrice(quantity || 1)
-    : product.price;
-
-  return (
-    <div style={STYLES.selector}>
-
-      <div style={STYLES.inventoryCircle}>
-        {inventory}
-      </div>
-
-      <button
-        type="button"
-        aria-label={`Remove ${product.title}`}
-        onClick={() =>
-          onStep(product.id, -1)
-        }
-        disabled={quantity <= 0}
-        style={{
-          ...STYLES.selectorAction,
-          ...(quantity <= 0
-            ? STYLES.selectorActionDisabled
-            : {}),
-        }}
-      >
-        <Minus size={18} />
-      </button>
-
-
-      <div style={STYLES.selectorCenter}>
-
-        <div style={STYLES.selectorTitle}>
-          {product.title}
-        </div>
-
-        <div style={STYLES.selectorMeta}>
-          {isReplies && quantity > 0
-            ? `${product.desc} · $${displayedPrice.toFixed(
-                2
-              )} selected`
-            : `${product.desc} · $${product.price.toFixed(
-                2
-              )}`}
-        </div>
-
-        {isReplies &&
-          replySavings > 0 && (
-            <div
-              style={
-                STYLES.selectorSavings
-              }
-            >
-              You save $
-              {replySavings.toFixed(2)}
+          {replySavings > 0 && (
+            <div style={C.savingsLine}>
+              Reply savings: ${replySavings.toFixed(2)}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={handleCheckout}
+            disabled={total <= 0 || loading}
+            style={{
+              ...C.checkout,
+              ...(total <= 0 || loading
+                ? C.checkoutDisabled
+                : C.checkoutEnabled),
+            }}
+          >
+            {loading ? "…" : "CHECKOUT"}
+          </button>
+
+        </div>
+
+        {/* ─────────────────────────────
+            BALANCE (under checkout)
+        ───────────────────────────── */}
+
+        {balance && (
+          <p style={C.balanceBottom}>
+            You currently have{" "}
+            <b style={C.balanceStrong}>
+              {balance.readings}
+            </b>{" "}
+            {plural(balance.readings, "reading")}
+            ,{" "}
+            <b style={C.balanceStrong}>
+              {balance.jxl}
+            </b>{" "}
+            JXL, and{" "}
+            <b style={C.balanceStrong}>
+              {balance.replies}
+            </b>{" "}
+            {plural(balance.replies, "reply", "replies")}
+            .
+          </p>
+        )}
+
+        <style>{`
+          @keyframes shimmer-sweep {
+            0% { left: -60%; }
+            45% { left: 130%; }
+            100% { left: 130%; }
+          }
+          @keyframes checkout-pulse {
+            0%, 100% { 
+              box-shadow: 0 0 0 1px rgba(255,255,255,0.25), 
+                          0 0 16px rgba(255,255,255,0.35), 
+                          0 0 22px rgba(45,212,191,0.22); 
+            }
+            50% { 
+              box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 
+                          0 0 20px rgba(255,255,255,0.45), 
+                          0 0 30px rgba(45,212,191,0.4); 
+            }
+          }
+        `}</style>
+
       </div>
-
-
-      <button
-        type="button"
-        aria-label={`Add ${product.title}`}
-        onClick={() =>
-          onStep(product.id, 1)
-        }
-        style={STYLES.selectorAction}
-      >
-        <Plus size={20} />
-      </button>
-
     </div>
   );
-}
-
-function plural(
-  n: number,
-  one: string,
-  many?: string
-) {
-  return n === 1
-    ? one
-    : many ?? `${one}s`;
 }
 
 /* ─────────────────────────────────────────────
@@ -619,29 +577,25 @@ function plural(
 ───────────────────────────────────────────── */
 
 const GOLD = "rgba(251,191,36,0.72)";
-const GOLD_SOFT = "rgba(251,191,36,0.18)";
+const TEAL = "rgba(45,212,191,0.85)";
+const TEAL_SOFT = "rgba(45,212,191,0.22)";
 const BORDER = "rgba(148,163,184,0.24)";
 const PANEL = "#050816";
 
-// ── Shadow system (enhanced) ──
+// ── Shadow system (dark depth) ──
 const SHADOW_DEEP = "0 14px 30px rgba(0,0,0,0.62), 0 5px 12px rgba(0,0,0,0.48)";
 const SHADOW_GOLD = "0 14px 30px rgba(0,0,0,0.62), 0 0 18px rgba(251,191,36,0.10)";
 const SHADOW_TEXT = "0 4px 10px rgba(0,0,0,0.9), 0 1px 3px rgba(0,0,0,0.6)";
 const SHADOW_DROP_GOLD = "drop-shadow(0 10px 14px rgba(0,0,0,0.85)) drop-shadow(0 3px 5px rgba(0,0,0,0.65))";
 
-const STYLES: Record<
-  string,
-  React.CSSProperties
-> = {
+const STYLES: Record<string, React.CSSProperties> = {
   root: {
     position: "fixed",
     inset: 0,
     zIndex: 50,
-    background:
-      "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+    background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
     color: "#f1f5f9",
-    fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     overflowY: "auto",
     overflowX: "hidden",
     WebkitOverflowScrolling: "touch",
@@ -660,17 +614,18 @@ const STYLES: Record<
   back: {
     position: "fixed",
     top: "calc(12px + env(safe-area-inset-top))",
-    left: 16,
+    left: 20,
     zIndex: 100,
+    width: 36,
+    height: 36,
+    padding: 0,
     display: "flex",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
     background: "rgba(5,8,22,0.6)",
     border: `1px solid ${BORDER}`,
-    borderRadius: 999,
-    padding: "6px 12px 6px 8px",
+    borderRadius: "50%",
     color: "#cbd5e1",
-    fontSize: 13,
     cursor: "pointer",
     backdropFilter: "blur(8px)",
     boxShadow: SHADOW_DEEP,
@@ -682,8 +637,7 @@ const STYLES: Record<
     width: "100%",
     maxWidth: 430,
     margin: "0 auto",
-    padding:
-      "calc(70px + env(safe-area-inset-top)) 20px calc(70px + env(safe-area-inset-bottom))",
+    padding: `calc(44px + env(safe-area-inset-top)) 20px calc(60px + env(safe-area-inset-bottom))`,
     minHeight: "100vh",
     boxSizing: "border-box",
   },
@@ -694,13 +648,9 @@ const STYLES: Record<
 
   membershipFrame: {
     position: "relative",
-    marginTop: 0,
-    padding:
-      "56px 34px 70px",
+    padding: "56px 34px 70px",
     minHeight: 430,
   },
-
-  /* LEFT BRACKET — ONE element */
 
   leftBracket: {
     position: "absolute",
@@ -731,8 +681,6 @@ const STYLES: Record<
     background: GOLD,
   },
 
-  /* RIGHT BRACKET — ONE element */
-
   rightBracket: {
     position: "absolute",
     top: 22,
@@ -761,8 +709,6 @@ const STYLES: Record<
     height: 1.5,
     background: GOLD,
   },
-
-  /* ── Bracket pricing ── */
 
   membershipPriceLeft: {
     position: "absolute",
@@ -794,8 +740,7 @@ const STYLES: Record<
     color: "#fde68a",
     opacity: 1,
     filter: "blur(0px)",
-    textShadow:
-      "0 4px 10px rgba(0,0,0,0.9), 0 0 10px rgba(251,191,36,0.25)",
+    textShadow: "0 4px 10px rgba(0,0,0,0.9), 0 0 10px rgba(251,191,36,0.25)",
   },
 
   membershipPriceInactive: {
@@ -803,8 +748,6 @@ const STYLES: Record<
     opacity: 0.42,
     filter: "blur(0.7px)",
   },
-
-  /* TOP OPENING */
 
   membershipTitle: {
     position: "absolute",
@@ -822,37 +765,31 @@ const STYLES: Record<
     textShadow: SHADOW_TEXT,
   },
 
-  /* FEATURE MATRIX */
-
   membershipContent: {
     display: "flex",
     flexDirection: "column",
-    gap: 24,
+    gap: 7,
   },
 
   featureRow: {
-    display: "grid",
-    gridTemplateColumns:
-      "minmax(105px, 0.72fr) minmax(0, 1.5fr)",
-    columnGap: 22,
-    alignItems: "start",
+    lineHeight: 1.25,
+    textAlign: "center",
   },
 
   featureName: {
+    display: "block",
     fontSize: 11,
-    lineHeight: 1.3,
     fontWeight: 700,
-    color: "#f8fafc",
+    color: "#fff",
     textShadow: SHADOW_TEXT,
   },
 
   featureCopy: {
-    fontSize: 11,
-    lineHeight: 1.5,
+    display: "block",
+    fontSize: 9.5,
     color: "#a7b1c3",
+    marginTop: 1,
   },
-
-  /* BOTTOM OPENING */
 
   getAccess: {
     position: "absolute",
@@ -860,6 +797,7 @@ const STYLES: Record<
     bottom: -2,
     transform: "translateX(-50%)",
     zIndex: 3,
+    overflow: "hidden",
     minWidth: 154,
     height: 46,
     padding: "0 24px",
@@ -871,8 +809,19 @@ const STYLES: Record<
     fontWeight: 700,
     letterSpacing: "0.08em",
     cursor: "pointer",
-    boxShadow: SHADOW_GOLD,
+    boxShadow: "0 0 0 1px rgba(255,255,255,0.25), 0 0 16px rgba(255,255,255,0.35), 0 0 22px rgba(251,191,36,0.35)",
     whiteSpace: "nowrap",
+  },
+
+  shimmerSweep: {
+    position: "absolute",
+    top: 0,
+    left: "-60%",
+    width: "45%",
+    height: "100%",
+    background: "linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent)",
+    transform: "skewX(-20deg)",
+    animation: "shimmer-sweep 3.4s ease-in-out infinite",
   },
 
   /* ─────────────────────────────────
@@ -884,7 +833,7 @@ const STYLES: Record<
     flexDirection: "column",
     alignItems: "center",
     gap: 8,
-    margin: "34px 0 28px",
+    margin: "26px 0 20px",
   },
 
   billingToggleRow: {
@@ -922,10 +871,8 @@ const STYLES: Record<
   },
 
   billingSwitchOn: {
-    borderColor:
-      "rgba(251,191,36,0.45)",
-    background:
-      "rgba(251,191,36,0.12)",
+    borderColor: "rgba(251,191,36,0.45)",
+    background: "rgba(251,191,36,0.12)",
   },
 
   billingKnob: {
@@ -943,41 +890,34 @@ const STYLES: Record<
     left: 22,
   },
 
-  billingSavings: {
-    fontSize: 10,
-    color: "#fbbf24",
-    textShadow: SHADOW_TEXT,
-  },
-
   /* ─────────────────────────────────
      GET CREDITS
   ───────────────────────────────── */
 
   creditHeader: {
-    margin: "4px 0 20px",
+    margin: "8px 0 26px",
+  },
+
+  titleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  titleLine: {
+    flex: 1,
+    height: 1,
+    background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
   },
 
   title: {
-    fontSize: 16,
-    fontWeight: 700,
-    letterSpacing: "0.12em",
-    color: "#e2e8f0",
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: "0.16em",
+    color: "#fff",
     textAlign: "center",
-    marginBottom: 6,
-    textShadow: SHADOW_TEXT,
-  },
-
-  balance: {
-    textAlign: "center",
-    fontSize: 10.5,
-    lineHeight: 1.45,
-    color: "#7f8ba3",
-    margin: "4px 2px 0",
-  },
-
-  balanceStrong: {
-    color: "#cbd5e1",
-    fontWeight: 600,
+    whiteSpace: "nowrap",
+    textShadow: "0 4px 14px rgba(255,255,255,0.4), 0 0 22px rgba(255,255,255,0.18)",
   },
 
   /* ─────────────────────────────────
@@ -1000,8 +940,7 @@ const STYLES: Record<
     padding: "14px 20px",
     border: `1px solid ${BORDER}`,
     borderRadius: 22,
-    background:
-      "linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
+    background: "linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
     boxShadow: SHADOW_DEEP,
   },
 
@@ -1062,8 +1001,7 @@ const STYLES: Record<
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    border:
-      "1px solid rgba(251,191,36,0.65)",
+    border: "1px solid rgba(251,191,36,0.65)",
     background: "#07101d",
     color: "#fde68a",
     fontSize: 11,
@@ -1080,7 +1018,7 @@ const STYLES: Record<
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    marginTop: 22,
+    marginTop: 8,
     gap: 8,
   },
 
@@ -1089,26 +1027,38 @@ const STYLES: Record<
     padding: "0 24px",
     minWidth: 154,
     borderRadius: 10,
-    border: `1px solid ${GOLD}`,
+    border: `1px solid ${TEAL}`,
     background: PANEL,
     color: "#fff",
     fontSize: 13,
     fontWeight: 700,
     letterSpacing: "0.08em",
     cursor: "pointer",
-    boxShadow: SHADOW_GOLD,
     whiteSpace: "nowrap",
+    opacity: 0.5,
+    transition: "opacity 0.5s ease, box-shadow 0.5s ease",
+  },
+
+  checkoutEnabled: {
+    opacity: 1,
+    boxShadow: "0 0 0 1px rgba(255,255,255,0.25), 0 0 16px rgba(255,255,255,0.35), 0 0 22px rgba(45,212,191,0.22)",
+    animation: "checkout-pulse 2.6s ease-in-out 0.6s infinite",
   },
 
   checkoutDisabled: {
     opacity: 0.36,
     cursor: "default",
     boxShadow: "none",
+    animation: "none",
   },
 
   totalRow: {
     fontSize: 11,
     color: "#64748b",
+    textAlign: "right",
+    width: "100%",
+    maxWidth: 300,
+    margin: "6px 6px 0",
   },
 
   totalPrice: {
@@ -1121,5 +1071,18 @@ const STYLES: Record<
     fontSize: 10.5,
     color: "#fbbf24",
     textShadow: SHADOW_TEXT,
+  },
+
+  balanceBottom: {
+    textAlign: "center",
+    fontSize: 10.5,
+    lineHeight: 1.45,
+    color: "#7f8ba3",
+    margin: "32px 2px 0",
+  },
+
+  balanceStrong: {
+    color: "#cbd5e1",
+    fontWeight: 600,
   },
 };
