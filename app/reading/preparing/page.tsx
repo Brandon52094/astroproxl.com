@@ -7,20 +7,20 @@ import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartSto
 import type { ReadingPage } from "@/lib/chartStore";
 
 const LOADING_MESSAGES = [
-  "Reading your natal placements…",
-  "Mapping current transits to your chart…",
-  "Calculating your profection year…",
-  "Identifying your Time Lord…",
-  "Tracing house rulers and themes…",
-  "Checking mutual reception patterns…",
-  "Mapping sensitive midpoint activations…",
-  "Checking transits to your angles…",
-  "Cross-referencing your solar return…",
-  "Synthesizing progressions and solar arcs…",
-  "Scanning planetary station points…",
-  "Checking eclipse activations…",
-  "Weighing the strongest timing signals…",
-  "Finalizing your reading…",
+  "Reading your natal structure…",
+  "Weighing the transits active around you now…",
+  "Tracing your profection year and Time Lord…",
+  "Following the house rulers shaping this question…",
+  "Checking for reinforcing planetary patterns…",
+  "Reviewing sensitive midpoint activations…",
+  "Weighing contacts to your chart angles…",
+  "Cross-checking your solar return themes…",
+  "Comparing progressions and solar arcs…",
+  "Reviewing planetary station pressure points…",
+  "Checking eclipse activations around your chart…",
+  "Comparing the strongest predictive layers…",
+  "Identifying the central thread of your reading…",
+  "Finalizing the interpretation…",
 ];
 
 function PreparingPageInner() {
@@ -298,15 +298,21 @@ function PreparingPageInner() {
                 <span className="text-2xl">✕</span>
               </div>
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold text-white">yikes</h1>
-                <p className="text-sm leading-6 text-slate-400">{error}</p>
-              </div>
-              <button
-                onClick={() => router.push("/reading/intake")}
-                className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
-              >
-                Tap again
-              </button>
+  <h1 className="text-xl font-semibold text-white">
+    Something interrupted the reading
+  </h1>
+
+  <p className="text-sm leading-6 text-slate-400">
+    {error}
+  </p>
+</div>
+
+<button
+  onClick={() => router.push("/reading/intake")}
+  className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
+>
+  Try again
+</button>
             </motion.div>
           ) : (
             <motion.div
@@ -337,15 +343,16 @@ function PreparingPageInner() {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Reading the sky
-                </h1>
-                <p className="text-sm leading-6 text-slate-400">
-                  Your chart is being traced from multiple angles. Only you can see this reading —
-                  tap the download icon to keep it.
-                </p>
-              </div>
+             <div className="space-y-3">
+  <h1 className="text-2xl font-semibold tracking-tight text-white">
+    Building your reading
+  </h1>
+
+  <p className="text-sm leading-6 text-slate-400">
+    Your chart is being weighed across multiple predictive layers to find the
+    strongest development active for you now.
+  </p>
+</div>
 
               <div className="h-6">
                 <AnimatePresence mode="wait">
@@ -388,15 +395,14 @@ function PreparingPageInner() {
               </div>
 
               <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
-                <p className="text-xs leading-6 text-slate-400">
-                  The sky does not repeat itself{" "}
-                  <span className="text-slate-200">— this configuration is yours alone</span>,{" "}
-                  read through <span className="text-slate-200">every layer your chart holds</span>,{" "}
-                  weighed against <span className="text-slate-200">what is moving toward you now</span>.{" "}
-                  What surfaces next may be quiet, or it may change how you see the next few weeks
-                  — take note of the dates it gives.
-                </p>
-              </div>
+  <p className="text-xs leading-6 text-slate-400">
+    This reading is built from{" "}
+    <span className="text-slate-200">your natal chart</span>,{" "}
+    <span className="text-slate-200">the timing active around you now</span>, and{" "}
+    <span className="text-slate-200">multiple predictive techniques weighed together</span>.{" "}
+    The goal is not to give you more astrology — it is to identify the signal that matters most.
+  </p>
+</div>
             </motion.div>
           )}
         </AnimatePresence>

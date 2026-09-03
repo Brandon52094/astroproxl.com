@@ -29,9 +29,18 @@ interface UserCredits {
 }
 
 type ParsedSection =
-  | { kind: "opening"; label: string; body: string }
+  | { kind: "prediction"; label: string; body: string }
+  | { kind: "whyNow"; label: string; body: string }
+  | { kind: "manifestation"; label: string; body: string }
+  | { kind: "prose"; label: string; body: string }
   | { kind: "window"; date: string; note: string | null; body: string }
-  | { kind: "directive"; directive: "DROP" | "EXECUTE" | "LOCK"; label: string; date: string | null; body: string }
+  | {
+      kind: "directive";
+      directive: "DROP" | "EXECUTE" | "LOCK";
+      label: string;
+      date: string | null;
+      body: string;
+    }
   | { kind: "closing"; body: string };
 
 // ─── 1. ResultsStarfield Component ────────────────────────────────
@@ -272,6 +281,7 @@ const INTERNAL_PART_RE =
   /^\s*Part\s*(1|2|2B|3|4|5)\s*[:—–-]\s*/i;
 
 const HUMAN_HEADERS = [
+  "The Prediction",
   "Where You Are Now",
   "Why This Is Active",
   "Why This Is Active Now",
@@ -360,6 +370,34 @@ function splitWindowNote(body: string): { note: string | null; rest: string } {
     return { note: dashLead[1].trim(), rest: body.slice(dashLead[0].length) };
   }
   return { note: null, rest: body };
+}
+
+function classifyProseKind(
+  label: string,
+  isFirst: boolean
+): "prediction" | "whyNow" | "manifestation" | "prose" {
+  const normalized = label.trim().toLowerCase();
+
+  if (
+    isFirst ||
+    normalized === "the prediction" ||
+    normalized === "where you are now"
+  ) {
+    return "prediction";
+  }
+
+  if (
+    normalized === "why this is active" ||
+    normalized === "why this is active now"
+  ) {
+    return "whyNow";
+  }
+
+  if (normalized === "how this is most likely to show up") {
+    return "manifestation";
+  }
+
+  return "prose";
 }
 
 function parseReadingSections(content: string): ParsedSection[] | null {
@@ -491,12 +529,19 @@ function parseReadingSections(content: string): ParsedSection[] | null {
     }
 
     // Normal reading prose.
+    const resolvedLabel =
+      labelFromParagraph ||
+      pendingLabel ||
+      (sections.length === 0 ? "The Prediction" : "");
+
+    const kind = classifyProseKind(
+      resolvedLabel,
+      sections.length === 0
+    );
+
     sections.push({
-      kind: "opening",
-      label:
-        labelFromParagraph ||
-        pendingLabel ||
-        (sections.length === 0 ? "Where You Are Now" : ""),
+      kind,
+      label: resolvedLabel,
       body: para,
     });
 
@@ -710,15 +755,23 @@ export default function ReadingResultsPage() {
 
   // ─── Group sections ─────────────────────────────────────────────
 
-  const proseSections =
-    parsedSections?.filter((section) => section.kind === "opening") ?? [];
+  const predictionSections =
+    parsedSections?.filter((section) => section.kind === "prediction") ?? [];
 
-  const actionSections =
-    parsedSections?.filter(
-      (section) =>
-        section.kind === "window" ||
-        section.kind === "directive"
-    ) ?? [];
+  const whyNowSections =
+    parsedSections?.filter((section) => section.kind === "whyNow") ?? [];
+
+  const manifestationSections =
+    parsedSections?.filter((section) => section.kind === "manifestation") ?? [];
+
+  const additionalProseSections =
+    parsedSections?.filter((section) => section.kind === "prose") ?? [];
+
+  const timingSections =
+    parsedSections?.filter((section) => section.kind === "window") ?? [];
+
+  const directiveSections =
+    parsedSections?.filter((section) => section.kind === "directive") ?? [];
 
   const closingSections =
     parsedSections?.filter((section) => section.kind === "closing") ?? [];
@@ -739,6 +792,23 @@ export default function ReadingResultsPage() {
       }
       return <React.Fragment key={i}>{part}</React.Fragment>;
     });
+  };
+
+  const splitPredictionLead = (body: string) => {
+    const sentences =
+      body.match(/[^.!?]+[.!?]+(?:["'’”)]*)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
+
+    if (sentences.length <= 2) {
+      return {
+        lead: body.trim(),
+        rest: "",
+      };
+    }
+
+    return {
+      lead: sentences.slice(0, 2).join(" "),
+      rest: sentences.slice(2).join(" "),
+    };
   };
 
   const handleDownload = async () => {
@@ -1032,6 +1102,121 @@ export default function ReadingResultsPage() {
           margin-left: auto;
           margin-right: auto;
           text-align: center;
+        }
+
+        /* ─── Guided reveal ─────────────────────────────────────────────── */
+
+        .prediction-feature {
+          position: relative;
+          margin-top: 4px;
+          padding: 28px 18px 30px;
+          text-align: center;
+        }
+
+        .prediction-feature::after {
+          content: "";
+          position: absolute;
+          left: 18%;
+          right: 18%;
+          bottom: 0;
+          height: 1px;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(94, 234, 212, 0.22),
+            transparent
+          );
+        }
+
+        .prediction-label {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.88);
+        }
+
+        .prediction-lead {
+          max-width: 500px;
+          margin: 14px auto 0;
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 21px;
+          line-height: 1.65;
+          color: #f8fafc;
+          text-align: center;
+        }
+
+        .prediction-support {
+          max-width: 470px;
+          margin: 16px auto 0;
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 15px;
+          line-height: 1.85;
+          color: #aebbd0;
+          text-align: center;
+        }
+
+        .context-section {
+          margin-top: 34px;
+          padding-top: 28px;
+          border-top: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .context-section .section-label {
+          text-align: left;
+        }
+
+        .context-section .reading-body {
+          margin-top: 10px;
+        }
+
+        .manifestation-feature {
+          position: relative;
+          margin-top: 34px;
+          padding: 22px 20px;
+          border: 1px solid rgba(94, 234, 212, 0.14);
+          border-radius: 22px;
+          background:
+            linear-gradient(
+              145deg,
+              rgba(94, 234, 212, 0.055),
+              rgba(15, 23, 42, 0.22)
+            );
+        }
+
+        .manifestation-feature .section-label {
+          color: rgba(94, 234, 212, 0.95);
+        }
+
+        .manifestation-feature .reading-body {
+          margin-top: 11px;
+          color: #e2e8f0;
+        }
+
+        .reveal-zone {
+          margin-top: 38px;
+          padding-top: 30px;
+          border-top: 1px solid rgba(255, 255, 255, 0.075);
+        }
+
+        .reveal-zone-heading {
+          margin-bottom: 13px;
+          text-align: center;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.92);
+        }
+
+        .directive-zone {
+          margin-top: 28px;
+        }
+
+        .directive-zone .action-zone-frame {
+          border-color: rgba(251, 191, 36, 0.14);
         }
 
         .action-zone {
@@ -1502,88 +1687,134 @@ export default function ReadingResultsPage() {
         >
           {parsedSections ? (
             <>
-              {/* ── Main interpretation ── */}
-              {proseSections.map((section, i) => {
-                const isOpening =
-                  i === 0 ||
-                  section.label.toLowerCase() ===
-                    "where you are now";
+              {/* ── 1. THE PREDICTION ── */}
+              {predictionSections.map((section, i) => {
+                const { lead, rest } = splitPredictionLead(section.body);
 
                 return (
-                  <div
-                    key={`prose-${i}`}
-                    className={[
-                      "section-block",
-                      "reading-focusable",
-                      i === 0 ? "first" : "",
-                      isOpening ? "opening-feature" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
+                  <section
+                    key={`prediction-${i}`}
+                    className="prediction-feature reading-focusable"
                   >
-                    {section.label && (
-                      <p className="section-label">
-                        {section.label}
+                    <p className="prediction-label">
+                      The Prediction
+                    </p>
+
+                    <p className="prediction-lead">
+                      {renderContentWithBadges(lead)}
+                    </p>
+
+                    {rest && (
+                      <p className="prediction-support">
+                        {renderContentWithBadges(rest)}
                       </p>
                     )}
-
-                    <p
-                      className="reading-body"
-                      style={{
-                        marginTop: section.label ? 10 : 0,
-                      }}
-                    >
-                      {renderContentWithBadges(section.body)}
-                    </p>
-                  </div>
+                  </section>
                 );
               })}
 
-              {/* ── Timing & Direction ── */}
-              {actionSections.length > 0 && (
-                <section className="action-zone reading-focusable">
-                  <p className="action-zone-heading">
-                    Timing &amp; Direction
+              {/* ── 2. WHY NOW ── */}
+              {whyNowSections.map((section, i) => (
+                <section
+                  key={`why-${i}`}
+                  className="context-section reading-focusable"
+                >
+                  <p className="section-label">
+                    Why This Is Active Now
+                  </p>
+
+                  <p className="reading-body">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                </section>
+              ))}
+
+              {/* ── 3. HOW THIS SHOWS UP ── */}
+              {manifestationSections.map((section, i) => (
+                <section
+                  key={`manifestation-${i}`}
+                  className="manifestation-feature reading-focusable"
+                >
+                  <p className="section-label">
+                    How This Is Most Likely To Show Up
+                  </p>
+
+                  <p className="reading-body">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                </section>
+              ))}
+
+              {/* ── Any additional prose the parser does not recognize ── */}
+              {additionalProseSections.map((section, i) => (
+                <section
+                  key={`additional-${i}`}
+                  className="context-section reading-focusable"
+                >
+                  {section.label && (
+                    <p className="section-label">
+                      {section.label}
+                    </p>
+                  )}
+
+                  <p className="reading-body">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                </section>
+              ))}
+
+              {/* ── 4. TIMING ── */}
+              {timingSections.length > 0 && (
+                <section className="reveal-zone reading-focusable">
+                  <p className="reveal-zone-heading">
+                    Timing
                   </p>
 
                   <div className="action-zone-frame">
-                    {actionSections.map((section, i) => {
-                      if (section.kind === "window") {
-                        return (
-                          <div
-                            key={`action-${i}`}
-                            className="action-card window"
-                          >
-                            <div className="action-card-head">
-                              <CalendarDays
-                                className="h-4 w-4 text-teal-300/80"
-                                aria-hidden="true"
-                              />
+                    {timingSections.map((section, i) => (
+                      <div
+                        key={`timing-${i}`}
+                        className="action-card window"
+                      >
+                        <div className="action-card-head">
+                          <CalendarDays
+                            className="h-4 w-4 text-teal-300/80"
+                            aria-hidden="true"
+                          />
 
-                              <span className="action-card-label">
-                                Dated Window
-                              </span>
+                          <span className="action-card-label">
+                            Dated Window
+                          </span>
 
-                              <span className="date-badge">
-                                {section.date}
-                              </span>
+                          <span className="date-badge">
+                            {section.date}
+                          </span>
 
-                              {section.note && (
-                                <span className="action-card-note">
-                                  — {section.note}
-                                </span>
-                              )}
-                            </div>
+                          {section.note && (
+                            <span className="action-card-note">
+                              — {section.note}
+                            </span>
+                          )}
+                        </div>
 
-                            <p className="action-card-body">
-                              {renderContentWithBadges(
-                                section.body
-                              )}
-                            </p>
-                          </div>
-                        );
-                      }
+                        <p className="action-card-body">
+                          {renderContentWithBadges(section.body)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
+              {/* ── 5. YOUR MOVE ── */}
+              {directiveSections.length > 0 && (
+                <section className="reveal-zone directive-zone reading-focusable">
+                  <p className="reveal-zone-heading">
+                    Your Move
+                  </p>
+
+                  <div className="action-zone-frame">
+                    {directiveSections.map((section, i) => {
                       const variant =
                         section.directive === "DROP"
                           ? "drop"
@@ -1600,7 +1831,7 @@ export default function ReadingResultsPage() {
 
                       return (
                         <div
-                          key={`action-${i}`}
+                          key={`directive-${i}`}
                           className={`action-card ${variant}`}
                         >
                           <div className="action-card-head">
@@ -1616,9 +1847,7 @@ export default function ReadingResultsPage() {
                           </div>
 
                           <p className="action-card-body">
-                            {renderContentWithBadges(
-                              section.body
-                            )}
+                            {renderContentWithBadges(section.body)}
                           </p>
                         </div>
                       );

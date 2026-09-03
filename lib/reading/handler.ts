@@ -16,10 +16,34 @@ const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000;
 const CREDITS_PER_READING = 1;
 
 const DEFAULT_SYSTEM =
-  "You are a precision astrological synthesis engine. Follow the supplied calculation hierarchy and evidence rules exactly. Select timing windows deterministically from the strongest topic-relevant calculator-supported evidence. Never invent, approximate, diversify, or substitute dates for variety. If the evidence does not support a dated window, do not create one. Output raw JSON only.";
+  "You are a precision personal astrologer. Follow the supplied calculation hierarchy and evidence exactly. " +
+  "Never invent aspects, dates, placements, or unsupported outcomes. " +
+  "Select timing windows deterministically from the strongest topic-relevant calculator-supported evidence. " +
+  "Never approximate, diversify, shift, or substitute dates for variety; if the evidence does not support a dated window, do not create one. " +
+  "When the supplied evidence strongly converges, write with conviction and commit to the strongest supported interpretation. " +
+  "Speak directly to the person as 'you' with warmth, specificity, and emotional intelligence. " +
+  "Translate astrology into recognizable real-life developments rather than sounding like a technical report. " +
+  "Match certainty to the evidence: EVENT, ACTIVATION, or BACKGROUND. " +
+  "Bold delivery never upgrades weak evidence.";
 
 const RETRY_SYSTEM =
-  "You are a precision astrological synthesis engine correcting an invalid reading. Preserve all supported interpretation, but remove or replace every unsupported date. Use ONLY calculator-supported dates explicitly provided in the correction instruction. Do not invent, approximate, shift, diversify, or substitute dates. If no valid date supports a window, remove that window. Output raw JSON only.";
+  "You are a precision personal astrologer correcting date provenance in an existing reading. " +
+  "Use the PREVIOUS READING supplied in the correction prompt as the text to repair. " +
+  "Remove or replace every unsupported date using ONLY calculator-supported dates explicitly provided in the correction instruction. " +
+  "Do not invent, approximate, shift, diversify, or substitute dates; if no valid date supports a window, remove that window. " +
+  "Preserve all supported interpretation, structure, specificity, warmth, and decisive voice. " +
+  "Change only what is necessary to repair date provenance. " +
+  "Do NOT make the corrected reading more tentative, generic, flat, or clinical than the original. " +
+  "Bold delivery does not upgrade evidence: preserve EVENT, ACTIVATION, and BACKGROUND distinctions exactly as supported. " +
+  "Output raw JSON only.";
+
+function buildSystemPrompt(topicSystem?: string) {
+  if (!topicSystem?.trim()) {
+    return `${DEFAULT_SYSTEM} Output raw JSON only.`;
+  }
+
+  return DEFAULT_SYSTEM + " " + topicSystem.trim() + " Output raw JSON only.";
+}
 
 export async function handleReading(request: NextRequest) {
   try {
@@ -149,12 +173,12 @@ export async function handleReading(request: NextRequest) {
     );
     console.log("[DEBUG] =============================");
 
-        // ── GENERATE READING WITH GPT-5.6 LUNA ──
+    // ── GENERATE READING WITH GPT-5.6 LUNA ──
     let rawText: string;
 
     try {
       rawText = await generateOpenAIText({
-        system: topic.system ?? DEFAULT_SYSTEM,
+        system: buildSystemPrompt(topic.system),
         prompt,
         maxTokens: topic.maxTokens ?? 4000,
       });
@@ -188,7 +212,7 @@ export async function handleReading(request: NextRequest) {
       let pages = parsed.pages;
       let unsupported = pages.flatMap((pg) => findUnsupportedMarkers(pg.content ?? "", dateIndex));
 
-            // ── RETRY ON UNSUPPORTED DATES ──
+      // ── RETRY ON UNSUPPORTED DATES ──
       if (unsupported.length > 0) {
         console.warn(`[readings] Unsupported dates: ${unsupported.join(" | ")}`);
 
@@ -205,10 +229,15 @@ export async function handleReading(request: NextRequest) {
           "\nDATE PROVENANCE CORRECTION — HARD RULE" +
           "\n═══════════════════════════════════════════" +
           "\nThe previous response contained unsupported dates." +
+          "\n\nPREVIOUS READING TO CORRECT:" +
+          "\n" +
+          rawText +
           "\n\nThe ONLY approved date anchors are:" +
           "\n" +
           approvedDates +
-          "\n\nRewrite the reading while preserving supported interpretation." +
+          "\n\nCorrect the PREVIOUS READING above." +
+          "\nPreserve its supported interpretation, structure, specificity, and voice." +
+          "\nChange only what is necessary to repair unsupported date provenance." +
           "\nRemove every unsupported dated window." +
           "\nDo not move an event to the nearest approved date." +
           "\nDo not add a date merely because one is available." +
@@ -219,7 +248,7 @@ export async function handleReading(request: NextRequest) {
           const retryText = await generateOpenAIText({
             system: RETRY_SYSTEM,
             prompt: correctionMessage,
-            maxTokens: 3000,
+            maxTokens: topic.maxTokens ?? 4000,
           });
 
           if (retryText) {

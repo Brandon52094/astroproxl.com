@@ -77,8 +77,12 @@ export interface AdvancedCalculations {
   /**
    * NOTE:
    * These are raw angle contacts only.
-   * Exact dates must be attached by the ephemeris/date solver
-   * before they are used as prediction anchors.
+   * They may support interpretation and spine ranking,
+   * but they are NOT valid dated prediction anchors by themselves.
+   *
+   * Exact dates must be attached upstream by the
+   * ephemeris/date solver before the reading engine
+   * may use them as timing anchors.
    */
   transitsToAngles: TransitToAngle[];
 
@@ -92,10 +96,9 @@ export interface AdvancedCalculations {
  * in chart-calculate, not inferred here.
  */
 export function generateAdvancedCalculations(
-  chartData: ChartData
+  chartData: ChartData,
+  referenceDate: Date = new Date()
 ): AdvancedCalculations {
-  const currentDate = new Date();
-
   // 1. HOUSE RULERS
   // Natal interpretation → Placidus
   const houseRulers = calculateHouseRulers(
@@ -123,11 +126,14 @@ export function generateAdvancedCalculations(
   const synodicCycles =
     calculateSynodicCycles(
       chartData.tropical.planets,
-      currentDate
+      referenceDate
     );
 
   // 5. MIDPOINTS
-  // Predictive placement → Whole Sign
+  // Predictive placement → Whole Sign.
+  // Sensitive interpretive points only.
+  // Do not use as standalone event or timing anchors
+  // unless independently activated by stronger predictive evidence.
   const midpoints =
     calculateMidpoints(
       chartData.tropical.planets,
@@ -140,12 +146,12 @@ export function generateAdvancedCalculations(
     calculateLunarReturn(
       chartData.moonSign,
       chartData.moonDegree,
-      currentDate
+      referenceDate
     );
 
   // 7. ECLIPSE ACTIVATIONS
   const knownEclipses =
-    getKnownEclipses(currentDate);
+    getKnownEclipses(referenceDate);
 
   const eclipseActivations =
     calculateEclipseActivation(
