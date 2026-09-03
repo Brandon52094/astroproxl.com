@@ -269,6 +269,34 @@ export default function CreditsPanel({
             <span style={C.rightBracketBottom} />
           </div>
 
+          {/* ── Bracket pricing ── */}
+
+          <button
+            type="button"
+            onClick={() => setBillingCycle("monthly")}
+            style={{
+              ...C.membershipPriceLeft,
+              ...(billingCycle === "monthly"
+                ? C.membershipPriceActive
+                : C.membershipPriceInactive),
+            }}
+          >
+            $19.99 / mo
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBillingCycle("yearly")}
+            style={{
+              ...C.membershipPriceRight,
+              ...(billingCycle === "yearly"
+                ? C.membershipPriceActive
+                : C.membershipPriceInactive),
+            }}
+          >
+            $199.99 / yr
+          </button>
+
           <div style={C.membershipTitle}>
             MEMBERSHIP
           </div>
@@ -301,7 +329,7 @@ export default function CreditsPanel({
 
 
         {/* ─────────────────────────────
-            BILLING
+            BILLING TOGGLE
         ───────────────────────────── */}
 
         <div style={C.billingWrap}>
@@ -361,21 +389,6 @@ export default function CreditsPanel({
               Yearly
             </button>
 
-          </div>
-
-          <div style={C.billingPrice}>
-            $
-            {MEMBERSHIP_PRICING[
-              billingCycle
-            ].price.toFixed(2)}
-
-            <span style={C.billingSuffix}>
-              {
-                MEMBERSHIP_PRICING[
-                  billingCycle
-                ].suffix
-              }
-            </span>
           </div>
 
           {billingCycle === "yearly" && (
@@ -610,11 +623,11 @@ const GOLD_SOFT = "rgba(251,191,36,0.18)";
 const BORDER = "rgba(148,163,184,0.24)";
 const PANEL = "#050816";
 
-// ── Shadow system ──
-const SHADOW_DEEP = "0 10px 26px rgba(0,0,0,0.42), 0 3px 8px rgba(0,0,0,0.28)";
-const SHADOW_GOLD = "0 10px 26px rgba(0,0,0,0.42), 0 0 18px rgba(251,191,36,0.10)";
-const SHADOW_TEXT = "0 4px 10px rgba(0,0,0,0.75)";
-const SHADOW_DROP_GOLD = "drop-shadow(0 6px 7px rgba(0,0,0,0.55))";
+// ── Shadow system (enhanced) ──
+const SHADOW_DEEP = "0 14px 30px rgba(0,0,0,0.62), 0 5px 12px rgba(0,0,0,0.48)";
+const SHADOW_GOLD = "0 14px 30px rgba(0,0,0,0.62), 0 0 18px rgba(251,191,36,0.10)";
+const SHADOW_TEXT = "0 4px 10px rgba(0,0,0,0.9), 0 1px 3px rgba(0,0,0,0.6)";
+const SHADOW_DROP_GOLD = "drop-shadow(0 10px 14px rgba(0,0,0,0.85)) drop-shadow(0 3px 5px rgba(0,0,0,0.65))";
 
 const STYLES: Record<
   string,
@@ -749,6 +762,48 @@ const STYLES: Record<
     background: GOLD,
   },
 
+  /* ── Bracket pricing ── */
+
+  membershipPriceLeft: {
+    position: "absolute",
+    left: 0,
+    bottom: -2,
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    cursor: "pointer",
+  },
+
+  membershipPriceRight: {
+    position: "absolute",
+    right: 0,
+    bottom: -2,
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    cursor: "pointer",
+  },
+
+  membershipPriceActive: {
+    color: "#fde68a",
+    opacity: 1,
+    filter: "blur(0px)",
+    textShadow:
+      "0 4px 10px rgba(0,0,0,0.9), 0 0 10px rgba(251,191,36,0.25)",
+  },
+
+  membershipPriceInactive: {
+    color: "#64748b",
+    opacity: 0.42,
+    filter: "blur(0.7px)",
+  },
+
   /* TOP OPENING */
 
   membershipTitle: {
@@ -821,7 +876,7 @@ const STYLES: Record<
   },
 
   /* ─────────────────────────────────
-     BILLING
+     BILLING TOGGLE
   ───────────────────────────────── */
 
   billingWrap: {
@@ -829,7 +884,7 @@ const STYLES: Record<
     flexDirection: "column",
     alignItems: "center",
     gap: 8,
-    margin: "20px 0 28px",
+    margin: "34px 0 28px",
   },
 
   billingToggleRow: {
@@ -886,20 +941,6 @@ const STYLES: Record<
 
   billingKnobOn: {
     left: 22,
-  },
-
-  billingPrice: {
-    fontSize: 15,
-    fontWeight: 700,
-    color: "#fff",
-    textShadow: SHADOW_TEXT,
-  },
-
-  billingSuffix: {
-    fontSize: 11,
-    color: "#94a3b8",
-    fontWeight: 500,
-    marginLeft: 2,
   },
 
   billingSavings: {
