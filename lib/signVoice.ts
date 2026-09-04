@@ -4,18 +4,6 @@ export interface SignVoice {
   forbidden: string;
 }
 
-// Each sign's polar opposite — its natural completion, the other end of its axis.
-// The counterweight beat borrows this sign's approach: not an outside voice,
-// but the person's own missing half speaking.
-const OPPOSITE_SIGN: Record<string, string> = {
-  Aries: "Libra", Libra: "Aries",
-  Taurus: "Scorpio", Scorpio: "Taurus",
-  Gemini: "Sagittarius", Sagittarius: "Gemini",
-  Cancer: "Capricorn", Capricorn: "Cancer",
-  Leo: "Aquarius", Aquarius: "Leo",
-  Virgo: "Pisces", Pisces: "Virgo",
-};
-
 export const SIGN_VOICE: Record<string, SignVoice> = {
   aries: {
     rhythm: "Direct, rapid, and combative. Lead with the core conclusion. Short, heavy, declarative sentences.",
@@ -90,6 +78,7 @@ export function getSignVoice(sign: string | undefined): SignVoice {
   return SIGN_VOICE[sign.toLowerCase()] ?? DEFAULT_SIGN_VOICE;
 }
 
+// ── EDIT 1: Keep PLACEMENT_DOMAIN (may be imported elsewhere) ──
 export const PLACEMENT_DOMAIN: Record<string, string> = {
   sun: "core identity and how directives land with their baseline confidence",
   moon: "emotional register — how much feeling-language versus blunt fact is true to them",
@@ -98,43 +87,92 @@ export const PLACEMENT_DOMAIN: Record<string, string> = {
   venus: "what comfort and ease sound like to them, specifically in the warm closing answer",
 };
 
+// ── EDIT 1: Lane config ──
+// Each placement governs ONE delivery dimension. Giving all five placements a
+// full rhythm command made them fight and average into a smooth neutral; here
+// each owns a distinct lane, so a single sign's intensity comes through
+// uncontested. The sign's `rhythm` string is generic enough to apply to any
+// lane — the header tells the model which dimension it governs, so a Scorpio
+// applied to EMOTIONAL REGISTER reads as intense feeling while the same string
+// applied to SENTENCE RHYTHM reads as compressed sentences.
+const PLACEMENT_LANE: Record<
+  string,
+  { header: string; frame: (voice: SignVoice) => string }
+> = {
+  sun: {
+    header: "CONVICTION & IDENTITY",
+    frame: (v) => v.rhythm,
+  },
+  moon: {
+    header: "EMOTIONAL REGISTER",
+    frame: (v) =>
+      `${v.rhythm} Let this set how much feeling-language versus blunt fact is true to them.`,
+  },
+  rising: {
+    header: "OPENING",
+    frame: (v) => `${v.rhythm} This is how the reading walks into the room.`,
+  },
+  mercury: {
+    header: "SENTENCE RHYTHM",
+    frame: (v) => v.rhythm,
+  },
+  venus: {
+    header: "CLOSING WARMTH",
+    frame: (v) =>
+      `In the final, warm answer, let comfort and ease sound like this — ${v.rhythm}`,
+  },
+};
+
+// ── EDIT 2: Replace buildPlacementVoiceBlock ──
 export function buildPlacementVoiceBlock(
   placementKey: string,
   label: string,
   sign: string | undefined
 ): string {
   if (!sign) return "";
+  const lane = PLACEMENT_LANE[placementKey];
+  if (!lane) return "";
   const voice = getSignVoice(sign);
-  const sisterSign = OPPOSITE_SIGN[sign];
-  const sisterVoice = sisterSign ? getSignVoice(sisterSign) : voice;
-  const domain = PLACEMENT_DOMAIN[placementKey] ?? "general tone";
   return [
-    `${label} (${sign}) governs ${domain}:`,
-    `  RHYTHM: ${voice.rhythm}`,
-    `  COUNTERWEIGHT: ${voice.counterweight}`,
-    `  COUNTERWEIGHT DELIVERY: When offering this balancing perspective, let the tone lean into their sister sign ${sisterSign}'s approach — ${sisterVoice.rhythm} This is not a separate voice; it's the other end of their own axis, their natural completion speaking.`,
-    `  FORBIDDEN: ${voice.forbidden}`,
+    `${lane.header} (${label} in ${sign}): ${lane.frame(voice)}`,
+    `  Avoid: ${voice.forbidden}`,
   ].join("\n");
 }
 
+// ── EDIT 3: Replace buildVoiceCalibrationBlock ──
 export function buildVoiceCalibrationBlock(
   planets: Array<{ name: string; sign: string }>
 ): string {
   const find = (name: string) => planets.find((p) => p.name === name)?.sign;
 
-  const voiceBlocks = [
-    buildPlacementVoiceBlock("sun", "Sun", find("Sun")),
-    buildPlacementVoiceBlock("moon", "Moon", find("Moon")),
-    buildPlacementVoiceBlock("rising", "Rising", find("Ascendant")),
-    buildPlacementVoiceBlock("mercury", "Mercury", find("Mercury")),
-    buildPlacementVoiceBlock("venus", "Venus", find("Venus")),
-  ].filter(Boolean);
+  const lanes: Array<[string, string, string | undefined]> = [
+    ["sun", "Sun", find("Sun")],
+    ["moon", "Moon", find("Moon")],
+    ["rising", "Rising", find("Ascendant")],
+    ["mercury", "Mercury", find("Mercury")],
+    ["venus", "Venus", find("Venus")],
+  ];
 
-  if (voiceBlocks.length === 0) return "";
+  const laneBlocks = lanes
+    .map(([key, label, sign]) => buildPlacementVoiceBlock(key, label, sign))
+    .filter(Boolean);
+
+  if (laneBlocks.length === 0) return "";
+
+  // Counterweight comes from ONE source (Sun / core identity) and is offered as
+  // a CONTENT beat, never a rhythm instruction — so it can no longer cancel the
+  // voice. Delete these three lines to drop the counterweight entirely.
+  const sunSign = find("Sun");
+  const counterweightLine = sunSign
+    ? `\nCOUNTERWEIGHT (weave in once, as content — their own missing half, never as correction): ${getSignVoice(sunSign).counterweight}`
+    : "";
 
   return (
-    "\nVOICE CALIBRATION — DELIVERY, NOT CONTENT (use to shape rhythm and counterweight only — never name a placement as the reason for your tone, never say 'because you're a Pisces Moon' or similar). The COUNTERWEIGHT is where you gently offer the perspective they under-see — their sister sign's natural gift — delivered as their own missing half, never as correction:\n" +
-    voiceBlocks.join("\n\n") +
+    "\nVOICE CALIBRATION — how THIS person needs to be spoken to.\n" +
+    "This shapes HOW you deliver the reading's conclusions; it never changes WHAT the chart says, and you never name a placement as the reason for your tone.\n" +
+    "Each line governs a DIFFERENT dimension of delivery — let each shape only its own lane, so the voice stays distinct and committed rather than averaged into neutral.\n\n" +
+    laneBlocks.join("\n\n") +
+    counterweightLine +
     "\n"
   );
 }
