@@ -632,15 +632,15 @@ const STYLES: Record<string, React.CSSProperties> = {
   },
 
   container: {
-    position: "relative",
-    zIndex: 10,
-    width: "100%",
-    maxWidth: 430,
-    margin: "0 auto",
-    padding: `calc(44px + env(safe-area-inset-top)) 20px calc(60px + env(safe-area-inset-bottom))`,
-    minHeight: "100vh",
-    boxSizing: "border-box",
-  },
+  position: "relative",
+  zIndex: 10,
+  width: "100%",
+  maxWidth: 430,
+  margin: "0 auto",
+  padding: `calc(14px + env(safe-area-inset-top)) 20px calc(60px + env(safe-area-inset-bottom))`,
+  minHeight: "100vh",
+  boxSizing: "border-box",
+},
 
   /* ─────────────────────────────────
      MEMBERSHIP FRAME
