@@ -2,28 +2,26 @@ import React, { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { ChevronLeft, Minus, Plus } from "lucide-react";
 
 /* ─────────────────────────────────────────────
-   PREVIEW SHIMS (swap back for production)
-   - StarfieldBackground: replace with your real import
-   - balance: replace the mocked state with your
-     /api/user/credits fetch (kept below, commented)
+   StarfieldBackground Component
 ───────────────────────────────────────────── */
 
 function StarfieldBackground() {
-  const ref = useRef(null);
+  const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let raf = 0;
+    if (!ctx) return;
+    let raf: number = 0;
 
     const reduce = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
     const resize = () => {
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
+      canvas.width = canvas.offsetWidth || 200;
+      canvas.height = canvas.offsetHeight || 200;
     };
     resize();
     window.addEventListener("resize", resize);
@@ -37,7 +35,7 @@ function StarfieldBackground() {
       phase: Math.random() * Math.PI * 2,
     }));
 
-    const draw = (t) => {
+    const draw = (t: number) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const s of stars) {
         const a = reduce
@@ -53,7 +51,7 @@ function StarfieldBackground() {
     draw(0);
 
     return () => {
-      cancelAnimationFrame(raf);
+      if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
   }, []);
@@ -90,7 +88,22 @@ function useReducedMotion() {
    Products
 ───────────────────────────────────────────── */
 
-const PRODUCTS = [
+type ProductId = "jxl" | "reading" | "replies";
+
+interface Product {
+  id: ProductId;
+  title: string;
+  desc: string;
+  price: number;
+}
+
+interface Balance {
+  readings: number;
+  jxl: number;
+  replies: number;
+}
+
+const PRODUCTS: Product[] = [
   { id: "jxl", title: "JXL", desc: "Includes 3 replies", price: 12.99 },
   { id: "reading", title: "General Readings", desc: "Includes 2 replies", price: 10.0 },
   { id: "replies", title: "More Replies", desc: "Works with any reading", price: 1.0 },
@@ -100,7 +113,12 @@ const PRODUCTS = [
    Membership
 ───────────────────────────────────────────── */
 
-const MEMBERSHIP_FEATURES = [
+interface MembershipFeature {
+  title: string;
+  copy: string;
+}
+
+const MEMBERSHIP_FEATURES: MembershipFeature[] = [
   { title: "Unlimited Readings & Replies", copy: "Unlimited access to JXL & General Readings with replies." },
   { title: "Commission Eligible (request only)", copy: "Earn 1–5% recurring commission with subscription referrals." },
   { title: "Members-Only Features (beta)", copy: "Unlock experiences and tools only XL members can access." },
@@ -114,18 +132,18 @@ const MEMBERSHIP_FEATURES = [
    1–7 replies = $1 each · every group of 8 = $6
 ───────────────────────────────────────────── */
 
-function getReplyPrice(quantity) {
+function getReplyPrice(quantity: number): number {
   if (quantity <= 0) return 0;
   const groupsOfEight = Math.floor(quantity / 8);
   const remainder = quantity % 8;
   return groupsOfEight * 6 + remainder;
 }
 
-function getReplySavings(quantity) {
+function getReplySavings(quantity: number): number {
   return quantity - getReplyPrice(quantity);
 }
 
-function plural(n, one, many) {
+function plural(n: number, one: string, many?: string): string {
   return n === 1 ? one : many ?? `${one}s`;
 }
 
@@ -133,23 +151,25 @@ function plural(n, one, many) {
    Component
 ───────────────────────────────────────────── */
 
-export default function CreditsPanel({ onClose, embedded = false }) {
+interface CreditsPanelProps {
+  onClose?: () => void;
+  embedded?: boolean;
+}
+
+type BillingCycle = "monthly" | "yearly";
+
+export default function CreditsPanel({ onClose, embedded = false }: CreditsPanelProps) {
   const reducedMotion = useReducedMotion();
 
-  const [cart, setCart] = useState({ jxl: 0, reading: 0, replies: 0 });
+  const [cart, setCart] = useState<Record<ProductId, number>>({ jxl: 0, reading: 0, replies: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [billingCycle, setBillingCycle] = useState("monthly");
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
 
-  /* PREVIEW: mocked balance. In production keep your fetch:
-     const [balance, setBalance] = useState(null);
-     useEffect(() => { (async () => {
-       try { const res = await fetch("/api/user/credits"); const d = await res.json();
-         setBalance({ readings: Number(d.credits ?? 0), jxl: Number(d.jxlCredits ?? 0), replies: Number(d.replyCredits ?? 0) });
-       } catch {} })(); }, []);                                                          */
-  const [balance] = useState({ readings: 2, jxl: 1, replies: 5 });
+  /* PREVIEW: mocked balance. In production keep your fetch */
+  const [balance] = useState<Balance>({ readings: 2, jxl: 1, replies: 5 });
 
-  const step = useCallback((id, amount) => {
+  const step = useCallback((id: ProductId, amount: number) => {
     setCart((current) => ({ ...current, [id]: Math.max(0, current[id] + amount) }));
   }, []);
 
@@ -165,9 +185,9 @@ export default function CreditsPanel({ onClose, embedded = false }) {
     setError("");
     try {
       const items = [
-        ...(cart.jxl > 0 ? [{ id: "jxl", quantity: cart.jxl }] : []),
-        ...(cart.reading > 0 ? [{ id: "reading", quantity: cart.reading }] : []),
-        ...(cart.replies > 0 ? [{ id: "replies", quantity: cart.replies }] : []),
+        ...(cart.jxl > 0 ? [{ id: "jxl" as const, quantity: cart.jxl }] : []),
+        ...(cart.reading > 0 ? [{ id: "reading" as const, quantity: cart.reading }] : []),
+        ...(cart.replies > 0 ? [{ id: "replies" as const, quantity: cart.replies }] : []),
       ];
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
@@ -493,7 +513,11 @@ const SHADOW_DEEP = "0 10px 24px rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.4)";
 const SHADOW_TEXT = "0 2px 8px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.55)";
 const SHADOW_DROP_GOLD = "drop-shadow(0 8px 12px rgba(0,0,0,0.8)) drop-shadow(0 2px 4px rgba(0,0,0,0.6))";
 
-const STYLES = {
+interface StyleObject {
+  [key: string]: React.CSSProperties;
+}
+
+const STYLES: StyleObject = {
   root: {
     position: "fixed",
     inset: 0,
@@ -553,81 +577,149 @@ const STYLES = {
       "0 18px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.6)",
   },
   membershipLogo: {
-    position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 4,
-    width: 54, height: 15, borderRadius: 999,
-    border: "1px solid rgba(200,205,216,0.35)", background: "rgba(255,255,255,0.03)",
+    position: "absolute" as const,
+    top: 16,
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 4,
+    width: 54,
+    height: 15,
+    borderRadius: 999,
+    border: "1px solid rgba(200,205,216,0.35)",
+    background: "rgba(255,255,255,0.03)",
   },
   recessWell: {
-    position: "absolute", top: 52, left: 20, right: 20, bottom: 44,
-    borderRadius: 8, overflow: "hidden",
+    position: "absolute" as const,
+    top: 52,
+    left: 20,
+    right: 20,
+    bottom: 44,
+    borderRadius: 8,
+    overflow: "hidden",
     background: "radial-gradient(125% 100% at 50% 0%, #14152c 0%, #0a0a18 46%, #050510 100%)",
     border: "1px solid rgba(0,0,0,0.6)",
     boxShadow: "inset 0 8px 20px rgba(0,0,0,0.7), inset 0 -6px 16px rgba(0,0,0,0.55)",
   },
-  bevelSvg: { position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 2 },
+  bevelSvg: { position: "absolute" as const, inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 2 },
   recessViewport: {
-    position: "absolute", top: 24, bottom: 24, left: 24, right: 24, zIndex: 3,
+    position: "absolute" as const,
+    top: 24,
+    bottom: 24,
+    left: 24,
+    right: 24,
+    zIndex: 3,
     overflow: "hidden",
     WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%)",
     maskImage: "linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%)",
   },
 
   membershipPriceLeft: {
-    position: "absolute", left: 16, bottom: 12, border: "none", background: "transparent",
-    padding: "6px 4px", fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
-    fontVariantNumeric: "tabular-nums", zIndex: 4,
+    position: "absolute" as const,
+    left: 16,
+    bottom: 12,
+    border: "none",
+    background: "transparent",
+    padding: "6px 4px",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+    cursor: "pointer",
+    fontVariantNumeric: "tabular-nums",
+    zIndex: 4,
   },
   membershipPriceRight: {
-    position: "absolute", right: 16, bottom: 12, border: "none", background: "transparent",
-    padding: "6px 4px", fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
-    fontVariantNumeric: "tabular-nums", zIndex: 4,
+    position: "absolute" as const,
+    right: 16,
+    bottom: 12,
+    border: "none",
+    background: "transparent",
+    padding: "6px 4px",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+    cursor: "pointer",
+    fontVariantNumeric: "tabular-nums",
+    zIndex: 4,
   },
   priceUnit: { fontSize: 9, fontWeight: 600, opacity: 0.75, marginLeft: 1 },
   membershipPriceActive: {
-    color: "#fde68a", opacity: 1, filter: "blur(0px)",
+    color: "#fde68a",
+    opacity: 1,
+    filter: "blur(0px)",
     textShadow: "0 1px 4px rgba(0,0,0,0.85), 0 0 8px rgba(251,191,36,0.3)",
   },
   membershipPriceInactive: { color: "#5b626e", opacity: 0.6, filter: "blur(0.6px)" },
 
   membershipTitle: {
-    position: "absolute", top: 36, left: "50%", transform: "translateX(-50%)", zIndex: 4,
+    position: "absolute" as const,
+    top: 36,
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 4,
     color: "#fde68a",
-    fontSize: 11, fontWeight: 600, letterSpacing: "0.22em", textTransform: "uppercase", whiteSpace: "nowrap",
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: "0.22em",
+    textTransform: "uppercase" as const,
+    whiteSpace: "nowrap",
     textShadow: "0 1px 3px rgba(0,0,0,0.85), 0 0 8px rgba(251,191,36,0.25)",
   },
-  membershipContentStatic: { display: "flex", flexDirection: "column", gap: 18 },
+  membershipContentStatic: { display: "flex", flexDirection: "column" as const, gap: 18 },
   membershipTrack: {
     display: "flex",
-    flexDirection: "column",
+    flexDirection: "column" as const,
     willChange: "transform",
     animation: "membership-marquee 24s linear infinite",
   },
-  featureRow: { lineHeight: 1.3, textAlign: "center" },
-  featureRowScroll: { lineHeight: 1.3, textAlign: "center", marginBottom: 26 },
+  featureRow: { lineHeight: 1.3, textAlign: "center" as const },
+  featureRowScroll: { lineHeight: 1.3, textAlign: "center" as const, marginBottom: 26 },
   featureName: {
-    display: "block", fontSize: 13, fontWeight: 600, color: "#f2d99a",
-    letterSpacing: "0.01em", textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+    display: "block" as const,
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#f2d99a",
+    letterSpacing: "0.01em",
+    textShadow: "0 1px 3px rgba(0,0,0,0.8)",
   },
   featureCopy: {
-    display: "block", fontSize: 11, color: "#9aa3b4", marginTop: 3,
-    lineHeight: 1.45, textShadow: "0 1px 2px rgba(0,0,0,0.7)",
+    display: "block" as const,
+    fontSize: 11,
+    color: "#9aa3b4",
+    marginTop: 3,
+    lineHeight: 1.45,
+    textShadow: "0 1px 2px rgba(0,0,0,0.7)",
   },
 
   /* SUBSCRIBE - Original style with gold glow */
   getAccess: {
-    position: "absolute", left: "50%", bottom: 22, transform: "translateX(-50%)", zIndex: 5,
-    overflow: "hidden", minWidth: 176, height: 46, padding: "0 28px", borderRadius: 14,
+    position: "absolute" as const,
+    left: "50%",
+    bottom: 22,
+    transform: "translateX(-50%)",
+    zIndex: 5,
+    overflow: "hidden",
+    minWidth: 176,
+    height: 46,
+    padding: "0 28px",
+    borderRadius: 14,
     border: `1px solid ${GOLD}`,
     background: "rgba(255,255,255,0.03)",
     backdropFilter: "blur(4px)",
     color: "#fff",
-    fontSize: 12, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase",
+    fontSize: 12,
+    fontWeight: 600,
+    letterSpacing: "0.18em",
+    textTransform: "uppercase" as const,
     cursor: "pointer",
     boxShadow: "0 0 22px rgba(251,191,36,0.30), inset 0 0 14px rgba(251,191,36,0.16)",
     whiteSpace: "nowrap",
   },
   shimmerSweep: {
-    position: "absolute", top: 0, bottom: 0, left: 0, width: "45%",
+    position: "absolute" as const,
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: "45%",
     background:
       "linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%)",
     transform: "translateX(-140%) skewX(-18deg)",
@@ -637,67 +729,116 @@ const STYLES = {
 
   /* BILLING TOGGLE */
   billingWrap: {
-    display: "flex", flexDirection: "column", alignItems: "center", margin: "16px 0 12px",
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center" as const,
+    margin: "16px 0 12px",
   },
-  billingToggleRow: { display: "flex", alignItems: "center", gap: 14 },
+  billingToggleRow: { display: "flex", alignItems: "center" as const, gap: 14 },
   billingLabel: {
-    border: "none", background: "transparent", padding: "4px 4px", fontSize: 14, fontWeight: 700,
-    color: "#7c8aa3", letterSpacing: "0.04em", cursor: "pointer",
+    border: "none",
+    background: "transparent",
+    padding: "4px 4px",
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#7c8aa3",
+    letterSpacing: "0.04em",
+    cursor: "pointer",
     transition: "filter 0.2s ease, opacity 0.2s ease, color 0.2s ease",
   },
   billingLabelActive: { color: "#fde68a", opacity: 1, filter: "blur(0)", textShadow: SHADOW_TEXT },
   billingLabelInactive: { color: "#6b7691", opacity: 0.5, filter: "blur(1px)" },
   billingSwitch: {
-    width: 46, height: 26, borderRadius: 999, padding: 0, cursor: "pointer",
-    border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.06)", position: "relative",
+    width: 46,
+    height: 26,
+    borderRadius: 999,
+    padding: 0,
+    cursor: "pointer",
+    border: `1px solid ${BORDER}`,
+    background: "rgba(255,255,255,0.06)",
+    position: "relative" as const,
     boxShadow: SHADOW_DEEP,
   },
   billingSwitchOn: { borderColor: "rgba(251,191,36,0.45)", background: "rgba(251,191,36,0.12)" },
   billingKnob: {
-    position: "absolute", top: 2, left: 2, width: 20, height: 20, borderRadius: "50%",
-    background: "#fde68a", transition: "left 0.2s ease",
+    position: "absolute" as const,
+    top: 2,
+    left: 2,
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    background: "#fde68a",
+    transition: "left 0.2s ease",
   },
   billingKnobOn: { left: 22 },
   billingKnobPulse: { animation: "knob-pulse 2.4s ease-in-out infinite" },
 
   /* PRODUCTS - Original style with black face */
-  products: { display: "flex", flexDirection: "column", gap: 14 },
+  products: { display: "flex", flexDirection: "column" as const, gap: 14 },
   selector: {
-    position: "relative", isolation: "isolate", overflow: "hidden",
-    minHeight: 86, display: "flex", alignItems: "center",
-    justifyContent: "space-between", gap: 10, padding: "14px 16px",
-    border: "1px solid rgba(206,211,222,0.18)", borderRadius: 20,
+    position: "relative" as const,
+    isolation: "isolate",
+    overflow: "hidden",
+    minHeight: 86,
+    display: "flex",
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    gap: 10,
+    padding: "14px 16px",
+    border: "1px solid rgba(206,211,222,0.18)",
+    borderRadius: 20,
     background: "transparent",
     boxShadow: "inset 0 0 24px rgba(0,0,0,0.5)",
   },
   selectorSky: {
-    position: "absolute", inset: 0, zIndex: 0, overflow: "hidden", borderRadius: 20,
+    position: "absolute" as const,
+    inset: 0,
+    zIndex: 0,
+    overflow: "hidden",
+    borderRadius: 20,
     background: "radial-gradient(130% 120% at 30% 0%, #12142b 0%, #0a0a16 55%, #050510 100%)",
   },
   stepBtn: {
-    flexShrink: 0, width: 40, height: 40, borderRadius: "50%",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.04)",
-    color: "#f8fafc", cursor: "pointer", transition: "background 0.15s ease, opacity 0.15s ease",
-    zIndex: 2, // Ensure buttons are above the starfield
-    position: "relative",
+    flexShrink: 0,
+    width: 40,
+    height: 40,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    border: `1px solid ${BORDER}`,
+    background: "rgba(255,255,255,0.04)",
+    color: "#f8fafc",
+    cursor: "pointer",
+    transition: "background 0.15s ease, opacity 0.15s ease",
+    zIndex: 2,
+    position: "relative" as const,
   },
   stepBtnDisabled: { opacity: 0.28, cursor: "default", border: `1px solid rgba(148,163,184,0.12)` },
   selectorCenter: {
-    flex: 1, minWidth: 0, textAlign: "center", display: "flex", flexDirection: "column",
-    alignItems: "center", gap: 3,
+    flex: 1,
+    minWidth: 0,
+    textAlign: "center" as const,
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center" as const,
+    gap: 3,
     zIndex: 2,
-    position: "relative",
+    position: "relative" as const,
   },
   selectorTitle: {
-    fontSize: 18, fontWeight: 800, letterSpacing: "0.03em", color: "#fff",
-    textTransform: "uppercase", textShadow: SHADOW_TEXT,
+    fontSize: 18,
+    fontWeight: 800,
+    letterSpacing: "0.03em",
+    color: "#fff",
+    textTransform: "uppercase" as const,
+    textShadow: SHADOW_TEXT,
   },
   selectorMeta: { fontSize: 11.5, color: "#a4b0c4" },
   selectorSavings: { fontSize: 10.5, fontWeight: 600, color: "#fbbf24", textShadow: SHADOW_TEXT },
   // Inventory badge - HIGH z-index to show over everything
   inventoryCircle: {
-    position: "absolute",
+    position: "absolute" as const,
     top: -10,
     right: -8,
     minWidth: 28,
@@ -705,29 +846,42 @@ const STYLES = {
     padding: "0 4px",
     borderRadius: 999,
     display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     border: "1px solid rgba(251,191,36,0.6)",
     background: "#07101d",
     color: "#fde68a",
     fontSize: 11,
     fontWeight: 700,
-    zIndex: 10, // Highest z-index to show over everything
+    zIndex: 10,
     boxShadow: SHADOW_DEEP,
   },
 
   /* CHECKOUT - Original style */
-  checkoutWrap: { display: "flex", flexDirection: "column", alignItems: "center", marginTop: 10, gap: 10 },
+  checkoutWrap: { display: "flex", flexDirection: "column" as const, alignItems: "center" as const, marginTop: 10, gap: 10 },
   totalRow: {
-    display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6,
+    display: "flex",
+    alignItems: "baseline" as const,
+    justifyContent: "center" as const,
+    gap: 6,
   },
-  totalLabel: { fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6b7691" },
+  totalLabel: { fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#6b7691" },
   totalPrice: { color: "#cbd5e1", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em" },
   savingsLine: { fontSize: 11, fontWeight: 600, color: "#fbbf24", textShadow: SHADOW_TEXT, paddingRight: 0 },
   checkout: {
-    height: 50, padding: "0 26px", minWidth: 168, borderRadius: 11, border: `1px solid ${TEAL}`,
-    background: PANEL, color: "#fff", fontSize: 13, fontWeight: 700, letterSpacing: "0.1em",
-    cursor: "pointer", whiteSpace: "nowrap", marginTop: 2,
+    height: 50,
+    padding: "0 26px",
+    minWidth: 168,
+    borderRadius: 11,
+    border: `1px solid ${TEAL}`,
+    background: PANEL,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    marginTop: 2,
     transition: "opacity 0.4s ease, box-shadow 0.4s ease",
   },
   checkoutEnabled: {
@@ -737,12 +891,20 @@ const STYLES = {
   checkoutPulse: { animation: "checkout-pulse 3s ease-in-out 0.6s infinite" },
   checkoutDisabled: { opacity: 0.34, cursor: "default", boxShadow: "none", animation: "none" },
   errorLine: {
-    fontSize: 11.5, color: "#fca5a5", textAlign: "center", maxWidth: 280, lineHeight: 1.4,
+    fontSize: 11.5,
+    color: "#fca5a5",
+    textAlign: "center" as const,
+    maxWidth: 280,
+    lineHeight: 1.4,
     marginTop: 2,
   },
 
   balanceLine: {
-    textAlign: "center", fontSize: 11.5, lineHeight: 1.5, color: "#93a0b8", margin: "10px 2px 0",
+    textAlign: "center" as const,
+    fontSize: 11.5,
+    lineHeight: 1.5,
+    color: "#93a0b8",
+    margin: "10px 2px 0",
   },
   balanceStrong: { color: "#dbe3f0", fontWeight: 700 },
 };
