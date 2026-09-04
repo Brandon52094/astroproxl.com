@@ -148,10 +148,10 @@ const ASPECT_ORBS: Record<string, { exact: number; live: number; background: num
 };
 
 // Forward-looking window (days) for a transit's exact date to still count as
-// usable for a dated window. This is the single source of truth — the date
-// provenance validator (lib/validateReadingDates.ts) imports this exact value,
-// so the two can no longer drift out of sync.
-export const FORWARD_WINDOW_DAYS = 60;
+// usable for a dated window. Must stay in sync with buildValidDateIndex's
+// window in lib/validateReadingDates.ts — widening one without the other
+// causes the model to surface dates the provenance validator then rejects.
+const FORWARD_WINDOW_DAYS = 60;
 
 const SIGN_INDEX: Record<string, number> = {
   Aries: 0,
@@ -195,11 +195,10 @@ const NATAL_ASPECT_PRIORITY: Record<string, number> = {
   Pluto: 4,
 };
 
-// ── EDIT 1: Body-significance constants ──
+// ── EDIT 1: Body-weighting constants ──
 // Significance of a *transiting* body when deciding what may anchor the reading.
 // Luminaries and angles outrank planets; planets outrank asteroids and points.
-// This is why a tight asteroid contact can no longer outrank a luminary on an
-// angle when the spine is chosen. Higher = more significant.
+// Stops a tight asteroid contact from outranking a luminary on an angle.
 const SPINE_BODY_WEIGHT: Record<string, number> = {
   Sun: 100, Moon: 100,
   Ascendant: 100, Midheaven: 100, Descendant: 100, "Imum Coeli": 100,
@@ -211,8 +210,8 @@ const SPINE_BODY_WEIGHT: Record<string, number> = {
 };
 
 // Minimum significance for a transiting body to anchor a priority-1
-// "major life event" ANGLE ACTIVATION spine. Real planets and nodes qualify;
-// asteroids and minor points do not — they remain available as context.
+// "major life event" ANGLE ACTIVATION spine. Asteroids/minor points fall short
+// and remain available as context instead of hijacking the headline.
 const SPINE_ANCHOR_MIN_WEIGHT = 50;
 
 function spineBodyWeight(name: string): number {
@@ -222,14 +221,6 @@ function spineBodyWeight(name: string): number {
 // ============================================================
 // HELPER FUNCTIONS
 // ============================================================
-
-// Single source of truth for reading an aspect's band. Storage is lowercase
-// ("exact"/"live"/"background"); every consumer wants the uppercase form.
-// Routing all reads through here means a future stray === "EXACT" comparison
-// against raw storage can't silently misclassify a band.
-function bandOf(a: TransitAspect): "EXACT" | "LIVE" | "BACKGROUND" | "" {
-  return (a.band?.toUpperCase() as "EXACT" | "LIVE" | "BACKGROUND") || "";
-}
 
 function normalizeLongitude(longitude: number): number {
   return ((longitude % 360) + 360) % 360;
@@ -307,7 +298,7 @@ function scoreTransitAspect(
 ): number {
   let score = 0;
 
-  const band = bandOf(a);
+  const band = a.band?.toUpperCase();
 
   if (band === "EXACT") score += 50;
   else if (band === "LIVE") score += 30;
@@ -345,7 +336,7 @@ function scoreTransitAspect(
     score += 10;
   }
 
-  // ── EDIT 5: Let the transiting body's weight nudge the topic ranking too ──
+  // ── EDIT 2: Weight the transiting body in topic scoring ──
   // Significance of the transiting body itself (luminary > planet > asteroid).
   score += spineBodyWeight(a.transitPlanet) / 10;
 
@@ -410,17 +401,18 @@ function filterTransitsByTopic(
   // than a different answer because Math.random() fired differently.
   const pool = filtered.length > 0 ? filtered : personalAspects;
 
-  // ── EDIT 4: Stop truncating evidence to 6 ──
-  // Never drop EXACT/LIVE evidence — those are the load-bearing contacts.
-  // Cap only BACKGROUND, which is texture, so the prompt can't be flooded.
+  // ── EDIT 3: Stop truncating evidence to 6 ──
   const ranked = [...pool].sort(
     (a, b) =>
       scoreTransitAspect(b, topic, timeLord, profectionHouse) -
       scoreTransitAspect(a, topic, timeLord, profectionHouse)
   );
 
-  const strong = ranked.filter((a) => bandOf(a) === "EXACT" || bandOf(a) === "LIVE");
-  const background = ranked.filter((a) => bandOf(a) === "BACKGROUND");
+  // Never drop EXACT/LIVE evidence — those are load-bearing. Cap only BACKGROUND.
+  const strong = ranked.filter(
+    (a) => a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
+  );
+  const background = ranked.filter((a) => a.band?.toUpperCase() === "BACKGROUND");
 
   return [...strong, ...background.slice(0, 8)];
 }
@@ -496,7 +488,7 @@ function determineSpine(
 
   const active: TransitAspect[] = [];
   for (const a of aspects) {
-    const band = bandOf(a);
+    const band = a.band?.toUpperCase();
     if (band === "EXACT" || band === "LIVE") active.push(a);
   }
 
@@ -516,7 +508,7 @@ function determineSpine(
     }
   }
 
-  // ── EDIT 3: Sort the `personal` array by significance ──
+  // ── EDIT 4: Sort the personal array by significance ──
   // Order personal contacts by significance so the checks below select the
   // strongest available contact rather than whichever arrived first.
   personal.sort((a, b) => {
@@ -526,20 +518,19 @@ function determineSpine(
     return a.orbDegrees - b.orbDegrees;
   });
 
-  // ── EDIT 2: Rewrite CHECK 1 so the body's weight gates and sorts the angle spine ──
+  // ── EDIT 5: Gate and sort CHECK 1 by body weight ──
   // CHECK 1: TRANSIT TO ANGLE
   // Only a significant transiting body may anchor a "major life event" spine.
-  // An asteroid or minor point at a tight orb must not outrank a luminary or
-  // personal planet contacting an angle at a slightly wider orb.
+  // An asteroid at a tight orb must not outrank a luminary on an angle.
   if (transitsToAngles && transitsToAngles.length > 0) {
     const exactAngles = transitsToAngles
       .filter((a) => a.orb < 2 && spineBodyWeight(a.transitPlanet) >= SPINE_ANCHOR_MIN_WEIGHT)
       .sort((a, b) => {
         const wA = spineBodyWeight(a.transitPlanet);
         const wB = spineBodyWeight(b.transitPlanet);
-        if (wA !== wB) return wB - wA;              // more significant body first
+        if (wA !== wB) return wB - wA;
         if (a.isApplying !== b.isApplying) return a.isApplying ? -1 : 1;
-        return a.orb - b.orb;                       // then tighter orb
+        return a.orb - b.orb;
       });
 
     if (exactAngles.length > 0) {
@@ -636,7 +627,7 @@ function determineSpine(
 
   // CHECK 5: FAST PLANET EXACT
   const exactFast = personal.filter(
-    (a) => bandOf(a) === "EXACT" && FAST_PLANETS.has(a.transitPlanet)
+    (a) => a.band?.toUpperCase() === "EXACT" && FAST_PLANETS.has(a.transitPlanet)
   );
   if (exactFast.length) {
     const a = exactFast[0];
@@ -679,7 +670,7 @@ function classifyTemporal(aspects: TransitAspect[], timeLord: string) {
   const background: TransitAspect[] = [];
 
   for (const a of aspects) {
-    const band = bandOf(a);
+    const band = a.band?.toUpperCase();
     const isPersonal = PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === timeLord;
     const isGenerational = GENERATIONAL_PLANETS.has(a.transitPlanet) && !isPersonal;
 
@@ -756,7 +747,7 @@ export function buildReadingPrompt(
   // ── COLLECT TOPIC-RELEVANT DATES ──
   const activeTopicAspects = topicRelevantAspects.filter(
     (a) =>
-      (bandOf(a) === "EXACT" || bandOf(a) === "LIVE") &&
+      (a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE") &&
       (PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord) &&
       !!a.exactDate
   );
@@ -866,24 +857,6 @@ export function buildReadingPrompt(
     `QUESTION: "${question}"`,
     "",
     buildVoiceCalibrationBlock(tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))),
-    ""
-  );
-
-  // ── CORE ASTROLOGICAL DIRECTIVE ──
-  sections.push(
-    "═══════════════════════════════════════════",
-    "ASTROLOGICAL SYNTHESIS DIRECTIVE",
-    "═══════════════════════════════════════════",
-    "",
-    "You are an expert, intuitive personal astrologer. Your goal is to deliver a profound, deeply insightful, and practically useful reading.",
-    "You have full freedom to weave together the chart's layers—transits, profections, progressions, solar arcs, and structural placements—into a unified narrative.",
-    "Do not just list data points or recite technical aspects; interpret what they mean for the human being sitting across from you.",
-    "",
-    "BALANCING FREEDOM AND PRECISION:",
-    "  - Be bold, perceptive, and thorough in your reasoning and guidance.",
-    "  - Ground every insight strictly in the provided data sources (Spine, Transits, Profections, etc.). Never invent placements or external events.",
-    "  - When multiple techniques converge, lean into that narrative with confidence and clarity.",
-    "  - Translate astrological mechanics cleanly into real-life scenarios, emotional realities, choices, and timing windows.",
     ""
   );
 
@@ -1041,9 +1014,9 @@ export function buildReadingPrompt(
     sections.push("TRANSIT-TO-NATAL ASPECTS — TOPIC-RELEVANT ONLY:");
     sections.push(`RELEVANT ASPECTS (${topicRelevantAspects.length}):`);
 
-    const exact = topicRelevantAspects.filter((a) => bandOf(a) === "EXACT");
-    const live = topicRelevantAspects.filter((a) => bandOf(a) === "LIVE");
-    const background = topicRelevantAspects.filter((a) => bandOf(a) === "BACKGROUND");
+    const exact = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "EXACT");
+    const live = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "LIVE");
+    const background = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "BACKGROUND");
 
     if (exact.length > 0) {
       sections.push(`  EXACT (${exact.length}):`);
@@ -1216,10 +1189,10 @@ export function buildReadingPrompt(
     "HOW TO DELIVER — COMMIT TO THE SPINE",
     "═══════════════════════════════════════════",
     "",
-    // ── EDIT 6: Reframe the spine from a command into a prior ──
+    // ── EDIT 6: Reframe the spine from command to prior ──
     "The SPINE below is the engine's best estimate of the strongest chart-supported development.",
     "It will usually be the right lead — but your first duty is to answer the user's actual question using the tightest, most significant evidence in the chart.",
-    "If the tightest convergence of contacts points somewhere other than the SPINE, follow the evidence and lead there. Prefer luminaries, angles, and personal planets over asteroids and minor points; prefer tighter orbs over looser ones when choosing what to lead with.",
+    "If the tightest convergence of contacts points elsewhere, follow the evidence and lead there. Prefer luminaries, angles, and personal planets over asteroids and minor points; prefer tighter orbs when choosing what to lead with.",
     "",
     "Your first responsibility is to LAND the reading.",
     "Do not make the user dig through explanation before they understand what is happening.",
@@ -1329,6 +1302,7 @@ export function buildReadingPrompt(
     "READING STRUCTURE",
     "═══════════════════════════════════════════",
     "",
+    "PART 1 — THE PREDICTION",
     "Lead immediately with the strongest chart-supported development.",
     "The first two sentences must contain the nerve of the reading.",
     "State the consequence in plain human language before explaining astrology.",
@@ -1338,12 +1312,15 @@ export function buildReadingPrompt(
     "Translate the activation into what the user is actually facing.",
     "",
     "If the SPINE is strong, this section should feel unmistakably decisive.",
-    "The user should know what the reading is saying before they reach the explanation.",
+    "The user should know what the reading is saying before they reach Part 2.",
     "",
-    "Then explain the primary predictive evidence and how the techniques converge.",
-    "Do not repeat the opening in different words.",
+    "PART 2 — WHY THIS IS ACTIVE NOW",
+    "Explain the primary predictive evidence and how the techniques converge.",
+    "Do not repeat Part 1 in different words.",
     "",
-    "Translate the astrology specifically into the relevant life area.",
+    "PART 2B — HOW IT IS MOST LIKELY TO SHOW UP",
+    `Translate the astrology specifically into the ${topic.id} area.`,
+    "",
     "Choose the single strongest real-life manifestation first.",
     "Develop that manifestation concretely before mentioning alternatives.",
     "Describe the likely circumstance, interaction, decision, pressure, opportunity, realization, ending, beginning, or change in behavior.",
@@ -1354,15 +1331,21 @@ export function buildReadingPrompt(
     "",
     "Separate what the chart clearly supports from what remains unresolved, but always state the clearest conclusion first.",
     "",
-    "Use only calculator-supplied dates that pass the dated-window rules below.",
-    "When several exact contacts share one date, synthesize them into a single window (e.g. identity + the other person + the decision) rather than voicing only one.",
+    // ── EDIT 7: Synthesize multi-aspect dates ──
+    "When several exact contacts share one date, synthesize them into a single moment (e.g. identity + the other person + the decision) rather than voicing only one.",
     "",
+    "PART 3 — DATED WINDOWS",
+    "Use only calculator-supplied dates that pass the dated-window rules below.",
+    "",
+    "PART 4 — THE DIRECTIVE",
     "Give practical action tied directly to the reading evidence.",
+    "",
+    "PART 5 — BOTTOM LINE",
     "Close by returning to the SPINE in plain human language.",
     "State the central development with conviction, not as a list of possibilities.",
     "Then state the single most important thing the user should understand or do about it.",
     "",
-    "Do not introduce a new prediction in the closing.",
+    "Do not introduce a new prediction here.",
     "Do not retreat from the confidence used earlier in the reading.",
     "End cleanly and decisively.",
     ""
@@ -1393,7 +1376,7 @@ export function buildReadingPrompt(
   // ── PART 3 — DATED WINDOWS ──
   if (hasDatedEvidence) {
     sections.push(
-      "DATED WINDOWS (2-4 windows, as data supports):",
+      "PART 3 — DATED WINDOWS (2-4 windows, as data supports):",
       "",
       "⚠️ PRECISION RULE: Select timing windows deterministically from the strongest evidence.",
       "Do NOT vary dates for novelty, variety, or stylistic differentiation.",
@@ -1430,22 +1413,22 @@ export function buildReadingPrompt(
     );
   } else {
     sections.push(
-      "DATED WINDOWS — SKIPPED: No topic-relevant personal EXACT or LIVE transit aspects with calculator-supplied dates.",
+      "PART 3 — SKIPPED: No topic-relevant personal EXACT or LIVE transit aspects with calculator-supplied dates.",
       "",
-      `Replace windows with: "There are no tight topic-relevant transit windows in the next ${FORWARD_WINDOW_DAYS} days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
+      `Replace Part 3 with: "There are no tight topic-relevant transit windows in the next ${FORWARD_WINDOW_DAYS} days. Your focus should be on the ${profection.activatedHouse}th House ${profection.activatedSign} year theme and the longer-term progressions unfolding."`,
       ""
     );
   }
 
-  // ── THE DIRECTIVE ──
+  // ── PART 4 — DIRECTIVE ──
   sections.push(
-    "THE DIRECTIVE",
+    "PART 4 — THE DIRECTIVE",
     "",
     "Tell the user what to DO with this reading.",
     "The directive must follow directly from the prediction and should feel specific to the user's actual situation.",
     "",
     "Do not give generic wellness advice.",
-    "Respond to the specific development identified in the reading.",
+    "Respond to the specific development identified in Part 1.",
     "If a decision is clearly favored by the reading, say so plainly.",
     "If waiting, confronting, negotiating, applying, ending, beginning, documenting, asking, declining, or committing is the strongest strategic response, name the action directly.",
     "",
@@ -1453,10 +1436,11 @@ export function buildReadingPrompt(
     "Prioritize the action that gives the user the strongest position under the current astrology.",
     "",
     "When a valid dated window exists, connect an action to that window when doing so is genuinely useful.",
-    "Use [[DATE: ...]] only when the date is an approved calculator-supplied date from the dated windows section.",
+    "Use [[DATE: ...]] only when the date is an approved calculator-supplied date from Part 3.",
     "Do not force a date onto advice that does not need one.",
     "",
     "Include something to stop, avoid, or reconsider only when the reading actually identifies a relevant risk or counterproductive behavior.",
+    "Do not force DROP / EXECUTE / LOCK IN labels.",
     "",
     "Be practical and direct.",
     "Do not give generic advice that could apply to anyone.",
@@ -1523,7 +1507,7 @@ export function buildReadingPrompt(
     "SOURCE VERIFICATION",
     "═══════════════════════════════════════════",
     "",
-    "Every ASTROLOGICAL claim must be traceable to evidence printed in this prompt.",
+    "Every ASTROLOGICAL claim in Parts 1, 2, 2B, 3, 4, and 5 must be traceable to evidence printed in this prompt.",
     "",
     "The verification requirement governs factual support; it must NOT make the prose sound tentative.",
     "Verify silently in your reasoning, then write the supported conclusion naturally and decisively.",
@@ -1556,7 +1540,7 @@ export function buildReadingPrompt(
     "  - at least one primary activation",
     "  - plus one independent confirmation",
     "",
-    "Behavioral advice does not require a separate astrological claim, but it must logically follow from the cited prediction/window.",
+    "Behavioral advice in Part 4 does not require a separate astrological claim, but it must logically follow from the cited prediction/window.",
     ""
   );
 
@@ -1599,9 +1583,9 @@ export function buildReadingPrompt(
     '    {',
     '      "pageNumber": 1,',
     '      "title": "Your Reading",',
-    '      "content": "...",',
+    '      "content": "Part 1: ...\\n\\nPart 2: ...\\n\\nPart 2B: ...\\n\\nPart 3: ...\\n\\nPart 4: ...\\n\\nPart 5: ...",',
     '      "sources": [',
-    '        { "section": "Spine", "placements": "...verbatim line..." }',
+    '        { "section": "Part 1 — Spine", "placements": "...verbatim line..." }',
     "      ]",
     "    }",
     "  ]",
