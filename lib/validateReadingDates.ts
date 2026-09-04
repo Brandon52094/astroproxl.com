@@ -1,3 +1,5 @@
+import { FORWARD_WINDOW_DAYS } from "@/lib/reading/engine";
+
 /**
  * validateReadingDates.ts
  *
@@ -29,12 +31,6 @@
  *   4. transitsToAngles[].exactDate
  *      — calculator-computed exact angle contacts
  */
-
-// Forward-looking limit for exact calculator-supplied date anchors.
-// Keep synchronized with FORWARD_WINDOW_DAYS in lib/reading/engine.ts.
-// Discovery may happen outside this window, but the model may not create
-// a dated prediction from an activation beyond this horizon.
-const FORWARD_WINDOW_DAYS = 60;
 
 /** Minimal shape this module needs — a subset of JxlAskBody. */
 interface DateProvenanceInput {

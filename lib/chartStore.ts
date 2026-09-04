@@ -170,6 +170,33 @@ export function isChartFresh(): boolean {
   return now - savedAt < twentyFourHours;
 }
 
+/**
+ * Stricter freshness gate for the TIME-SENSITIVE layers of a chart.
+ *
+ * isChartFresh() (24h) is about whether the cached chart is usable at all —
+ * fine for the natal half, which never changes. But the "current sky" layers
+ * (transits, upcomingTrigger, planetaryStations, moonPhase, transitsToAngles,
+ * lunarReturn) were all solved against the jdNow of the moment the chart was
+ * calculated. A reading generated hours later stamps a NEW "TODAY" into the
+ * prompt while still handing the model sky data anchored to that older moment —
+ * so a since-passed "next exact aspect" or a drifted moon-phase countdown can
+ * slip in.
+ *
+ * The preparing page uses this to decide whether to recompute the sky before
+ * generating. A false result means "recalc first"; on recalc failure the caller
+ * falls back to the still-valid cached chart, so this only ever tightens, never
+ * blocks.
+ */
+export function isSkyFresh(): boolean {
+  const chart = loadChart();
+  if (!chart) return false;
+  const savedAt = new Date(chart.savedAt).getTime();
+  if (!Number.isFinite(savedAt)) return false;
+  const now = Date.now();
+  const sixHours = 6 * 60 * 60 * 1000;
+  return now - savedAt < sixHours;
+}
+
 /* ── V2 MIGRATION — silent, guarded, one-time ────────────────────────────
  *
  * Why this exists: charts saved before the SEFLG_SPEED fix have transits

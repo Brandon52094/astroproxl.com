@@ -148,10 +148,10 @@ const ASPECT_ORBS: Record<string, { exact: number; live: number; background: num
 };
 
 // Forward-looking window (days) for a transit's exact date to still count as
-// usable for a dated window. Must stay in sync with buildValidDateIndex's
-// window in lib/validateReadingDates.ts — widening one without the other
-// causes the model to surface dates the provenance validator then rejects.
-const FORWARD_WINDOW_DAYS = 60;
+// usable for a dated window. This is the single source of truth — the date
+// provenance validator (lib/validateReadingDates.ts) imports this exact value,
+// so the two can no longer drift out of sync.
+export const FORWARD_WINDOW_DAYS = 60;
 
 const SIGN_INDEX: Record<string, number> = {
   Aries: 0,
@@ -198,6 +198,14 @@ const NATAL_ASPECT_PRIORITY: Record<string, number> = {
 // ============================================================
 // HELPER FUNCTIONS
 // ============================================================
+
+// Single source of truth for reading an aspect's band. Storage is lowercase
+// ("exact"/"live"/"background"); every consumer wants the uppercase form.
+// Routing all reads through here means a future stray === "EXACT" comparison
+// against raw storage can't silently misclassify a band.
+function bandOf(a: TransitAspect): "EXACT" | "LIVE" | "BACKGROUND" | "" {
+  return (a.band?.toUpperCase() as "EXACT" | "LIVE" | "BACKGROUND") || "";
+}
 
 function normalizeLongitude(longitude: number): number {
   return ((longitude % 360) + 360) % 360;
@@ -275,7 +283,7 @@ function scoreTransitAspect(
 ): number {
   let score = 0;
 
-  const band = a.band?.toUpperCase();
+  const band = bandOf(a);
 
   if (band === "EXACT") score += 50;
   else if (band === "LIVE") score += 30;
@@ -454,7 +462,7 @@ function determineSpine(
 
   const active: TransitAspect[] = [];
   for (const a of aspects) {
-    const band = a.band?.toUpperCase();
+    const band = bandOf(a);
     if (band === "EXACT" || band === "LIVE") active.push(a);
   }
 
@@ -580,7 +588,7 @@ function determineSpine(
 
   // CHECK 5: FAST PLANET EXACT
   const exactFast = personal.filter(
-    (a) => a.band?.toUpperCase() === "EXACT" && FAST_PLANETS.has(a.transitPlanet)
+    (a) => bandOf(a) === "EXACT" && FAST_PLANETS.has(a.transitPlanet)
   );
   if (exactFast.length) {
     const a = exactFast[0];
@@ -623,7 +631,7 @@ function classifyTemporal(aspects: TransitAspect[], timeLord: string) {
   const background: TransitAspect[] = [];
 
   for (const a of aspects) {
-    const band = a.band?.toUpperCase();
+    const band = bandOf(a);
     const isPersonal = PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === timeLord;
     const isGenerational = GENERATIONAL_PLANETS.has(a.transitPlanet) && !isPersonal;
 
@@ -700,7 +708,7 @@ export function buildReadingPrompt(
   // ── COLLECT TOPIC-RELEVANT DATES ──
   const activeTopicAspects = topicRelevantAspects.filter(
     (a) =>
-      (a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE") &&
+      (bandOf(a) === "EXACT" || bandOf(a) === "LIVE") &&
       (PERSONAL_PLANETS.has(a.natalPlanet) || a.natalPlanet === profection.timeLord) &&
       !!a.exactDate
   );
@@ -967,9 +975,9 @@ export function buildReadingPrompt(
     sections.push("TRANSIT-TO-NATAL ASPECTS — TOPIC-RELEVANT ONLY:");
     sections.push(`RELEVANT ASPECTS (${topicRelevantAspects.length}):`);
 
-    const exact = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "EXACT");
-    const live = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "LIVE");
-    const background = topicRelevantAspects.filter((a) => a.band?.toUpperCase() === "BACKGROUND");
+    const exact = topicRelevantAspects.filter((a) => bandOf(a) === "EXACT");
+    const live = topicRelevantAspects.filter((a) => bandOf(a) === "LIVE");
+    const background = topicRelevantAspects.filter((a) => bandOf(a) === "BACKGROUND");
 
     if (exact.length > 0) {
       sections.push(`  EXACT (${exact.length}):`);

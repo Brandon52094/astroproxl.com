@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
-import { loadChart, loadIntake, saveReading, isChartFresh } from "@/lib/chartStore";
-import type { ReadingPage } from "@/lib/chartStore";
+import { loadChart, loadIntake, saveReading, saveChart, isChartFresh, isSkyFresh } from "@/lib/chartStore";
+import type { ReadingPage, StoredChart } from "@/lib/chartStore";
 
 const LOADING_MESSAGES = [
   "Reading your natal structure…",
@@ -22,6 +22,74 @@ const LOADING_MESSAGES = [
   "Identifying the central thread of your reading…",
   "Finalizing the interpretation…",
 ];
+
+/**
+ * Recompute the chart's time-sensitive layers so the "current sky" matches the
+ * moment the reading is generated. Re-sends the EXACT stored birth + location
+ * inputs (identical to migrateChartV3), so the natal half is unchanged and only
+ * the sky moves. Returns the refreshed StoredChart on success, or the original
+ * chart on any failure — this only ever tightens freshness, never blocks a
+ * reading that would otherwise have proceeded on cached data.
+ */
+async function refreshSky(chart: StoredChart): Promise<StoredChart> {
+  // Guard: without valid birth inputs a recalc can't run — keep the cached chart.
+  const inputsValid =
+    typeof chart.birthDate === "string" && chart.birthDate.trim() !== "" &&
+    typeof chart.birthTime === "string" && chart.birthTime.trim() !== "" &&
+    typeof chart.timezone === "string" && chart.timezone.trim() !== "" &&
+    typeof chart.lat === "number" && Number.isFinite(chart.lat) &&
+    typeof chart.lng === "number" && Number.isFinite(chart.lng) &&
+    !(chart.lat === 0 && chart.lng === 0);
+
+  if (!inputsValid) return chart;
+
+  try {
+    const response = await fetch("/api/chart-calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        birthDate: chart.birthDate,
+        birthTime: chart.birthTime,
+        birthPlace: chart.birthPlace,
+        lat: chart.lat,
+        lng: chart.lng,
+        timezone: chart.timezone,
+        ...(typeof chart.currentLat === "number" && typeof chart.currentLng === "number"
+          ? { currentLat: chart.currentLat, currentLng: chart.currentLng }
+          : {}),
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) return chart;
+
+    const refreshed: StoredChart = {
+      ...chart,
+      chartData: data,
+      savedAt: new Date().toISOString(),
+    };
+
+    // Persist so a retry / results reload sees the fresh sky too. saveChart
+    // stamps its own savedAt; our object mirrors it for the in-memory return.
+    saveChart({
+      birthDate: chart.birthDate,
+      birthTime: chart.birthTime,
+      birthPlace: chart.birthPlace,
+      lat: chart.lat,
+      lng: chart.lng,
+      timezone: chart.timezone,
+      currentLat: chart.currentLat ?? undefined,
+      currentLng: chart.currentLng ?? undefined,
+      currentPlace: chart.currentPlace ?? "",
+      currentTimezone: chart.currentTimezone ?? "",
+      chartData: data,
+    });
+
+    return refreshed;
+  } catch {
+    return chart;
+  }
+}
 
 function PreparingPageInner() {
   const router = useRouter();
@@ -112,7 +180,7 @@ function PreparingPageInner() {
       const startTime = Date.now();
 
       try {
-        const chart = loadChart();
+        let chart = loadChart();
         const intake = loadIntake();
 
         if (!chart || !isChartFresh()) {
@@ -123,6 +191,15 @@ function PreparingPageInner() {
         if (!intake) {
           router.push("/reading/intake");
           return;
+        }
+
+        // Sky-freshness gate (#1): the natal half is fine for 24h (isChartFresh),
+        // but the time-sensitive layers drift. If the sky is older than the
+        // tight window, recompute it so the prompt's "TODAY" and the transit /
+        // trigger / station / moon data refer to the same moment. On failure,
+        // refreshSky returns the cached chart and we proceed as before.
+        if (!isSkyFresh()) {
+          chart = await refreshSky(chart);
         }
 
         const response = await fetch("/api/readings", {
@@ -236,7 +313,7 @@ function PreparingPageInner() {
         />
 
         <motion.div
-          className="absolute left-1/2 top-[16%] h-[24rem] w-[24rem] -translate-x-1/2 rounded-full blur-3xl"
+          className="absolute left-1/2 top-[42%] h-[24rem] w-[24rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
           animate={
             shouldReduceMotion
               ? undefined
@@ -298,21 +375,19 @@ function PreparingPageInner() {
                 <span className="text-2xl">✕</span>
               </div>
               <div className="space-y-2">
-  <h1 className="text-xl font-semibold text-white">
-    Something interrupted the reading
-  </h1>
-
-  <p className="text-sm leading-6 text-slate-400">
-    {error}
-  </p>
-</div>
-
-<button
-  onClick={() => router.push("/reading/intake")}
-  className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
->
-  Try again
-</button>
+                <h1 className="text-xl font-semibold text-white">
+                  Something interrupted the reading
+                </h1>
+                <p className="text-sm leading-6 text-slate-400">
+                  {error}
+                </p>
+              </div>
+              <button
+                onClick={() => router.push("/reading/intake")}
+                className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
+              >
+                Try again
+              </button>
             </motion.div>
           ) : (
             <motion.div
@@ -320,41 +395,48 @@ function PreparingPageInner() {
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="space-y-12"
+              className="flex flex-col items-center"
             >
-              <div className="relative mx-auto h-32 w-32">
+              {/* Header + subhead */}
+              <div className="space-y-3">
+                <h1 className="text-2xl font-semibold tracking-tight text-white">
+                  Building your reading
+                </h1>
+                <p className="mx-auto max-w-sm text-sm leading-6 text-slate-400">
+                  Your chart is being weighed across multiple predictive layers to
+                  find the strongest development active for you now.
+                </p>
+              </div>
+
+              {/* Orb with live percentage */}
+              <div className="relative mx-auto my-14 h-36 w-36">
                 <motion.div
                   className="absolute inset-0 rounded-full bg-teal-400/20"
-                  animate={{ scale: [1, 1.15, 1] }}
+                  animate={{ scale: [1, 1.12, 1] }}
                   transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
                 />
                 <motion.div
-                  className="absolute inset-3 rounded-full bg-teal-400/30"
-                  animate={{ scale: [1, 1.1, 1] }}
+                  className="absolute inset-[0.85rem] rounded-full bg-teal-400/30"
+                  animate={{ scale: [1, 1.12, 1] }}
                   transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
                 />
                 <motion.div
-                  className="absolute inset-6 rounded-full bg-teal-300/40"
-                  animate={{ scale: [1, 1.08, 1] }}
+                  className="absolute inset-[1.7rem] rounded-full bg-teal-300/40"
+                  animate={{ scale: [1, 1.12, 1] }}
                   transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 0.6 }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-3xl">✦</span>
+                  <span
+                    className="text-[2rem] font-semibold tracking-tight text-white"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {progress < 95 ? `${progress}%` : "…"}
+                  </span>
                 </div>
               </div>
 
-             <div className="space-y-3">
-  <h1 className="text-2xl font-semibold tracking-tight text-white">
-    Building your reading
-  </h1>
-
-  <p className="text-sm leading-6 text-slate-400">
-    Your chart is being weighed across multiple predictive layers to find the
-    strongest development active for you now.
-  </p>
-</div>
-
-              <div className="h-6">
+              {/* Rotating status line */}
+              <div className="mb-5 flex h-6 items-center justify-center">
                 <AnimatePresence mode="wait">
                   <motion.p
                     key={messageIndex}
@@ -369,40 +451,17 @@ function PreparingPageInner() {
                 </AnimatePresence>
               </div>
 
-              <div className="flex items-center justify-center gap-2">
-                {LOADING_MESSAGES.map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all duration-500 ${
-                      i <= messageIndex ? "w-6 bg-teal-300" : "w-1.5 bg-white/10"
-                    }`}
-                  />
-                ))}
-              </div>
-
-              {/* ── Progress Bar ── */}
-              <div className="w-full">
-                <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-teal-400 to-teal-300"
-                    style={{ width: `${progress}%` }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </div>
-                <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                  {progress < 95 ? `Reading ${progress}%` : "Finalizing..."}
+              {/* Info card */}
+              <div className="w-full rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
+                <p className="text-xs leading-6 text-slate-400">
+                  This reading is built from{" "}
+                  <span className="text-slate-200">your natal chart</span>,{" "}
+                  <span className="text-slate-200">the timing active around you now</span>, and{" "}
+                  <span className="text-slate-200">multiple predictive techniques weighed together</span>.{" "}
+                  The goal is not to give you more astrology — it is to identify the
+                  signal that matters most.
                 </p>
               </div>
-
-              <div className="rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
-  <p className="text-xs leading-6 text-slate-400">
-    This reading is built from{" "}
-    <span className="text-slate-200">your natal chart</span>,{" "}
-    <span className="text-slate-200">the timing active around you now</span>, and{" "}
-    <span className="text-slate-200">multiple predictive techniques weighed together</span>.{" "}
-    The goal is not to give you more astrology — it is to identify the signal that matters most.
-  </p>
-</div>
             </motion.div>
           )}
         </AnimatePresence>

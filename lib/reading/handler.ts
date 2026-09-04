@@ -45,6 +45,44 @@ function buildSystemPrompt(topicSystem?: string) {
   return DEFAULT_SYSTEM + " " + topicSystem.trim() + " Output raw JSON only.";
 }
 
+/**
+ * Strip specific [[DATE: ...]] markers the validator flagged, keeping the
+ * surrounding prose. Driven entirely by the validator's own findUnsupportedMarkers
+ * output — we do NOT re-derive which dates are bad here, so this can never
+ * disagree with the provenance check.
+ *
+ * A stripped window paragraph loses its lead date and degrades to plain prose
+ * downstream, which is acceptable and far better than failing the whole reading.
+ */
+function stripMarkersByDateText(content: string, badDateTexts: string[]): string {
+  let out = content;
+
+  for (const bad of badDateTexts) {
+    const inner = bad
+      .replace(/^\[\[\s*DATE\s*:\s*/i, "")
+      .replace(/\]\]$/, "")
+      .trim();
+
+    if (!inner) continue;
+
+    const esc = inner.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // Match the whole marker for this date, plus any trailing dash lead-in
+    // (the window format is "[[DATE: X]] — ...").
+    const re = new RegExp(
+      `\\s*\\[\\[\\s*DATE\\s*:\\s*${esc}\\s*\\]\\]\\s*[—–-]?\\s*`,
+      "gi"
+    );
+
+    out = out.replace(re, " ");
+  }
+
+  return out
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
 export async function handleReading(request: NextRequest) {
   try {
     const body = (await request.json()) as ReadingRequestBody;
@@ -300,15 +338,34 @@ export async function handleReading(request: NextRequest) {
       }
 
       // ── FINAL DATE PROVENANCE CHECK ──
+      // Salvage before failing: strip only the markers the validator flagged,
+      // then RE-VALIDATE against the same index. We hard-fail only if stripping
+      // did not actually clear the problem — one stubborn invented date no
+      // longer sinks an otherwise-supported reading.
       if (unsupported.length > 0) {
-        console.error(
-          `[readings] Date provenance FAILED: ${unsupported.join(" | ")}`
+        console.warn(
+          `[readings] Stripping unsupported dates: ${unsupported.join(" | ")}`
         );
 
-        return NextResponse.json(
-          { error: "Could not verify timing. Please try again." },
-          { status: 422 }
+        pages = pages.map((pg) => ({
+          ...pg,
+          content: stripMarkersByDateText(pg.content ?? "", unsupported),
+        }));
+
+        const recheck = pages.flatMap((pg) =>
+          findUnsupportedMarkers(pg.content ?? "", dateIndex)
         );
+
+        if (recheck.length > 0) {
+          console.error(
+            `[readings] Date provenance FAILED after strip: ${recheck.join(" | ")}`
+          );
+
+          return NextResponse.json(
+            { error: "Could not verify timing. Please try again." },
+            { status: 422 }
+          );
+        }
       }
 
       // ── SUCCESS ──
@@ -341,4 +398,4 @@ export async function handleReading(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+}ß
