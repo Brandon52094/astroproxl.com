@@ -450,7 +450,7 @@ const STYLES: Record<string, React.CSSProperties> = {
     width: "100%",
     maxWidth: 420,
     margin: "0 auto",
-    padding: `calc(10px + env(safe-area-inset-top)) 22px calc(64px + env(safe-area-inset-bottom))`,
+    padding: `calc(8px + env(safe-area-inset-top)) 22px calc(64px + env(safe-area-inset-bottom))`,
     minHeight: "100vh",
     boxSizing: "border-box",
   },
