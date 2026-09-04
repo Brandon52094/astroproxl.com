@@ -398,4 +398,4 @@ export async function handleReading(request: NextRequest) {
       { status: 500 }
     );
   }
-}ß
+}
