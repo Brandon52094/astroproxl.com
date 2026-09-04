@@ -1,88 +1,8 @@
-import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
+"use client";
+
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { ChevronLeft, Minus, Plus } from "lucide-react";
-
-/* ─────────────────────────────────────────────
-   StarfieldBackground Component
-───────────────────────────────────────────── */
-
-function StarfieldBackground() {
-  const ref = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    let raf: number = 0;
-
-    const reduce = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    const resize = () => {
-      canvas.width = canvas.offsetWidth || 200;
-      canvas.height = canvas.offsetHeight || 200;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const stars = Array.from({ length: 90 }, () => ({
-      x: Math.random(),
-      y: Math.random(),
-      r: Math.random() * 1.3 + 0.2,
-      base: Math.random() * 0.5 + 0.2,
-      tw: Math.random() * 0.5 + 0.2,
-      phase: Math.random() * Math.PI * 2,
-    }));
-
-    const draw = (t: number) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const s of stars) {
-        const a = reduce
-          ? s.base
-          : s.base + Math.sin(t / 1400 + s.phase) * s.tw * 0.5;
-        ctx.beginPath();
-        ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(226,232,240,${Math.max(0.05, a)})`;
-        ctx.fill();
-      }
-      if (!reduce) raf = requestAnimationFrame(draw);
-    };
-    draw(0);
-
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={ref}
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        pointerEvents: "none",
-        zIndex: 1,
-      }}
-    />
-  );
-}
-
-/* Respect the OS "reduce motion" setting for our own animations. */
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const on = () => setReduced(mq.matches);
-    on();
-    mq.addEventListener?.("change", on);
-    return () => mq.removeEventListener?.("change", on);
-  }, []);
-  return reduced;
-}
+import StarfieldBackground from "./StarfieldBackground";
 
 /* ─────────────────────────────────────────────
    Products
@@ -97,28 +17,23 @@ interface Product {
   price: number;
 }
 
-interface Balance {
-  readings: number;
-  jxl: number;
-  replies: number;
-}
-
 const PRODUCTS: Product[] = [
   { id: "jxl", title: "JXL", desc: "Includes 3 replies", price: 12.99 },
   { id: "reading", title: "General Readings", desc: "Includes 2 replies", price: 10.0 },
   { id: "replies", title: "More Replies", desc: "Works with any reading", price: 1.0 },
 ];
 
+interface Balance {
+  readings: number;
+  jxl: number;
+  replies: number;
+}
+
 /* ─────────────────────────────────────────────
    Membership
 ───────────────────────────────────────────── */
 
-interface MembershipFeature {
-  title: string;
-  copy: string;
-}
-
-const MEMBERSHIP_FEATURES: MembershipFeature[] = [
+const MEMBERSHIP_FEATURES = [
   { title: "Unlimited Readings & Replies", copy: "Unlimited access to JXL & General Readings with replies." },
   { title: "Commission Eligible (request only)", copy: "Earn 1–5% recurring commission with subscription referrals." },
   { title: "Members-Only Features (beta)", copy: "Unlock experiences and tools only XL members can access." },
@@ -147,27 +62,58 @@ function plural(n: number, one: string, many?: string): string {
   return n === 1 ? one : many ?? `${one}s`;
 }
 
+/* Respect the OS "reduce motion" setting for our own CSS animations. */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const on = () => setReduced(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+  return reduced;
+}
+
 /* ─────────────────────────────────────────────
    Component
 ───────────────────────────────────────────── */
 
-interface CreditsPanelProps {
+export default function CreditsPanel({
+  onClose,
+  embedded = false,
+}: {
   onClose?: () => void;
   embedded?: boolean;
-}
-
-type BillingCycle = "monthly" | "yearly";
-
-export default function CreditsPanel({ onClose, embedded = false }: CreditsPanelProps) {
+}) {
   const reducedMotion = useReducedMotion();
 
-  const [cart, setCart] = useState<Record<ProductId, number>>({ jxl: 0, reading: 0, replies: 0 });
+  const [cart, setCart] = useState<Record<ProductId, number>>({
+    jxl: 0,
+    reading: 0,
+    replies: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [balance, setBalance] = useState<Balance | null>(null);
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
 
-  /* PREVIEW: mocked balance. In production keep your fetch */
-  const [balance] = useState<Balance>({ readings: 2, jxl: 1, replies: 5 });
+  /* Current balances */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/user/credits");
+        const d = await res.json();
+        setBalance({
+          readings: Number(d.credits ?? 0),
+          jxl: Number(d.jxlCredits ?? 0),
+          replies: Number(d.replyCredits ?? 0),
+        });
+      } catch {
+        // Balance line simply stays hidden.
+      }
+    })();
+  }, []);
 
   const step = useCallback((id: ProductId, amount: number) => {
     setCart((current) => ({ ...current, [id]: Math.max(0, current[id] + amount) }));
@@ -179,15 +125,16 @@ export default function CreditsPanel({ onClose, embedded = false }: CreditsPanel
     return cart.jxl * 12.99 + cart.reading * 10 + getReplyPrice(cart.replies);
   }, [cart]);
 
+  /* ── Credit checkout ── */
   const handleCheckout = async () => {
     if (total <= 0) return;
     setLoading(true);
     setError("");
     try {
       const items = [
-        ...(cart.jxl > 0 ? [{ id: "jxl" as const, quantity: cart.jxl }] : []),
-        ...(cart.reading > 0 ? [{ id: "reading" as const, quantity: cart.reading }] : []),
-        ...(cart.replies > 0 ? [{ id: "replies" as const, quantity: cart.replies }] : []),
+        ...(cart.jxl > 0 ? [{ id: "jxl", quantity: cart.jxl }] : []),
+        ...(cart.reading > 0 ? [{ id: "reading", quantity: cart.reading }] : []),
+        ...(cart.replies > 0 ? [{ id: "replies", quantity: cart.replies }] : []),
       ];
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
@@ -211,7 +158,9 @@ export default function CreditsPanel({ onClose, embedded = false }: CreditsPanel
     }
   };
 
+  /* ── Membership entry ── */
   const handleGetAccess = () => {
+    // NEXT STEP: wire this to Stripe subscription checkout (monthly $20 / yearly $200).
     console.log(`XL Access selected: ${billingCycle}`);
     alert(`Subscribe pressed — ${billingCycle}`);
   };
@@ -220,6 +169,8 @@ export default function CreditsPanel({ onClose, embedded = false }: CreditsPanel
 
   return (
     <div style={{ ...C.root, ...(embedded ? C.rootEmbedded : {}) }}>
+      <StarfieldBackground />
+
       {!embedded && (
         <button type="button" onClick={onClose} style={C.back} aria-label="Back">
           <ChevronLeft size={17} />
@@ -227,96 +178,17 @@ export default function CreditsPanel({ onClose, embedded = false }: CreditsPanel
       )}
 
       <div style={C.container}>
-        {/* ── MEMBERSHIP (beveled recess / frustum) ── */}
+        {/* ── MEMBERSHIP ── */}
         <section style={C.membershipFrame}>
-          {/* top faceplate: logo pill + title */}
-          <div style={C.membershipLogo} aria-hidden="true" />
-          <div style={C.membershipTitle}>MEMBERSHIP</div>
-
-          {/* the sunken galaxy well */}
-          <div style={C.recessWell}>
-            <StarfieldBackground />
-
-            {/* bevel geometry: walls (sheen), silver miter seams, subtle black fold line */}
-            <svg style={C.bevelSvg} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              <defs>
-                {/* brushed-metal sweep — dark → bright band → dark, like the reference */}
-                <linearGradient id="metalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#202227" />
-                  <stop offset="30%" stopColor="#8c9199" />
-                  <stop offset="48%" stopColor="#c9cdd4" />
-                  <stop offset="62%" stopColor="#797d85" />
-                  <stop offset="100%" stopColor="#1b1d21" />
-                </linearGradient>
-                <linearGradient id="seamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#9aa0aa" />
-                  <stop offset="50%" stopColor="#eef1f6" />
-                  <stop offset="100%" stopColor="#9aa0aa" />
-                </linearGradient>
-                {/* anodized grain */}
-                <filter id="grain" x="0" y="0" width="100%" height="100%">
-                  <feTurbulence type="fractalNoise" baseFrequency="0.9 0.5" numOctaves="2" stitchTiles="stitch" result="n" />
-                  <feColorMatrix in="n" type="saturate" values="0" />
-                </filter>
-                {/* clip = the bevel ring (the four walls) */}
-                <clipPath id="bevelClip">
-                  <polygon points="0,0 100,0 93.5,7.5 6.5,7.5" />
-                  <polygon points="0,0 6.5,7.5 6.5,92.5 0,100" />
-                  <polygon points="100,0 100,100 93.5,92.5 93.5,7.5" />
-                  <polygon points="0,100 6.5,92.5 93.5,92.5 100,100" />
-                </clipPath>
-              </defs>
-
-              {/* solid metal frame walls */}
-              <g clipPath="url(#bevelClip)">
-                <rect x="0" y="0" width="100" height="100" fill="url(#metalGrad)" />
-                {/* facet shading: top/left lifted, bottom/right deepened */}
-                <polygon points="0,0 100,0 93.5,7.5 6.5,7.5" fill="rgba(255,255,255,0.10)" />
-                <polygon points="0,0 6.5,7.5 6.5,92.5 0,100" fill="rgba(255,255,255,0.05)" />
-                <polygon points="100,0 100,100 93.5,92.5 93.5,7.5" fill="rgba(0,0,0,0.28)" />
-                <polygon points="0,100 6.5,92.5 93.5,92.5 100,100" fill="rgba(0,0,0,0.34)" />
-                {/* grain */}
-                <rect x="0" y="0" width="100" height="100" filter="url(#grain)" opacity="0.2" />
-              </g>
-
-              {/* inner fold line (metal → space): subtle black */}
-              <rect x="6.5" y="7.5" width="87" height="85" fill="none"
-                    stroke="rgba(0,0,0,0.6)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-
-              {/* miter seams (bright silver) */}
-              <g stroke="url(#seamGrad)" strokeWidth="1.2" strokeLinecap="round" vectorEffect="non-scaling-stroke">
-                <line x1="0" y1="0" x2="6.5" y2="7.5" />
-                <line x1="100" y1="0" x2="93.5" y2="7.5" />
-                <line x1="100" y1="100" x2="93.5" y2="92.5" />
-                <line x1="0" y1="100" x2="6.5" y2="92.5" />
-              </g>
-            </svg>
-
-            {/* recessed viewport — the scrolling features */}
-            <div style={C.recessViewport}>
-              {reducedMotion ? (
-                <div style={C.membershipContentStatic}>
-                  {MEMBERSHIP_FEATURES.map((feature) => (
-                    <div key={feature.title} style={C.featureRow}>
-                      <span style={C.featureName}>{feature.title}</span>
-                      <span style={C.featureCopy}>{feature.copy}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={C.membershipTrack}>
-                  {[...MEMBERSHIP_FEATURES, ...MEMBERSHIP_FEATURES].map((feature, i) => (
-                    <div key={i} style={C.featureRowScroll}>
-                      <span style={C.featureName}>{feature.title}</span>
-                      <span style={C.featureCopy}>{feature.copy}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div style={C.leftBracket}>
+            <span style={C.leftBracketTop} />
+            <span style={C.leftBracketBottom} />
+          </div>
+          <div style={C.rightBracket}>
+            <span style={C.rightBracketTop} />
+            <span style={C.rightBracketBottom} />
           </div>
 
-          {/* billing price selectors on the bottom faceplate */}
           <button
             type="button"
             onClick={() => setBillingCycle("monthly")}
@@ -327,6 +199,7 @@ export default function CreditsPanel({ onClose, embedded = false }: CreditsPanel
           >
             $20<span style={C.priceUnit}>/mo</span>
           </button>
+
           <button
             type="button"
             onClick={() => setBillingCycle("yearly")}
@@ -338,7 +211,31 @@ export default function CreditsPanel({ onClose, embedded = false }: CreditsPanel
             $200<span style={C.priceUnit}>/yr</span>
           </button>
 
-          {/* SUBSCRIBE straddles the recess bottom edge */}
+          <div style={C.membershipTitle}>MEMBERSHIP</div>
+
+          {reducedMotion ? (
+            <div style={C.membershipContentStatic}>
+              {MEMBERSHIP_FEATURES.map((feature) => (
+                <div key={feature.title} style={C.featureRow}>
+                  <span style={C.featureName}>{feature.title}</span>
+                  <span style={C.featureCopy}>{feature.copy}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={C.membershipWindow}>
+              {/* Two identical copies so translateY(-50%) loops seamlessly */}
+              <div style={C.membershipTrack}>
+                {[...MEMBERSHIP_FEATURES, ...MEMBERSHIP_FEATURES].map((feature, i) => (
+                  <div key={i} style={C.featureRowScroll}>
+                    <span style={C.featureName}>{feature.title}</span>
+                    <span style={C.featureCopy}>{feature.copy}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button type="button" onClick={handleGetAccess} style={C.getAccess}>
             SUBSCRIBE
             {!reducedMotion && <span style={C.shimmerSweep} />}
@@ -387,11 +284,6 @@ export default function CreditsPanel({ onClose, embedded = false }: CreditsPanel
 
             return (
               <div key={product.id} style={C.selector}>
-                <div style={C.selectorSky} aria-hidden="true">
-                  <StarfieldBackground />
-                </div>
-
-                {/* Inventory badge - now with higher z-index to show over everything */}
                 {quantity > 0 && (
                   <div style={C.inventoryCircle}>{quantity}</div>
                 )}
@@ -513,16 +405,12 @@ const SHADOW_DEEP = "0 10px 24px rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.4)";
 const SHADOW_TEXT = "0 2px 8px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.55)";
 const SHADOW_DROP_GOLD = "drop-shadow(0 8px 12px rgba(0,0,0,0.8)) drop-shadow(0 2px 4px rgba(0,0,0,0.6))";
 
-interface StyleObject {
-  [key: string]: React.CSSProperties;
-}
-
-const STYLES: StyleObject = {
+const STYLES: Record<string, React.CSSProperties> = {
   root: {
     position: "fixed",
     inset: 0,
     zIndex: 50,
-    background: "radial-gradient(150% 120% at 50% 0%, #0a0a0d 0%, #050506 55%, #020203 100%)",
+    background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
     color: "#f1f5f9",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     overflowY: "auto",
@@ -543,7 +431,7 @@ const STYLES: StyleObject = {
     top: "calc(14px + env(safe-area-inset-top))",
     left: 18,
     zIndex: 100,
-    width: 40,
+    width: 40, // was 36 — 40+ reads as a real tap target on mobile
     height: 40,
     display: "flex",
     alignItems: "center",
@@ -562,164 +450,98 @@ const STYLES: StyleObject = {
     width: "100%",
     maxWidth: 420,
     margin: "0 auto",
-    padding: `calc(10px + env(safe-area-inset-top)) 22px calc(64px + env(safe-area-inset-bottom))`,
+    padding: `calc(8px + env(safe-area-inset-top)) 22px calc(64px + env(safe-area-inset-bottom))`,
     minHeight: "100vh",
     boxSizing: "border-box",
   },
 
-  /* MEMBERSHIP — beveled recess (frustum) */
+  /* MEMBERSHIP FRAME — brackets kept as the panel's signature */
   membershipFrame: {
     position: "relative",
+    padding: "82px 36px 68px",
     minHeight: 430,
-    borderRadius: 26,
-    background: "linear-gradient(150deg, #101017 0%, #08080d 55%, #030305 100%)",
-    boxShadow:
-      "0 18px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.6)",
   },
-  membershipLogo: {
-    position: "absolute" as const,
-    top: 16,
-    left: "50%",
-    transform: "translateX(-50%)",
-    zIndex: 4,
-    width: 54,
-    height: 15,
-    borderRadius: 999,
-    border: "1px solid rgba(200,205,216,0.35)",
-    background: "rgba(255,255,255,0.03)",
+  leftBracket: {
+    position: "absolute", top: 22, bottom: 22, left: 0, width: 52,
+    borderLeft: `1.5px solid ${GOLD}`, pointerEvents: "none", filter: SHADOW_DROP_GOLD,
   },
-  recessWell: {
-    position: "absolute" as const,
-    top: 52,
-    left: 20,
-    right: 20,
-    bottom: 44,
-    borderRadius: 8,
-    overflow: "hidden",
-    background: "radial-gradient(125% 100% at 50% 0%, #14152c 0%, #0a0a18 46%, #050510 100%)",
-    border: "1px solid rgba(0,0,0,0.6)",
-    boxShadow: "inset 0 8px 20px rgba(0,0,0,0.7), inset 0 -6px 16px rgba(0,0,0,0.55)",
+  leftBracketTop: { position: "absolute", left: 0, top: 0, width: 52, height: 1.5, background: GOLD },
+  leftBracketBottom: { position: "absolute", left: 0, bottom: 0, width: 52, height: 1.5, background: GOLD },
+  rightBracket: {
+    position: "absolute", top: 22, bottom: 22, right: 0, width: 52,
+    borderRight: `1.5px solid ${GOLD}`, pointerEvents: "none", filter: SHADOW_DROP_GOLD,
   },
-  bevelSvg: { position: "absolute" as const, inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 2 },
-  recessViewport: {
-    position: "absolute" as const,
-    top: 24,
-    bottom: 24,
-    left: 24,
-    right: 24,
-    zIndex: 3,
-    overflow: "hidden",
-    WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%)",
-    maskImage: "linear-gradient(to bottom, transparent 0%, #000 14%, #000 86%, transparent 100%)",
-  },
+  rightBracketTop: { position: "absolute", right: 0, top: 0, width: 52, height: 1.5, background: GOLD },
+  rightBracketBottom: { position: "absolute", right: 0, bottom: 0, width: 52, height: 1.5, background: GOLD },
 
   membershipPriceLeft: {
-    position: "absolute" as const,
-    left: 16,
-    bottom: 12,
-    border: "none",
-    background: "transparent",
-    padding: "6px 4px",
-    fontSize: 12,
-    fontWeight: 700,
-    letterSpacing: "0.02em",
-    cursor: "pointer",
+    position: "absolute", left: -2, bottom: -4, border: "none", background: "transparent",
+    padding: "6px 4px", fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
     fontVariantNumeric: "tabular-nums",
-    zIndex: 4,
   },
   membershipPriceRight: {
-    position: "absolute" as const,
-    right: 16,
-    bottom: 12,
-    border: "none",
-    background: "transparent",
-    padding: "6px 4px",
-    fontSize: 12,
-    fontWeight: 700,
-    letterSpacing: "0.02em",
-    cursor: "pointer",
+    position: "absolute", right: -2, bottom: -4, border: "none", background: "transparent",
+    padding: "6px 4px", fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
     fontVariantNumeric: "tabular-nums",
-    zIndex: 4,
   },
-  priceUnit: { fontSize: 9, fontWeight: 600, opacity: 0.75, marginLeft: 1 },
+  priceUnit: { fontSize: 10, fontWeight: 600, opacity: 0.8, marginLeft: 1 },
   membershipPriceActive: {
-    color: "#fde68a",
-    opacity: 1,
-    filter: "blur(0px)",
-    textShadow: "0 1px 4px rgba(0,0,0,0.85), 0 0 8px rgba(251,191,36,0.3)",
+    color: "#fcd34d", opacity: 1, filter: "blur(0px)", // amber-300 to match the title + glow
+    textShadow: "0 2px 8px rgba(0,0,0,0.85), 0 0 10px rgba(251,191,36,0.28)",
   },
-  membershipPriceInactive: { color: "#5b626e", opacity: 0.6, filter: "blur(0.6px)" },
+  membershipPriceInactive: { color: "#7c8aa3", opacity: 0.5, filter: "blur(0.6px)" },
 
   membershipTitle: {
-    position: "absolute" as const,
-    top: 36,
-    left: "50%",
-    transform: "translateX(-50%)",
-    zIndex: 4,
-    color: "#fde68a",
-    fontSize: 11,
-    fontWeight: 600,
-    letterSpacing: "0.22em",
-    textTransform: "uppercase" as const,
-    whiteSpace: "nowrap",
-    textShadow: "0 1px 3px rgba(0,0,0,0.85), 0 0 8px rgba(251,191,36,0.25)",
+    position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3,
+    padding: "0 18px", background: PANEL, color: "#fcd34d", // amber-300, Birthchart's warm accent
+    fontSize: 10, fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase", whiteSpace: "nowrap",
   },
-  membershipContentStatic: { display: "flex", flexDirection: "column" as const, gap: 18 },
+  // Reduced-motion fallback: the old static list, fully visible.
+  membershipContentStatic: { display: "flex", flexDirection: "column", gap: 18 },
+  // The visible corridor between the title and the SUBSCRIBE button.
+  // The mask fades content just under "MEMBERSHIP" (top) and just above SUBSCRIBE (bottom).
+  membershipWindow: {
+    position: "relative",
+    height: 258,
+    overflow: "hidden",
+    WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%)",
+    maskImage: "linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%)",
+  },
+  // 24s = one full drift. Lower for faster, higher for slower.
   membershipTrack: {
     display: "flex",
-    flexDirection: "column" as const,
+    flexDirection: "column",
     willChange: "transform",
     animation: "membership-marquee 24s linear infinite",
   },
-  featureRow: { lineHeight: 1.3, textAlign: "center" as const },
-  featureRowScroll: { lineHeight: 1.3, textAlign: "center" as const, marginBottom: 26 },
+  featureRow: { lineHeight: 1.3, textAlign: "center" },
+  // Spacing baked into each row (not a parent gap) so both copies tile seamlessly.
+  featureRowScroll: { lineHeight: 1.3, textAlign: "center", marginBottom: 26 },
   featureName: {
-    display: "block" as const,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#f2d99a",
+    display: "block", fontSize: 13, fontWeight: 500, color: "#f8fafc",
     letterSpacing: "0.01em",
-    textShadow: "0 1px 3px rgba(0,0,0,0.8)",
   },
   featureCopy: {
-    display: "block" as const,
-    fontSize: 11,
-    color: "#9aa3b4",
-    marginTop: 3,
+    display: "block", fontSize: 11, color: "#94a3b8", marginTop: 3, // slate-400
     lineHeight: 1.45,
-    textShadow: "0 1px 2px rgba(0,0,0,0.7)",
   },
 
-  /* SUBSCRIBE - Original style with gold glow */
+  // SUBSCRIBE — Birthchart's glowing bordered box (outer + inner glow, bg-white/[0.03], shine).
   getAccess: {
-    position: "absolute" as const,
-    left: "50%",
-    bottom: 22,
-    transform: "translateX(-50%)",
-    zIndex: 5,
-    overflow: "hidden",
-    minWidth: 176,
-    height: 46,
-    padding: "0 28px",
-    borderRadius: 14,
+    position: "absolute", left: "50%", bottom: -4, transform: "translateX(-50%)", zIndex: 3,
+    overflow: "hidden", minWidth: 172, height: 50, padding: "0 28px", borderRadius: 16,
     border: `1px solid ${GOLD}`,
     background: "rgba(255,255,255,0.03)",
     backdropFilter: "blur(4px)",
     color: "#fff",
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: "0.18em",
-    textTransform: "uppercase" as const,
+    fontSize: 12, fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase",
     cursor: "pointer",
-    boxShadow: "0 0 22px rgba(251,191,36,0.30), inset 0 0 14px rgba(251,191,36,0.16)",
+    boxShadow: "0 0 22px rgba(251,191,36,0.26), inset 0 0 14px rgba(251,191,36,0.14)",
     whiteSpace: "nowrap",
   },
+  // Birthchart's exact element-shine sweep (skewX -18deg, translateX pass).
   shimmerSweep: {
-    position: "absolute" as const,
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: "45%",
+    position: "absolute", top: 0, bottom: 0, left: 0, width: "45%",
     background:
       "linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%)",
     transform: "translateX(-140%) skewX(-18deg)",
@@ -728,160 +550,79 @@ const STYLES: StyleObject = {
   },
 
   /* BILLING TOGGLE */
+  // Top is 16 (not 14) because SUBSCRIBE overhangs the frame ~4px, so this lands
+  // the visible subscribe→toggle gap ≈ the toggle→JXL gap (both ~12px).
   billingWrap: {
-    display: "flex",
-    flexDirection: "column" as const,
-    alignItems: "center" as const,
-    margin: "16px 0 12px",
+    display: "flex", flexDirection: "column", alignItems: "center", margin: "16px 0 12px",
   },
-  billingToggleRow: { display: "flex", alignItems: "center" as const, gap: 14 },
+  billingToggleRow: { display: "flex", alignItems: "center", gap: 14 },
   billingLabel: {
-    border: "none",
-    background: "transparent",
-    padding: "4px 4px",
-    fontSize: 14,
-    fontWeight: 700,
-    color: "#7c8aa3",
-    letterSpacing: "0.04em",
-    cursor: "pointer",
+    border: "none", background: "transparent", padding: "4px 4px", fontSize: 14, fontWeight: 700,
+    color: "#7c8aa3", letterSpacing: "0.04em", cursor: "pointer",
     transition: "filter 0.2s ease, opacity 0.2s ease, color 0.2s ease",
   },
   billingLabelActive: { color: "#fde68a", opacity: 1, filter: "blur(0)", textShadow: SHADOW_TEXT },
   billingLabelInactive: { color: "#6b7691", opacity: 0.5, filter: "blur(1px)" },
   billingSwitch: {
-    width: 46,
-    height: 26,
-    borderRadius: 999,
-    padding: 0,
-    cursor: "pointer",
-    border: `1px solid ${BORDER}`,
-    background: "rgba(255,255,255,0.06)",
-    position: "relative" as const,
+    width: 46, height: 26, borderRadius: 999, padding: 0, cursor: "pointer",
+    border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.06)", position: "relative",
     boxShadow: SHADOW_DEEP,
   },
   billingSwitchOn: { borderColor: "rgba(251,191,36,0.45)", background: "rgba(251,191,36,0.12)" },
   billingKnob: {
-    position: "absolute" as const,
-    top: 2,
-    left: 2,
-    width: 20,
-    height: 20,
-    borderRadius: "50%",
-    background: "#fde68a",
-    transition: "left 0.2s ease",
+    position: "absolute", top: 2, left: 2, width: 20, height: 20, borderRadius: "50%",
+    background: "#fde68a", transition: "left 0.2s ease",
   },
   billingKnobOn: { left: 22 },
   billingKnobPulse: { animation: "knob-pulse 2.4s ease-in-out infinite" },
 
-  /* PRODUCTS - Original style with black face */
-  products: { display: "flex", flexDirection: "column" as const, gap: 14 },
+  /* PRODUCTS */
+  products: { display: "flex", flexDirection: "column", gap: 14 },
   selector: {
-    position: "relative" as const,
-    isolation: "isolate",
-    overflow: "hidden",
-    minHeight: 86,
-    display: "flex",
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-    gap: 10,
-    padding: "14px 16px",
-    border: "1px solid rgba(206,211,222,0.18)",
-    borderRadius: 20,
-    background: "transparent",
-    boxShadow: "inset 0 0 24px rgba(0,0,0,0.5)",
+    position: "relative", minHeight: 86, display: "flex", alignItems: "center",
+    justifyContent: "space-between", gap: 10, padding: "14px 16px",
+    border: `1px solid ${BORDER}`, borderRadius: 20,
+    background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
+    boxShadow: SHADOW_DEEP,
   },
-  selectorSky: {
-    position: "absolute" as const,
-    inset: 0,
-    zIndex: 0,
-    overflow: "hidden",
-    borderRadius: 20,
-    background: "radial-gradient(130% 120% at 30% 0%, #12142b 0%, #0a0a16 55%, #050510 100%)",
-  },
+  // 40px circular tap target with a visible ring — was a bare ~30px icon.
   stepBtn: {
-    flexShrink: 0,
-    width: 40,
-    height: 40,
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    border: `1px solid ${BORDER}`,
-    background: "rgba(255,255,255,0.04)",
-    color: "#f8fafc",
-    cursor: "pointer",
-    transition: "background 0.15s ease, opacity 0.15s ease",
-    zIndex: 2,
-    position: "relative" as const,
+    flexShrink: 0, width: 40, height: 40, borderRadius: "50%",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.04)",
+    color: "#f8fafc", cursor: "pointer", transition: "background 0.15s ease, opacity 0.15s ease",
   },
   stepBtnDisabled: { opacity: 0.28, cursor: "default", border: `1px solid rgba(148,163,184,0.12)` },
   selectorCenter: {
-    flex: 1,
-    minWidth: 0,
-    textAlign: "center" as const,
-    display: "flex",
-    flexDirection: "column" as const,
-    alignItems: "center" as const,
-    gap: 3,
-    zIndex: 2,
-    position: "relative" as const,
+    flex: 1, minWidth: 0, textAlign: "center", display: "flex", flexDirection: "column",
+    alignItems: "center", gap: 3,
   },
   selectorTitle: {
-    fontSize: 18,
-    fontWeight: 800,
-    letterSpacing: "0.03em",
-    color: "#fff",
-    textTransform: "uppercase" as const,
-    textShadow: SHADOW_TEXT,
+    fontSize: 18, fontWeight: 800, letterSpacing: "0.03em", color: "#fff",
+    textTransform: "uppercase", textShadow: SHADOW_TEXT,
   },
   selectorMeta: { fontSize: 11.5, color: "#a4b0c4" },
   selectorSavings: { fontSize: 10.5, fontWeight: 600, color: "#fbbf24", textShadow: SHADOW_TEXT },
-  // Inventory badge - HIGH z-index to show over everything
+  // Badge now shows the quantity accumulated from the +/- buttons (hidden at 0).
   inventoryCircle: {
-    position: "absolute" as const,
-    top: -10,
-    right: -8,
-    minWidth: 28,
-    height: 28,
-    padding: "0 4px",
-    borderRadius: 999,
-    display: "flex",
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    border: "1px solid rgba(251,191,36,0.6)",
-    background: "#07101d",
-    color: "#fde68a",
-    fontSize: 11,
-    fontWeight: 700,
-    zIndex: 10,
-    boxShadow: SHADOW_DEEP,
+    position: "absolute", top: -10, right: -8, minWidth: 28, height: 28, padding: "0 4px",
+    borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
+    border: "1px solid rgba(251,191,36,0.6)", background: "#07101d", color: "#fde68a",
+    fontSize: 11, fontWeight: 700, zIndex: 4, boxShadow: SHADOW_DEEP,
   },
 
-  /* CHECKOUT - Original style */
-  checkoutWrap: { display: "flex", flexDirection: "column" as const, alignItems: "center" as const, marginTop: 10, gap: 10 },
+  /* CHECKOUT */
+  checkoutWrap: { display: "flex", flexDirection: "column", alignItems: "center", marginTop: 10, gap: 10 },
   totalRow: {
-    display: "flex",
-    alignItems: "baseline" as const,
-    justifyContent: "center" as const,
-    gap: 6,
+    display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6,
   },
-  totalLabel: { fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#6b7691" },
+  totalLabel: { fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6b7691" },
   totalPrice: { color: "#cbd5e1", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em" },
   savingsLine: { fontSize: 11, fontWeight: 600, color: "#fbbf24", textShadow: SHADOW_TEXT, paddingRight: 0 },
   checkout: {
-    height: 50,
-    padding: "0 26px",
-    minWidth: 168,
-    borderRadius: 11,
-    border: `1px solid ${TEAL}`,
-    background: PANEL,
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: 700,
-    letterSpacing: "0.1em",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    marginTop: 2,
+    height: 50, padding: "0 26px", minWidth: 168, borderRadius: 11, border: `1px solid ${TEAL}`,
+    background: PANEL, color: "#fff", fontSize: 13, fontWeight: 700, letterSpacing: "0.1em",
+    cursor: "pointer", whiteSpace: "nowrap", marginTop: 2,
     transition: "opacity 0.4s ease, box-shadow 0.4s ease",
   },
   checkoutEnabled: {
@@ -891,20 +632,12 @@ const STYLES: StyleObject = {
   checkoutPulse: { animation: "checkout-pulse 3s ease-in-out 0.6s infinite" },
   checkoutDisabled: { opacity: 0.34, cursor: "default", boxShadow: "none", animation: "none" },
   errorLine: {
-    fontSize: 11.5,
-    color: "#fca5a5",
-    textAlign: "center" as const,
-    maxWidth: 280,
-    lineHeight: 1.4,
+    fontSize: 11.5, color: "#fca5a5", textAlign: "center", maxWidth: 280, lineHeight: 1.4,
     marginTop: 2,
   },
 
   balanceLine: {
-    textAlign: "center" as const,
-    fontSize: 11.5,
-    lineHeight: 1.5,
-    color: "#93a0b8",
-    margin: "10px 2px 0",
+    textAlign: "center", fontSize: 11.5, lineHeight: 1.5, color: "#93a0b8", margin: "10px 2px 0",
   },
   balanceStrong: { color: "#dbe3f0", fontWeight: 700 },
 };
