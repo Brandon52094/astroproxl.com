@@ -7,7 +7,7 @@ type OpenAITextRequest = {
 export async function generateOpenAIText({
   system,
   prompt,
-  maxTokens = 4000,
+  maxTokens = 8000, // ── EDIT: Raised default ceiling
 }: OpenAITextRequest): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -26,6 +26,9 @@ export async function generateOpenAIText({
       instructions: system,
       input: prompt,
       max_output_tokens: maxTokens,
+      // ── EDIT: Reasoning knobs ──
+      reasoning: { effort: "medium" },
+      text: { verbosity: "high" },
     }),
   });
 
