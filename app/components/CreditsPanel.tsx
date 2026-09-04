@@ -917,7 +917,7 @@ const STYLES: Record<string, React.CSSProperties> = {
     color: "#fff",
     textAlign: "center",
     whiteSpace: "nowrap",
-    textShadow: "0 4px 14px rgba(255,255,255,0.4), 0 0 22px rgba(255,255,255,0.18)",
+    textShadow: "0 4px 6px rgba(255,255,255,0.4), 0 0 22px rgba(255,255,255,0.18)",
   },
 
   /* ─────────────────────────────────
