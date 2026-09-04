@@ -151,7 +151,7 @@ const ASPECT_ORBS: Record<string, { exact: number; live: number; background: num
 // usable for a dated window. Must stay in sync with buildValidDateIndex's
 // window in lib/validateReadingDates.ts — widening one without the other
 // causes the model to surface dates the provenance validator then rejects.
-const FORWARD_WINDOW_DAYS = 60;
+export const FORWARD_WINDOW_DAYS = 60;
 
 const SIGN_INDEX: Record<string, number> = {
   Aries: 0,
