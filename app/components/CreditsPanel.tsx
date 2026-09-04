@@ -407,21 +407,6 @@ export default function CreditsPanel({
 
 
         {/* ─────────────────────────────
-            GET CREDITS
-        ───────────────────────────── */}
-
-        <div style={C.creditHeader}>
-          <div style={C.titleRow}>
-            <div style={C.titleLine} />
-            <div style={C.title}>
-              GET CREDITS
-            </div>
-            <div style={C.titleLine} />
-          </div>
-        </div>
-
-
-        {/* ─────────────────────────────
             PRODUCTS
         ───────────────────────────── */}
 
@@ -632,15 +617,15 @@ const STYLES: Record<string, React.CSSProperties> = {
   },
 
   container: {
-  position: "relative",
-  zIndex: 10,
-  width: "100%",
-  maxWidth: 430,
-  margin: "0 auto",
-  padding: `calc(8px + env(safe-area-inset-top)) 20px calc(60px + env(safe-area-inset-bottom))`,
-  minHeight: "100vh",
-  boxSizing: "border-box",
-},
+    position: "relative",
+    zIndex: 10,
+    width: "100%",
+    maxWidth: 430,
+    margin: "0 auto",
+    padding: `calc(6px + env(safe-area-inset-top)) 20px calc(60px + env(safe-area-inset-bottom))`,
+    minHeight: "100vh",
+    boxSizing: "border-box",
+  },
 
   /* ─────────────────────────────────
      MEMBERSHIP FRAME
@@ -648,13 +633,13 @@ const STYLES: Record<string, React.CSSProperties> = {
 
   membershipFrame: {
     position: "relative",
-    padding: "56px 34px 70px",
+    padding: "84px 34px 70px",
     minHeight: 430,
   },
 
   leftBracket: {
     position: "absolute",
-    top: 22,
+    top: 21,
     bottom: 20,
     left: 0,
     width: 54,
@@ -683,7 +668,7 @@ const STYLES: Record<string, React.CSSProperties> = {
 
   rightBracket: {
     position: "absolute",
-    top: 22,
+    top: 21,
     bottom: 20,
     right: 0,
     width: 54,
@@ -751,7 +736,7 @@ const STYLES: Record<string, React.CSSProperties> = {
 
   membershipTitle: {
     position: "absolute",
-    top: 11,
+    top: 13,
     left: "50%",
     transform: "translateX(-50%)",
     zIndex: 3,
@@ -768,7 +753,7 @@ const STYLES: Record<string, React.CSSProperties> = {
   membershipContent: {
     display: "flex",
     flexDirection: "column",
-    gap: 7,
+    gap: 20,
   },
 
   featureRow: {
@@ -833,7 +818,7 @@ const STYLES: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     alignItems: "center",
     gap: 8,
-    margin: "26px 0 20px",
+    margin: "26px 0 12px",
   },
 
   billingToggleRow: {
@@ -888,36 +873,6 @@ const STYLES: Record<string, React.CSSProperties> = {
 
   billingKnobOn: {
     left: 22,
-  },
-
-  /* ─────────────────────────────────
-     GET CREDITS
-  ───────────────────────────────── */
-
-  creditHeader: {
-    margin: "8px 0 26px",
-  },
-
-  titleRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-  },
-
-  titleLine: {
-    flex: 1,
-    height: 1,
-    background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: 800,
-    letterSpacing: "0.16em",
-    color: "#fff",
-    textAlign: "center",
-    whiteSpace: "nowrap",
-    textShadow: "0 4px 6px rgba(255,255,255,0.4), 0 0 22px rgba(255,255,255,0.18)",
   },
 
   /* ─────────────────────────────────
