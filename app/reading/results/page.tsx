@@ -679,40 +679,6 @@ export default function ReadingResultsPage() {
     fetchCredits();
   }, [followups.length]);
 
-  // ── Intersection Observer for Bottom Line ──
-  useEffect(() => {
-    if (!bottomLineRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            // Start timer when Bottom Line becomes visible
-            if (goingDeeperTimerRef.current) {
-              clearTimeout(goingDeeperTimerRef.current);
-            }
-            goingDeeperTimerRef.current = setTimeout(() => {
-              setShowGoingDeeper(true);
-            }, 7000);
-          }
-        }
-      },
-      {
-        root: null,
-        threshold: 0.5,
-      }
-    );
-
-    observer.observe(bottomLineRef.current);
-
-    return () => {
-      observer.disconnect();
-      if (goingDeeperTimerRef.current) {
-        clearTimeout(goingDeeperTimerRef.current);
-      }
-    };
-  }, [parsedSections]);
-
   const page = reading?.pages?.[0] ?? null;
 
   const parsedSections = useMemo(
@@ -745,6 +711,39 @@ export default function ReadingResultsPage() {
 
   const closingSections =
     parsedSections?.filter((section) => section.kind === "closing") ?? [];
+
+  // ── Intersection Observer for Bottom Line ──
+  useEffect(() => {
+    if (!bottomLineRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            if (goingDeeperTimerRef.current) {
+              clearTimeout(goingDeeperTimerRef.current);
+            }
+            goingDeeperTimerRef.current = setTimeout(() => {
+              setShowGoingDeeper(true);
+            }, 7000);
+          }
+        }
+      },
+      {
+        root: null,
+        threshold: 0.5,
+      }
+    );
+
+    observer.observe(bottomLineRef.current);
+
+    return () => {
+      observer.disconnect();
+      if (goingDeeperTimerRef.current) {
+        clearTimeout(goingDeeperTimerRef.current);
+      }
+    };
+  }, [parsedSections]);
 
   const renderContentWithBadges = (content: string) => {
     const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
@@ -1155,7 +1154,7 @@ export default function ReadingResultsPage() {
           text-align: left;
         }
 
-        /* ─── Context section (Stage 2) ────────────────────────────────── */
+        /* ─── Context stage (Stage 2) ────────────────────────────────── */
         .context-stage .context-section {
           width: 100%;
           margin-top: 34px;
