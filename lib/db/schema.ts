@@ -21,3 +21,23 @@ export const referralRedemptions = pgTable("referral_redemptions", {
   rewarded: boolean("rewarded").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ── NEW TABLE: Stripe Fulfillment Ledger ──
+// One row per Stripe object that has already granted something to a user.
+//
+// stripeObjectId is typically:
+//   • Checkout Session ID for purchases/subscription starts
+//   • Invoice ID for subscription renewals
+//
+// UNIQUE prevents Stripe retries from granting the same credits twice.
+export const stripeFulfillments = pgTable("stripe_fulfillments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  stripeObjectId: text("stripe_object_id").notNull().unique(),
+
+  eventType: text("event_type").notNull(),
+
+  userId: text("user_id"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

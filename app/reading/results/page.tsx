@@ -1219,50 +1219,52 @@ export default function ReadingResultsPage() {
     );
   };
 
-  const renderStage3 = () => {
-    const proseContent = additionalProseSections
-      .map((section) => section.body)
-      .join(" ");
+ const renderStage3 = () => {
+  const proseContent = additionalProseSections
+    .map((section) => section.body)
+    .join(" ");
 
-    const entranceOffset =
-      typeof window !== "undefined"
-        ? window.innerHeight * 0.38
-        : 300;
+  const entranceOffset =
+    typeof window !== "undefined"
+      ? window.innerHeight * 0.38
+      : 300;
 
-    const trackY =
-      entranceOffset -
-      proseProgress * proseMaxTravelRef.current;
+  const trackY =
+    entranceOffset -
+    proseProgress * proseMaxTravelRef.current;
 
-    return (
-      <section className="reading-stage prose-stage" data-stage="3">
-        <div className="prose-window" ref={proseContainerRef}>
-          <motion.div
-            className="prose-track"
-            ref={proseTrackRef}
-            animate={{ y: trackY }}
-            transition={{
-              type: "spring",
-              stiffness: 240,
-              damping: 32,
-              mass: 0.7,
-            }}
-          >
-            <p className="reading-body">
-              {renderContentWithBadges(proseContent)}
-            </p>
-          </motion.div>
+  return (
+    <section className="reading-stage prose-stage" data-stage="3">
+      <div className="prose-window" ref={proseContainerRef}>
+        <motion.div
+          className="prose-track"
+          ref={proseTrackRef}
+          animate={{ y: trackY }}
+          transition={{
+            type: "spring",
+            stiffness: 240,
+            damping: 32,
+            mass: 0.7,
+          }}
+        >
+          <p className="reading-body">
+            {renderContentWithBadges(proseContent)}
+          </p>
+        </motion.div>
 
-          {/* TOP EXIT PORTAL */}
-          <div className="prose-top-fade" />
-          <div className="prose-top-line" />
+        {/* TOP EXIT PORTAL */}
+        <div className="prose-top-glass" />
+        <div className="prose-top-fade" />
+        <div className="prose-top-line" />
 
-          {/* BOTTOM ENTRY PORTAL */}
-          <div className="prose-bottom-fade" />
-          <div className="prose-bottom-line" />
-        </div>
-      </section>
-    );
-  };
+        {/* BOTTOM ENTRY PORTAL */}
+        <div className="prose-bottom-glass" />
+        <div className="prose-bottom-fade" />
+        <div className="prose-bottom-line" />
+      </div>
+    </section>
+  );
+};
 
   const renderStage4 = () => (
     <section className="reading-stage" data-stage="4">
@@ -1811,118 +1813,147 @@ export default function ReadingResultsPage() {
         }
 
         /* ─── Prose stage (Stage 3) ────────────────────────────────────── */
-        .prose-stage {
-          overflow: hidden;
-          touch-action: none;
-        }
+.prose-stage {
+  overflow: hidden;
+  touch-action: none;
+}
 
-        .prose-window {
-          position: relative;
-          width: 100%;
-          height: 100svh;
-          overflow: hidden;
-        }
+.prose-window {
+  /* one knob per edge — line, fade, and glass all follow it */
+  --portal-top: 7svh;
+  --portal-bottom: 7svh;
+  position: relative;
+  width: 100%;
+  height: 100svh;
+  overflow: hidden;
+}
 
-        .prose-track {
-          position: absolute;
-          left: 0;
-          right: 0;
-          top: 50%;
-          width: 100%;
-          padding: 0 2px;
-          will-change: transform;
-          z-index: 2;
-        }
+.prose-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  width: 100%;
+  padding: 0 2px;
+  will-change: transform;
+  z-index: 2;
+}
 
-        .prose-track .reading-body {
-          font-size: 17px;
-          line-height: 2;
-          margin: 0;
-        }
+.prose-track .reading-body {
+  font-size: 17px;
+  line-height: 2;
+  margin: 0;
+}
 
-        /* ── TOP PORTAL ── */
-        .prose-top-fade {
-          position: absolute;
-          top: 0;
-          left: -8px;
-          right: -8px;
-          height: 22svh;
-          z-index: 5;
-          pointer-events: none;
-          background:
-            linear-gradient(
-              to bottom,
-              rgba(2, 3, 12, 1) 0%,
-              rgba(2, 3, 12, 0.97) 28%,
-              rgba(2, 3, 12, 0.76) 52%,
-              rgba(2, 3, 12, 0.34) 76%,
-              transparent 100%
-            );
-          backdrop-filter: blur(2px);
-          -webkit-backdrop-filter: blur(2px);
-        }
+/* ── liquid-glass bands: blur peak centered on each line ── */
+.prose-top-glass {
+  position: absolute;
+  top: calc(var(--portal-top) - 7.5svh);
+  left: -8px;
+  right: -8px;
+  height: 15svh;
+  z-index: 4;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+}
+.prose-bottom-glass {
+  position: absolute;
+  bottom: calc(var(--portal-bottom) - 7.5svh);
+  left: -8px;
+  right: -8px;
+  height: 15svh;
+  z-index: 4;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+          mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+}
 
-        .prose-top-line {
-          position: absolute;
-          top: 22svh;
-          left: 2%;
-          right: 2%;
-          height: 1px;
-          z-index: 6;
-          pointer-events: none;
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(148, 163, 184, 0.18) 18%,
-              rgba(203, 213, 225, 0.28) 50%,
-              rgba(148, 163, 184, 0.18) 82%,
-              transparent
-            );
-        }
+/* ── TOP PORTAL ── (color dissolve, no blur here) */
+.prose-top-fade {
+  position: absolute;
+  top: 0;
+  left: -8px;
+  right: -8px;
+  height: var(--portal-top);
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(2,3,12,1) 0%, rgba(2,3,12,.85) 55%, transparent 100%);
+}
 
-        /* ── BOTTOM PORTAL ── */
-        .prose-bottom-fade {
-          position: absolute;
-          bottom: 0;
-          left: -8px;
-          right: -8px;
-          height: 24svh;
-          z-index: 5;
-          pointer-events: none;
-          background:
-            linear-gradient(
-              to top,
-              rgba(13, 36, 78, 0.98) 0%,
-              rgba(18, 48, 92, 0.90) 26%,
-              rgba(18, 48, 92, 0.62) 53%,
-              rgba(18, 48, 92, 0.28) 77%,
-              transparent 100%
-            );
-          backdrop-filter: blur(5px);
-          -webkit-backdrop-filter: blur(5px);
-        }
+.prose-top-line {
+  position: absolute;
+  top: var(--portal-top);
+  left: 2%;
+  right: 2%;
+  height: 1px;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(226,232,255,.16) 16%, rgba(240,245,255,.85) 50%, rgba(226,232,255,.16) 84%, transparent);
+  box-shadow: 0 0 10px rgba(190,214,255,.5), 0 0 26px rgba(120,160,255,.26);
+}
 
-        .prose-bottom-line {
-          position: absolute;
-          bottom: 24svh;
-          left: 2%;
-          right: 2%;
-          height: 1px;
-          z-index: 6;
-          pointer-events: none;
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(94, 234, 212, 0.18) 18%,
-              rgba(125, 211, 252, 0.32) 50%,
-              rgba(94, 234, 212, 0.18) 82%,
-              transparent
-            );
-          box-shadow:
-            0 0 16px rgba(59, 130, 246, 0.08);
-        }
+/* ── BOTTOM PORTAL ── */
+.prose-bottom-fade {
+  position: absolute;
+  bottom: 0;
+  left: -8px;
+  right: -8px;
+  height: var(--portal-bottom);
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(13,36,78,.98) 0%, rgba(18,48,92,.8) 55%, transparent 100%);
+}
+
+.prose-bottom-line {
+  position: absolute;
+  bottom: var(--portal-bottom);
+  left: 2%;
+  right: 2%;
+  height: 1px;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(94,234,212,.16) 16%, rgba(150,225,255,.9) 50%, rgba(94,234,212,.16) 84%, transparent);
+  box-shadow: 0 0 10px rgba(120,220,235,.45), 0 0 26px rgba(59,130,246,.2);
+}
+
+/* ── shimmer sweep + star field on each line (no extra DOM) ── */
+.prose-top-line::after,
+.prose-bottom-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -32%;
+  height: 100%;
+  width: 32%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent);
+  filter: blur(1px);
+  animation: prose-sweep 5.5s ease-in-out infinite;
+}
+.prose-top-line::before,
+.prose-bottom-line::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  top: 0;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: .5;
+  box-shadow:
+    30px 6px 0 rgba(255,255,255,.7), 90px -4px 0 rgba(255,255,255,.5),
+    150px 8px 0 rgba(255,255,255,.6), 210px -6px 0 rgba(255,255,255,.45),
+    260px 5px 0 rgba(255,255,255,.6), 60px 10px 0 rgba(255,255,255,.4),
+    180px -9px 0 rgba(255,255,255,.5);
+  animation: prose-twinkle 3.6s ease-in-out infinite;
+}
+@keyframes prose-sweep   { 0% { transform: translateX(0); }   100% { transform: translateX(430%); } }
+@keyframes prose-twinkle { 0%, 100% { opacity: .22; }         50%  { opacity: .85; } }
 
         /* ─── Timing (Stage 4) ──────────────────────────────────────────── */
         .reveal-zone {
