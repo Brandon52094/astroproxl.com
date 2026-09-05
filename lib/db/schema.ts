@@ -1,5 +1,7 @@
 import { pgTable, text, timestamp, uuid, boolean, integer } from "drizzle-orm/pg-core";
 
+// ─── REFERRAL SYSTEM ──────────────────────────────────────────────────────────
+
 // One row per user who has a referral code. Code is unique and indexed for
 // fast lookup at checkout time — "who owns code XYZ123" needs to be cheap.
 export const referralCodes = pgTable("referral_codes", {
@@ -22,14 +24,11 @@ export const referralRedemptions = pgTable("referral_redemptions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// ── NEW TABLE: Stripe Fulfillment Ledger ──
-// One row per Stripe object that has already granted something to a user.
-//
-// stripeObjectId is typically:
-//   • Checkout Session ID for purchases/subscription starts
-//   • Invoice ID for subscription renewals
-//
-// UNIQUE prevents Stripe retries from granting the same credits twice.
+// ─── STRIPE FULFILLMENT LEDGER ──────────────────────────────────────────────
+
+// One row per Stripe object that has already fulfilled a purchase or renewal.
+// The UNIQUE stripeObjectId prevents webhook retries from granting the same
+// Reading / JXL / reply purchase twice.
 export const stripeFulfillments = pgTable("stripe_fulfillments", {
   id: uuid("id").primaryKey().defaultRandom(),
 

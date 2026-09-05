@@ -2,14 +2,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import Stripe from "stripe";
-
-import {
-  SUB_TIERS,
-  READING_PRICE,
-  SUBSCRIBER_TAIL,
-  BUNDLE_PACK,
-} from "@/lib/paywallConfig";
-
+import { PRICING } from "@/lib/paywallConfig";
 import { JXL_SESSION } from "@/lib/jxlConfig";
 
 import {
@@ -26,60 +19,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const ONE_TIME_READING_CREDITS = 1;
 
 const REFERRAL_COOKIE = "aproxl_ref";
-
-/* ─────────────────────────────────────────────
-   NEW STORE PRICING
-───────────────────────────────────────────── */
-
-const STORE_PRICES = {
-  reading: 1000, // $10.00
-  jxl: 1299, // $12.99
-
-  // Replies:
-  // $1 each normally
-  // every complete group of 8 = $6
-  replySingle: 100,
-  replyBundle8: 600,
-} as const;
-
-/*
-  Examples:
-
-  1 reply  = $1
-  3 replies = $3
-  7 replies = $7
-  8 replies = $6
-  9 replies = $7
-  10 replies = $8
-  16 replies = $12
-*/
-
-function getReplyPricing(quantity: number) {
-  const safeQuantity = Math.max(
-    0,
-    Math.floor(Number(quantity || 0))
-  );
-
-  const bundles = Math.floor(safeQuantity / 8);
-  const singles = safeQuantity % 8;
-
-  const subtotal =
-    bundles * STORE_PRICES.replyBundle8 +
-    singles * STORE_PRICES.replySingle;
-
-  const normalPrice =
-    safeQuantity * STORE_PRICES.replySingle;
-
-  const savings = normalPrice - subtotal;
-
-  return {
-    quantity: safeQuantity,
-    bundles,
-    singles,
-    subtotal,
-    savings,
-  };
-}
 
 function applyReferralDiscount(
   amountCents: number
@@ -144,7 +83,6 @@ export async function POST(
     const {
       returnUrl,
       mode,
-      bundleTier,
       items,
     } = body as {
       returnUrl: string;
@@ -157,8 +95,6 @@ export async function POST(
         | "jxl_session"
         | "bundle_pack"
         | "cart";
-
-      bundleTier?: string;
 
       items?: Array<{
         id?: string;
@@ -192,9 +128,9 @@ export async function POST(
     if (mode === "one_time") {
       const unitAmount = referral
         ? applyReferralDiscount(
-            STORE_PRICES.reading
+            PRICING.reading.price
           )
-        : STORE_PRICES.reading;
+        : PRICING.reading.price;
 
       const session =
         await stripe.checkout.sessions.create({
@@ -211,8 +147,8 @@ export async function POST(
                     "Astrological Reading",
 
                   description: referral
-                    ? "One personalized reading · includes 2 replies · 15% referral discount applied"
-                    : "One personalized reading · includes 2 replies",
+                    ? `One personalized reading · includes ${PRICING.reading.includedReplies} reply · 15% referral discount applied`
+                    : `One personalized reading · includes ${PRICING.reading.includedReplies} reply`,
                 },
 
                 unit_amount: unitAmount,
@@ -252,29 +188,18 @@ export async function POST(
     }
 
     /* ───────────────────────────────────────
-       SUBSCRIPTION
-       Leaving existing tier system alone
-       until we rebuild XL Access.
+       SUBSCRIPTION — SINGLE XL MEMBERSHIP
     ─────────────────────────────────────── */
 
     if (mode === "subscription") {
-      const tier =
-        SUB_TIERS[
-          bundleTier === "sub_plus"
-            ? "sub_plus"
-            : "sub_base"
-        ];
-
       const unitAmount = referral
-        ? applyReferralDiscount(tier.price)
-        : tier.price;
+        ? applyReferralDiscount(PRICING.membership.price)
+        : PRICING.membership.price;
 
       const session =
         await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
-
           mode: "subscription",
-
           allow_promotion_codes: true,
 
           line_items: [
@@ -283,17 +208,17 @@ export async function POST(
                 currency: "usd",
 
                 product_data: {
-                  name: tier.name,
+                  name: "AstroProXL Membership",
 
                   description: referral
-                    ? `${tier.tagline} — 15% off your first month`
-                    : tier.tagline,
+                    ? "Unlimited General Readings + JXL · up to 8 replies per conversation · members-only access · 15% referral discount applied"
+                    : "Unlimited General Readings + JXL · up to 8 replies per conversation · members-only access",
                 },
 
                 unit_amount: unitAmount,
 
                 recurring: {
-                  interval: "month",
+                  interval: PRICING.membership.interval,
                 },
               },
 
@@ -304,14 +229,18 @@ export async function POST(
           subscription_data: {
             metadata: {
               userId,
-              tier: tier.key,
+              membership: "astroproxl",
+              // Temporary compatibility for the current webhook until it is migrated.
+              tier: "sub_base",
             },
           },
 
           metadata: {
             userId,
-            tier: tier.key,
             mode: "subscription",
+            membership: "astroproxl",
+            // Temporary compatibility for the current webhook until it is migrated.
+            tier: "sub_base",
 
             ...(referral
               ? {
@@ -347,7 +276,7 @@ export async function POST(
     ─────────────────────────────────────── */
 
     if (mode === "followup") {
-      const followupPrice = 100;
+      const followupPrice = PRICING.replies.priceEach;
 
       const session =
         await stripe.checkout.sessions.create({
@@ -422,7 +351,7 @@ export async function POST(
                     "3 universal replies · works with Reading or JXL",
                 },
 
-                unit_amount: 300,
+                unit_amount: PRICING.replies.priceEach * 3,
               },
 
               quantity: 1,
@@ -454,9 +383,9 @@ export async function POST(
     if (mode === "jxl_session") {
       const unitAmount = referral
         ? applyReferralDiscount(
-            STORE_PRICES.jxl
+            PRICING.jxl.price
           )
-        : STORE_PRICES.jxl;
+        : PRICING.jxl.price;
 
       const session =
         await stripe.checkout.sessions.create({
@@ -473,8 +402,8 @@ export async function POST(
                     JXL_SESSION.name,
 
                   description: referral
-                    ? "One JXL session · includes 3 replies · 15% referral discount applied"
-                    : "One JXL session · includes 3 replies",
+                    ? `One JXL session · includes ${PRICING.jxl.includedReplies} replies · 15% referral discount applied`
+                    : `One JXL session · includes ${PRICING.jxl.includedReplies} replies`,
                 },
 
                 unit_amount: unitAmount,
@@ -493,7 +422,7 @@ export async function POST(
               JXL session logic can still read
               the included allowance.
             */
-            jxlReplies: 3,
+            jxlReplies: PRICING.jxl.includedReplies,
 
             ...(referral
               ? {
@@ -542,7 +471,7 @@ export async function POST(
                 },
 
                 unit_amount:
-                  BUNDLE_PACK.price,
+                  PRICING.reading.price * 2 + PRICING.jxl.price,
               },
 
               quantity: 1,
@@ -554,10 +483,10 @@ export async function POST(
             mode: "bundle_pack",
 
             credits:
-              BUNDLE_PACK.credits,
+              2,
 
             jxlCredits:
-              BUNDLE_PACK.jxlCredits,
+              1,
           },
 
           success_url:
@@ -621,9 +550,9 @@ export async function POST(
       if (readingQuantity > 0) {
         const readingAmount = referral
           ? applyReferralDiscount(
-              STORE_PRICES.reading
+              PRICING.reading.price
             )
-          : STORE_PRICES.reading;
+          : PRICING.reading.price;
 
         lineItems.push({
           price_data: {
@@ -634,8 +563,8 @@ export async function POST(
                 "Regular Reading",
 
               description: referral
-                ? "Includes 2 replies · 15% referral discount applied"
-                : "Includes 2 replies",
+                ? `Includes ${PRICING.reading.includedReplies} reply · 15% referral discount applied`
+                : `Includes ${PRICING.reading.includedReplies} reply`,
             },
 
             unit_amount:
@@ -671,9 +600,9 @@ export async function POST(
       if (jxlQuantity > 0) {
         const jxlAmount = referral
           ? applyReferralDiscount(
-              STORE_PRICES.jxl
+              PRICING.jxl.price
             )
-          : STORE_PRICES.jxl;
+          : PRICING.jxl.price;
 
         lineItems.push({
           price_data: {
@@ -684,8 +613,8 @@ export async function POST(
                 "JXL Session",
 
               description: referral
-                ? "Includes 3 replies · 15% referral discount applied"
-                : "Includes 3 replies",
+                ? `Includes ${PRICING.jxl.includedReplies} replies · 15% referral discount applied`
+                : `Includes ${PRICING.jxl.includedReplies} replies`,
             },
 
             unit_amount: jxlAmount,
@@ -699,7 +628,7 @@ export async function POST(
           jxlQuantity;
       }
 
-      /* ── UNIVERSAL REPLIES ── */
+      /* ── UNIVERSAL REPLIES — $1 EACH ── */
 
       const repliesItem =
         cartItems.find(
@@ -707,93 +636,46 @@ export async function POST(
             item.id === "replies"
         );
 
-      const replyPricing =
-        getReplyPricing(
-          Number(
-            repliesItem?.quantity ?? 0
+      const replyQuantity =
+        Math.max(
+          0,
+          Math.floor(
+            Number(
+              repliesItem?.quantity ?? 0
+            )
           )
         );
 
-      if (
-        replyPricing.quantity > 0
-      ) {
-        /*
-          Complete groups of 8.
+      if (replyQuantity > 0) {
+        const replyAmount = referral
+          ? applyReferralDiscount(
+              PRICING.replies.priceEach
+            )
+          : PRICING.replies.priceEach;
 
-          Each bundle = $6.
-        */
+        lineItems.push({
+          price_data: {
+            currency: "usd",
 
-        if (
-          replyPricing.bundles > 0
-        ) {
-          const bundleAmount =
-            referral
-              ? applyReferralDiscount(
-                  STORE_PRICES.replyBundle8
-                )
-              : STORE_PRICES.replyBundle8;
+            product_data: {
+              name:
+                "Universal Reply",
 
-          lineItems.push({
-            price_data: {
-              currency: "usd",
-
-              product_data: {
-                name:
-                  "8 Universal Replies",
-
-                description: referral
-                  ? "Works with Reading or JXL · Save $2 · referral discount applied"
-                  : "Works with Reading or JXL · Save $2",
-              },
-
-              unit_amount:
-                bundleAmount,
+              description: referral
+                ? "Works with Reading or JXL · 15% referral discount applied"
+                : "Works with Reading or JXL",
             },
 
-            quantity:
-              replyPricing.bundles,
-          });
-        }
+            unit_amount:
+              replyAmount,
+          },
 
-        /*
-          Any replies left after bundles
-          are $1 each.
-        */
-
-        if (
-          replyPricing.singles > 0
-        ) {
-          const singleAmount =
-            referral
-              ? applyReferralDiscount(
-                  STORE_PRICES.replySingle
-                )
-              : STORE_PRICES.replySingle;
-
-          lineItems.push({
-            price_data: {
-              currency: "usd",
-
-              product_data: {
-                name:
-                  "Universal Reply",
-
-                description: referral
-                  ? "Works with Reading or JXL · referral discount applied"
-                  : "Works with Reading or JXL",
-              },
-
-              unit_amount:
-                singleAmount,
-            },
-
-            quantity:
-              replyPricing.singles,
-          });
-        }
+          quantity:
+            replyQuantity,
+        });
 
         grantReplyCredits +=
-          replyPricing.quantity;
+          replyQuantity;
       }
 
       /* Nothing selected */
@@ -836,11 +718,7 @@ export async function POST(
               String(
                 grantReplyCredits
               ),
-
-            replySavingsCents:
-              String(
-                replyPricing.savings
-              ),
+            replySavingsCents: "0",
 
             ...(referral
               ? {

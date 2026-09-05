@@ -1,170 +1,270 @@
 // lib/paywallConfig.ts
 //
-// SINGLE SOURCE OF TRUTH for pricing and entitlements.
+// SINGLE SOURCE OF TRUTH for AstroProXL pricing and core entitlements.
 //
-// Core rule: 1 credit = 1 reading. No multipliers anywhere. If a plan grants
-// "4 readings," that is literally `credits: 4`.
+// IMPORTANT:
+// - All money values are stored in cents.
+// - Change live prices inside PRICING only.
+// - Older exports are kept temporarily as compatibility aliases while the
+//   remaining checkout/webhook/reading files are migrated.
 //
-// The model, in full:
+// CURRENT MODEL:
 //
-//   NON-SUBSCRIBER (à la carte)
-//     • Regular reading:  $4, includes 1 reply.
-//     • JXL reading:      $6, includes 2 replies. First ever: 50% off ($3).
-//     • Regular reply-pack: $2 → 2 more replies on a regular reading.
-//     • JXL reply-pack:     $3 → 2 more replies on a JXL conversation.
-//     • PWA install → ONE free regular reading, once ever, first install only.
+//   NON-MEMBER
+//     • Regular Reading: $3.00, includes 1 reply.
+//     • JXL:             $4.99, includes 2 replies.
+//     • Extra replies:   $1.00 each, UNIVERSAL across Reading + JXL.
+//     • PWA install:     one free Regular Reading, once ever.
 //
-//   SUBSCRIBER — two tiers, structurally identical, only grants differ:
-//     • base  $12/mo → 4 reading credits + 4 JXL credits
-//     • plus  $16/mo → 8 reading credits + 8 JXL credits
-//     Both: 1 reply/reading, 3 replies/JXL(*), 50% off everything once
-//     included credits are exhausted, no cooldowns, unlimited free downloads.
-//     Credits RESET on renewal (use-it-or-lose-it) but are never set BELOW the
-//     user's current balance — purchased top-ups are never confiscated.
+//   MEMBER
+//     • $12.99/month for now.
+//     • Unlimited Regular Readings.
+//     • Unlimited JXL sessions.
+//     • Up to 8 replies per individual conversation.
+//     • Members-only content/features can be unlocked throughout the app.
 //
-//   SAFETY WALLS (unpurchasable, per-conversation, reset on a fresh convo):
-//     • Regular reading:  hard stop at 8 COUNTED replies (the 1 included is free/uncounted).
-//     • JXL conversation: hard stop at 8 COUNTED replies (the 2 included are free/uncounted).
-//     These are wellbeing limits, not paywalls. Past the wall, no purchase is
-//     accepted — the concern is spiralling on one subject, not revenue. Other
-//     subjects remain fully open; the wall is per-conversation only.
+//   REFERRAL
+//     • Referred buyer receives 15% off eligible purchases.
+//     • Referrer receives 1 free Regular Reading after a successful redemption.
 //
-// Cooldowns and paid downloads have been removed entirely. Downloads are free.
+//   SAFETY WALL
+//     • Maximum 8 replies per individual Reading/JXL conversation.
+//     • Starting a fresh conversation resets that per-conversation limit.
+//
+// Downloads remain free. Cooldowns have been removed.
 
-// ── Reading (regular) ─────────────────────────────────────────────────────────
-export const READING_PRICE = 400;            // $4.00 — every regular reading
-export const READING_INCLUDED_REPLIES = 1;   // free, uncounted toward the wall
+// ── Canonical live pricing ────────────────────────────────────────────────────
 
-// ── Reply packs ───────────────────────────────────────────────────────────────
-// Two DISTINCT currencies. A regular reply-pack can never be spent on JXL, and
-// vice versa. This separation is load-bearing — keep the pools apart everywhere.
+export const PRICING = {
+  reading: {
+    price: 300, // $3.00
+    includedReplies: 1,
+  },
+
+  jxl: {
+    price: 499, // $4.99
+    includedReplies: 2,
+  },
+
+  replies: {
+    priceEach: 100, // $1.00 each — universal
+  },
+
+  membership: {
+    price: 1299, // $12.99/month — change THIS value when membership price changes
+    interval: "month" as const,
+
+    unlimitedReadings: true,
+    unlimitedJxl: true,
+    membersOnlyContent: true,
+  },
+
+  referral: {
+    discountPercent: 15,
+    referrerReadingReward: 1,
+  },
+} as const;
+
+export function formatUsd(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+// ── Compatibility price exports ───────────────────────────────────────────────
+// Keep these while older files are still being migrated to PRICING.
+
+export const READING_PRICE = PRICING.reading.price;
+export const READING_INCLUDED_REPLIES = PRICING.reading.includedReplies;
+
+export const JXL_PRICE = PRICING.jxl.price;
+export const JXL_INCLUDED_REPLIES = PRICING.jxl.includedReplies;
+
+export const UNIVERSAL_REPLY_PRICE = PRICING.replies.priceEach;
+export const MEMBERSHIP_PRICE = PRICING.membership.price;
+
+// ── Legacy reply-pack exports ─────────────────────────────────────────────────
+// Purchased replies are now one universal currency at $1 each.
+// These old names remain only so older imports do not break.
+
 export const REGULAR_REPLY_PACK = {
   mode: "reply_pack" as const,
   name: "2 Follow-Up Replies",
-  description: "Keep the conversation going — 2 more replies on your reading",
-  price: 200,        // $2.00
+  description: "2 universal replies — works with Reading or JXL",
+  price: PRICING.replies.priceEach * 2,
   replies: 2,
 };
 
 export const JXL_REPLY_PACK = {
   mode: "jxl_reply_pack" as const,
-  name: "2 More JXL Replies",
-  description: "Two more replies to go deeper on what you're working through",
-  price: 300,        // $3.00
+  name: "2 More Replies",
+  description: "2 universal replies — works with Reading or JXL",
+  price: PRICING.replies.priceEach * 2,
   replies: 2,
 };
 
-// ── Bundle pack — one-time purchase, mixed credits ──────────────────────────
+// ── Legacy bundle export ──────────────────────────────────────────────────────
+// No special bundle discount is assumed here. This simply derives from the
+// current central prices so it cannot drift.
+
 export const BUNDLE_PACK = {
   mode: "bundle_pack" as const,
-  price: 1000,          // $10.00 in cents
-  credits: 2,           // regular reading credits
-  jxlCredits: 1,        // JXL credits
-  label: "2 readings + 1 JXL for $10",
+  price: PRICING.reading.price * 2 + PRICING.jxl.price,
+  credits: 2,
+  jxlCredits: 1,
+  label: `2 readings + 1 JXL for ${formatUsd(
+    PRICING.reading.price * 2 + PRICING.jxl.price
+  )}`,
 } as const;
 
-// ── Per-conversation safety wall (unpurchasable hard stop) ────────────────────
-// COUNTED replies only. Included replies do not count toward this.
-// Identical for both features by design. Resets when a new conversation starts.
-export const MAX_COUNTED_REPLIES_PER_CONVERSATION = 8;
+// ── Per-conversation safety wall ──────────────────────────────────────────────
 
-// ── Subscription tiers ────────────────────────────────────────────────────────
-// The two tiers differ ONLY in the grant numbers. Everything else is shared, so
-// there is one shape, not two hand-maintained blocks that can drift.
+export const MAX_REPLIES_PER_CONVERSATION = 8;
+
+// Compatibility alias for older files using the previous constant name.
+// NOTE: the canonical meaning is now 8 TOTAL replies per conversation.
+export const MAX_COUNTED_REPLIES_PER_CONVERSATION =
+  MAX_REPLIES_PER_CONVERSATION;
+
+// ── Membership status ─────────────────────────────────────────────────────────
+
+export type MembershipStatus = "active" | "paused" | "canceled";
+
+export function hasMemberAccess(
+  status: MembershipStatus | string | null | undefined
+): boolean {
+  return status === "active";
+}
+
+// ── Legacy subscription-tier compatibility ────────────────────────────────────
+//
+// AstroProXL now has ONE membership tier.
+// These shapes stay temporarily because the current webhook / older PaywallScreen
+// may still import SUB_TIERS or getSubTier.
+//
+// Both legacy keys intentionally point at the SAME live membership price so an
+// old caller cannot accidentally charge the retired $12/$16 prices.
+//
+// The reading/jxl grant numbers remain temporarily for compatibility with the
+// CURRENT webhook until that webhook is migrated to unlimited-member access.
+// They are NOT the new membership entitlement model.
+
 export type SubTierKey = "sub_base" | "sub_plus";
 
 export interface SubTier {
   key: SubTierKey;
   name: string;
   tagline: string;
-  price: number;          // cents / month
+  price: number;
   displayPrice: string;
-  readings: number;       // reading credits granted (and reset target) per cycle
-  jxl: number;            // JXL credits granted (and reset target) per cycle
+
+  // LEGACY webhook compatibility fields only:
+  readings: number;
+  jxl: number;
+
   repliesPerReading: number;
   repliesPerJxl: number;
-  discountAfterIncluded: number; // 0.5 = 50% off everything once credits run out
+  discountAfterIncluded: number;
   isBestOffer: boolean;
 }
 
 const SHARED = {
-  repliesPerReading: READING_INCLUDED_REPLIES, // 1
-  repliesPerJxl: 3,
-  discountAfterIncluded: 0.5,
+  // Members can reply up to the 8-reply conversation wall without purchasing
+  // individual reply credits.
+  repliesPerReading: MAX_REPLIES_PER_CONVERSATION,
+  repliesPerJxl: MAX_REPLIES_PER_CONVERSATION,
+
+  // No paid "extras" model for active members under the current membership.
+  discountAfterIncluded: 0,
 };
+
+const LEGACY_MEMBERSHIP_TAGLINE =
+  "Unlimited General Readings + JXL · up to 8 replies per conversation · members-only access";
 
 export const SUB_TIERS: Record<SubTierKey, SubTier> = {
   sub_base: {
     key: "sub_base",
-    name: "AstroXL",
-    tagline: "4 readings + 4 JXL every month · 50% off extras · no cooldowns · free downloads",
-    price: 1200,
-    displayPrice: "$12/mo",
+    name: "AstroProXL Membership",
+    tagline: LEGACY_MEMBERSHIP_TAGLINE,
+    price: PRICING.membership.price,
+    displayPrice: `${formatUsd(PRICING.membership.price)}/mo`,
+
+    // Temporary only until webhook migration.
     readings: 4,
     jxl: 4,
-    ...SHARED,
-    isBestOffer: false,
-  },
-  sub_plus: {
-    key: "sub_plus",
-    name: "AstroXL Plus",
-    tagline: "8 readings + 8 JXL every month · 50% off extras · no cooldowns · free downloads",
-    price: 1600,
-    displayPrice: "$16/mo",
-    readings: 8,
-    jxl: 8,
+
     ...SHARED,
     isBestOffer: true,
   },
+
+  sub_plus: {
+    key: "sub_plus",
+    name: "AstroProXL Membership",
+    tagline: LEGACY_MEMBERSHIP_TAGLINE,
+    price: PRICING.membership.price,
+    displayPrice: `${formatUsd(PRICING.membership.price)}/mo`,
+
+    // Temporary only until webhook migration.
+    readings: 8,
+    jxl: 8,
+
+    ...SHARED,
+    isBestOffer: false,
+  },
 };
 
-/** Look up a tier by the key stored in Stripe/Clerk metadata. Defaults to base. */
+/**
+ * Compatibility helper for older webhook/UI code.
+ * New code should not select membership tiers.
+ */
 export function getSubTier(key: string | undefined): SubTier {
   return key === "sub_plus" ? SUB_TIERS.sub_plus : SUB_TIERS.sub_base;
 }
 
 /**
- * Renewal reset: bring the balance UP to the plan amount, never DOWN.
- * Included credits don't stack month to month (a light user resets to the plan
- * amount), but a user who bought top-ups above the plan keeps them.
+ * Legacy renewal helper.
+ * The new membership model is unlimited and should not need monthly credit
+ * resets once the webhook has been migrated.
  */
-export function renewalCredits(currentBalance: number, planAmount: number): number {
+export function renewalCredits(
+  currentBalance: number,
+  planAmount: number
+): number {
   return Math.max(currentBalance, planAmount);
 }
 
-// ── First-purchase discount (à la carte, non-subscriber) ──────────────────────
-// Two independent one-time flags. Using the first regular-reading discount does
-// NOT consume the first JXL discount, and vice versa. The webhook stamps the
-// matching flag once the discounted purchase completes.
+// ── Legacy member-extra pricing helper ────────────────────────────────────────
+// Active members no longer use a discounted-extra model. Keep the function so
+// old imports compile; it now simply returns the normal price.
 
 export function subscriberExtraPrice(basePrice: number): number {
-  // Once a subscriber's included credits are gone, everything is 50% off.
-  return Math.round(basePrice * (1 - SHARED.discountAfterIncluded));
+  return basePrice;
 }
 
-// ── Reply bands & discounted tail ─────────────────────────────────────────────
-// The per-conversation reply model. Applies to BOTH regular readings and JXL.
+// ── Member reply compatibility ────────────────────────────────────────────────
 //
-//   Non-subscriber: included replies free (1 regular / 2 JXL), then buys
-//     reply-packs up to the wall.
-//   Subscriber: FLAT 4 free per conversation (replaces the 1/2 included), then
-//     replies 5–8 come from the paid pool, sold as a one-time discounted tail.
-//   Everyone: hard wall at 8 counted replies (free + paid), fresh each convo.
+// New rule: members can use up to 8 replies per conversation.
+// This old constant is preserved so existing reply logic can move toward the
+// correct member allowance without breaking imports.
 
-export const SUBSCRIBER_FREE_REPLIES = 4;   // subscriber free band, both features
+export const SUBSCRIBER_FREE_REPLIES = MAX_REPLIES_PER_CONVERSATION;
 
-// The discounted tail — bought once at reply 5, grants 4 replies into the
-// PERSISTENT pool (jxlReplyCredits / replyCredits). Carries across conversations.
-// Prices are already 50% off the à la carte rate (2 packs' worth for one).
+// Deprecated compatibility object.
+// Under the current model, members should never need to purchase a reply "tail"
+// before reaching the 8-reply hard wall. Keep the old shape until all consumers
+// are migrated, then remove it.
+
 export const SUBSCRIBER_TAIL = {
   regular: {
     mode: "sub_reply_tail_regular" as const,
-    price: 200,        // $2.00 — normally 2×$2=$4, 50% off
-    replies: 4,        // unlocks replies 5–8
+    price: PRICING.replies.priceEach * 4,
+    replies: 4,
   },
+
   jxl: {
     mode: "sub_reply_tail_jxl" as const,
-    price: 300,        // $3.00 — normally 2×$3=$6, 50% off
+    price: PRICING.replies.priceEach * 4,
     replies: 4,
   },
 } as const;

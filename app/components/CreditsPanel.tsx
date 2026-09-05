@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { ChevronLeft, Minus, Plus } from "lucide-react";
 import StarfieldBackground from "./StarfieldBackground";
-import { PRICING, formatUsd, getSubTier, SUB_TIERS } from "@/lib/paywallConfig";
+import { PRICING, formatUsd } from "@/lib/paywallConfig";
 
 /* ─────────────────────────────────────────────
    Products
@@ -51,24 +51,20 @@ interface Balance {
 
 const MEMBERSHIP_FEATURES = [
   {
-    title: "Unlimited Readings & Replies",
-    copy: "Unlimited access to JXL & General Readings with replies.",
+    title: "Unlimited Readings + JXL",
+    copy: "Unlimited General Readings and JXL sessions, with up to 8 replies per conversation.",
   },
   {
-    title: "Commission Eligible (request only)",
-    copy: "Earn 1–5% recurring commission with subscription referrals.",
-  },
-  {
-    title: "Members-Only Features (beta)",
-    copy: "Unlock experiences and tools only XL members can access.",
+    title: "Members-Only Features",
+    copy: "Unlock experiences, tools, and content reserved for XL members.",
   },
   {
     title: "Save Your Readings (beta)",
     copy: "Save your reading synopsis so you don't forget.",
   },
   {
-    title: "Lowered Cooldowns",
-    copy: "More readings, less cooldowns.",
+    title: "Commission Eligible (request only)",
+    copy: "Earn 1–5% recurring commission with subscription referrals.",
   },
   {
     title: "Member Feedback Box",
@@ -119,7 +115,6 @@ export default function CreditsPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [balance, setBalance] = useState<Balance | null>(null);
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
 
   /* Current balances */
   useEffect(() => {
@@ -184,25 +179,23 @@ export default function CreditsPanel({
     }
   };
 
-  /* ── Membership entry ── */
+  /* ── Membership checkout ── */
   const handleGetAccess = async () => {
     setLoading(true);
     setError("");
-    try {
-      // Get the selected tier
-      const tierKey = billingCycle === "yearly" ? "sub_plus" : "sub_base";
-      const tier = getSubTier(tierKey);
 
+    try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "subscription",
-          tier: tierKey,
           returnUrl: `${window.location.origin}/reading/intake`,
         }),
       });
+
       const data = await res.json();
+
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -239,29 +232,10 @@ export default function CreditsPanel({
             <span style={C.rightBracketBottom} />
           </div>
 
-          <button
-            type="button"
-            onClick={() => setBillingCycle("monthly")}
-            style={{
-              ...C.membershipPriceLeft,
-              ...(billingCycle === "monthly" ? C.membershipPriceActive : C.membershipPriceInactive),
-            }}
-          >
-            {formatUsd(SUB_TIERS.sub_base.price)}
+          <div style={C.membershipPrice}>
+            {formatUsd(PRICING.membership.price)}
             <span style={C.priceUnit}>/mo</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setBillingCycle("yearly")}
-            style={{
-              ...C.membershipPriceRight,
-              ...(billingCycle === "yearly" ? C.membershipPriceActive : C.membershipPriceInactive),
-            }}
-          >
-            {formatUsd(SUB_TIERS.sub_plus.price)}
-            <span style={C.priceUnit}>/mo</span>
-          </button>
+          </div>
 
           <div style={C.membershipTitle}>MEMBERSHIP</div>
 
@@ -297,38 +271,6 @@ export default function CreditsPanel({
             {!reducedMotion && !loading && <span style={C.shimmerSweep} />}
           </button>
         </section>
-
-        {/* ── BILLING TOGGLE ── */}
-        <div style={C.billingWrap}>
-          <div style={C.billingToggleRow}>
-            <button
-              type="button"
-              onClick={() => setBillingCycle("monthly")}
-              style={{ ...C.billingLabel, ...(billingCycle === "monthly" ? C.billingLabelActive : C.billingLabelInactive) }}
-            >
-              Base
-            </button>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={billingCycle === "yearly"}
-              aria-label="Toggle subscription tier"
-              onClick={() =>
-                setBillingCycle((current) => (current === "monthly" ? "yearly" : "monthly"))
-              }
-              style={{ ...C.billingSwitch, ...(billingCycle === "yearly" ? C.billingSwitchOn : {}) }}
-            >
-              <span style={{ ...C.billingKnob, ...(billingCycle === "yearly" ? C.billingKnobOn : {}), ...(!reducedMotion ? C.billingKnobPulse : {}) }} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setBillingCycle("yearly")}
-              style={{ ...C.billingLabel, ...(billingCycle === "yearly" ? C.billingLabelActive : C.billingLabelInactive) }}
-            >
-              Plus
-            </button>
-          </div>
-        </div>
 
         {/* ── PRODUCTS ── */}
         <div style={C.products}>
@@ -421,10 +363,6 @@ export default function CreditsPanel({
           @keyframes membership-marquee {
             from { transform: translateY(0); }
             to   { transform: translateY(-50%); }
-          }
-          @keyframes knob-pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.0); }
-            50%      { box-shadow: 0 0 7px 2px rgba(251,191,36,0.5); }
           }
           @keyframes checkout-pulse {
             0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.22), 0 0 14px rgba(45,212,191,0.28); }
@@ -522,22 +460,20 @@ const STYLES: Record<string, React.CSSProperties> = {
   rightBracketTop: { position: "absolute", right: 0, top: 0, width: 52, height: 1.5, background: GOLD },
   rightBracketBottom: { position: "absolute", right: 0, bottom: 0, width: 52, height: 1.5, background: GOLD },
 
-  membershipPriceLeft: {
-    position: "absolute", left: -2, bottom: -4, border: "none", background: "transparent",
-    padding: "6px 4px", fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
+  membershipPrice: {
+    position: "absolute",
+    left: "50%",
+    bottom: 58,
+    transform: "translateX(-50%)",
+    padding: "4px 8px",
+    color: "#fcd34d",
+    fontSize: 14,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
     fontVariantNumeric: "tabular-nums",
-  },
-  membershipPriceRight: {
-    position: "absolute", right: -2, bottom: -4, border: "none", background: "transparent",
-    padding: "6px 4px", fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
-    fontVariantNumeric: "tabular-nums",
-  },
-  priceUnit: { fontSize: 10, fontWeight: 600, opacity: 0.8, marginLeft: 1 },
-  membershipPriceActive: {
-    color: "#fcd34d", opacity: 1, filter: "blur(0px)",
     textShadow: "0 2px 8px rgba(0,0,0,0.85), 0 0 10px rgba(251,191,36,0.28)",
+    whiteSpace: "nowrap",
   },
-  membershipPriceInactive: { color: "#7c8aa3", opacity: 0.5, filter: "blur(0.6px)" },
 
   membershipTitle: {
     position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3,
@@ -590,29 +526,6 @@ const STYLES: Record<string, React.CSSProperties> = {
     pointerEvents: "none",
   },
 
-  billingWrap: {
-    display: "flex", flexDirection: "column", alignItems: "center", margin: "16px 0 12px",
-  },
-  billingToggleRow: { display: "flex", alignItems: "center", gap: 14 },
-  billingLabel: {
-    border: "none", background: "transparent", padding: "4px 4px", fontSize: 14, fontWeight: 700,
-    color: "#7c8aa3", letterSpacing: "0.04em", cursor: "pointer",
-    transition: "filter 0.2s ease, opacity 0.2s ease, color 0.2s ease",
-  },
-  billingLabelActive: { color: "#fde68a", opacity: 1, filter: "blur(0)", textShadow: SHADOW_TEXT },
-  billingLabelInactive: { color: "#6b7691", opacity: 0.5, filter: "blur(1px)" },
-  billingSwitch: {
-    width: 46, height: 26, borderRadius: 999, padding: 0, cursor: "pointer",
-    border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.06)", position: "relative",
-    boxShadow: SHADOW_DEEP,
-  },
-  billingSwitchOn: { borderColor: "rgba(251,191,36,0.45)", background: "rgba(251,191,36,0.12)" },
-  billingKnob: {
-    position: "absolute", top: 2, left: 2, width: 20, height: 20, borderRadius: "50%",
-    background: "#fde68a", transition: "left 0.2s ease",
-  },
-  billingKnobOn: { left: 22 },
-  billingKnobPulse: { animation: "knob-pulse 2.4s ease-in-out infinite" },
 
   products: { display: "flex", flexDirection: "column", gap: 14 },
   selector: {

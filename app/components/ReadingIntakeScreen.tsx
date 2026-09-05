@@ -25,7 +25,7 @@ import {
   clearIntake,
   clearReading,
 } from "@/lib/chartStore";
-import { SUB_TIERS } from "@/lib/paywallConfig";
+import { PRICING, formatUsd } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
 import CreditsPanel from "./CreditsPanel";
@@ -360,7 +360,7 @@ setChartStatus("ready");
     const hasCredits = Number(userStatus?.credits ?? 0) > 0;
     const isSubscribed = userStatus?.isSubscribed === true;
     if (!hasCredits && !isSubscribed) {
-      return `${selectedAreaConfig.cta} — $4.00`;
+      return `${selectedAreaConfig.cta} — ${formatUsd(PRICING.reading.price)}`;
     }
     return selectedAreaConfig.cta;
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
@@ -439,7 +439,7 @@ setChartStatus("ready");
         return;
       }
 
-      const readingValue = 4.0;
+      const readingValue = PRICING.reading.price / 100;
       trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
 
       const checkoutRes = await fetch("/api/stripe/checkout", {
@@ -453,8 +453,17 @@ setChartStatus("ready");
         }),
       });
       const checkoutData = await checkoutRes.json();
+
+      // Support both Stripe checkout styles:
+      // - embedded checkout returns clientSecret
+      // - hosted checkout returns url
       if (checkoutData?.clientSecret) {
-        setClientSecret(checkoutData.clientSecret); // opens the embedded modal
+        setClientSecret(checkoutData.clientSecret);
+        return;
+      }
+
+      if (checkoutData?.url) {
+        window.location.href = checkoutData.url;
         return;
       }
 
