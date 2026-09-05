@@ -1463,48 +1463,49 @@ export default function ReadingResultsPage() {
 
   // ─── Touch handler for swipe navigation ──────────────────────
 
-  useEffect(() => {
-    const container = document.querySelector(".results-root");
-    if (!container) return;
+useEffect(() => {
+  const container = document.querySelector(".results-root");
+  if (!container) return;
 
-    let startX = 0;
-    let startY = 0;
-    let isSwiping = false;
+  let startX = 0;
+  let startY = 0;
+  let isSwiping = false;
 
-    const handleTouchStart = (e: TouchEvent) => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      isSwiping = true;
-    };
+  const handleTouchStart = (e: TouchEvent) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    isSwiping = true;
+  };
 
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (!isSwiping) return;
-      isSwiping = false;
+  const handleTouchEnd = (e: TouchEvent) => {
+    if (!isSwiping) return;
+    isSwiping = false;
 
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      const deltaX = endX - startX;
-      const deltaY = endY - startY;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
 
-      if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) return;
+    if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) return;
 
-      if (isVerticalGesture(deltaX, deltaY)) {
-        if (deltaY < -30) {
-          handleSwipeUp();
-        } else if (deltaY > 30) {
-          handleSwipeDown();
-        }
+    if (isVerticalGesture(deltaX, deltaY)) {
+      if (deltaY < -30) {
+        handleSwipeUp();
+      } else if (deltaY > 30) {
+        handleSwipeDown();
       }
-    };
+    }
+  };
 
-    container.addEventListener("touchstart", handleTouchStart, { passive: true });
-    container.addEventListener("touchend", handleTouchEnd, { passive: true });
+  // Use addEventListener with proper typing via type assertion
+  container.addEventListener("touchstart", handleTouchStart as EventListener);
+  container.addEventListener("touchend", handleTouchEnd as EventListener);
 
-    return () => {
-      container.removeEventListener("touchstart", handleTouchStart);
-      container.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded]);
+  return () => {
+    container.removeEventListener("touchstart", handleTouchStart as EventListener);
+    container.removeEventListener("touchend", handleTouchEnd as EventListener);
+  };
+}, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded]);
 
   return (
     <div
