@@ -732,44 +732,13 @@ export default function ReadingResultsPage() {
   const closingSections =
     parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
-  const renderContentWithBadges = (content: string) => {
-    const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
-    return parts.map((part, i) => {
-      const match = part.match(/\[\[DATE:\s*([^\]]+)\]\]/);
-      if (match) {
-        const dateText = match[1].trim();
-        const isRange = dateText.includes("-") || dateText.includes("to");
-        return (
-          <span key={i} className={`date-badge ${isRange ? "date-range" : ""}`}>
-            {dateText}
-          </span>
-        );
-      }
-      return <React.Fragment key={i}>{part}</React.Fragment>;
-    });
-  };
-
-  const splitPredictionLead = (body: string) => {
-    const sentences =
-      body.match(/[^.!?]+[.!?]+(?:["'’”)]*)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
-
-    if (sentences.length <= 2) {
-      return { lead: body.trim(), rest: "" };
-    }
-
-    return {
-      lead: sentences.slice(0, 2).join(" "),
-      rest: sentences.slice(2).join(" "),
-    };
-  };
-
   // ─── Navigation ──────────────────────────────────────────────────
 
-  const goToStage = (stage: ReadingStage) => {
+  const goToStage = useCallback((stage: ReadingStage) => {
     setActiveStage(stage);
-  };
+  }, []);
 
-  const handleSwipeUp = () => {
+  const handleSwipeUp = useCallback(() => {
     switch (activeStage) {
       case 1:
         goToStage(2);
@@ -802,9 +771,9 @@ export default function ReadingResultsPage() {
         }
         break;
     }
-  };
+  }, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage, timingSections.length, directiveSections.length]);
 
-  const handleSwipeDown = () => {
+  const handleSwipeDown = useCallback(() => {
     switch (activeStage) {
       case 2:
         if (contextStep > 1) {
@@ -844,7 +813,7 @@ export default function ReadingResultsPage() {
       default:
         break;
     }
-  };
+  }, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage]);
 
   // ─── Prose drag handler ────────────────────────────────────────
 
@@ -854,7 +823,6 @@ export default function ReadingResultsPage() {
     const container = proseContainerRef.current;
     const track = proseTrackRef.current;
     let startY = 0;
-    let currentY = 0;
     let isDragging = false;
 
     const trackHeight = track.scrollHeight;
@@ -863,7 +831,6 @@ export default function ReadingResultsPage() {
 
     const handleTouchStart = (e: TouchEvent) => {
       startY = e.touches[0].clientY;
-      currentY = startY;
       isDragging = true;
     };
 
@@ -876,7 +843,6 @@ export default function ReadingResultsPage() {
 
     const handleTouchEnd = () => {
       isDragging = false;
-      // Snap to nearest threshold if close
       if (proseProgress > 0.85) {
         setProseProgress(1);
       } else if (proseProgress < 0.15) {
@@ -884,28 +850,104 @@ export default function ReadingResultsPage() {
       }
     };
 
-    container.addEventListener("touchstart", handleTouchStart, { passive: true });
-    container.addEventListener("touchmove", handleTouchMove, { passive: true });
-    container.addEventListener("touchend", handleTouchEnd, { passive: true });
+    container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
+    container.addEventListener("touchmove", handleTouchMove as EventListener, { passive: true });
+    container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
 
     return () => {
-      container.removeEventListener("touchstart", handleTouchStart);
-      container.removeEventListener("touchmove", handleTouchMove);
-      container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchstart", handleTouchStart as EventListener);
+      container.removeEventListener("touchmove", handleTouchMove as EventListener);
+      container.removeEventListener("touchend", handleTouchEnd as EventListener);
     };
-  }, [activeStage, proseProgress]);
+  }, [activeStage]); // Removed proseProgress from deps to prevent tearing down listeners during drag
 
   // ─── Directive drag handler ────────────────────────────────────
 
-  const handleDirectiveDrag = (index: number, offsetX: number, cardWidth: number) => {
+  const handleDirectiveDrag = useCallback((index: number, offsetX: number, cardWidth: number) => {
     if (index !== revealedDirectiveCount) return;
     const threshold = cardWidth * 0.7;
     if (offsetX >= threshold) {
       setRevealedDirectiveCount((n) => Math.min(n + 1, directiveSections.length));
     }
-  };
+  }, [revealedDirectiveCount, directiveSections.length]);
+
+  // ─── Touch handler for swipe navigation ──────────────────────
+
+  useEffect(() => {
+    const container = document.querySelector(".results-root");
+    if (!container) return;
+
+    let startX = 0;
+    let startY = 0;
+    let isSwiping = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      isSwiping = true;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (!isSwiping) return;
+      isSwiping = false;
+
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const deltaX = endX - startX;
+      const deltaY = endY - startY;
+
+      if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) return;
+
+      if (isVerticalGesture(deltaX, deltaY)) {
+        if (deltaY < -30) {
+          handleSwipeUp();
+        } else if (deltaY > 30) {
+          handleSwipeDown();
+        }
+      }
+    };
+
+    container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
+    container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
+
+    return () => {
+      container.removeEventListener("touchstart", handleTouchStart as EventListener);
+      container.removeEventListener("touchend", handleTouchEnd as EventListener);
+    };
+  }, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, handleSwipeUp, handleSwipeDown]);
 
   // ─── Action handlers ───────────────────────────────────────────
+
+  const renderContentWithBadges = (content: string) => {
+    const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
+    return parts.map((part, i) => {
+      const match = part.match(/\[\[DATE:\s*([^\]]+)\]\]/);
+      if (match) {
+        const dateText = match[1].trim();
+        const isRange = dateText.includes("-") || dateText.includes("to");
+        return (
+          <span key={i} className={`date-badge ${isRange ? "date-range" : ""}`}>
+            {dateText}
+          </span>
+        );
+      }
+      return <React.Fragment key={i}>{part}</React.Fragment>;
+    });
+  };
+
+  const splitPredictionLead = (body: string) => {
+    const sentences =
+      body.match(/[^.!?]+[.!?]+(?:["'’”)]*)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
+
+    if (sentences.length <= 2) {
+      return { lead: body.trim(), rest: "" };
+    }
+
+    return {
+      lead: sentences.slice(0, 2).join(" "),
+      rest: sentences.slice(2).join(" "),
+    };
+  };
 
   const handleDownload = async () => {
     if (!reading || !page) return;
@@ -1069,6 +1111,8 @@ export default function ReadingResultsPage() {
     clearIntake();
     router.push("/reading/intake");
   };
+
+  // ─── EARLY RETURN — AFTER ALL HOOKS ──────────────────────────
 
   if (isLoading || !reading || !page) {
     return (
@@ -1263,8 +1307,6 @@ export default function ReadingResultsPage() {
                         onDragEnd={(_, info) => {
                           if (available && info.offset.x >= cardWidth * 0.7) {
                             setRevealedDirectiveCount((n) => Math.min(n + 1, directiveSections.length));
-                          } else if (available) {
-                            // Reset position
                           }
                         }}
                         style={{
@@ -1461,52 +1503,6 @@ export default function ReadingResultsPage() {
     }
   };
 
-  // ─── Touch handler for swipe navigation ──────────────────────
-
-useEffect(() => {
-  const container = document.querySelector(".results-root");
-  if (!container) return;
-
-  let startX = 0;
-  let startY = 0;
-  let isSwiping = false;
-
-  const handleTouchStart = (e: TouchEvent) => {
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    isSwiping = true;
-  };
-
-  const handleTouchEnd = (e: TouchEvent) => {
-    if (!isSwiping) return;
-    isSwiping = false;
-
-    const endX = e.changedTouches[0].clientX;
-    const endY = e.changedTouches[0].clientY;
-    const deltaX = endX - startX;
-    const deltaY = endY - startY;
-
-    if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) return;
-
-    if (isVerticalGesture(deltaX, deltaY)) {
-      if (deltaY < -30) {
-        handleSwipeUp();
-      } else if (deltaY > 30) {
-        handleSwipeDown();
-      }
-    }
-  };
-
-  // Use addEventListener with proper typing via type assertion
-  container.addEventListener("touchstart", handleTouchStart as EventListener);
-  container.addEventListener("touchend", handleTouchEnd as EventListener);
-
-  return () => {
-    container.removeEventListener("touchstart", handleTouchStart as EventListener);
-    container.removeEventListener("touchend", handleTouchEnd as EventListener);
-  };
-}, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded]);
-
   return (
     <div
       className="results-root"
@@ -1521,6 +1517,7 @@ useEffect(() => {
       }}
     >
       <style jsx global>{`
+        /* ... (all CSS styles remain the same) ... */
         html, body {
           overflow: auto !important;
           height: auto !important;
