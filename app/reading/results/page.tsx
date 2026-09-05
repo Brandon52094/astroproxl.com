@@ -547,16 +547,16 @@ export default function ReadingResultsPage() {
   const [tailMode, setTailMode] = useState<"reply_pack" | "sub_reply_tail_regular">("reply_pack");
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
-  const sectionRefs = useRef<Record<SectionId, HTMLDivElement | null>>({
-    title: null,
-    prediction: null,
-    currentState: null,
-    whyNow: null,
-    manifestation: null,
-    timing: null,
-    directive: null,
-    bottomLine: null,
-  });
+  const sectionRefs = useRef<Record<SectionId, HTMLElement | null>>({
+  title: null,
+  prediction: null,
+  currentState: null,
+  whyNow: null,
+  manifestation: null,
+  timing: null,
+  directive: null,
+  bottomLine: null,
+});
   const hasMarkedComplete = useRef(false);
 
   const readingKey = useMemo(() => {
