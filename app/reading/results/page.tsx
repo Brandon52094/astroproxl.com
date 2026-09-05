@@ -49,16 +49,6 @@ type ParsedSection =
     }
   | { kind: "closing"; body: string };
 
-type SectionId =
-  | "title"
-  | "prediction"
-  | "currentState"
-  | "whyNow"
-  | "manifestation"
-  | "timing"
-  | "directive"
-  | "bottomLine";
-
 // ─── ResultsStarfield Component ────────────────────────────────
 
 function ResultsStarfield() {
@@ -534,9 +524,6 @@ export default function ReadingResultsPage() {
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // ── Universal focus state ──
-  const [activeSection, setActiveSection] = useState<SectionId>("title");
-
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
   const [replyCreditsRemaining, setReplyCreditsRemaining] = useState<number | null>(null);
@@ -547,16 +534,6 @@ export default function ReadingResultsPage() {
   const [tailMode, setTailMode] = useState<"reply_pack" | "sub_reply_tail_regular">("reply_pack");
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
-  const sectionRefs = useRef<Record<SectionId, HTMLElement | null>>({
-  title: null,
-  prediction: null,
-  currentState: null,
-  whyNow: null,
-  manifestation: null,
-  timing: null,
-  directive: null,
-  bottomLine: null,
-});
   const hasMarkedComplete = useRef(false);
 
   const readingKey = useMemo(() => {
@@ -706,37 +683,6 @@ export default function ReadingResultsPage() {
     () => (page?.content ? parseReadingSections(page.content) : null),
     [page?.content]
   );
-
-  // ─── Universal section focus observer ─────────────────────────
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const id = entry.target.getAttribute("data-section-id") as SectionId;
-            if (id && id !== activeSection) {
-              setActiveSection(id);
-            }
-          }
-        }
-      },
-      {
-        root: null,
-        threshold: 0.35,
-        rootMargin: "-15% 0px -35% 0px",
-      }
-    );
-
-    // Observe all section refs
-    for (const [id, ref] of Object.entries(sectionRefs.current)) {
-      if (ref) {
-        observer.observe(ref);
-      }
-    }
-
-    return () => observer.disconnect();
-  }, [parsedSections]);
 
   // ─── Group sections ─────────────────────────────────────────────
 
@@ -1349,23 +1295,6 @@ export default function ReadingResultsPage() {
           text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
         }
 
-        /* ─── Universal section focus ──────────────────────────────────── */
-        .reading-focusable {
-          transition: filter 0.6s ease, opacity 0.6s ease, transform 0.6s ease;
-        }
-
-        .reading-article.has-focus .reading-focusable {
-          filter: blur(5px);
-          opacity: 0.18;
-          transform: scale(0.99);
-        }
-
-        .reading-article.has-focus .reading-focusable.is-active {
-          filter: none;
-          opacity: 1;
-          transform: scale(1.015);
-        }
-
         /* ─── Sources ───────────────────────────────────────────────────── */
         .sources-wrap {
           margin-top: 34px;
@@ -1533,20 +1462,6 @@ export default function ReadingResultsPage() {
           .sources-toggle::before {
             animation: none !important;
           }
-
-          .reading-focusable {
-            transition: none !important;
-          }
-
-          .reading-article.has-focus .reading-focusable {
-            filter: none !important;
-            opacity: 1 !important;
-            transform: none !important;
-          }
-
-          .reading-article.has-focus .reading-focusable.is-active {
-            transform: none !important;
-          }
         }
       `}</style>
 
@@ -1580,8 +1495,6 @@ export default function ReadingResultsPage() {
         <div className="mb-4 text-center">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300/80">{reading.topic}</p>
           <motion.h1
-            ref={(el) => { sectionRefs.current.title = el; }}
-            data-section-id="title"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
@@ -1636,172 +1549,79 @@ export default function ReadingResultsPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-          className={`reading-article ${activeSection !== "title" ? "has-focus" : ""}`}
         >
           {parsedSections ? (
             <>
               {/* ── 1. THE PREDICTION ── */}
-{predictionSections.map((section, i) => {
-  const { lead, rest } = splitPredictionLead(section.body);
-  const isActive = activeSection === "prediction";
+              {predictionSections.map((section, i) => {
+                const { lead, rest } = splitPredictionLead(section.body);
 
-  return (
-    <section
-      key={`prediction-${i}`}
-      ref={(el) => {
-        if (el) sectionRefs.current.prediction = el;
-      }}
-      data-section-id="prediction"
-      className={`prediction-feature reading-focusable ${isActive ? "is-active" : ""}`}
-    >
-      <p className="prediction-label">The Prediction</p>
-      <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
-      {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
-    </section>
-  );
-})}
+                return (
+                  <section key={`prediction-${i}`} className="prediction-feature">
+                    <p className="prediction-label">The Prediction</p>
+                    <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
+                    {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
+                  </section>
+                );
+              })}
 
-{/* ── 2. WHERE YOU ARE NOW ── */}
-{currentStateSections.map((section, i) => {
-  const isActive = activeSection === "currentState";
-  return (
-    <section
-      key={`current-${i}`}
-      ref={(el) => {
-        if (el) sectionRefs.current.currentState = el;
-      }}
-      data-section-id="currentState"
-      className={`context-section reading-focusable ${isActive ? "is-active" : ""}`}
-    >
-      <p className="section-label">Where You Are Now</p>
-      <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-    </section>
-  );
-})}
+              {/* ── 2. WHERE YOU ARE NOW ── */}
+              {currentStateSections.map((section, i) => (
+                <section key={`current-${i}`} className="context-section">
+                  <p className="section-label">Where You Are Now</p>
+                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                </section>
+              ))}
 
-{/* ── 3. WHY THIS IS ACTIVE NOW ── */}
-{whyNowSections.map((section, i) => {
-  const isActive = activeSection === "whyNow";
-  return (
-    <section
-      key={`why-${i}`}
-      ref={(el) => {
-        if (el) sectionRefs.current.whyNow = el;
-      }}
-      data-section-id="whyNow"
-      className={`context-section reading-focusable ${isActive ? "is-active" : ""}`}
-    >
-      <p className="section-label">Why This Is Active Now</p>
-      <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-    </section>
-  );
-})}
+              {/* ── 3. WHY THIS IS ACTIVE NOW ── */}
+              {whyNowSections.map((section, i) => (
+                <section key={`why-${i}`} className="context-section">
+                  <p className="section-label">Why This Is Active Now</p>
+                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                </section>
+              ))}
 
-{/* ── 4. HOW THIS IS MOST LIKELY TO SHOW UP ── */}
-{manifestationSections.map((section, i) => {
-  const isActive = activeSection === "manifestation";
-  return (
-    <section
-      key={`manifestation-${i}`}
-      ref={(el) => {
-        if (el) sectionRefs.current.manifestation = el;
-      }}
-      data-section-id="manifestation"
-      className={`context-section reading-focusable ${isActive ? "is-active" : ""}`}
-    >
-      <p className="section-label">How This Is Most Likely To Show Up</p>
-      <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-    </section>
-  );
-})}
+              {/* ── 4. HOW THIS IS MOST LIKELY TO SHOW UP ── */}
+              {manifestationSections.map((section, i) => (
+                <section key={`manifestation-${i}`} className="context-section">
+                  <p className="section-label">How This Is Most Likely To Show Up</p>
+                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                </section>
+              ))}
 
-{/* ── Any additional prose ── */}
-{additionalProseSections.map((section, i) => (
-  <section key={`additional-${i}`} className="context-section reading-focusable">
-    {section.label && <p className="section-label">{section.label}</p>}
-    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-  </section>
-))}
+              {/* ── Any additional prose ── */}
+              {additionalProseSections.map((section, i) => (
+                <section key={`additional-${i}`} className="context-section">
+                  {section.label && <p className="section-label">{section.label}</p>}
+                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                </section>
+              ))}
 
-{/* ── 5. DATED WINDOWS / TIMING ── */}
-{timingSections.length > 0 && (
-  <section
-    ref={(el) => {
-      if (el) sectionRefs.current.timing = el;
-    }}
-    data-section-id="timing"
-    className={`reveal-zone reading-focusable ${activeSection === "timing" ? "is-active" : ""}`}
-  >
-    <p className="reveal-zone-heading">Timing</p>
-    <div className="action-zone-frame">
-      {timingSections.map((section, i) => (
-        <div key={`timing-${i}`} className="action-card window">
-          <div className="action-card-head">
-            <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
-            <span className="action-card-label">
-              {section.date ? "Dated Window" : "Timing"}
-            </span>
-            {section.date && <span className="date-badge">{section.date}</span>}
-            {section.note && <span className="action-card-note">— {section.note}</span>}
-          </div>
-          <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-        </div>
-      ))}
-    </div>
-  </section>
-)}
-
-{/* ── 6. THE DIRECTIVE / YOUR MOVE ── */}
-{directiveSections.length > 0 && (
-  <section
-    ref={(el) => {
-      if (el) sectionRefs.current.directive = el;
-    }}
-    data-section-id="directive"
-    className={`reveal-zone directive-zone reading-focusable ${activeSection === "directive" ? "is-active" : ""}`}
-  >
-    <p className="reveal-zone-heading">Your Move</p>
-    <div className="action-zone-frame">
-      {directiveSections.map((section, i) => {
-        const variant =
-          section.directive === "DROP"
-            ? "drop"
-            : section.directive === "EXECUTE"
-              ? "execute"
-              : section.directive === "LOCK"
-                ? "lock"
-                : "general";
-
-        const visibleLabel =
-          section.directive === "DROP"
-            ? "Drop"
-            : section.directive === "EXECUTE"
-              ? "Execute"
-              : section.directive === "LOCK"
-                ? "Lock In"
-                : "Directive";
-
-        return (
-          <div key={`directive-${i}`} className={`action-card ${variant}`}>
-            <div className="action-card-head">
-              <span className="action-card-label">{visibleLabel}</span>
-              {section.date && <span className="date-badge">{section.date}</span>}
-            </div>
-            <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-          </div>
-        );
-      })}
-    </div>
-  </section>
-)}
+              {/* ── 5. DATED WINDOWS / TIMING ── */}
+              {timingSections.length > 0 && (
+                <section className="reveal-zone">
+                  <p className="reveal-zone-heading">Timing</p>
+                  <div className="action-zone-frame">
+                    {timingSections.map((section, i) => (
+                      <div key={`timing-${i}`} className="action-card window">
+                        <div className="action-card-head">
+                          <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
+                          <span className="action-card-label">
+                            {section.date ? "Dated Window" : "Timing"}
+                          </span>
+                          {section.date && <span className="date-badge">{section.date}</span>}
+                          {section.note && <span className="action-card-note">— {section.note}</span>}
+                        </div>
+                        <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* ── 6. THE DIRECTIVE / YOUR MOVE ── */}
               {directiveSections.length > 0 && (
-                <section
-                  ref={(el) => { sectionRefs.current.directive = el; }}
-                  data-section-id="directive"
-                  className={`reveal-zone directive-zone reading-focusable ${activeSection === "directive" ? "is-active" : ""}`}
-                >
+                <section className="reveal-zone directive-zone">
                   <p className="reveal-zone-heading">Your Move</p>
                   <div className="action-zone-frame">
                     {directiveSections.map((section, i) => {
@@ -1839,11 +1659,7 @@ export default function ReadingResultsPage() {
 
               {/* ── 7. BOTTOM LINE ── */}
               {closingSections.length > 0 && (
-                <div
-                  ref={(el) => { sectionRefs.current.bottomLine = el; }}
-                  data-section-id="bottomLine"
-                  className={`bottom-line-wrap reading-focusable ${activeSection === "bottomLine" ? "is-active" : ""}`}
-                >
+                <div className="bottom-line-wrap">
                   <p className="bottom-line-label">Bottom Line</p>
                   {closingSections.map((section, i) => (
                     <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
@@ -1857,7 +1673,7 @@ export default function ReadingResultsPage() {
 
           {/* ── Sources ── */}
           {page.sources && page.sources.length > 0 && (
-            <div className="sources-wrap reading-focusable">
+            <div className="sources-wrap">
               <button
                 type="button"
                 className={`sources-toggle ${showSources ? "open" : ""}`}
