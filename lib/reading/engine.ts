@@ -134,9 +134,6 @@ const SLOW_PLANETS = new Set(["Saturn", "Uranus", "Neptune", "Pluto"]);
 const FAST_PLANETS = new Set(["Mercury", "Venus", "Mars", "Sun", "Moon"]);
 const ANGULAR_HOUSES = new Set([1, 4, 7, 10]);
 
-// Discovery can be broad upstream, but the synthesis engine applies
-// conservative labels. "EXACT" should actually mean exact/tight.
-// Wider contacts remain available as context without becoming event anchors.
 const ASPECT_ORBS: Record<string, { exact: number; live: number; background: number }> = {
   conjunction:   { exact: 0.5, live: 3.0, background: 6.0 },
   opposition:    { exact: 0.5, live: 3.0, background: 6.0 },
@@ -147,10 +144,6 @@ const ASPECT_ORBS: Record<string, { exact: number; live: number; background: num
   quincunx:      { exact: 0.4, live: 1.5, background: 3.0 },
 };
 
-// Forward-looking window (days) for a transit's exact date to still count as
-// usable for a dated window. Must stay in sync with buildValidDateIndex's
-// window in lib/validateReadingDates.ts — widening one without the other
-// causes the model to surface dates the provenance validator then rejects.
 export const FORWARD_WINDOW_DAYS = 60;
 
 const SIGN_INDEX: Record<string, number> = {
@@ -195,10 +188,6 @@ const NATAL_ASPECT_PRIORITY: Record<string, number> = {
   Pluto: 4,
 };
 
-// ── EDIT 1: Body-weighting constants ──
-// Significance of a *transiting* body when deciding what may anchor the reading.
-// Luminaries and angles outrank planets; planets outrank asteroids and points.
-// Stops a tight asteroid contact from outranking a luminary on an angle.
 const SPINE_BODY_WEIGHT: Record<string, number> = {
   Sun: 100, Moon: 100,
   Ascendant: 100, Midheaven: 100, Descendant: 100, "Imum Coeli": 100,
@@ -209,9 +198,6 @@ const SPINE_BODY_WEIGHT: Record<string, number> = {
   Lilith: 20, Pallas: 15, Ceres: 15, Juno: 15, Vesta: 15,
 };
 
-// Minimum significance for a transiting body to anchor a priority-1
-// "major life event" ANGLE ACTIVATION spine. Asteroids/minor points fall short
-// and remain available as context instead of hijacking the headline.
 const SPINE_ANCHOR_MIN_WEIGHT = 50;
 
 function spineBodyWeight(name: string): number {
@@ -228,33 +214,22 @@ function normalizeLongitude(longitude: number): number {
 
 function angularDistance(a: number, b: number): number {
   let diff = Math.abs(normalizeLongitude(a) - normalizeLongitude(b));
-
-  if (diff > 180) {
-    diff = 360 - diff;
-  }
-
+  if (diff > 180) diff = 360 - diff;
   return diff;
 }
 
 function parseDegreeInSign(degree: string): number | null {
   const match = degree.match(/(\d+(?:\.\d+)?)°(?:\s*(\d+(?:\.\d+)?)')?/);
-
   if (!match) return null;
-
   const degrees = Number(match[1]);
   const minutes = Number(match[2] ?? 0);
-
   return degrees + minutes / 60;
 }
 
 function placementToLongitude(sign: string, degree: string): number | null {
   const signIndex = SIGN_INDEX[sign];
   const degreeInSign = parseDegreeInSign(degree);
-
-  if (signIndex === undefined || degreeInSign === null) {
-    return null;
-  }
-
+  if (signIndex === undefined || degreeInSign === null) return null;
   return normalizeLongitude(signIndex * 30 + degreeInSign);
 }
 
@@ -270,23 +245,15 @@ function findPredictiveHit(
     }
   | null {
   let best: { pointName: string; aspect: string; orb: number } | null = null;
-
   for (const point of points) {
     const distance = angularDistance(point.longitude, targetLongitude);
-
     for (const aspect of PREDICTIVE_ASPECTS) {
       const orb = Math.abs(distance - aspect.angle);
-
       if (orb <= maxOrb && (!best || orb < best.orb)) {
-        best = {
-          pointName: point.name,
-          aspect: aspect.name,
-          orb,
-        };
+        best = { pointName: point.name, aspect: aspect.name, orb };
       }
     }
   }
-
   return best;
 }
 
@@ -297,57 +264,25 @@ function scoreTransitAspect(
   profectionHouse: number
 ): number {
   let score = 0;
-
   const band = a.band?.toUpperCase();
-
   if (band === "EXACT") score += 50;
   else if (band === "LIVE") score += 30;
   else if (band === "BACKGROUND") score += 5;
-
-  if (a.natalHouse != null && topic.relevantHouses.has(a.natalHouse)) {
-    score += 35;
-  }
-
-  if (topic.relevantPlanets.has(a.natalPlanet)) {
-    score += 20;
-  }
-
-  if (topic.relevantPlanets.has(a.transitPlanet)) {
-    score += 15;
-  }
-
-  if (topic.relevantAspects.has(a.aspectType?.toLowerCase() || "")) {
-    score += 15;
-  }
-
-  if (a.natalPlanet === timeLord) {
-    score += 30;
-  }
-
-  if (a.natalHouse != null && a.natalHouse === profectionHouse) {
-    score += 20;
-  }
-
-  if (a.isApplying) {
-    score += 10;
-  }
-
-  if (SLOW_PLANETS.has(a.transitPlanet) && PERSONAL_PLANETS.has(a.natalPlanet)) {
-    score += 10;
-  }
-
-  // ── EDIT 2: Weight the transiting body in topic scoring ──
-  // Significance of the transiting body itself (luminary > planet > asteroid).
+  if (a.natalHouse != null && topic.relevantHouses.has(a.natalHouse)) score += 35;
+  if (topic.relevantPlanets.has(a.natalPlanet)) score += 20;
+  if (topic.relevantPlanets.has(a.transitPlanet)) score += 15;
+  if (topic.relevantAspects.has(a.aspectType?.toLowerCase() || "")) score += 15;
+  if (a.natalPlanet === timeLord) score += 30;
+  if (a.natalHouse != null && a.natalHouse === profectionHouse) score += 20;
+  if (a.isApplying) score += 10;
+  if (SLOW_PLANETS.has(a.transitPlanet) && PERSONAL_PLANETS.has(a.natalPlanet)) score += 10;
   score += spineBodyWeight(a.transitPlanet) / 10;
-
-  // Within the same category, tighter always wins.
   score -= a.orbDegrees;
-
   return score;
 }
 
 // ============================================================
-// FILTER TRANSITS BY TOPIC  (now reads from TopicConfig)
+// FILTER TRANSITS BY TOPIC
 // ============================================================
 
 function filterTransitsByTopic(
@@ -367,48 +302,30 @@ function filterTransitsByTopic(
   );
 
   let filtered = personalAspects.filter((a) => {
-    const isRelevantHouse =
-      a.natalHouse != null &&
-      relevantHouses.has(a.natalHouse);
-
-    const isRelevantAspect =
-      relevantAspects.has(a.aspectType?.toLowerCase() || "");
-
+    const isRelevantHouse = a.natalHouse != null && relevantHouses.has(a.natalHouse);
+    const isRelevantAspect = relevantAspects.has(a.aspectType?.toLowerCase() || "");
     return isRelevantHouse && isRelevantAspect;
   });
 
   if (filtered.length === 0) {
     filtered = personalAspects.filter((a) => {
-      const isRelevantPlanet =
-        relevantPlanets.has(a.transitPlanet) ||
-        relevantPlanets.has(a.natalPlanet);
-
-      const isRelevantAspect =
-        relevantAspects.has(a.aspectType?.toLowerCase() || "");
-
+      const isRelevantPlanet = relevantPlanets.has(a.transitPlanet) || relevantPlanets.has(a.natalPlanet);
+      const isRelevantAspect = relevantAspects.has(a.aspectType?.toLowerCase() || "");
       return isRelevantPlanet && isRelevantAspect;
     });
   }
 
   if (filtered.length === 0) {
-    filtered = personalAspects.filter(
-      (a) => a.natalHouse === profectionHouse
-    );
+    filtered = personalAspects.filter((a) => a.natalHouse === profectionHouse);
   }
 
-  // Final fallback stays deterministic.
-  // We would rather return the strongest evidence repeatedly
-  // than a different answer because Math.random() fired differently.
   const pool = filtered.length > 0 ? filtered : personalAspects;
-
-  // ── EDIT 3: Stop truncating evidence to 6 ──
   const ranked = [...pool].sort(
     (a, b) =>
       scoreTransitAspect(b, topic, timeLord, profectionHouse) -
       scoreTransitAspect(a, topic, timeLord, profectionHouse)
   );
 
-  // Never drop EXACT/LIVE evidence — those are load-bearing. Cap only BACKGROUND.
   const strong = ranked.filter(
     (a) => a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE"
   );
@@ -423,32 +340,22 @@ function filterTransitsByTopic(
 
 export function validateAndFilterAspects(aspects: TransitAspect[] | undefined): TransitAspect[] {
   if (!aspects?.length) return [];
-
   const valid: TransitAspect[] = [];
-
   for (const a of aspects) {
     const aspectType = a.aspectType?.toLowerCase() || "conjunction";
-
     const orbs = ASPECT_ORBS[aspectType] || ASPECT_ORBS.conjunction;
-
     let band: TransitAspect["band"];
-
-if (a.orbDegrees <= orbs.exact) {
-  band = "exact";
-} else if (a.orbDegrees <= orbs.live) {
-  band = "live";
-} else if (a.orbDegrees <= orbs.background) {
-  band = "background";
-} else {
-  continue;
-}
-
- valid.push({
-      ...a,
-      band,
-    });
+    if (a.orbDegrees <= orbs.exact) {
+      band = "exact";
+    } else if (a.orbDegrees <= orbs.live) {
+      band = "live";
+    } else if (a.orbDegrees <= orbs.background) {
+      band = "background";
+    } else {
+      continue;
+    }
+    valid.push({ ...a, band });
   }
-
   return valid;
 }
 
@@ -508,9 +415,6 @@ function determineSpine(
     }
   }
 
-  // ── EDIT 4: Sort the personal array by significance ──
-  // Order personal contacts by significance so the checks below select the
-  // strongest available contact rather than whichever arrived first.
   personal.sort((a, b) => {
     const wA = spineBodyWeight(a.transitPlanet);
     const wB = spineBodyWeight(b.transitPlanet);
@@ -518,10 +422,6 @@ function determineSpine(
     return a.orbDegrees - b.orbDegrees;
   });
 
-  // ── EDIT 5: Gate and sort CHECK 1 by body weight ──
-  // CHECK 1: TRANSIT TO ANGLE
-  // Only a significant transiting body may anchor a "major life event" spine.
-  // An asteroid at a tight orb must not outrank a luminary on an angle.
   if (transitsToAngles && transitsToAngles.length > 0) {
     const exactAngles = transitsToAngles
       .filter((a) => a.orb < 2 && spineBodyWeight(a.transitPlanet) >= SPINE_ANCHOR_MIN_WEIGHT)
@@ -547,43 +447,21 @@ function determineSpine(
     }
   }
 
-  // CHECK 2: CRITICAL MASS
-  //
-  // A critical-mass hit means three independent predictive layers
-  // converge on the SAME natal target:
-  //   1. active transit
-  //   2. secondary progression
-  //   3. solar arc
-  //
-  // Progressions and solar arcs are evaluated numerically in 360° longitude,
-  // not by parsing display strings.
   for (const a of personal) {
     const natalPlacement = natalPlanets.find((p) => p.name === a.natalPlanet);
-
     if (!natalPlacement) continue;
-
     const natalLongitude = placementToLongitude(natalPlacement.sign, natalPlacement.degree);
-
     if (natalLongitude === null) continue;
-
     const progHit = findPredictiveHit(
-      (progressions || []).map((p) => ({
-        name: p.name,
-        longitude: p.longitude,
-      })),
+      (progressions || []).map((p) => ({ name: p.name, longitude: p.longitude })),
       natalLongitude,
       1.0
     );
-
     const arcHit = findPredictiveHit(
-      (solarArcs || []).map((s) => ({
-        name: s.name,
-        longitude: s.longitude,
-      })),
+      (solarArcs || []).map((s) => ({ name: s.name, longitude: s.longitude })),
       natalLongitude,
       1.0
     );
-
     if (progHit && arcHit) {
       return {
         primary: `CRITICAL MASS: Transit ${a.transitPlanet} + Progression + Solar Arc converge on natal ${a.natalPlanet}`,
@@ -599,7 +477,6 @@ function determineSpine(
     }
   }
 
-  // CHECK 3: TIME LORD ACTIVATION
   for (const a of personal) {
     if (a.natalPlanet === profection.timeLord) {
       return {
@@ -612,7 +489,6 @@ function determineSpine(
     }
   }
 
-  // CHECK 4: SLOW PLANET activating PERSONAL PLANET
   for (const a of personal) {
     if (SLOW_PLANETS.has(a.transitPlanet) && PERSONAL_PLANETS.has(a.natalPlanet)) {
       return {
@@ -625,7 +501,6 @@ function determineSpine(
     }
   }
 
-  // CHECK 5: FAST PLANET EXACT
   const exactFast = personal.filter(
     (a) => a.band?.toUpperCase() === "EXACT" && FAST_PLANETS.has(a.transitPlanet)
   );
@@ -640,7 +515,6 @@ function determineSpine(
     };
   }
 
-  // CHECK 6: Any LIVE aspect
   if (personal.length > 0) {
     const a = personal[0];
     return {
@@ -678,12 +552,10 @@ function classifyTemporal(aspects: TransitAspect[], timeLord: string) {
       background.push(a);
       continue;
     }
-
     if (!isPersonal) {
       background.push(a);
       continue;
     }
-
     if (band === "EXACT") {
       (FAST_PLANETS.has(a.transitPlanet) ? immediate : structural).push(a);
     } else if (band === "LIVE") {
@@ -705,7 +577,7 @@ function filterPersonalTrigger(trigger: any, timeLord: string): any | null {
 }
 
 // ============================================================
-// BUILD PROMPT  (topic is now a TopicConfig, not a string)
+// BUILD PROMPT
 // ============================================================
 
 export function buildReadingPrompt(
@@ -736,7 +608,6 @@ export function buildReadingPrompt(
     dispositorTree,
   } = body;
 
-  // ── TOPIC-SPECIFIC FILTERING ──
   const topicRelevantAspects = filterTransitsByTopic(
     validatedAspects,
     topic,
@@ -744,7 +615,6 @@ export function buildReadingPrompt(
     profection.activatedHouse
   );
 
-  // ── COLLECT TOPIC-RELEVANT DATES ──
   const activeTopicAspects = topicRelevantAspects.filter(
     (a) =>
       (a.band?.toUpperCase() === "EXACT" || a.band?.toUpperCase() === "LIVE") &&
@@ -763,18 +633,9 @@ export function buildReadingPrompt(
 
   const relevantStationDates = (planetaryStations || [])
     .filter((s) => {
-      if (!s.natalPlanetHit) {
-        return false;
-      }
-
-      const hitsPersonal =
-        PERSONAL_PLANETS.has(s.natalPlanetHit) ||
-        s.natalPlanetHit === profection.timeLord;
-
-      const topicRelevant =
-        topic.relevantPlanets.has(s.natalPlanetHit) ||
-        (s.natalHouse != null && topic.relevantHouses.has(s.natalHouse));
-
+      if (!s.natalPlanetHit) return false;
+      const hitsPersonal = PERSONAL_PLANETS.has(s.natalPlanetHit) || s.natalPlanetHit === profection.timeLord;
+      const topicRelevant = topic.relevantPlanets.has(s.natalPlanetHit) || (s.natalHouse != null && topic.relevantHouses.has(s.natalHouse));
       return hitsPersonal && topicRelevant;
     })
     .map((s) => s.stationDate);
@@ -788,33 +649,21 @@ export function buildReadingPrompt(
 
   const angleDates = (transitsToAngles || [])
     .filter((t) => {
-      if (t.orb >= 2 || !t.exactDate) {
-        return false;
-      }
-
-      if (topic.id === "general") {
-        return true;
-      }
-
+      if (t.orb >= 2 || !t.exactDate) return false;
+      if (topic.id === "general") return true;
       const angleHouse = ANGLE_HOUSE_MAP[t.angle];
-
       return angleHouse != null && topic.relevantHouses.has(angleHouse);
     })
     .map((t) => t.exactDate!)
     .filter(Boolean);
 
-  // PRIORITY ORDER: topic-specific aspect dates first, then topic-relevant
-  // trigger/station/angle dates as fallback. Synodic cycle dates excluded.
   const prioritizedDates = [
-    ...aspectDates, // topic-specific — these lead
-    ...(triggerDate ? [triggerDate] : []), // universal, but topic-gated
-    ...relevantStationDates, // universal, but topic-gated
+    ...aspectDates,
+    ...(triggerDate ? [triggerDate] : []),
+    ...relevantStationDates,
     ...angleDates,
   ].filter(Boolean) as string[];
 
-  // Deduplicate while preserving evidence priority.
-  // The model may present chosen windows chronologically,
-  // but selection itself must follow astrological strength.
   const finalDates = [...new Set(prioritizedDates)];
 
   console.log(`[DEBUG] Topic: ${topic.id}`);
@@ -1148,16 +997,11 @@ export function buildReadingPrompt(
         NATAL_ASPECT_PRIORITY[a.planetA] ?? 99,
         NATAL_ASPECT_PRIORITY[a.planetB] ?? 99
       );
-
       const priorityB = Math.min(
         NATAL_ASPECT_PRIORITY[b.planetA] ?? 99,
         NATAL_ASPECT_PRIORITY[b.planetB] ?? 99
       );
-
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-
+      if (priorityA !== priorityB) return priorityA - priorityB;
       return a.orbDegrees - b.orbDegrees;
     })
     .slice(0, 15);
@@ -1189,7 +1033,6 @@ export function buildReadingPrompt(
     "HOW TO DELIVER — COMMIT TO THE SPINE",
     "═══════════════════════════════════════════",
     "",
-    // ── EDIT 6: Reframe the spine from command to prior ──
     "The SPINE below is the engine's best estimate of the strongest chart-supported development.",
     "It will usually be the right lead — but your first duty is to answer the user's actual question using the tightest, most significant evidence in the chart.",
     "If the tightest convergence of contacts points elsewhere, follow the evidence and lead there. Prefer luminaries, angles, and personal planets over asteroids and minor points; prefer tighter orbs when choosing what to lead with.",
@@ -1338,10 +1181,15 @@ export function buildReadingPrompt(
     "INTERNAL LENS: THIRD EYE — pattern recognition, insight, interpretation, inner understanding.",
     "",
     "Explain the primary predictive evidence and how the strongest techniques converge.",
-    "Reveal the pattern underneath the prediction rather than dumping astrological data.",
-    "Explain why this development has become important NOW.",
+    "Keep this section to a MAXIMUM of 3 paragraphs.",
+    "Each paragraph should build on the previous one so the section reads as one cohesive explanation, not several separate astrological observations.",
+    "",
+    "Paragraph 1: identify the main activation and why it matters now.",
+    "Paragraph 2: explain the strongest supporting convergence.",
+    "Paragraph 3: connect that convergence back to the user's real-life situation and the prediction.",
     "",
     "Do not repeat Parts 1 or 2 in different words.",
+    "Do not expand every supporting technique into its own paragraph.",
     "Astrology should illuminate the conclusion, not bury it.",
     "",
     "PART 4 — HOW THIS IS MOST LIKELY TO SHOW UP",
@@ -1386,18 +1234,26 @@ export function buildReadingPrompt(
     "PART 7 — BOTTOM LINE",
     "INTERNAL LENS: HEART — integration, compassion, emotional truth, acceptance, connection.",
     "",
-    "Close by returning to the SPINE in plain human language.",
-    "State the central development with conviction, not as a list of possibilities.",
-    "Reduce the reading to the single most important thing the user should understand or carry forward.",
+    "Revisit the user's original question naturally.",
+    "Connect that question directly to the strongest prediction.",
+    "Give enough context that Bottom Line can stand on its own.",
+    "State what the person should ultimately understand or carry forward.",
     "",
-    "Do not introduce a separate new prediction here.",
+    "Do not introduce a brand-new prediction here.",
     "Do not retreat from the confidence used earlier in the reading.",
+    "Do not merely repeat Part 1 word-for-word.",
     "",
-    "When a meaningful unresolved thread genuinely remains, the final sentence may create a natural bridge into a follow-up question.",
-    "The bridge should identify the next layer that could be explored without withholding information from the current reading.",
-    "Never manufacture uncertainty, hide an answer, or leave the reading artificially incomplete just to encourage a follow-up.",
+    "The Bottom Line MUST end with a question that naturally continues the same reading.",
     "",
-    "The reading must feel complete even if the user never asks another question.",
+    "Examples of acceptable shape:",
+    "  'Do you want me to look more closely at how this unfolds once that decision is made?'",
+    "  'Do you want me to look at how the other person is most likely to respond to this shift?'",
+    "  'Do you want me to narrow down what changes first during that timing window?'",
+    "",
+    "Avoid generic: 'Would you like to know more?' or 'Do you have any questions?'",
+    "Never mention credits, subscriptions, free replies, or product mechanics.",
+    "",
+    "The reading must still feel complete before the question.",
     ""
   );
 
@@ -1537,22 +1393,27 @@ export function buildReadingPrompt(
     "PART 7 — BOTTOM LINE",
     "",
     "Integrate the entire reading into one clear final understanding.",
-    "Return to the strongest chart-supported development identified in Part 1.",
     "",
-    "The Bottom Line has two possible functions:",
-    "  1. INTEGRATION — state what matters most and what the user should carry forward.",
-    "  2. BRIDGE — when genuinely useful, identify the most natural unresolved thread that could be explored in a follow-up.",
+    "Follow this structure:",
+    "  1. Revisit the user's original question naturally.",
+    "  2. Connect that question directly to the strongest prediction.",
+    "  3. State what matters most — what the user should understand or carry forward.",
     "",
-    "The bridge is optional.",
-    "Do not end with generic engagement language such as 'Let me know if you have questions.'",
-    "Do not say 'ask a follow-up question' or mention credits, replies, subscriptions, or product mechanics.",
+    "Do not introduce a brand-new prediction here.",
+    "Do not retreat from the confidence used earlier in the reading.",
+    "Do not merely repeat Part 1 word-for-word.",
     "",
-    "A strong bridge names the unresolved layer itself.",
-    "Example shape: 'What remains less settled is how the other person responds once this becomes explicit.'",
+    "The Bottom Line MUST end with a question that naturally continues the same reading.",
     "",
-    "Never withhold an answer from Parts 1-6 in order to create a bridge.",
-    "Never create artificial ambiguity solely to encourage continued engagement.",
-    "The reading must already feel complete before the bridge appears.",
+    "Acceptable continuation questions:",
+    "  'Do you want me to look more closely at how this unfolds once that decision is made?'",
+    "  'Do you want me to look at how the other person is most likely to respond to this shift?'",
+    "  'Do you want me to narrow down what changes first during that timing window?'",
+    "",
+    "AVOID generic: 'Would you like to know more?' or 'Do you have any questions?'",
+    "NEVER mention credits, subscriptions, free replies, or product mechanics.",
+    "",
+    "The reading must feel complete before the question.",
     ""
   );
 
