@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, ChevronDown, CalendarDays } from "lucide-react";
+import { Download, CalendarDays, ChevronDown } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import {
@@ -48,6 +48,8 @@ type ParsedSection =
       body: string;
     }
   | { kind: "closing"; body: string };
+
+type ReadingStage = 1 | 2 | 3 | 4 | 5 | 6;
 
 // ─── ResultsStarfield Component ────────────────────────────────
 
@@ -510,6 +512,12 @@ function parseReadingSections(content: string): ParsedSection[] | null {
   return sawStructuredHeader && sections.length > 0 ? sections : null;
 }
 
+// ─── Touch/Gesture helpers ─────────────────────────────────────
+
+function isVerticalGesture(deltaX: number, deltaY: number): boolean {
+  return Math.abs(deltaY) > Math.abs(deltaX) * 1.25;
+}
+
 // ─── Main Component ─────────────────────────────────────────────
 
 export default function ReadingResultsPage() {
@@ -522,7 +530,13 @@ export default function ReadingResultsPage() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [showGoingDeeper, setShowGoingDeeper] = useState(false);
+
+  // ── Stage state ──
+  // Each reading section is now one clean page. Only the final page has
+  // a second swipe state: Bottom Line first, then Sources + Going Deeper.
+  const [activeStage, setActiveStage] = useState<ReadingStage>(1);
+  const [bottomLineExpanded, setBottomLineExpanded] = useState(false);
+  const [showSources, setShowSources] = useState(false);
 
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -535,8 +549,6 @@ export default function ReadingResultsPage() {
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
-  const bottomLineRef = useRef<HTMLDivElement | null>(null);
-  const goingDeeperTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
@@ -712,38 +724,110 @@ export default function ReadingResultsPage() {
   const closingSections =
     parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
-  // ── Intersection Observer for Bottom Line ──
-  useEffect(() => {
-    if (!bottomLineRef.current) return;
+  // ─── Navigation ──────────────────────────────────────────────────
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            if (goingDeeperTimerRef.current) {
-              clearTimeout(goingDeeperTimerRef.current);
-            }
-            goingDeeperTimerRef.current = setTimeout(() => {
-              setShowGoingDeeper(true);
-            }, 7000);
-          }
+  const goToStage = useCallback((stage: ReadingStage) => {
+    setActiveStage(stage);
+  }, []);
+
+  const handleSwipeUp = useCallback(() => {
+    switch (activeStage) {
+      case 1:
+        goToStage(2);
+        break;
+      case 2:
+        goToStage(3);
+        break;
+      case 3:
+        goToStage(4);
+        break;
+      case 4:
+        goToStage(5);
+        break;
+      case 5:
+        goToStage(6);
+        break;
+      case 6:
+        if (!bottomLineExpanded) {
+          setBottomLineExpanded(true);
         }
-      },
-      {
-        root: null,
-        threshold: 0.5,
-      }
-    );
+        break;
+    }
+  }, [activeStage, bottomLineExpanded, goToStage]);
 
-    observer.observe(bottomLineRef.current);
+  const handleSwipeDown = useCallback(() => {
+    switch (activeStage) {
+      case 2:
+        goToStage(1);
+        break;
+      case 3:
+        goToStage(2);
+        break;
+      case 4:
+        goToStage(3);
+        break;
+      case 5:
+        goToStage(4);
+        break;
+      case 6:
+        if (bottomLineExpanded) {
+          setBottomLineExpanded(false);
+          setShowSources(false);
+        } else {
+          goToStage(5);
+        }
+        break;
+      default:
+        break;
+    }
+  }, [activeStage, bottomLineExpanded, goToStage]);
 
-    return () => {
-      observer.disconnect();
-      if (goingDeeperTimerRef.current) {
-        clearTimeout(goingDeeperTimerRef.current);
+  // ─── Touch handler for swipe navigation ──────────────────────
+
+  useEffect(() => {
+    const container = document.querySelector(".results-root");
+    if (!container) return;
+
+    let startX = 0;
+    let startY = 0;
+    let isSwiping = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      isSwiping = true;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (!isSwiping) return;
+      isSwiping = false;
+
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const deltaX = endX - startX;
+      const deltaY = endY - startY;
+
+      if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) return;
+
+      if (isVerticalGesture(deltaX, deltaY)) {
+        if (deltaY < -30) {
+          handleSwipeUp();
+        } else if (deltaY > 30) {
+          handleSwipeDown();
+        }
       }
     };
-  }, [parsedSections]);
+
+    container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
+    container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
+
+    return () => {
+      container.removeEventListener("touchstart", handleTouchStart as EventListener);
+      container.removeEventListener("touchend", handleTouchEnd as EventListener);
+    };
+  }, [activeStage, handleSwipeUp, handleSwipeDown]);
+
+  // ─── Action handlers ───────────────────────────────────────────
 
   const renderContentWithBadges = (content: string) => {
     const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
@@ -774,6 +858,39 @@ export default function ReadingResultsPage() {
       lead: sentences.slice(0, 2).join(" "),
       rest: sentences.slice(2).join(" "),
     };
+  };
+
+
+  // Keep the Prose page compact enough to behave like one page.
+  // This displays roughly 60% of the generated prose while preserving
+  // complete sentence boundaries instead of cutting a sentence in half.
+  const reduceProseByFortyPercent = (body: string) => {
+    const sentences =
+      body.match(/[^.!?]+[.!?]+(?:["'’”)]*)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
+
+    if (sentences.length <= 1) return body.trim();
+
+    const wordCount = (value: string) =>
+      value.split(/\s+/).filter(Boolean).length;
+
+    const totalWords = wordCount(body);
+    const targetWords = Math.max(1, Math.round(totalWords * 0.6));
+
+    let cumulative = 0;
+    let bestCount = 1;
+    let bestDifference = Number.POSITIVE_INFINITY;
+
+    sentences.forEach((sentence, index) => {
+      cumulative += wordCount(sentence);
+      const difference = Math.abs(cumulative - targetWords);
+
+      if (difference < bestDifference) {
+        bestDifference = difference;
+        bestCount = index + 1;
+      }
+    });
+
+    return sentences.slice(0, bestCount).join(" ");
   };
 
   const handleDownload = async () => {
@@ -939,6 +1056,8 @@ export default function ReadingResultsPage() {
     router.push("/reading/intake");
   };
 
+  // ─── EARLY RETURN — AFTER ALL HOOKS ──────────────────────────
+
   if (isLoading || !reading || !page) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e27" }}>
@@ -956,6 +1075,351 @@ export default function ReadingResultsPage() {
     replyCreditsRemaining !== null &&
     replyCreditsRemaining <= 0;
   const paywallVisible = !isSubscribed && (showPaywall || outOfReplies);
+
+  // ─── Render stages ─────────────────────────────────────────────
+
+  const renderStage1 = () => (
+    <section className="reading-stage" data-stage="1">
+      <div className="reading-stage-inner">
+        {predictionSections.map((section, i) => {
+          const { lead, rest } = splitPredictionLead(section.body);
+
+          return (
+            <div key={`prediction-${i}`} className="prediction-feature">
+              <p className="prediction-label">The Astrological Prediction</p>
+              <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
+              {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+
+  const renderStage2 = () => {
+    const sections = [
+      ...currentStateSections.map((s, i) => ({ key: `current-${i}`, label: "Where You Are Now", body: s.body })),
+      ...whyNowSections.map((s, i) => ({ key: `why-${i}`, label: "Why This Is Active Now", body: s.body })),
+      ...manifestationSections.map((s, i) => ({ key: `manifestation-${i}`, label: "How This Is Most Likely To Show Up", body: s.body })),
+    ];
+
+    return (
+      <section className="reading-stage" data-stage="2">
+        <div className="reading-stage-inner context-stage">
+          {sections.map((s) => (
+            <div key={s.key} className="context-section">
+              <p className="section-label">{s.label}</p>
+              <p className="reading-body">{renderContentWithBadges(s.body)}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  };
+
+  const renderStage3 = () => {
+    const proseContent = additionalProseSections
+      .map((section) => section.body)
+      .join(" ");
+
+    const reducedProseContent = reduceProseByFortyPercent(proseContent);
+
+    return (
+      <section className="reading-stage prose-stage" data-stage="3">
+        <div className="reading-stage-inner prose-static">
+          <p className="reading-body">
+            {renderContentWithBadges(reducedProseContent)}
+          </p>
+        </div>
+      </section>
+    );
+  };
+
+  const renderStage4 = () => (
+    <section className="reading-stage" data-stage="4">
+      <div className="reading-stage-inner">
+        <div className="reveal-zone">
+          <p className="reveal-zone-heading">Timing</p>
+          <div className="action-zone-frame">
+            {timingSections.map((section, i) => (
+              <div key={`timing-${i}`} className="action-card window">
+                <div className="action-card-head">
+                  <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
+                  <span className="action-card-label">
+                    {section.date ? "Dated Window" : "Timing"}
+                  </span>
+                  {section.date && <span className="date-badge">{section.date}</span>}
+                  {section.note && <span className="action-card-note">— {section.note}</span>}
+                </div>
+                <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderStage5 = () => {
+    return (
+      <section className="reading-stage" data-stage="5">
+        <div className="reading-stage-inner">
+          <div className="reveal-zone directive-zone">
+            <p className="reveal-zone-heading">Your Move</p>
+            <div className="action-zone-frame">
+              {directiveSections.map((section, i) => {
+                const variant =
+                  section.directive === "DROP"
+                    ? "drop"
+                    : section.directive === "EXECUTE"
+                      ? "execute"
+                      : section.directive === "LOCK"
+                        ? "lock"
+                        : "general";
+
+                const visibleLabel =
+                  section.directive === "DROP"
+                    ? "Drop"
+                    : section.directive === "EXECUTE"
+                      ? "Execute"
+                      : section.directive === "LOCK"
+                        ? "Lock In"
+                        : "Directive";
+
+                return (
+                  <div key={`directive-${i}`} className={`action-card ${variant}`}>
+                    <div className="action-card-head">
+                      <span className="action-card-label">{visibleLabel}</span>
+                      {section.date && <span className="date-badge">{section.date}</span>}
+                    </div>
+                    <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
+  const renderStage6 = () => {
+    const followUpContent = (
+      <div className="going-deeper-panel">
+        {/* ── Astrological Sources ── */}
+        {page.sources && page.sources.length > 0 && (
+          <div className="sources-wrap">
+            <button
+              type="button"
+              className={`sources-toggle ${showSources ? "open" : ""}`}
+              onClick={() => setShowSources((s) => !s)}
+              aria-expanded={showSources}
+            >
+              <span className="sources-toggle-copy">
+                <span className="sources-toggle-title">Astrological Sources</span>
+                <span className="sources-toggle-subtitle">
+                  See the astrology behind this reading
+                </span>
+              </span>
+
+              <ChevronDown
+                className="sources-chevron h-4 w-4"
+                aria-hidden="true"
+              />
+            </button>
+
+            <AnimatePresence initial={false}>
+              {showSources && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="sources-content"
+                >
+                  <div className="sources-list">
+                    {page.sources.map((src, i) => {
+                      const hasDate =
+                        src.placements.toLowerCase().includes("exact on");
+
+                      return (
+                        <div key={i} className="source-row">
+                          <p className="source-section">
+                            {src.section}
+                            {hasDate && (
+                              <span className="source-dated">⚡ dated</span>
+                            )}
+                          </p>
+
+                          <p className="source-placement">
+                            {src.placements}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        <div className="going-deeper-divider">
+          <div className="h-px flex-1 bg-white/[0.07]" />
+          <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
+          <div className="h-px flex-1 bg-white/[0.07]" />
+        </div>
+
+        {followups.map((f) => (
+          <div key={f.id} className="mb-5">
+            <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
+            <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
+            <div className="reading-body" style={{ fontSize: 15 }}>
+              {renderContentWithBadges(f.content)}
+            </div>
+          </div>
+        ))}
+        <div ref={followupEndRef} />
+
+        {justPurchased && (
+          <div className="purchase-success">
+            ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
+          </div>
+        )}
+
+        {paywallVisible ? (
+          <div className="paywall-card">
+            <p className="paywall-title">
+              {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
+            </p>
+            <p className="paywall-sub">
+              {isSubscribed
+                ? "As a subscriber, 4 more are half-price."
+                : "Keep the conversation going and get even more clarity."}
+            </p>
+            <button
+              type="button"
+              className="paywall-buy"
+              onClick={handleBuyReplyPack}
+              disabled={isPurchasing}
+            >
+              {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
+            </button>
+            {!isSubscribed && (
+              <button
+                type="button"
+                className="paywall-sub-link"
+                onClick={handleSubscribe}
+                disabled={isPurchasing}
+              >
+                or subscribe for more each month
+              </button>
+            )}
+            {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+          </div>
+        ) : (
+          <>
+            <p className="mb-2 px-1 text-[12px] text-slate-500">
+              Don't over think this. Just say what's on your mind.
+            </p>
+            <textarea
+              className="followup-input"
+              rows={3}
+              value={followupQuestion}
+              onChange={(e) => setFollowupQuestion(e.target.value)}
+              placeholder="Ask a follow up…"
+              disabled={isGeneratingFollowup}
+            />
+            {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+            <button
+              type="button"
+              onClick={handleFollowup}
+              disabled={isGeneratingFollowup || !followupQuestion.trim()}
+              className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+            >
+              {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
+            </button>
+
+            <div className="top-actions">
+              <button
+                type="button"
+                className="download-btn"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                aria-label="Download reading"
+              >
+                <Download className="h-5 w-5" />
+              </button>
+              <button type="button" className="done-btn" onClick={handleDone}>
+                Done
+              </button>
+            </div>
+
+            <div className="final-balance-line">
+              <span>{credits?.credits ?? 0} credits remaining</span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {freeRemainingClient} free{" "}
+                {freeRemainingClient === 1 ? "reply" : "replies"} remaining
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    );
+
+    return (
+      <section className={`reading-stage final-stage ${bottomLineExpanded ? "is-expanded" : ""}`} data-stage="6">
+        <div className="reading-stage-inner">
+          <div className="bottom-line-wrap">
+            <p className="bottom-line-label">Bottom Line</p>
+            {closingSections.map((section, i) => (
+              <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
+            ))}
+          </div>
+
+          {!bottomLineExpanded && (
+            <p className="final-stage-cue">Swipe up for sources &amp; Going Deeper</p>
+          )}
+
+          <AnimatePresence initial={false}>
+            {bottomLineExpanded && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+                className="going-deeper-wrapper"
+              >
+                {followUpContent}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </section>
+    );
+  };
+
+  // ─── Stage switcher ────────────────────────────────────────────
+
+  const renderActiveStage = () => {
+    switch (activeStage) {
+      case 1:
+        return renderStage1();
+      case 2:
+        return renderStage2();
+      case 3:
+        return renderStage3();
+      case 4:
+        return renderStage4();
+      case 5:
+        return renderStage5();
+      case 6:
+        return renderStage6();
+      default:
+        return null;
+    }
+  };
 
   return (
     <div
@@ -992,6 +1456,7 @@ export default function ReadingResultsPage() {
           position: relative;
           display: flex;
           align-items: center;
+          scroll-snap-align: start;
         }
 
         .reading-stage-inner {
@@ -1096,17 +1561,43 @@ export default function ReadingResultsPage() {
           justify-content: center;
           align-items: center;
           gap: 6px;
-          flex-wrap: wrap;
+          white-space: nowrap;
           margin-top: 8px;
           font-size: 11px;
           color: #64748b;
           text-align: center;
         }
 
+        @media (max-width: 380px) {
+          .final-balance-line {
+            font-size: 10px;
+          }
+        }
+
         /* ─── Prediction (hero) ─────────────────────────────────────────── */
         .prediction-feature {
           position: relative;
+          isolation: isolate;
+          width: 100%;
+          max-width: 560px;
+          margin: 0 auto;
           padding: 28px 8px 30px;
+          text-align: center;
+        }
+
+        .prediction-feature::before {
+          content: "";
+          position: absolute;
+          inset: -60px -30px;
+          background: radial-gradient(
+            ellipse at center,
+            rgba(94, 234, 212, 0.10),
+            rgba(59, 130, 246, 0.05) 45%,
+            transparent 72%
+          );
+          filter: blur(28px);
+          pointer-events: none;
+          z-index: -1;
         }
 
         .prediction-feature::after {
@@ -1131,7 +1622,7 @@ export default function ReadingResultsPage() {
           letter-spacing: 0.22em;
           text-transform: uppercase;
           color: rgba(94, 234, 212, 0.88);
-          text-align: left;
+          text-align: center;
         }
 
         .prediction-lead {
@@ -1141,7 +1632,7 @@ export default function ReadingResultsPage() {
           font-size: 21px;
           line-height: 1.65;
           color: #f8fafc;
-          text-align: left;
+          text-align: center;
         }
 
         .prediction-support {
@@ -1151,15 +1642,24 @@ export default function ReadingResultsPage() {
           font-size: 15px;
           line-height: 1.85;
           color: #aebbd0;
-          text-align: left;
+          text-align: center;
         }
 
         /* ─── Context stage (Stage 2) ────────────────────────────────── */
+        .context-stage {
+          justify-content: center;
+        }
+
         .context-stage .context-section {
           width: 100%;
-          margin-top: 34px;
-          padding-top: 28px;
+          margin-top: 22px;
+          padding-top: 20px;
           border-top: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .context-stage .reading-body {
+          font-size: 15px;
+          line-height: 1.72;
         }
 
         .context-stage .context-section:first-child {
@@ -1183,12 +1683,164 @@ export default function ReadingResultsPage() {
           margin-top: 10px;
         }
 
-        /* ─── Prose stage ───────────────────────────────────────────────── */
-        .prose-stage .reading-body {
-          margin-top: 0;
+        /* ─── Prose stage (Stage 3) ────────────────────────────────────── */
+.prose-stage {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.prose-window {
+  /* one knob per edge — line, fade, and glass all follow it */
+  --portal-top: 7svh;
+  --portal-bottom: 7svh;
+  position: relative;
+  width: 100%;
+  height: 100svh;
+  overflow: hidden;
+}
+
+.prose-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  width: 100%;
+  padding: 0 2px;
+  will-change: transform;
+  z-index: 2;
+}
+
+.prose-track .reading-body {
+  font-size: 17px;
+  line-height: 2;
+  margin: 0;
+}
+
+/* ── liquid-glass bands: blur peak centered on each line ── */
+.prose-top-glass {
+  position: absolute;
+  top: calc(var(--portal-top) - 7.5svh);
+  left: -8px;
+  right: -8px;
+  height: 15svh;
+  z-index: 4;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+}
+.prose-bottom-glass {
+  position: absolute;
+  bottom: calc(var(--portal-bottom) - 7.5svh);
+  left: -8px;
+  right: -8px;
+  height: 15svh;
+  z-index: 4;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+          mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
+}
+
+/* ── TOP PORTAL ── (color dissolve, no blur here) */
+.prose-top-fade {
+  position: absolute;
+  top: 0;
+  left: -8px;
+  right: -8px;
+  height: var(--portal-top);
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(2,3,12,1) 0%, rgba(2,3,12,.85) 55%, transparent 100%);
+}
+
+.prose-top-line {
+  position: absolute;
+  top: var(--portal-top);
+  left: 2%;
+  right: 2%;
+  height: 1px;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(226,232,255,.16) 16%, rgba(240,245,255,.85) 50%, rgba(226,232,255,.16) 84%, transparent);
+  box-shadow: 0 0 10px rgba(190,214,255,.5), 0 0 26px rgba(120,160,255,.26);
+}
+
+/* ── BOTTOM PORTAL ── */
+.prose-bottom-fade {
+  position: absolute;
+  bottom: 0;
+  left: -8px;
+  right: -8px;
+  height: var(--portal-bottom);
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(13,36,78,.98) 0%, rgba(18,48,92,.8) 55%, transparent 100%);
+}
+
+.prose-bottom-line {
+  position: absolute;
+  bottom: var(--portal-bottom);
+  left: 2%;
+  right: 2%;
+  height: 1px;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(94,234,212,.16) 16%, rgba(150,225,255,.9) 50%, rgba(94,234,212,.16) 84%, transparent);
+  box-shadow: 0 0 10px rgba(120,220,235,.45), 0 0 26px rgba(59,130,246,.2);
+}
+
+/* ── shimmer sweep + star field on each line (no extra DOM) ── */
+.prose-top-line::after,
+.prose-bottom-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -32%;
+  height: 100%;
+  width: 32%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent);
+  filter: blur(1px);
+  animation: prose-sweep 5.5s ease-in-out infinite;
+}
+.prose-top-line::before,
+.prose-bottom-line::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  top: 0;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: .5;
+  box-shadow:
+    30px 6px 0 rgba(255,255,255,.7), 90px -4px 0 rgba(255,255,255,.5),
+    150px 8px 0 rgba(255,255,255,.6), 210px -6px 0 rgba(255,255,255,.45),
+    260px 5px 0 rgba(255,255,255,.6), 60px 10px 0 rgba(255,255,255,.4),
+    180px -9px 0 rgba(255,255,255,.5);
+  animation: prose-twinkle 3.6s ease-in-out infinite;
+}
+@keyframes prose-sweep   { 0% { transform: translateX(0); }   100% { transform: translateX(430%); } }
+@keyframes prose-twinkle { 0%, 100% { opacity: .22; }         50%  { opacity: .85; } }
+
+        /* ─── Prose (Stage 3) — static single page ─────────────────────── */
+        .prose-static {
+          width: 100%;
+          max-width: 560px;
+          margin: 0 auto;
+          justify-content: center;
         }
 
-        /* ─── Timing (teal) ────────────────────────────────────────────── */
+        .prose-static .reading-body {
+          font-size: 16px;
+          line-height: 1.82;
+          color: #dbe4ef;
+        }
+
+        /* ─── Timing (Stage 4) ──────────────────────────────────────────── */
         .reveal-zone {
           width: 100%;
         }
@@ -1221,6 +1873,7 @@ export default function ReadingResultsPage() {
           border-radius: 18px;
           padding: 16px 17px;
           background: rgba(17, 22, 51, 0.46);
+          overflow: hidden;
         }
 
         .action-card + .action-card {
@@ -1229,6 +1882,17 @@ export default function ReadingResultsPage() {
 
         .action-card.window {
           border-color: rgba(94, 234, 212, 0.15);
+        }
+
+        .action-card.is-available {
+          border-color: rgba(94, 234, 212, 0.5);
+          box-shadow: 0 0 30px rgba(94, 234, 212, 0.08);
+          animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow {
+          0%, 100% { box-shadow: 0 0 30px rgba(94, 234, 212, 0.08); }
+          50% { box-shadow: 0 0 45px rgba(94, 234, 212, 0.16); }
         }
 
         .action-card-head {
@@ -1265,7 +1929,49 @@ export default function ReadingResultsPage() {
           white-space: pre-wrap;
         }
 
-        /* ─── Your Move (gold) ──────────────────────────────────────────── */
+        /* ─── Timing veil ────────────────────────────────────────────────── */
+        .timing-veil {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          border: 0;
+          background: linear-gradient(
+            135deg,
+            rgba(157, 177, 205, 0.23),
+            rgba(58, 77, 111, 0.34)
+          );
+          backdrop-filter: blur(16px) saturate(0.75);
+          -webkit-backdrop-filter: blur(16px) saturate(0.75);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: opacity 0.3s ease;
+        }
+
+        .timing-veil.is-locked {
+          cursor: default;
+          opacity: 0.6;
+        }
+
+        .timing-veil:hover:not(.is-locked) {
+          opacity: 0.8;
+        }
+
+        .timing-reveal-label {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: rgba(226, 232, 240, 0.6);
+          background: rgba(0, 0, 0, 0.3);
+          padding: 6px 16px;
+          border-radius: 9999px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* ─── Your Move (Stage 5) ───────────────────────────────────────── */
         .directive-zone {
           margin-top: 28px;
         }
@@ -1310,10 +2016,72 @@ export default function ReadingResultsPage() {
           color: #fbbf24;
         }
 
-        /* ─── Bottom Line ──────────────────────────────────────────────── */
+        .action-card.is-available {
+          border-color: rgba(251, 191, 36, 0.5);
+          box-shadow: 0 0 30px rgba(251, 191, 36, 0.08);
+          animation: pulse-glow-gold 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow-gold {
+          0%, 100% { box-shadow: 0 0 30px rgba(251, 191, 36, 0.08); }
+          50% { box-shadow: 0 0 45px rgba(251, 191, 36, 0.16); }
+        }
+
+        .directive-frost {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background: linear-gradient(
+            135deg,
+            rgba(157, 177, 205, 0.23),
+            rgba(58, 77, 111, 0.34)
+          );
+          backdrop-filter: blur(16px) saturate(0.75);
+          -webkit-backdrop-filter: blur(16px) saturate(0.75);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: grab;
+          touch-action: pan-y;
+        }
+
+        .directive-frost:active {
+          cursor: grabbing;
+        }
+
+        .directive-reveal-label {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: rgba(226, 232, 240, 0.5);
+          background: rgba(0, 0, 0, 0.3);
+          padding: 6px 16px;
+          border-radius: 9999px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          pointer-events: none;
+          user-select: none;
+        }
+
+        /* ─── Bottom Line (Stage 6) ────────────────────────────────────── */
+        .final-stage {
+          overflow: visible;
+          align-items: flex-start;
+        }
+
+        .final-stage .reading-stage-inner {
+          position: relative;
+          min-height: 100svh;
+          justify-content: flex-start;
+          padding-top: calc(28px + env(safe-area-inset-top));
+          padding-bottom: calc(34px + env(safe-area-inset-bottom));
+        }
+
         .bottom-line-wrap {
           width: 100%;
           text-align: center;
+          z-index: 2;
         }
 
         .bottom-line-label {
@@ -1336,6 +2104,141 @@ export default function ReadingResultsPage() {
           text-align: center;
           white-space: pre-wrap;
           text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
+        }
+
+        .going-deeper-wrapper {
+          width: 100%;
+          margin-top: 28px;
+          z-index: 1;
+        }
+
+        .final-stage-cue {
+          margin: 28px auto 0;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: rgba(148, 163, 184, 0.62);
+          text-align: center;
+        }
+
+        .going-deeper-panel {
+          width: 100%;
+        }
+
+        /* ─── Astrological Sources dropdown ─────────────────────────────── */
+        .sources-wrap {
+          width: 100%;
+          margin-bottom: 22px;
+          border: 1px solid rgba(94, 234, 212, 0.16);
+          border-radius: 18px;
+          background: rgba(8, 15, 32, 0.46);
+          overflow: hidden;
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+        }
+
+        .sources-toggle {
+          width: 100%;
+          min-height: 58px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 13px 15px;
+          border: 0;
+          background: transparent;
+          color: #e2e8f0;
+          text-align: left;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .sources-toggle-copy {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .sources-toggle-title {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.92);
+        }
+
+        .sources-toggle-subtitle {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          line-height: 1.4;
+          color: rgba(148, 163, 184, 0.82);
+        }
+
+        .sources-chevron {
+          flex: 0 0 auto;
+          color: rgba(94, 234, 212, 0.72);
+          transition: transform 0.22s ease;
+        }
+
+        .sources-toggle.open .sources-chevron {
+          transform: rotate(180deg);
+        }
+
+        .sources-content {
+          overflow: hidden;
+          text-align: left;
+        }
+
+        .sources-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 0 12px 12px;
+        }
+
+        .source-row {
+          border-radius: 14px;
+          background: rgba(0, 0, 0, 0.25);
+          padding: 11px 12px;
+        }
+
+        .source-section {
+          margin: 0;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1.45;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.8);
+        }
+
+        .source-dated {
+          margin-left: 8px;
+          font-size: 9px;
+          font-weight: 600;
+          letter-spacing: 0.05em;
+          text-transform: none;
+          color: rgba(250, 204, 21, 0.65);
+        }
+
+        .source-placement {
+          margin: 5px 0 0;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 12px;
+          line-height: 1.65;
+          color: rgba(148, 163, 184, 0.92);
+          overflow-wrap: anywhere;
+        }
+
+        .going-deeper-divider {
+          margin-bottom: 16px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
         }
 
         /* ─── Follow-up styles ──────────────────────────────────────────── */
@@ -1424,10 +2327,26 @@ export default function ReadingResultsPage() {
 
         .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
 
+        /* ─── Desktop ────────────────────────────────────────────────────── */
+        @media (min-width: 768px) {
+          .results-root {
+            overflow-y: auto;
+          }
+
+          .reading-stage {
+            min-height: 100vh;
+            scroll-snap-align: start;
+          }
+
+        }
+
         /* ─── Reduced motion ────────────────────────────────────────────── */
         @media (prefers-reduced-motion: reduce) {
-          .sources-toggle::before {
-            animation: none !important;
+          .prediction-feature::before {
+            display: none;
+          }
+          .action-card.is-available {
+            animation: none;
           }
         }
       `}</style>
@@ -1441,152 +2360,8 @@ export default function ReadingResultsPage() {
           minHeight: "100vh",
         }}
       >
-        {/* ── THE READING ── */}
         {parsedSections ? (
-          <>
-            {/* ── STAGE 1: THE ASTROLOGICAL PREDICTION ── */}
-            <section className="reading-stage">
-              <div className="reading-stage-inner">
-                {predictionSections.map((section, i) => {
-                  const { lead, rest } = splitPredictionLead(section.body);
-
-                  return (
-                    <div key={`prediction-${i}`} className="prediction-feature">
-                      <p className="prediction-label">The Astrological Prediction</p>
-                      <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
-                      {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* ── STAGE 2: CONTEXT / MANIFESTATION ── */}
-            <section className="reading-stage">
-              <div className="reading-stage-inner context-stage">
-                {/* WHERE YOU ARE NOW */}
-                {currentStateSections.map((section, i) => (
-                  <div key={`current-${i}`} className="context-section">
-                    <p className="section-label">Where You Are Now</p>
-                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-                  </div>
-                ))}
-
-                {/* WHY THIS IS ACTIVE NOW */}
-                {whyNowSections.map((section, i) => (
-                  <div key={`why-${i}`} className="context-section">
-                    <p className="section-label">Why This Is Active Now</p>
-                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-                  </div>
-                ))}
-
-                {/* HOW THIS IS MOST LIKELY TO SHOW UP */}
-                {manifestationSections.map((section, i) => (
-                  <div key={`manifestation-${i}`} className="context-section">
-                    <p className="section-label">How This Is Most Likely To Show Up</p>
-                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* ── STAGE 3: ADDITIONAL PROSE ── */}
-            {additionalProseSections.length > 0 && (
-              <section className="reading-stage prose-stage">
-                <div className="reading-stage-inner">
-                  <p className="reading-body">
-                    {renderContentWithBadges(
-                      additionalProseSections
-                        .map((section) => section.body)
-                        .join(" ")
-                    )}
-                  </p>
-                </div>
-              </section>
-            )}
-
-            {/* ── STAGE 4: TIMING ── */}
-            {timingSections.length > 0 && (
-              <section className="reading-stage">
-                <div className="reading-stage-inner">
-                  <div className="reveal-zone">
-                    <p className="reveal-zone-heading">Timing</p>
-                    <div className="action-zone-frame">
-                      {timingSections.map((section, i) => (
-                        <div key={`timing-${i}`} className="action-card window">
-                          <div className="action-card-head">
-                            <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
-                            <span className="action-card-label">
-                              {section.date ? "Dated Window" : "Timing"}
-                            </span>
-                            {section.date && <span className="date-badge">{section.date}</span>}
-                            {section.note && <span className="action-card-note">— {section.note}</span>}
-                          </div>
-                          <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* ── STAGE 5: YOUR MOVE ── */}
-            {directiveSections.length > 0 && (
-              <section className="reading-stage">
-                <div className="reading-stage-inner">
-                  <div className="reveal-zone directive-zone">
-                    <p className="reveal-zone-heading">Your Move</p>
-                    <div className="action-zone-frame">
-                      {directiveSections.map((section, i) => {
-                        const variant =
-                          section.directive === "DROP"
-                            ? "drop"
-                            : section.directive === "EXECUTE"
-                              ? "execute"
-                              : section.directive === "LOCK"
-                                ? "lock"
-                                : "general";
-
-                        const visibleLabel =
-                          section.directive === "DROP"
-                            ? "Drop"
-                            : section.directive === "EXECUTE"
-                              ? "Execute"
-                              : section.directive === "LOCK"
-                                ? "Lock In"
-                                : "Directive";
-
-                        return (
-                          <div key={`directive-${i}`} className={`action-card ${variant}`}>
-                            <div className="action-card-head">
-                              <span className="action-card-label">{visibleLabel}</span>
-                              {section.date && <span className="date-badge">{section.date}</span>}
-                            </div>
-                            <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* ── STAGE 6: BOTTOM LINE ── */}
-            {closingSections.length > 0 && (
-              <section className="reading-stage">
-                <div className="reading-stage-inner" ref={bottomLineRef}>
-                  <div className="bottom-line-wrap">
-                    <p className="bottom-line-label">Bottom Line</p>
-                    {closingSections.map((section, i) => (
-                      <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            )}
-          </>
+          renderActiveStage()
         ) : (
           <section className="reading-stage">
             <div className="reading-stage-inner">
@@ -1594,122 +2369,6 @@ export default function ReadingResultsPage() {
             </div>
           </section>
         )}
-
-        {/* ── GOING DEEPER — follow-ups (delayed reveal) ── */}
-        <AnimatePresence>
-          {showGoingDeeper && (
-            <motion.section
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8 }}
-              className="mt-10"
-            >
-              <div className="mb-4 flex items-center gap-3">
-                <div className="h-px flex-1 bg-white/[0.07]" />
-                <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
-                <div className="h-px flex-1 bg-white/[0.07]" />
-              </div>
-
-              {followups.map((f) => (
-                <div key={f.id} className="mb-5">
-                  <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
-                  <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
-                  <div className="reading-body" style={{ fontSize: 15 }}>
-                    {renderContentWithBadges(f.content)}
-                  </div>
-                </div>
-              ))}
-              <div ref={followupEndRef} />
-
-              {justPurchased && (
-                <div className="purchase-success">
-                  ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
-                </div>
-              )}
-
-              {paywallVisible ? (
-                <div className="paywall-card">
-                  <p className="paywall-title">
-                    {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
-                  </p>
-                  <p className="paywall-sub">
-                    {isSubscribed
-                      ? "As a subscriber, 4 more are half-price."
-                      : "Keep the conversation going and get even more clarity."}
-                  </p>
-                  <button
-                    type="button"
-                    className="paywall-buy"
-                    onClick={handleBuyReplyPack}
-                    disabled={isPurchasing}
-                  >
-                    {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
-                  </button>
-                  {!isSubscribed && (
-                    <button
-                      type="button"
-                      className="paywall-sub-link"
-                      onClick={handleSubscribe}
-                      disabled={isPurchasing}
-                    >
-                      or subscribe for more each month
-                    </button>
-                  )}
-                  {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-                </div>
-              ) : (
-                <>
-                  <p className="mb-2 px-1 text-[12px] text-slate-500">
-                    Don't over think this. Just say what's on your mind.
-                  </p>
-                  <textarea
-                    className="followup-input"
-                    rows={3}
-                    value={followupQuestion}
-                    onChange={(e) => setFollowupQuestion(e.target.value)}
-                    placeholder="Ask a follow up…"
-                    disabled={isGeneratingFollowup}
-                  />
-                  {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-                  <button
-                    type="button"
-                    onClick={handleFollowup}
-                    disabled={isGeneratingFollowup || !followupQuestion.trim()}
-                    className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
-                  >
-                    {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
-                  </button>
-
-                  {/* ── Download + Done ── */}
-                  <div className="top-actions">
-                    <button
-                      type="button"
-                      className="download-btn"
-                      onClick={handleDownload}
-                      disabled={isDownloading}
-                      aria-label="Download reading"
-                    >
-                      <Download className="h-5 w-5" />
-                    </button>
-                    <button type="button" className="done-btn" onClick={handleDone}>
-                      Done
-                    </button>
-                  </div>
-
-                  {/* ── Final balance line ── */}
-                  <div className="final-balance-line">
-                    <span>{credits?.credits ?? 0} credits remaining</span>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      {freeRemainingClient} free{" "}
-                      {freeRemainingClient === 1 ? "reply" : "replies"} remaining
-                    </span>
-                  </div>
-                </>
-              )}
-            </motion.section>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* ── Embedded Stripe checkout modal ── */}
