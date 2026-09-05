@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, CalendarDays, ChevronDown } from "lucide-react";
+import { ArrowLeft, Download, ChevronDown, CalendarDays } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import {
@@ -30,28 +30,20 @@ interface UserCredits {
 
 type ParsedSection =
   | { kind: "prediction"; label: string; body: string }
-  | { kind: "currentState"; label: string; body: string }
   | { kind: "whyNow"; label: string; body: string }
   | { kind: "manifestation"; label: string; body: string }
   | { kind: "prose"; label: string; body: string }
-  | {
-      kind: "window";
-      date: string | null;
-      note: string | null;
-      body: string;
-    }
+  | { kind: "window"; date: string; note: string | null; body: string }
   | {
       kind: "directive";
-      directive: "GENERAL" | "DROP" | "EXECUTE" | "LOCK";
+      directive: "DROP" | "EXECUTE" | "LOCK";
       label: string;
       date: string | null;
       body: string;
     }
   | { kind: "closing"; body: string };
 
-type ReadingStage = 1 | 2 | 3 | 4 | 5 | 6;
-
-// ─── ResultsStarfield Component ────────────────────────────────
+// ─── 1. ResultsStarfield Component ────────────────────────────────
 
 function ResultsStarfield() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -101,6 +93,7 @@ function ResultsStarfield() {
     resize();
     window.addEventListener("resize", resize);
 
+    // Three depth layers.
     const parallax: PStar[][] = [];
     const counts = [26, 16, 9];
     const speeds = [0.04, 0.09, 0.16];
@@ -109,6 +102,7 @@ function ResultsStarfield() {
 
     for (let layer = 0; layer < 3; layer++) {
       const stars: PStar[] = [];
+
       for (let i = 0; i < counts[layer]; i++) {
         stars.push({
           x: Math.random(),
@@ -116,10 +110,13 @@ function ResultsStarfield() {
           r: Math.random() * sizes[layer] + 0.3,
         });
       }
+
       parallax.push(stars);
     }
 
+    // Independent twinkling stars.
     const twinkling: TStar[] = [];
+
     for (let i = 0; i < 34; i++) {
       twinkling.push({
         x: Math.random(),
@@ -130,9 +127,11 @@ function ResultsStarfield() {
       });
     }
 
+    // Rare shooting stars.
     const shooters: Shooter[] = [];
     let tick = 0;
     let nextShoot = 360;
+
     let raf = 0;
 
     const frame = () => {
@@ -141,13 +140,16 @@ function ResultsStarfield() {
 
       ctx.clearRect(0, 0, w, h);
 
+      // Parallax stars.
       for (let layer = 0; layer < 3; layer++) {
         for (const star of parallax[layer]) {
           star.x -= speeds[layer] / w;
+
           if (star.x < 0) {
             star.x = 1;
             star.y = Math.random();
           }
+
           ctx.fillStyle = `rgba(219,234,254,${alphas[layer]})`;
           ctx.beginPath();
           ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
@@ -155,9 +157,12 @@ function ResultsStarfield() {
         }
       }
 
+      // Twinkling stars.
       for (const star of twinkling) {
         star.ph += star.sp;
+
         const twinkle = (Math.sin(star.ph) + 1) / 2;
+
         ctx.fillStyle = `rgba(226,232,240,${0.2 + twinkle * 0.6})`;
         ctx.beginPath();
         ctx.arc(
@@ -170,7 +175,9 @@ function ResultsStarfield() {
         ctx.fill();
       }
 
+      // Shooting stars.
       tick++;
+
       if (tick >= nextShoot) {
         shooters.push({
           x: Math.random() * w * 0.7,
@@ -181,33 +188,54 @@ function ResultsStarfield() {
           maxLife: 60 + Math.random() * 20,
           len: Math.random() * 40 + 50,
         });
+
         nextShoot = tick + 360 + Math.random() * 240;
       }
 
       for (let i = shooters.length - 1; i >= 0; i--) {
         const shooter = shooters[i];
+
         shooter.x += shooter.vx;
         shooter.y += shooter.vy;
         shooter.life++;
 
         let fade = 1;
+
         if (shooter.life < 10) {
           fade = shooter.life / 10;
         } else if (shooter.life > shooter.maxLife - 15) {
-          fade = Math.max(0, (shooter.maxLife - shooter.life) / 15);
+          fade = Math.max(
+            0,
+            (shooter.maxLife - shooter.life) / 15
+          );
         }
 
-        const magnitude = Math.sqrt(shooter.vx * shooter.vx + shooter.vy * shooter.vy);
-        const tailX = shooter.x - (shooter.vx / magnitude) * shooter.len;
-        const tailY = shooter.y - (shooter.vy / magnitude) * shooter.len;
+        const magnitude = Math.sqrt(
+          shooter.vx * shooter.vx + shooter.vy * shooter.vy
+        );
 
-        const gradient = ctx.createLinearGradient(shooter.x, shooter.y, tailX, tailY);
-        gradient.addColorStop(0, `rgba(226,232,240,${0.9 * fade})`);
+        const tailX =
+          shooter.x - (shooter.vx / magnitude) * shooter.len;
+        const tailY =
+          shooter.y - (shooter.vy / magnitude) * shooter.len;
+
+        const gradient = ctx.createLinearGradient(
+          shooter.x,
+          shooter.y,
+          tailX,
+          tailY
+        );
+
+        gradient.addColorStop(
+          0,
+          `rgba(226,232,240,${0.9 * fade})`
+        );
         gradient.addColorStop(1, "rgba(147,197,253,0)");
 
         ctx.strokeStyle = gradient;
         ctx.lineWidth = 1.6;
         ctx.lineCap = "round";
+
         ctx.beginPath();
         ctx.moveTo(shooter.x, shooter.y);
         ctx.lineTo(tailX, tailY);
@@ -218,7 +246,11 @@ function ResultsStarfield() {
         ctx.arc(shooter.x, shooter.y, 1.5, 0, Math.PI * 2);
         ctx.fill();
 
-        if (shooter.life >= shooter.maxLife || shooter.x > w + 60 || shooter.y > h + 60) {
+        if (
+          shooter.life >= shooter.maxLife ||
+          shooter.x > w + 60 ||
+          shooter.y > h + 60
+        ) {
           shooters.splice(i, 1);
         }
       }
@@ -243,9 +275,10 @@ function ResultsStarfield() {
   );
 }
 
-// ─── Parser ──────────────────────────────────────────────────────
+// ─── 2. Parser ──────────────────────────────────────────────────────
 
-const INTERNAL_PART_RE = /^\s*Part\s*([1-7])\s*[:—–-]\s*/i;
+const INTERNAL_PART_RE =
+  /^\s*Part\s*(1|2|2B|3|4|5)\s*[:—–-]\s*/i;
 
 const HUMAN_HEADERS = [
   "The Prediction",
@@ -290,7 +323,10 @@ function splitHumanHeader(
     );
 
     if (exact.test(cleaned)) {
-      return { label: header, body: "" };
+      return {
+        label: header,
+        body: "",
+      };
     }
 
     const withColon = new RegExp(
@@ -299,8 +335,12 @@ function splitHumanHeader(
     );
 
     const colonMatch = cleaned.match(withColon);
+
     if (colonMatch) {
-      return { label: header, body: colonMatch[1].trim() };
+      return {
+        label: header,
+        body: colonMatch[1].trim(),
+      };
     }
 
     const withLineBreak = new RegExp(
@@ -309,12 +349,19 @@ function splitHumanHeader(
     );
 
     const lineMatch = cleaned.match(withLineBreak);
+
     if (lineMatch) {
-      return { label: header, body: lineMatch[1].trim() };
+      return {
+        label: header,
+        body: lineMatch[1].trim(),
+      };
     }
   }
 
-  return { label: null, body: cleaned };
+  return {
+    label: null,
+    body: cleaned,
+  };
 }
 
 function splitWindowNote(body: string): { note: string | null; rest: string } {
@@ -328,18 +375,21 @@ function splitWindowNote(body: string): { note: string | null; rest: string } {
 function classifyProseKind(
   label: string,
   isFirst: boolean
-): "prediction" | "currentState" | "whyNow" | "manifestation" | "prose" {
+): "prediction" | "whyNow" | "manifestation" | "prose" {
   const normalized = label.trim().toLowerCase();
 
-  if (normalized === "where you are now") {
-    return "currentState";
-  }
-
-  if (isFirst || normalized === "the prediction") {
+  if (
+    isFirst ||
+    normalized === "the prediction" ||
+    normalized === "where you are now"
+  ) {
     return "prediction";
   }
 
-  if (normalized === "why this is active" || normalized === "why this is active now") {
+  if (
+    normalized === "why this is active" ||
+    normalized === "why this is active now"
+  ) {
     return "whyNow";
   }
 
@@ -360,17 +410,18 @@ function parseReadingSections(content: string): ParsedSection[] | null {
 
   const sections: ParsedSection[] = [];
 
-  let phase: "opening" | "windows" | "directives" | "closing" = "opening";
+  let phase:
+    | "opening"
+    | "windows"
+    | "directives"
+    | "closing" = "opening";
+
   let pendingLabel: string | null = null;
-  let sawStructuredHeader = false;
 
   for (const rawParagraph of paragraphs) {
     const parsedHeader = splitHumanHeader(rawParagraph);
 
-    if (parsedHeader.label) {
-      sawStructuredHeader = true;
-    }
-
+    // Standalone human-facing heading.
     if (parsedHeader.label && !parsedHeader.body) {
       const label = parsedHeader.label;
 
@@ -401,23 +452,6 @@ function parseReadingSections(content: string): ParsedSection[] | null {
 
     if (!para) continue;
 
-    if (labelFromParagraph === "Dated Windows") {
-      phase = "windows";
-      pendingLabel = null;
-    } else if (labelFromParagraph === "The Directive") {
-      phase = "directives";
-      pendingLabel = null;
-    } else if (labelFromParagraph === "Bottom Line") {
-      phase = "closing";
-      pendingLabel = "Bottom Line";
-    }
-
-    if (phase === "closing" || labelFromParagraph === "Bottom Line") {
-      sections.push({ kind: "closing", body: para });
-      pendingLabel = null;
-      continue;
-    }
-
     const isWindow = DATE_LEAD_RE.test(para);
     const isDrop = DROP_RE.test(para);
     const isExecute = EXECUTE_RE.test(para);
@@ -438,6 +472,7 @@ function parseReadingSections(content: string): ParsedSection[] | null {
         });
       } else if (isExecute) {
         const match = para.match(EXECUTE_RE);
+
         sections.push({
           kind: "directive",
           directive: "EXECUTE",
@@ -447,6 +482,7 @@ function parseReadingSections(content: string): ParsedSection[] | null {
         });
       } else {
         const match = para.match(LOCK_RE);
+
         sections.push({
           kind: "directive",
           directive: "LOCK",
@@ -455,10 +491,11 @@ function parseReadingSections(content: string): ParsedSection[] | null {
           body: para.replace(LOCK_RE, "").trim(),
         });
       }
+
       continue;
     }
 
-    if (isWindow) {
+    if (isWindow && phase !== "closing") {
       phase = "windows";
       pendingLabel = null;
 
@@ -468,62 +505,63 @@ function parseReadingSections(content: string): ParsedSection[] | null {
 
       sections.push({
         kind: "window",
-        date: match ? match[1].trim() : null,
+        date: match ? match[1].trim() : "",
         note,
         body: rest.trim(),
       });
+
       continue;
     }
 
-    if (phase === "windows") {
+    if (
+      phase === "closing" ||
+      labelFromParagraph === "Bottom Line"
+    ) {
+      phase = "closing";
+
       sections.push({
-        kind: "window",
-        date: null,
-        note: null,
+        kind: "closing",
         body: para,
       });
+
       pendingLabel = null;
       continue;
     }
 
-    if (phase === "directives") {
-      sections.push({
-        kind: "directive",
-        directive: "GENERAL",
-        label: "Directive",
-        date: null,
-        body: para,
-      });
-      pendingLabel = null;
-      continue;
-    }
-
+    // Normal reading prose.
     const resolvedLabel =
       labelFromParagraph ||
       pendingLabel ||
       (sections.length === 0 ? "The Prediction" : "");
 
-    const kind = classifyProseKind(resolvedLabel, sections.length === 0);
+    const kind = classifyProseKind(
+      resolvedLabel,
+      sections.length === 0
+    );
 
-    sections.push({ kind, label: resolvedLabel, body: para });
+    sections.push({
+      kind,
+      label: resolvedLabel,
+      body: para,
+    });
+
     pendingLabel = null;
   }
 
-  return sawStructuredHeader && sections.length > 0 ? sections : null;
+  const hasStructure =
+    sections.some((s) => s.kind === "window") ||
+    sections.some((s) => s.kind === "directive");
+
+  return hasStructure ? sections : null;
 }
 
-// ─── Touch/Gesture helpers ─────────────────────────────────────
-
-function isVerticalGesture(deltaX: number, deltaY: number): boolean {
-  return Math.abs(deltaY) > Math.abs(deltaX) * 1.25;
-}
-
-// ─── Main Component ─────────────────────────────────────────────
+// ─── 3. Main Component ─────────────────────────────────────────────
 
 export default function ReadingResultsPage() {
   const router = useRouter();
   const [reading, setReading] = useState<StoredReading | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSources, setShowSources] = useState(false);
   const [followups, setFollowups] = useState<FollowupEntry[]>([]);
   const [followupQuestion, setFollowupQuestion] = useState("");
   const [isGeneratingFollowup, setIsGeneratingFollowup] = useState(false);
@@ -531,12 +569,8 @@ export default function ReadingResultsPage() {
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // ── Stage state ──
-  // Each reading section is now one clean page. Only the final page has
-  // a second swipe state: Bottom Line first, then Sources + Going Deeper.
-  const [activeStage, setActiveStage] = useState<ReadingStage>(1);
-  const [bottomLineExpanded, setBottomLineExpanded] = useState(false);
-  const [showSources, setShowSources] = useState(false);
+  // ── Bottom Line focus state ──
+  const [bottomLineFocused, setBottomLineFocused] = useState(false);
 
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -548,15 +582,14 @@ export default function ReadingResultsPage() {
   const [tailMode, setTailMode] = useState<"reply_pack" | "sub_reply_tail_regular">("reply_pack");
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
+  const bottomLineRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
-  const lastWheelNavigationAt = useRef(0);
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
     return p ? hashKey(p.title + "::" + p.content) : "";
   }, [reading]);
 
-  // ── Fetch reading ──
   useEffect(() => {
     const stored = loadReading();
     if (!stored) {
@@ -567,7 +600,6 @@ export default function ReadingResultsPage() {
     setIsLoading(false);
   }, [router]);
 
-  // ── Mark reading complete ──
   useEffect(() => {
     if (!reading || !readingKey) return;
 
@@ -584,7 +616,7 @@ export default function ReadingResultsPage() {
         return;
       }
     } catch {
-      // localStorage unavailable
+      // localStorage unavailable — fall through to the in-session guard.
     }
 
     if (!hasMarkedComplete.current) {
@@ -595,7 +627,7 @@ export default function ReadingResultsPage() {
           try {
             localStorage.setItem(completedFlag, "1");
           } catch {
-            // ignore
+            // ignore persistence failure
           }
         })
         .catch(() => {
@@ -604,7 +636,6 @@ export default function ReadingResultsPage() {
     }
   }, [reading, readingKey]);
 
-  // ── Restore state from localStorage ──
   useEffect(() => {
     if (!reading || !readingKey) return;
 
@@ -633,7 +664,7 @@ export default function ReadingResultsPage() {
         if (Array.isArray(parsed)) setFollowups(parsed as FollowupEntry[]);
       }
     } catch {
-      // ignore
+      // ignore malformed cache
     }
 
     let cameFromSuccess = false;
@@ -674,7 +705,6 @@ export default function ReadingResultsPage() {
     setReplyCreditsRemaining(null);
   }, [reading, readingKey]);
 
-  // ── Fetch credits ──
   useEffect(() => {
     const fetchCredits = async () => {
       try {
@@ -692,6 +722,8 @@ export default function ReadingResultsPage() {
     fetchCredits();
   }, [followups.length]);
 
+  // ─── page + parsedSections (moved BEFORE Bottom Line effect) ───
+
   const page = reading?.pages?.[0] ?? null;
 
   const parsedSections = useMemo(
@@ -699,13 +731,32 @@ export default function ReadingResultsPage() {
     [page?.content]
   );
 
+  // ─── Bottom Line focus observer ────────────────────────────────
+
+  useEffect(() => {
+    const element = bottomLineRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setBottomLineFocused(entry.isIntersecting);
+      },
+      {
+        root: null,
+        threshold: 0,
+        rootMargin: "-34% 0px -34% 0px",
+      }
+    );
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [parsedSections]);
+
   // ─── Group sections ─────────────────────────────────────────────
 
   const predictionSections =
     parsedSections?.filter((section) => section.kind === "prediction") ?? [];
-
-  const currentStateSections =
-    parsedSections?.filter((section) => section.kind === "currentState") ?? [];
 
   const whyNowSections =
     parsedSections?.filter((section) => section.kind === "whyNow") ?? [];
@@ -725,160 +776,12 @@ export default function ReadingResultsPage() {
   const closingSections =
     parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
-  // ─── Navigation ──────────────────────────────────────────────────
-
-  const goToStage = useCallback((stage: ReadingStage) => {
-    setActiveStage(stage);
-  }, []);
-
-  const handleSwipeUp = useCallback(() => {
-    switch (activeStage) {
-      case 1:
-        goToStage(2);
-        break;
-      case 2:
-        goToStage(3);
-        break;
-      case 3:
-        goToStage(4);
-        break;
-      case 4:
-        goToStage(5);
-        break;
-      case 5:
-        goToStage(6);
-        break;
-      case 6:
-        if (!bottomLineExpanded) {
-          setBottomLineExpanded(true);
-        }
-        break;
-    }
-  }, [activeStage, bottomLineExpanded, goToStage]);
-
-  const handleSwipeDown = useCallback(() => {
-    switch (activeStage) {
-      case 2:
-        goToStage(1);
-        break;
-      case 3:
-        goToStage(2);
-        break;
-      case 4:
-        goToStage(3);
-        break;
-      case 5:
-        goToStage(4);
-        break;
-      case 6:
-        if (bottomLineExpanded) {
-          setBottomLineExpanded(false);
-          setShowSources(false);
-        } else {
-          goToStage(5);
-        }
-        break;
-      default:
-        break;
-    }
-  }, [activeStage, bottomLineExpanded, goToStage]);
-
-  // ─── Touch + wheel handlers for stage navigation ─────────────
-
-  useEffect(() => {
-    const container = document.querySelector(".results-root");
-    if (!container) return;
-
-    let startX = 0;
-    let startY = 0;
-    let isSwiping = false;
-    let wheelDistance = 0;
-    let wheelResetTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      isSwiping = true;
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (!isSwiping) return;
-      isSwiping = false;
-
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      const deltaX = endX - startX;
-      const deltaY = endY - startY;
-
-      if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) return;
-
-      if (isVerticalGesture(deltaX, deltaY)) {
-        if (deltaY < -30) {
-          handleSwipeUp();
-        } else if (deltaY > 30) {
-          // Once Going Deeper is open, let the user scroll its content
-          // normally. Only a downward swipe from the top collapses it.
-          if (activeStage === 6 && bottomLineExpanded && window.scrollY > 2) return;
-          handleSwipeDown();
-        }
-      }
-    };
-
-    const handleWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-
-      // Trackpads keep emitting momentum events after the stage changes.
-      // Keep the lock in a ref so it survives that React re-render.
-      if (Date.now() - lastWheelNavigationAt.current < 520) {
-        e.preventDefault();
-        return;
-      }
-
-      // The expanded final stage can be taller than the viewport. Preserve
-      // native scrolling there; collapse it only when scrolling upward from
-      // the very top.
-      if (activeStage === 6 && bottomLineExpanded) {
-        if (e.deltaY > 0 || window.scrollY > 2) return;
-      }
-
-      e.preventDefault();
-      wheelDistance += e.deltaY;
-
-      if (wheelResetTimer) clearTimeout(wheelResetTimer);
-      wheelResetTimer = setTimeout(() => {
-        wheelDistance = 0;
-      }, 140);
-
-      if (Math.abs(wheelDistance) < 45) return;
-
-      lastWheelNavigationAt.current = Date.now();
-      if (wheelDistance > 0) {
-        handleSwipeUp();
-      } else {
-        handleSwipeDown();
-      }
-      wheelDistance = 0;
-    };
-
-    container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
-    container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
-    container.addEventListener("wheel", handleWheel as EventListener, { passive: false });
-
-    return () => {
-      container.removeEventListener("touchstart", handleTouchStart as EventListener);
-      container.removeEventListener("touchend", handleTouchEnd as EventListener);
-      container.removeEventListener("wheel", handleWheel as EventListener);
-      if (wheelResetTimer) clearTimeout(wheelResetTimer);
-    };
-  }, [activeStage, bottomLineExpanded, handleSwipeUp, handleSwipeDown]);
-
-  // ─── Action handlers ───────────────────────────────────────────
-
   const renderContentWithBadges = (content: string) => {
     const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
     return parts.map((part, i) => {
       const match = part.match(/\[\[DATE:\s*([^\]]+)\]\]/);
       if (match) {
+        // Check if it's a date range (has a dash or "to")
         const dateText = match[1].trim();
         const isRange = dateText.includes("-") || dateText.includes("to");
         return (
@@ -896,46 +799,16 @@ export default function ReadingResultsPage() {
       body.match(/[^.!?]+[.!?]+(?:["'’”)]*)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
 
     if (sentences.length <= 2) {
-      return { lead: body.trim(), rest: "" };
+      return {
+        lead: body.trim(),
+        rest: "",
+      };
     }
 
     return {
       lead: sentences.slice(0, 2).join(" "),
       rest: sentences.slice(2).join(" "),
     };
-  };
-
-
-  // Keep the Prose page compact enough to behave like one page.
-  // This displays roughly 60% of the generated prose while preserving
-  // complete sentence boundaries instead of cutting a sentence in half.
-  const reduceProseByFortyPercent = (body: string) => {
-    const sentences =
-      body.match(/[^.!?]+[.!?]+(?:["'’”)]*)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
-
-    if (sentences.length <= 1) return body.trim();
-
-    const wordCount = (value: string) =>
-      value.split(/\s+/).filter(Boolean).length;
-
-    const totalWords = wordCount(body);
-    const targetWords = Math.max(1, Math.round(totalWords * 0.6));
-
-    let cumulative = 0;
-    let bestCount = 1;
-    let bestDifference = Number.POSITIVE_INFINITY;
-
-    sentences.forEach((sentence, index) => {
-      cumulative += wordCount(sentence);
-      const difference = Math.abs(cumulative - targetWords);
-
-      if (difference < bestDifference) {
-        bestDifference = difference;
-        bestCount = index + 1;
-      }
-    });
-
-    return sentences.slice(0, bestCount).join(" ");
   };
 
   const handleDownload = async () => {
@@ -1101,8 +974,6 @@ export default function ReadingResultsPage() {
     router.push("/reading/intake");
   };
 
-  // ─── EARLY RETURN — AFTER ALL HOOKS ──────────────────────────
-
   if (isLoading || !reading || !page) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e27" }}>
@@ -1121,353 +992,8 @@ export default function ReadingResultsPage() {
     replyCreditsRemaining <= 0;
   const paywallVisible = !isSubscribed && (showPaywall || outOfReplies);
 
-  // ─── Render stages ─────────────────────────────────────────────
-
-  const renderStage1 = () => (
-    <section className="reading-stage" data-stage="1">
-      <div className="reading-stage-inner">
-        {predictionSections.map((section, i) => {
-          const { lead, rest } = splitPredictionLead(section.body);
-
-          return (
-            <div key={`prediction-${i}`} className="prediction-feature">
-              <p className="prediction-label">The Astrological Prediction</p>
-              <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
-              {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-
-  const renderStage2 = () => {
-    const sections = [
-      ...currentStateSections.map((s, i) => ({ key: `current-${i}`, label: "Where You Are Now", body: s.body })),
-      ...whyNowSections.map((s, i) => ({ key: `why-${i}`, label: "Why This Is Active Now", body: s.body })),
-      ...manifestationSections.map((s, i) => ({ key: `manifestation-${i}`, label: "How This Is Most Likely To Show Up", body: s.body })),
-    ];
-
-    return (
-      <section className="reading-stage" data-stage="2">
-        <div className="reading-stage-inner context-stage">
-          {sections.map((s) => (
-            <div key={s.key} className="context-section">
-              <p className="section-label">{s.label}</p>
-              <p className="reading-body">{renderContentWithBadges(s.body)}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  };
-
-  const renderStage3 = () => {
-    const proseContent = additionalProseSections
-      .map((section) => section.body)
-      .join(" ");
-
-    const reducedProseContent = reduceProseByFortyPercent(proseContent);
-
-    return (
-      <section className="reading-stage prose-stage" data-stage="3">
-        <div className="reading-stage-inner prose-static">
-          <p className="reading-body">
-            {renderContentWithBadges(reducedProseContent)}
-          </p>
-        </div>
-      </section>
-    );
-  };
-
-  const renderStage4 = () => (
-    <section className="reading-stage" data-stage="4">
-      <div className="reading-stage-inner">
-        <div className="reveal-zone">
-          <p className="reveal-zone-heading">Timing</p>
-          <div className="action-zone-frame">
-            {timingSections.map((section, i) => (
-              <div key={`timing-${i}`} className="action-card window">
-                <div className="action-card-head">
-                  <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
-                  <span className="action-card-label">
-                    {section.date ? "Dated Window" : "Timing"}
-                  </span>
-                  {section.date && <span className="date-badge">{section.date}</span>}
-                  {section.note && <span className="action-card-note">— {section.note}</span>}
-                </div>
-                <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-
-  const renderStage5 = () => {
-    return (
-      <section className="reading-stage" data-stage="5">
-        <div className="reading-stage-inner">
-          <div className="reveal-zone directive-zone">
-            <p className="reveal-zone-heading">Your Move</p>
-            <div className="action-zone-frame">
-              {directiveSections.map((section, i) => {
-                const variant =
-                  section.directive === "DROP"
-                    ? "drop"
-                    : section.directive === "EXECUTE"
-                      ? "execute"
-                      : section.directive === "LOCK"
-                        ? "lock"
-                        : "general";
-
-                const visibleLabel =
-                  section.directive === "DROP"
-                    ? "Drop"
-                    : section.directive === "EXECUTE"
-                      ? "Execute"
-                      : section.directive === "LOCK"
-                        ? "Lock In"
-                        : "Directive";
-
-                return (
-                  <div key={`directive-${i}`} className={`action-card ${variant}`}>
-                    <div className="action-card-head">
-                      <span className="action-card-label">{visibleLabel}</span>
-                      {section.date && <span className="date-badge">{section.date}</span>}
-                    </div>
-                    <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  };
-
-  const renderStage6 = () => {
-    const followUpContent = (
-      <div className="going-deeper-panel">
-        {/* ── Astrological Sources ── */}
-        {page.sources && page.sources.length > 0 && (
-          <div className="sources-wrap">
-            <button
-              type="button"
-              className={`sources-toggle ${showSources ? "open" : ""}`}
-              onClick={() => setShowSources((s) => !s)}
-              aria-expanded={showSources}
-            >
-              <span className="sources-toggle-copy">
-                <span className="sources-toggle-title">Astrological Sources</span>
-                <span className="sources-toggle-subtitle">
-                  See the astrology behind this reading
-                </span>
-              </span>
-
-              <ChevronDown
-                className="sources-chevron h-4 w-4"
-                aria-hidden="true"
-              />
-            </button>
-
-            <AnimatePresence initial={false}>
-              {showSources && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: "easeOut" }}
-                  className="sources-content"
-                >
-                  <div className="sources-list">
-                    {page.sources.map((src, i) => {
-                      const hasDate =
-                        src.placements.toLowerCase().includes("exact on");
-
-                      return (
-                        <div key={i} className="source-row">
-                          <p className="source-section">
-                            {src.section}
-                            {hasDate && (
-                              <span className="source-dated">⚡ dated</span>
-                            )}
-                          </p>
-
-                          <p className="source-placement">
-                            {src.placements}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
-        <div className="going-deeper-divider">
-          <div className="h-px flex-1 bg-white/[0.07]" />
-          <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
-          <div className="h-px flex-1 bg-white/[0.07]" />
-        </div>
-
-        {followups.map((f) => (
-          <div key={f.id} className="mb-5">
-            <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
-            <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
-            <div className="reading-body" style={{ fontSize: 15 }}>
-              {renderContentWithBadges(f.content)}
-            </div>
-          </div>
-        ))}
-        <div ref={followupEndRef} />
-
-        {justPurchased && (
-          <div className="purchase-success">
-            ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
-          </div>
-        )}
-
-        {paywallVisible ? (
-          <div className="paywall-card">
-            <p className="paywall-title">
-              {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
-            </p>
-            <p className="paywall-sub">
-              {isSubscribed
-                ? "As a subscriber, 4 more are half-price."
-                : "Keep the conversation going and get even more clarity."}
-            </p>
-            <button
-              type="button"
-              className="paywall-buy"
-              onClick={handleBuyReplyPack}
-              disabled={isPurchasing}
-            >
-              {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
-            </button>
-            {!isSubscribed && (
-              <button
-                type="button"
-                className="paywall-sub-link"
-                onClick={handleSubscribe}
-                disabled={isPurchasing}
-              >
-                or subscribe for more each month
-              </button>
-            )}
-            {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-          </div>
-        ) : (
-          <>
-            <p className="mb-2 px-1 text-[12px] text-slate-500">
-              Don't over think this. Just say what's on your mind.
-            </p>
-            <textarea
-              className="followup-input"
-              rows={3}
-              value={followupQuestion}
-              onChange={(e) => setFollowupQuestion(e.target.value)}
-              placeholder="Ask a follow up…"
-              disabled={isGeneratingFollowup}
-            />
-            {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-            <button
-              type="button"
-              onClick={handleFollowup}
-              disabled={isGeneratingFollowup || !followupQuestion.trim()}
-              className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
-            >
-              {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
-            </button>
-
-            <div className="top-actions">
-              <button
-                type="button"
-                className="download-btn"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                aria-label="Download reading"
-              >
-                <Download className="h-5 w-5" />
-              </button>
-              <button type="button" className="done-btn" onClick={handleDone}>
-                Done
-              </button>
-            </div>
-
-            <div className="final-balance-line">
-              <span>{credits?.credits ?? 0} credits remaining</span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {freeRemainingClient} free{" "}
-                {freeRemainingClient === 1 ? "reply" : "replies"} remaining
-              </span>
-            </div>
-          </>
-        )}
-      </div>
-    );
-
-    return (
-      <section className={`reading-stage final-stage ${bottomLineExpanded ? "is-expanded" : ""}`} data-stage="6">
-        <div className="reading-stage-inner">
-          <div className="bottom-line-wrap">
-            <p className="bottom-line-label">Bottom Line</p>
-            {closingSections.map((section, i) => (
-              <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
-            ))}
-          </div>
-
-          {!bottomLineExpanded && (
-            <p className="final-stage-cue">Swipe up for sources &amp; Going Deeper</p>
-          )}
-
-          <AnimatePresence initial={false}>
-            {bottomLineExpanded && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
-                className="going-deeper-wrapper"
-              >
-                {followUpContent}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </section>
-    );
-  };
-
-  // ─── Stage switcher ────────────────────────────────────────────
-
-  const renderActiveStage = () => {
-    switch (activeStage) {
-      case 1:
-        return renderStage1();
-      case 2:
-        return renderStage2();
-      case 3:
-        return renderStage3();
-      case 4:
-        return renderStage4();
-      case 5:
-        return renderStage5();
-      case 6:
-        return renderStage6();
-      default:
-        return null;
-    }
-  };
-
   return (
-    <div
+    <div 
       className="results-root"
       style={{
         position: "relative",
@@ -1486,6 +1012,7 @@ export default function ReadingResultsPage() {
           min-height: 100vh;
         }
 
+        /* ─── Starfield ──────────────────────────────────────────────────── */
         .results-starfield {
           position: fixed;
           inset: 0;
@@ -1493,23 +1020,6 @@ export default function ReadingResultsPage() {
           height: 100vh;
           pointer-events: none;
           z-index: 0;
-        }
-
-        /* ─── Reading stage ─────────────────────────────────────────────── */
-        .reading-stage {
-          min-height: 100svh;
-          position: relative;
-          display: flex;
-          align-items: center;
-          scroll-snap-align: start;
-        }
-
-        .reading-stage-inner {
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          padding: 40px 0;
         }
 
         /* ─── Reading sections ──────────────────────────────────────────── */
@@ -1552,97 +1062,57 @@ export default function ReadingResultsPage() {
           box-shadow: 0 0 18px rgba(94, 234, 212, 0.12);
         }
 
-        /* ─── Top actions ────────────────────────────────────────────────── */
-        .top-actions {
-          width: 100%;
-          margin-top: 10px;
-          margin-bottom: 4px;
-          display: flex;
-          gap: 12px;
-          align-items: center;
+        .section-block {
+          position: relative;
+          margin-top: 32px;
+          padding-top: 30px;
+          border-top: 1px solid rgba(255, 255, 255, 0.075);
+          transition:
+            filter 0.72s ease,
+            opacity 0.72s ease,
+            transform 0.72s ease;
         }
 
-        .top-actions .download-btn {
-          width: 48px;
-          height: 48px;
-          border-radius: 14px;
-          border: 1px solid rgba(251, 191, 36, 0.4);
-          background: rgba(251, 191, 36, 0.06);
-          color: #fbbf24;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          flex-shrink: 0;
-          transition: background 0.2s ease, border-color 0.2s ease;
+        .section-block.first {
+          margin-top: 0;
+          padding-top: 0;
+          border-top: none;
         }
 
-        .top-actions .download-btn:hover {
-          background: rgba(251, 191, 36, 0.12);
-          border-color: rgba(251, 191, 36, 0.6);
-        }
-
-        .top-actions .done-btn {
-          flex: 1;
-          height: 48px;
-          border-radius: 14px;
-          border: none;
-          background: #5eead4;
-          color: #042f2e;
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          box-shadow: 0 0 30px rgba(94, 234, 212, 0.25);
-          transition: box-shadow 0.2s ease;
-        }
-
-        .top-actions .done-btn:hover {
-          box-shadow: 0 0 40px rgba(94, 234, 212, 0.4);
-        }
-
-        /* ─── Final balance line ───────────────────────────────────────── */
-        .final-balance-line {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 6px;
-          white-space: nowrap;
-          margin-top: 8px;
+        .section-label {
+          font-family: var(--font-sans, ui-sans-serif);
           font-size: 11px;
-          color: #64748b;
+          font-weight: 650;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.9);
+        }
+
+        .section-block.opening-feature {
+          text-align: center;
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+        .section-block.opening-feature .section-label {
           text-align: center;
         }
 
-        @media (max-width: 380px) {
-          .final-balance-line {
-            font-size: 10px;
-          }
+        .section-block.opening-feature .reading-body {
+          width: 100%;
+          max-width: none;
+          margin-left: auto;
+          margin-right: auto;
+          text-align: center;
         }
 
-        /* ─── Prediction (hero) ─────────────────────────────────────────── */
+        /* ─── Guided reveal ─────────────────────────────────────────────── */
+
         .prediction-feature {
           position: relative;
-          isolation: isolate;
-          width: 100%;
-          max-width: 560px;
-          margin: 0 auto;
+          margin-top: 4px;
           padding: 28px 8px 30px;
           text-align: center;
-        }
-
-        .prediction-feature::before {
-          content: "";
-          position: absolute;
-          inset: -60px -30px;
-          background: radial-gradient(
-            ellipse at center,
-            rgba(94, 234, 212, 0.10),
-            rgba(59, 130, 246, 0.05) 45%,
-            transparent 72%
-          );
-          filter: blur(28px);
-          pointer-events: none;
-          z-index: -1;
         }
 
         .prediction-feature::after {
@@ -1667,12 +1137,11 @@ export default function ReadingResultsPage() {
           letter-spacing: 0.22em;
           text-transform: uppercase;
           color: rgba(94, 234, 212, 0.88);
-          text-align: center;
         }
 
         .prediction-lead {
-          width: 100%;
-          margin-top: 14px;
+          max-width: 560px;
+          margin: 14px auto 0;
           font-family: var(--font-display, Georgia, serif);
           font-size: 21px;
           line-height: 1.65;
@@ -1681,8 +1150,8 @@ export default function ReadingResultsPage() {
         }
 
         .prediction-support {
-          width: 100%;
-          margin-top: 16px;
+          max-width: 540px;
+          margin: 16px auto 0;
           font-family: var(--font-display, Georgia, serif);
           font-size: 15px;
           line-height: 1.85;
@@ -1690,36 +1159,14 @@ export default function ReadingResultsPage() {
           text-align: center;
         }
 
-        /* ─── Context stage (Stage 2) ────────────────────────────────── */
-        .context-stage {
-          justify-content: center;
-        }
-
-        .context-stage .context-section {
+        .context-section {
           width: 100%;
-          margin-top: 22px;
-          padding-top: 20px;
+          margin-top: 34px;
+          padding-top: 28px;
           border-top: 1px solid rgba(255, 255, 255, 0.07);
         }
 
-        .context-stage .reading-body {
-          font-size: 15px;
-          line-height: 1.72;
-        }
-
-        .context-stage .context-section:first-child {
-          margin-top: 0;
-          padding-top: 0;
-          border-top: none;
-        }
-
         .context-section .section-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 650;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.9);
           text-align: left;
         }
 
@@ -1728,169 +1175,66 @@ export default function ReadingResultsPage() {
           margin-top: 10px;
         }
 
-        /* ─── Prose stage (Stage 3) ────────────────────────────────────── */
-.prose-stage {
-  overflow: hidden;
-  touch-action: none;
-}
-
-.prose-window {
-  /* one knob per edge — line, fade, and glass all follow it */
-  --portal-top: 7svh;
-  --portal-bottom: 7svh;
-  position: relative;
-  width: 100%;
-  height: 100svh;
-  overflow: hidden;
-}
-
-.prose-track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  width: 100%;
-  padding: 0 2px;
-  will-change: transform;
-  z-index: 2;
-}
-
-.prose-track .reading-body {
-  font-size: 17px;
-  line-height: 2;
-  margin: 0;
-}
-
-/* ── liquid-glass bands: blur peak centered on each line ── */
-.prose-top-glass {
-  position: absolute;
-  top: calc(var(--portal-top) - 7.5svh);
-  left: -8px;
-  right: -8px;
-  height: 15svh;
-  z-index: 4;
-  pointer-events: none;
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-          mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-}
-.prose-bottom-glass {
-  position: absolute;
-  bottom: calc(var(--portal-bottom) - 7.5svh);
-  left: -8px;
-  right: -8px;
-  height: 15svh;
-  z-index: 4;
-  pointer-events: none;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  -webkit-mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-          mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-}
-
-/* ── TOP PORTAL ── (color dissolve, no blur here) */
-.prose-top-fade {
-  position: absolute;
-  top: 0;
-  left: -8px;
-  right: -8px;
-  height: var(--portal-top);
-  z-index: 5;
-  pointer-events: none;
-  background: linear-gradient(to bottom, rgba(2,3,12,1) 0%, rgba(2,3,12,.85) 55%, transparent 100%);
-}
-
-.prose-top-line {
-  position: absolute;
-  top: var(--portal-top);
-  left: 2%;
-  right: 2%;
-  height: 1px;
-  z-index: 6;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(226,232,255,.16) 16%, rgba(240,245,255,.85) 50%, rgba(226,232,255,.16) 84%, transparent);
-  box-shadow: 0 0 10px rgba(190,214,255,.5), 0 0 26px rgba(120,160,255,.26);
-}
-
-/* ── BOTTOM PORTAL ── */
-.prose-bottom-fade {
-  position: absolute;
-  bottom: 0;
-  left: -8px;
-  right: -8px;
-  height: var(--portal-bottom);
-  z-index: 5;
-  pointer-events: none;
-  background: linear-gradient(to top, rgba(13,36,78,.98) 0%, rgba(18,48,92,.8) 55%, transparent 100%);
-}
-
-.prose-bottom-line {
-  position: absolute;
-  bottom: var(--portal-bottom);
-  left: 2%;
-  right: 2%;
-  height: 1px;
-  z-index: 6;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(94,234,212,.16) 16%, rgba(150,225,255,.9) 50%, rgba(94,234,212,.16) 84%, transparent);
-  box-shadow: 0 0 10px rgba(120,220,235,.45), 0 0 26px rgba(59,130,246,.2);
-}
-
-/* ── shimmer sweep + star field on each line (no extra DOM) ── */
-.prose-top-line::after,
-.prose-bottom-line::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -32%;
-  height: 100%;
-  width: 32%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent);
-  filter: blur(1px);
-  animation: prose-sweep 5.5s ease-in-out infinite;
-}
-.prose-top-line::before,
-.prose-bottom-line::before {
-  content: "";
-  position: absolute;
-  left: 12%;
-  top: 0;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: #fff;
-  opacity: .5;
-  box-shadow:
-    30px 6px 0 rgba(255,255,255,.7), 90px -4px 0 rgba(255,255,255,.5),
-    150px 8px 0 rgba(255,255,255,.6), 210px -6px 0 rgba(255,255,255,.45),
-    260px 5px 0 rgba(255,255,255,.6), 60px 10px 0 rgba(255,255,255,.4),
-    180px -9px 0 rgba(255,255,255,.5);
-  animation: prose-twinkle 3.6s ease-in-out infinite;
-}
-@keyframes prose-sweep   { 0% { transform: translateX(0); }   100% { transform: translateX(430%); } }
-@keyframes prose-twinkle { 0%, 100% { opacity: .22; }         50%  { opacity: .85; } }
-
-        /* ─── Prose (Stage 3) — static single page ─────────────────────── */
-        .prose-static {
+        .manifestation-feature {
+          position: relative;
           width: 100%;
-          max-width: 560px;
-          margin: 0 auto;
-          justify-content: center;
+          margin-top: 34px;
+          padding: 22px 16px;
+          border: 1px solid rgba(94, 234, 212, 0.14);
+          border-radius: 22px;
+          background:
+            linear-gradient(
+              145deg,
+              rgba(94, 234, 212, 0.055),
+              rgba(15, 23, 42, 0.22)
+            );
         }
 
-        .prose-static .reading-body {
-          font-size: 16px;
-          line-height: 1.82;
-          color: #dbe4ef;
+        .manifestation-feature .section-label {
+          color: rgba(94, 234, 212, 0.95);
         }
 
-        /* ─── Timing (Stage 4) ──────────────────────────────────────────── */
+        .manifestation-feature .reading-body {
+          margin-top: 11px;
+          color: #e2e8f0;
+        }
+
         .reveal-zone {
-          width: 100%;
+          margin-top: 38px;
+          padding-top: 30px;
+          border-top: 1px solid rgba(255, 255, 255, 0.075);
         }
 
         .reveal-zone-heading {
+          margin-bottom: 13px;
+          text-align: center;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.92);
+        }
+
+        .directive-zone {
+          margin-top: 28px;
+        }
+
+        .directive-zone .action-zone-frame {
+          border-color: rgba(251, 191, 36, 0.14);
+        }
+
+        .action-zone {
+          margin-top: 34px;
+          padding-top: 30px;
+          border-top: 1px solid rgba(255, 255, 255, 0.075);
+          transition:
+            filter 0.72s ease,
+            opacity 0.72s ease,
+            transform 0.72s ease;
+        }
+
+        .action-zone-heading {
           margin-bottom: 13px;
           text-align: center;
           font-family: var(--font-sans, ui-sans-serif);
@@ -1918,7 +1262,6 @@ export default function ReadingResultsPage() {
           border-radius: 18px;
           padding: 16px 17px;
           background: rgba(17, 22, 51, 0.46);
-          overflow: hidden;
         }
 
         .action-card + .action-card {
@@ -1929,15 +1272,16 @@ export default function ReadingResultsPage() {
           border-color: rgba(94, 234, 212, 0.15);
         }
 
-        .action-card.is-available {
-          border-color: rgba(94, 234, 212, 0.5);
-          box-shadow: 0 0 30px rgba(94, 234, 212, 0.08);
-          animation: pulse-glow 2s ease-in-out infinite;
+        .action-card.drop {
+          border-color: rgba(248, 113, 113, 0.2);
         }
 
-        @keyframes pulse-glow {
-          0%, 100% { box-shadow: 0 0 30px rgba(94, 234, 212, 0.08); }
-          50% { box-shadow: 0 0 45px rgba(94, 234, 212, 0.16); }
+        .action-card.execute {
+          border-color: rgba(45, 212, 191, 0.2);
+        }
+
+        .action-card.lock {
+          border-color: rgba(251, 191, 36, 0.2);
         }
 
         .action-card-head {
@@ -1959,6 +1303,18 @@ export default function ReadingResultsPage() {
           color: #5eead4;
         }
 
+        .action-card.drop .action-card-label {
+          color: #f87171;
+        }
+
+        .action-card.execute .action-card-label {
+          color: #2dd4bf;
+        }
+
+        .action-card.lock .action-card-label {
+          color: #fbbf24;
+        }
+
         .action-card-note {
           font-family: var(--font-sans, ui-sans-serif);
           font-size: 12px;
@@ -1974,159 +1330,30 @@ export default function ReadingResultsPage() {
           white-space: pre-wrap;
         }
 
-        /* ─── Timing veil ────────────────────────────────────────────────── */
-        .timing-veil {
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          border: 0;
-          background: linear-gradient(
-            135deg,
-            rgba(157, 177, 205, 0.23),
-            rgba(58, 77, 111, 0.34)
-          );
-          backdrop-filter: blur(16px) saturate(0.75);
-          -webkit-backdrop-filter: blur(16px) saturate(0.75);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: opacity 0.3s ease;
-        }
-
-        .timing-veil.is-locked {
-          cursor: default;
-          opacity: 0.6;
-        }
-
-        .timing-veil:hover:not(.is-locked) {
-          opacity: 0.8;
-        }
-
-        .timing-reveal-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: rgba(226, 232, 240, 0.6);
-          background: rgba(0, 0, 0, 0.3);
-          padding: 6px 16px;
-          border-radius: 9999px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* ─── Your Move (Stage 5) ───────────────────────────────────────── */
-        .directive-zone {
-          margin-top: 28px;
-        }
-
-        .directive-zone .reveal-zone-heading {
-          color: rgba(251, 191, 36, 0.95);
-        }
-
-        .directive-zone .action-zone-frame {
-          border-color: rgba(251, 191, 36, 0.14);
-        }
-
-        .action-card.general {
-          border-color: rgba(251, 191, 36, 0.2);
-        }
-
-        .action-card.general .action-card-label {
-          color: #fbbf24;
-        }
-
-        .action-card.drop {
-          border-color: rgba(248, 113, 113, 0.2);
-        }
-
-        .action-card.drop .action-card-label {
-          color: #f87171;
-        }
-
-        .action-card.execute {
-          border-color: rgba(45, 212, 191, 0.2);
-        }
-
-        .action-card.execute .action-card-label {
-          color: #2dd4bf;
-        }
-
-        .action-card.lock {
-          border-color: rgba(251, 191, 36, 0.2);
-        }
-
-        .action-card.lock .action-card-label {
-          color: #fbbf24;
-        }
-
-        .action-card.is-available {
-          border-color: rgba(251, 191, 36, 0.5);
-          box-shadow: 0 0 30px rgba(251, 191, 36, 0.08);
-          animation: pulse-glow-gold 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse-glow-gold {
-          0%, 100% { box-shadow: 0 0 30px rgba(251, 191, 36, 0.08); }
-          50% { box-shadow: 0 0 45px rgba(251, 191, 36, 0.16); }
-        }
-
-        .directive-frost {
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          background: linear-gradient(
-            135deg,
-            rgba(157, 177, 205, 0.23),
-            rgba(58, 77, 111, 0.34)
-          );
-          backdrop-filter: blur(16px) saturate(0.75);
-          -webkit-backdrop-filter: blur(16px) saturate(0.75);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: grab;
-          touch-action: pan-y;
-        }
-
-        .directive-frost:active {
-          cursor: grabbing;
-        }
-
-        .directive-reveal-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: rgba(226, 232, 240, 0.5);
-          background: rgba(0, 0, 0, 0.3);
-          padding: 6px 16px;
-          border-radius: 9999px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          pointer-events: none;
-          user-select: none;
-        }
-
-        /* ─── Bottom Line (Stage 6) ────────────────────────────────────── */
-        .final-stage {
-          overflow: visible;
-          align-items: flex-start;
-        }
-
-        .final-stage .reading-stage-inner {
-          position: relative;
-          min-height: 100svh;
-          justify-content: flex-start;
-          padding-top: calc(28px + env(safe-area-inset-top));
-          padding-bottom: calc(34px + env(safe-area-inset-bottom));
-        }
-
         .bottom-line-wrap {
-          width: 100%;
+          position: relative;
+          margin-top: 54px;
+          padding: 52px 10px 48px;
           text-align: center;
-          z-index: 2;
+          transition:
+            transform 0.72s ease,
+            opacity 0.72s ease;
+        }
+
+        .bottom-line-wrap::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 16%;
+          right: 16%;
+          height: 1px;
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(94, 234, 212, 0.28),
+              transparent
+            );
         }
 
         .bottom-line-label {
@@ -2151,142 +1378,126 @@ export default function ReadingResultsPage() {
           text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
         }
 
-        .going-deeper-wrapper {
-          width: 100%;
-          margin-top: 28px;
-          z-index: 1;
+        .reading-focusable {
+          transition:
+            filter 0.72s ease,
+            opacity 0.72s ease,
+            transform 0.72s ease;
         }
 
-        .final-stage-cue {
-          margin: 28px auto 0;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: rgba(148, 163, 184, 0.62);
-          text-align: center;
+        .reading-article.bottom-focus .reading-focusable {
+          filter: blur(6px);
+          opacity: 0.2;
+          transform: scale(0.992);
         }
 
-        .going-deeper-panel {
-          width: 100%;
+        .reading-article.bottom-focus .bottom-line-wrap {
+          transform: scale(1.025);
         }
 
-        /* ─── Astrological Sources dropdown ─────────────────────────────── */
+        /* ─── Astrological Sources ──────────────────────────────────────── */
+
         .sources-wrap {
-          width: 100%;
-          margin-bottom: 22px;
-          border: 1px solid rgba(94, 234, 212, 0.16);
-          border-radius: 18px;
-          background: rgba(8, 15, 32, 0.46);
-          overflow: hidden;
-          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+          margin-top: 34px;
+          padding-top: 22px;
+          border-top: 1px solid rgba(255, 255, 255, 0.07);
+          text-align: center;
+          transition:
+            filter 0.72s ease,
+            opacity 0.72s ease;
         }
 
         .sources-toggle {
-          width: 100%;
-          min-height: 58px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 14px;
-          padding: 13px 15px;
-          border: 0;
+          position: relative;
+          overflow: hidden;
+          margin: 0 auto;
+          padding: 8px 14px;
+          border: none;
           background: transparent;
-          color: #e2e8f0;
-          text-align: left;
           cursor: pointer;
-          -webkit-tap-highlight-color: transparent;
-        }
 
-        .sources-toggle-copy {
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
 
-        .sources-toggle-title {
           font-family: var(--font-sans, ui-sans-serif);
           font-size: 11px;
-          font-weight: 700;
+          font-weight: 600;
           letter-spacing: 0.16em;
           text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.92);
+
+          color: #94a3b8;
+          transition:
+            color 0.25s ease,
+            text-shadow 0.25s ease;
         }
 
-        .sources-toggle-subtitle {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          line-height: 1.4;
-          color: rgba(148, 163, 184, 0.82);
+        .sources-toggle::before {
+          content: "";
+          position: absolute;
+          top: -50%;
+          bottom: -50%;
+          width: 34%;
+          left: -45%;
+          transform: skewX(-18deg);
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(191, 219, 254, 0.26),
+              rgba(94, 234, 212, 0.38),
+              transparent
+            );
+          filter: blur(4px);
+          animation: sourceStarlight 5.4s ease-in-out infinite;
+          pointer-events: none;
+        }
+
+        .sources-toggle:hover {
+          color: #cbd5e1;
+          text-shadow: 0 0 18px rgba(94, 234, 212, 0.28);
+        }
+
+        .sources-toggle.open {
+          color: #bae6fd;
+          text-shadow: 0 0 18px rgba(94, 234, 212, 0.24);
         }
 
         .sources-chevron {
-          flex: 0 0 auto;
-          color: rgba(94, 234, 212, 0.72);
-          transition: transform 0.22s ease;
+          transition:
+            transform 0.3s ease,
+            filter 0.3s ease;
         }
 
         .sources-toggle.open .sources-chevron {
           transform: rotate(180deg);
+          filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.5));
         }
 
-        .sources-content {
-          overflow: hidden;
-          text-align: left;
-        }
+        @keyframes sourceStarlight {
+          0%, 68% {
+            left: -45%;
+            opacity: 0;
+          }
 
-        .sources-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          padding: 0 12px 12px;
-        }
+          74% {
+            opacity: 1;
+          }
 
-        .source-row {
-          border-radius: 14px;
-          background: rgba(0, 0, 0, 0.25);
-          padding: 11px 12px;
-        }
+          92% {
+            left: 115%;
+            opacity: 0.85;
+          }
 
-        .source-section {
-          margin: 0;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 10px;
-          font-weight: 700;
-          line-height: 1.45;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.8);
-        }
-
-        .source-dated {
-          margin-left: 8px;
-          font-size: 9px;
-          font-weight: 600;
-          letter-spacing: 0.05em;
-          text-transform: none;
-          color: rgba(250, 204, 21, 0.65);
-        }
-
-        .source-placement {
-          margin: 5px 0 0;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 12px;
-          line-height: 1.65;
-          color: rgba(148, 163, 184, 0.92);
-          overflow-wrap: anywhere;
-        }
-
-        .going-deeper-divider {
-          margin-bottom: 16px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
+          100% {
+            left: 115%;
+            opacity: 0;
+          }
         }
 
         /* ─── Follow-up styles ──────────────────────────────────────────── */
+
         .followup-input {
           width: 100%;
           background: rgba(10, 14, 39, 0.6);
@@ -2299,7 +1510,6 @@ export default function ReadingResultsPage() {
           resize: none;
           transition: border-color 0.25s ease, box-shadow 0.25s ease;
         }
-
         .followup-input:focus {
           border-color: rgba(45, 212, 191, 0.6);
           box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
@@ -2325,14 +1535,12 @@ export default function ReadingResultsPage() {
           text-align: center;
           backdrop-filter: blur(8px);
         }
-
         .paywall-title {
           font-family: var(--font-display, Georgia, serif);
           font-size: 19px;
           color: #ffffff;
           font-weight: 600;
         }
-
         .paywall-sub {
           font-family: var(--font-sans, ui-sans-serif);
           font-size: 13px;
@@ -2340,7 +1548,6 @@ export default function ReadingResultsPage() {
           color: #94a3b8;
           margin-top: 8px;
         }
-
         .paywall-buy {
           margin-top: 18px;
           width: 100%;
@@ -2355,9 +1562,7 @@ export default function ReadingResultsPage() {
           cursor: pointer;
           box-shadow: 0 0 34px rgba(251, 191, 36, 0.22);
         }
-
         .paywall-buy:disabled { opacity: 0.6; cursor: default; }
-
         .paywall-sub-link {
           margin-top: 12px;
           background: none;
@@ -2369,51 +1574,501 @@ export default function ReadingResultsPage() {
           text-decoration: underline;
           text-underline-offset: 2px;
         }
-
         .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
 
-        /* ─── Desktop ────────────────────────────────────────────────────── */
-        @media (min-width: 768px) {
-          .results-root {
-            overflow-y: auto;
-          }
+        .bottom-bar {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          background: linear-gradient(180deg, rgba(10, 14, 39, 0) 0%, rgba(10, 14, 39, 0.94) 40%);
+          z-index: 40;
+        }
 
-          .reading-stage {
-            min-height: 100vh;
-            scroll-snap-align: start;
-          }
+        @keyframes downloadPulse {
+          0%, 100% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.4), 0 0 22px rgba(251, 191, 36, 0.18); }
+          50% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.7), 0 0 34px rgba(251, 191, 36, 0.32); }
+        }
 
+        .download-btn {
+          width: 56px;
+          height: 56px;
+          border-radius: 18px;
+          border: 1px solid rgba(251, 191, 36, 0.5);
+          background: rgba(251, 191, 36, 0.08);
+          color: #fbbf24;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          animation: downloadPulse 2.6s ease-in-out infinite;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        .done-btn {
+          flex: 1;
+          height: 56px;
+          border-radius: 18px;
+          border: none;
+          background: #5eead4;
+          color: #042f2e;
+          font-size: 17px;
+          font-weight: 600;
+          cursor: pointer;
+          box-shadow: 0 0 40px rgba(94, 234, 212, 0.35);
         }
 
         /* ─── Reduced motion ────────────────────────────────────────────── */
+
         @media (prefers-reduced-motion: reduce) {
-          .prediction-feature::before {
-            display: none;
+          .download-btn,
+          .sources-toggle::before {
+            animation: none !important;
           }
-          .action-card.is-available {
-            animation: none;
+
+          .reading-article.bottom-focus .reading-focusable {
+            filter: none;
+            opacity: 1;
+            transform: none;
           }
         }
       `}</style>
 
+      {/* ─── Fixed starfield behind everything ── */}
       <ResultsStarfield />
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[620px] px-4"
-        style={{
-          paddingBottom: "env(safe-area-inset-bottom)",
-          minHeight: "100vh",
+        className="relative z-10 mx-auto w-full max-w-[620px] px-4 pt-14"
+        style={{ 
+          paddingBottom: "calc(160px + env(safe-area-inset-bottom))",
+          minHeight: "calc(100vh - 40px)",
         }}
       >
-        {parsedSections ? (
-          renderActiveStage()
-        ) : (
-          <section className="reading-stage">
-            <div className="reading-stage-inner">
-              <div className="reading-body">{renderContentWithBadges(page.content)}</div>
+        {/* ── Header ── */}
+        <header className="mb-6 flex items-start gap-3">
+          <button
+            type="button"
+            onClick={handleDone}
+            aria-label="Back"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="flex-1 text-center">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Your Direct Insights</p>
+            <p className="mt-0.5 text-[13px] text-slate-300">What We've Gathered</p>
+          </div>
+          <div className="h-11 w-11 shrink-0" aria-hidden="true" />
+        </header>
+
+        {/* ── Topic + title, centered ── */}
+        <div className="mb-6 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300/80">{reading.topic}</p>
+          <motion.h1
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="reading-title mt-2 text-[27px] text-white sm:text-[31px]"
+          >
+            {page.title}
+          </motion.h1>
+        </div>
+
+        {/* ── THE READING ── */}
+        <motion.article
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.45,
+            delay: 0.08,
+            ease: "easeOut",
+          }}
+          className={`reading-article ${
+            bottomLineFocused ? "bottom-focus" : ""
+          }`}
+        >
+          {parsedSections ? (
+            <>
+              {/* ── 1. THE PREDICTION ── */}
+              {predictionSections.map((section, i) => {
+                const { lead, rest } = splitPredictionLead(section.body);
+
+                return (
+                  <section
+                    key={`prediction-${i}`}
+                    className="prediction-feature reading-focusable"
+                  >
+                    <p className="prediction-label">
+                      The Prediction
+                    </p>
+
+                    <p className="prediction-lead">
+                      {renderContentWithBadges(lead)}
+                    </p>
+
+                    {rest && (
+                      <p className="prediction-support">
+                        {renderContentWithBadges(rest)}
+                      </p>
+                    )}
+                  </section>
+                );
+              })}
+
+              {/* ── 2. WHY NOW ── */}
+              {whyNowSections.map((section, i) => (
+                <section
+                  key={`why-${i}`}
+                  className="context-section reading-focusable"
+                >
+                  <p className="section-label">
+                    Why This Is Active Now
+                  </p>
+
+                  <p className="reading-body">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                </section>
+              ))}
+
+              {/* ── 3. HOW THIS SHOWS UP ── */}
+              {manifestationSections.map((section, i) => (
+                <section
+                  key={`manifestation-${i}`}
+                  className="manifestation-feature reading-focusable"
+                >
+                  <p className="section-label">
+                    How This Is Most Likely To Show Up
+                  </p>
+
+                  <p className="reading-body">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                </section>
+              ))}
+
+              {/* ── Any additional prose the parser does not recognize ── */}
+              {additionalProseSections.map((section, i) => (
+                <section
+                  key={`additional-${i}`}
+                  className="context-section reading-focusable"
+                >
+                  {section.label && (
+                    <p className="section-label">
+                      {section.label}
+                    </p>
+                  )}
+
+                  <p className="reading-body">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                </section>
+              ))}
+
+              {/* ── 4. TIMING ── */}
+              {timingSections.length > 0 && (
+                <section className="reveal-zone reading-focusable">
+                  <p className="reveal-zone-heading">
+                    Timing
+                  </p>
+
+                  <div className="action-zone-frame">
+                    {timingSections.map((section, i) => (
+                      <div
+                        key={`timing-${i}`}
+                        className="action-card window"
+                      >
+                        <div className="action-card-head">
+                          <CalendarDays
+                            className="h-4 w-4 text-teal-300/80"
+                            aria-hidden="true"
+                          />
+
+                          <span className="action-card-label">
+                            Dated Window
+                          </span>
+
+                          <span className="date-badge">
+                            {section.date}
+                          </span>
+
+                          {section.note && (
+                            <span className="action-card-note">
+                              — {section.note}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="action-card-body">
+                          {renderContentWithBadges(section.body)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* ── 5. YOUR MOVE ── */}
+              {directiveSections.length > 0 && (
+                <section className="reveal-zone directive-zone reading-focusable">
+                  <p className="reveal-zone-heading">
+                    Your Move
+                  </p>
+
+                  <div className="action-zone-frame">
+                    {directiveSections.map((section, i) => {
+                      const variant =
+                        section.directive === "DROP"
+                          ? "drop"
+                          : section.directive === "EXECUTE"
+                            ? "execute"
+                            : "lock";
+
+                      const visibleLabel =
+                        section.directive === "DROP"
+                          ? "Drop"
+                          : section.directive === "EXECUTE"
+                            ? "Execute"
+                            : "Lock In";
+
+                      return (
+                        <div
+                          key={`directive-${i}`}
+                          className={`action-card ${variant}`}
+                        >
+                          <div className="action-card-head">
+                            <span className="action-card-label">
+                              {visibleLabel}
+                            </span>
+
+                            {section.date && (
+                              <span className="date-badge">
+                                {section.date}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="action-card-body">
+                            {renderContentWithBadges(section.body)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* ── Bottom Line focus moment ── */}
+              {closingSections.length > 0 && (
+                <div
+                  ref={bottomLineRef}
+                  className="bottom-line-wrap"
+                >
+                  <p className="bottom-line-label">
+                    Bottom Line
+                  </p>
+
+                  {closingSections.map((section, i) => (
+                    <p key={i} className="closing-line">
+                      {renderContentWithBadges(
+                        section.body
+                      )}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="reading-body">
+              {renderContentWithBadges(page.content)}
             </div>
-          </section>
+          )}
+
+          {/* ── Astrological Sources ── */}
+          {page.sources && page.sources.length > 0 && (
+            <div className="sources-wrap reading-focusable">
+              <button
+                type="button"
+                className={`sources-toggle ${
+                  showSources ? "open" : ""
+                }`}
+                onClick={() => setShowSources((s) => !s)}
+                aria-expanded={showSources}
+              >
+                <span>Astrological Sources</span>
+
+                <ChevronDown
+                  className="sources-chevron h-3.5 w-3.5"
+                />
+              </button>
+
+              <AnimatePresence>
+                {showSources && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{
+                      height: "auto",
+                      opacity: 1,
+                    }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{
+                      duration: 0.22,
+                      ease: "easeOut",
+                    }}
+                    className="overflow-hidden text-left"
+                  >
+                    <div className="mt-3 space-y-2.5">
+                      {page.sources.map((src, i) => {
+                        const hasDate =
+                          src.placements.includes("exact on");
+
+                        return (
+                          <div
+                            key={i}
+                            className="rounded-xl bg-black/25 px-3.5 py-2.5"
+                          >
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
+                              {src.section}
+
+                              {hasDate && (
+                                <span className="ml-2 text-[9px] text-yellow-400/60">
+                                  ⚡ dated
+                                </span>
+                              )}
+                            </p>
+
+                            <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                              {src.placements}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </motion.article>
+
+        {credits && !credits.isSubscribed && (
+          <p className="mt-4 text-right text-[11px] text-slate-500">{credits.credits} credits remaining</p>
         )}
+
+        {/* ── GOING DEEPER — follow-ups ── */}
+        <section className="mt-10">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.07]" />
+            <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
+            <div className="h-px flex-1 bg-white/[0.07]" />
+          </div>
+
+          {followups.map((f) => (
+            <div key={f.id} className="mb-5">
+              <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
+              <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
+              <div className="reading-body" style={{ fontSize: 15 }}>
+                {renderContentWithBadges(f.content)}
+              </div>
+            </div>
+          ))}
+          <div ref={followupEndRef} />
+
+          {justPurchased && (
+            <div className="purchase-success">
+              ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
+            </div>
+          )}
+
+          {paywallVisible ? (
+            <div className="paywall-card">
+              <p className="paywall-title">
+                {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
+              </p>
+              <p className="paywall-sub">
+                {isSubscribed
+                  ? "As a subscriber, 4 more are half-price."
+                  : "Keep the conversation going and get even more clarity."}
+              </p>
+              <button
+                type="button"
+                className="paywall-buy"
+                onClick={handleBuyReplyPack}
+                disabled={isPurchasing}
+              >
+                {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
+              </button>
+              {!isSubscribed && (
+                <button
+                  type="button"
+                  className="paywall-sub-link"
+                  onClick={handleSubscribe}
+                  disabled={isPurchasing}
+                >
+                  or subscribe for more each month
+                </button>
+              )}
+              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+            </div>
+          ) : (
+            <>
+              <p className="mb-2 px-1 text-[12px] text-slate-500">
+                Don't over think this. Just say what's on your mind.
+              </p>
+              <textarea
+                className="followup-input"
+                rows={3}
+                value={followupQuestion}
+                onChange={(e) => setFollowupQuestion(e.target.value)}
+                placeholder="Ask a follow up…"
+                disabled={isGeneratingFollowup}
+              />
+              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+              <button
+                type="button"
+                onClick={handleFollowup}
+                disabled={isGeneratingFollowup || !followupQuestion.trim()}
+                className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+              >
+                {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
+              </button>
+
+              {isSubscribed ? (
+                <p className="mt-2 text-center text-[11px] text-slate-500">
+                  {freeRemainingClient > 0 ? `${freeRemainingClient} free ${freeRemainingClient === 1 ? "reply" : "replies"} this reading` : "Half-price replies available"}
+                </p>
+              ) : freeRemainingClient > 0 ? (
+                <p className="mt-2 text-center text-[11px] text-slate-500">
+                  {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"} remaining
+                </p>
+              ) : replyCreditsRemaining && replyCreditsRemaining > 0 ? (
+                <p className="mt-2 text-center text-[11px] text-slate-500">
+                  {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"} remaining
+                </p>
+              ) : null}
+            </>
+          )}
+        </section>
+      </div>
+
+      {/* ── Fixed bottom bar ── */}
+      <div className="bottom-bar">
+        <button
+          type="button"
+          className="download-btn"
+          onClick={handleDownload}
+          disabled={isDownloading}
+          aria-label="Download reading"
+        >
+          <Download className="h-5 w-5" />
+        </button>
+        <button type="button" className="done-btn" onClick={handleDone}>
+          Done
+        </button>
       </div>
 
       {/* ── Embedded Stripe checkout modal ── */}
