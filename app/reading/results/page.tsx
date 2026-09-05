@@ -1552,21 +1552,18 @@ export default function ReadingResultsPage() {
         >
           {parsedSections ? (
             <>
-              "PART 1 — THE PREDICTION",
-"INTERNAL LENS: THROAT — truth, clarity, communication, speaking plainly.",
-"",
-"If the user asked a specific question, answer that question directly in the opening sentence.",
-"The Prediction must resolve the user's actual question before expanding into the broader chart-supported development.",
-"",
-"Lead immediately with the strongest chart-supported answer.",
-"The first two sentences must contain both:",
-"  1. The direct answer to the user's question, when a specific question was provided.",
-"  2. The nerve of the strongest chart-supported development.",
-"",
-"If the user's question calls for a yes/no, directional, timing, outcome, or decision-oriented answer, give the clearest supported answer first.",
-"Do not make the user infer the answer from the astrology.",
-"",
-"State the consequence in plain human language before explaining astrology.",
+              {/* ── 1. THE PREDICTION ── */}
+              {predictionSections.map((section, i) => {
+                const { lead, rest } = splitPredictionLead(section.body);
+
+                return (
+                  <section key={`prediction-${i}`} className="prediction-feature">
+                    <p className="prediction-label">The Prediction</p>
+                    <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
+                    {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
+                  </section>
+                );
+              })}
 
               {/* ── 2. WHERE YOU ARE NOW ── */}
               {currentStateSections.map((section, i) => (
