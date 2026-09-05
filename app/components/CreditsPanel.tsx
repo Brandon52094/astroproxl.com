@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { ChevronLeft, Minus, Plus } from "lucide-react";
 import StarfieldBackground from "./StarfieldBackground";
+import { PRICING, formatUsd, getSubTier, SUB_TIERS } from "@/lib/paywallConfig";
 
 /* ─────────────────────────────────────────────
    Products
@@ -14,13 +15,28 @@ interface Product {
   id: ProductId;
   title: string;
   desc: string;
-  price: number;
+  price: number; // in cents
 }
 
 const PRODUCTS: Product[] = [
-  { id: "jxl", title: "JXL", desc: "Includes 3 replies", price: 12.99 },
-  { id: "reading", title: "General Readings", desc: "Includes 2 replies", price: 10.0 },
-  { id: "replies", title: "More Replies", desc: "Works with any reading", price: 1.0 },
+  {
+    id: "jxl",
+    title: "JXL",
+    desc: "Includes 2 replies",
+    price: PRICING.jxl.price,
+  },
+  {
+    id: "reading",
+    title: "General Readings",
+    desc: "Includes 1 reply",
+    price: PRICING.reading.price,
+  },
+  {
+    id: "replies",
+    title: "More Replies",
+    desc: "Works with any reading",
+    price: PRICING.replies.priceEach,
+  },
 ];
 
 interface Balance {
@@ -34,29 +50,36 @@ interface Balance {
 ───────────────────────────────────────────── */
 
 const MEMBERSHIP_FEATURES = [
-  { title: "Unlimited Readings & Replies", copy: "Unlimited access to JXL & General Readings with replies." },
-  { title: "Commission Eligible (request only)", copy: "Earn 1–5% recurring commission with subscription referrals." },
-  { title: "Members-Only Features (beta)", copy: "Unlock experiences and tools only XL members can access." },
-  { title: "Save Your Readings (beta)", copy: "Save your reading synopsis so you don't forget." },
-  { title: "Lowered Cooldowns", copy: "More readings, less cooldowns." },
-  { title: "Member Feedback Box", copy: "Send your ideas, requests, and feedback directly to us." },
+  {
+    title: "Unlimited Readings & Replies",
+    copy: "Unlimited access to JXL & General Readings with replies.",
+  },
+  {
+    title: "Commission Eligible (request only)",
+    copy: "Earn 1–5% recurring commission with subscription referrals.",
+  },
+  {
+    title: "Members-Only Features (beta)",
+    copy: "Unlock experiences and tools only XL members can access.",
+  },
+  {
+    title: "Save Your Readings (beta)",
+    copy: "Save your reading synopsis so you don't forget.",
+  },
+  {
+    title: "Lowered Cooldowns",
+    copy: "More readings, less cooldowns.",
+  },
+  {
+    title: "Member Feedback Box",
+    copy: "Send your ideas, requests, and feedback directly to us.",
+  },
 ];
 
 /* ─────────────────────────────────────────────
-   Reply pricing
-   1–7 replies = $1 each · every group of 8 = $6
+   Reply pricing - removed bundle logic
+   Now just $1 each, no bulk discount
 ───────────────────────────────────────────── */
-
-function getReplyPrice(quantity: number): number {
-  if (quantity <= 0) return 0;
-  const groupsOfEight = Math.floor(quantity / 8);
-  const remainder = quantity % 8;
-  return groupsOfEight * 6 + remainder;
-}
-
-function getReplySavings(quantity: number): number {
-  return quantity - getReplyPrice(quantity);
-}
 
 function plural(n: number, one: string, many?: string): string {
   return n === 1 ? one : many ?? `${one}s`;
@@ -119,10 +142,13 @@ export default function CreditsPanel({
     setCart((current) => ({ ...current, [id]: Math.max(0, current[id] + amount) }));
   }, []);
 
-  const replySavings = useMemo(() => getReplySavings(cart.replies), [cart.replies]);
-
   const total = useMemo(() => {
-    return cart.jxl * 12.99 + cart.reading * 10 + getReplyPrice(cart.replies);
+    // Simple cart math: quantity × price (all in cents)
+    const totalCents =
+      cart.jxl * PRICING.jxl.price +
+      cart.reading * PRICING.reading.price +
+      cart.replies * PRICING.replies.priceEach;
+    return totalCents;
   }, [cart]);
 
   /* ── Credit checkout ── */
@@ -159,10 +185,34 @@ export default function CreditsPanel({
   };
 
   /* ── Membership entry ── */
-  const handleGetAccess = () => {
-    // NEXT STEP: wire this to Stripe subscription checkout (monthly $20 / yearly $200).
-    console.log(`XL Access selected: ${billingCycle}`);
-    alert(`Subscribe pressed — ${billingCycle}`);
+  const handleGetAccess = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      // Get the selected tier
+      const tierKey = billingCycle === "yearly" ? "sub_plus" : "sub_base";
+      const tier = getSubTier(tierKey);
+
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "subscription",
+          tier: tierKey,
+          returnUrl: `${window.location.origin}/reading/intake`,
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError("Couldn't start subscription. Try again.");
+      }
+    } catch {
+      setError("Couldn't reach checkout. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const C = STYLES;
@@ -197,7 +247,8 @@ export default function CreditsPanel({
               ...(billingCycle === "monthly" ? C.membershipPriceActive : C.membershipPriceInactive),
             }}
           >
-            $20<span style={C.priceUnit}>/mo</span>
+            {formatUsd(SUB_TIERS.sub_base.price)}
+            <span style={C.priceUnit}>/mo</span>
           </button>
 
           <button
@@ -208,7 +259,8 @@ export default function CreditsPanel({
               ...(billingCycle === "yearly" ? C.membershipPriceActive : C.membershipPriceInactive),
             }}
           >
-            $200<span style={C.priceUnit}>/yr</span>
+            {formatUsd(SUB_TIERS.sub_plus.price)}
+            <span style={C.priceUnit}>/mo</span>
           </button>
 
           <div style={C.membershipTitle}>MEMBERSHIP</div>
@@ -224,7 +276,6 @@ export default function CreditsPanel({
             </div>
           ) : (
             <div style={C.membershipWindow}>
-              {/* Two identical copies so translateY(-50%) loops seamlessly */}
               <div style={C.membershipTrack}>
                 {[...MEMBERSHIP_FEATURES, ...MEMBERSHIP_FEATURES].map((feature, i) => (
                   <div key={i} style={C.featureRowScroll}>
@@ -236,9 +287,14 @@ export default function CreditsPanel({
             </div>
           )}
 
-          <button type="button" onClick={handleGetAccess} style={C.getAccess}>
-            SUBSCRIBE
-            {!reducedMotion && <span style={C.shimmerSweep} />}
+          <button
+            type="button"
+            onClick={handleGetAccess}
+            style={C.getAccess}
+            disabled={loading}
+          >
+            {loading ? "Opening..." : "SUBSCRIBE"}
+            {!reducedMotion && !loading && <span style={C.shimmerSweep} />}
           </button>
         </section>
 
@@ -250,13 +306,13 @@ export default function CreditsPanel({
               onClick={() => setBillingCycle("monthly")}
               style={{ ...C.billingLabel, ...(billingCycle === "monthly" ? C.billingLabelActive : C.billingLabelInactive) }}
             >
-              M
+              Base
             </button>
             <button
               type="button"
               role="switch"
               aria-checked={billingCycle === "yearly"}
-              aria-label="Toggle yearly billing"
+              aria-label="Toggle subscription tier"
               onClick={() =>
                 setBillingCycle((current) => (current === "monthly" ? "yearly" : "monthly"))
               }
@@ -269,7 +325,7 @@ export default function CreditsPanel({
               onClick={() => setBillingCycle("yearly")}
               style={{ ...C.billingLabel, ...(billingCycle === "yearly" ? C.billingLabelActive : C.billingLabelInactive) }}
             >
-              Y
+              Plus
             </button>
           </div>
         </div>
@@ -279,8 +335,7 @@ export default function CreditsPanel({
           {PRODUCTS.map((product) => {
             const quantity = cart[product.id];
             const isReplies = product.id === "replies";
-            const displayedPrice = isReplies ? getReplyPrice(quantity || 1) : product.price;
-            const savings = isReplies ? getReplySavings(quantity) : 0;
+            const displayedPrice = product.price;
 
             return (
               <div key={product.id} style={C.selector}>
@@ -302,12 +357,9 @@ export default function CreditsPanel({
                   <div style={C.selectorTitle}>{product.title}</div>
                   <div style={C.selectorMeta}>
                     {isReplies && quantity > 0
-                      ? `${product.desc} · $${displayedPrice.toFixed(2)} selected`
-                      : `${product.desc} · $${product.price.toFixed(2)}`}
+                      ? `${product.desc} · ${formatUsd(displayedPrice)} selected`
+                      : `${product.desc} · ${formatUsd(displayedPrice)}`}
                   </div>
-                  {isReplies && savings > 0 && (
-                    <div style={C.selectorSavings}>You save ${savings.toFixed(2)}</div>
-                  )}
                 </div>
 
                 <button
@@ -350,12 +402,8 @@ export default function CreditsPanel({
 
           <div style={C.totalRow}>
             <span style={C.totalLabel}>Total :</span>
-            <span style={C.totalPrice}>${total.toFixed(2)}</span>
+            <span style={C.totalPrice}>{formatUsd(total)}</span>
           </div>
-
-          {replySavings > 0 && (
-            <div style={C.savingsLine}>Reply savings ${replySavings.toFixed(2)}</div>
-          )}
 
           {error && (
             <div role="alert" style={C.errorLine}>
@@ -431,7 +479,7 @@ const STYLES: Record<string, React.CSSProperties> = {
     top: "calc(14px + env(safe-area-inset-top))",
     left: 18,
     zIndex: 100,
-    width: 40, // was 36 — 40+ reads as a real tap target on mobile
+    width: 40,
     height: 40,
     display: "flex",
     alignItems: "center",
@@ -486,20 +534,17 @@ const STYLES: Record<string, React.CSSProperties> = {
   },
   priceUnit: { fontSize: 10, fontWeight: 600, opacity: 0.8, marginLeft: 1 },
   membershipPriceActive: {
-    color: "#fcd34d", opacity: 1, filter: "blur(0px)", // amber-300 to match the title + glow
+    color: "#fcd34d", opacity: 1, filter: "blur(0px)",
     textShadow: "0 2px 8px rgba(0,0,0,0.85), 0 0 10px rgba(251,191,36,0.28)",
   },
   membershipPriceInactive: { color: "#7c8aa3", opacity: 0.5, filter: "blur(0.6px)" },
 
   membershipTitle: {
     position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3,
-    padding: "0 18px", background: PANEL, color: "#fcd34d", // amber-300, Birthchart's warm accent
+    padding: "0 18px", background: PANEL, color: "#fcd34d",
     fontSize: 10, fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase", whiteSpace: "nowrap",
   },
-  // Reduced-motion fallback: the old static list, fully visible.
   membershipContentStatic: { display: "flex", flexDirection: "column", gap: 18 },
-  // The visible corridor between the title and the SUBSCRIBE button.
-  // The mask fades content just under "MEMBERSHIP" (top) and just above SUBSCRIBE (bottom).
   membershipWindow: {
     position: "relative",
     height: 258,
@@ -507,7 +552,6 @@ const STYLES: Record<string, React.CSSProperties> = {
     WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%)",
     maskImage: "linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%)",
   },
-  // 24s = one full drift. Lower for faster, higher for slower.
   membershipTrack: {
     display: "flex",
     flexDirection: "column",
@@ -515,18 +559,16 @@ const STYLES: Record<string, React.CSSProperties> = {
     animation: "membership-marquee 24s linear infinite",
   },
   featureRow: { lineHeight: 1.3, textAlign: "center" },
-  // Spacing baked into each row (not a parent gap) so both copies tile seamlessly.
   featureRowScroll: { lineHeight: 1.3, textAlign: "center", marginBottom: 26 },
   featureName: {
     display: "block", fontSize: 13, fontWeight: 500, color: "#f8fafc",
     letterSpacing: "0.01em",
   },
   featureCopy: {
-    display: "block", fontSize: 11, color: "#94a3b8", marginTop: 3, // slate-400
+    display: "block", fontSize: 11, color: "#94a3b8", marginTop: 3,
     lineHeight: 1.45,
   },
 
-  // SUBSCRIBE — Birthchart's glowing bordered box (outer + inner glow, bg-white/[0.03], shine).
   getAccess: {
     position: "absolute", left: "50%", bottom: -4, transform: "translateX(-50%)", zIndex: 3,
     overflow: "hidden", minWidth: 172, height: 50, padding: "0 28px", borderRadius: 16,
@@ -539,7 +581,6 @@ const STYLES: Record<string, React.CSSProperties> = {
     boxShadow: "0 0 22px rgba(251,191,36,0.26), inset 0 0 14px rgba(251,191,36,0.14)",
     whiteSpace: "nowrap",
   },
-  // Birthchart's exact element-shine sweep (skewX -18deg, translateX pass).
   shimmerSweep: {
     position: "absolute", top: 0, bottom: 0, left: 0, width: "45%",
     background:
@@ -549,9 +590,6 @@ const STYLES: Record<string, React.CSSProperties> = {
     pointerEvents: "none",
   },
 
-  /* BILLING TOGGLE */
-  // Top is 16 (not 14) because SUBSCRIBE overhangs the frame ~4px, so this lands
-  // the visible subscribe→toggle gap ≈ the toggle→JXL gap (both ~12px).
   billingWrap: {
     display: "flex", flexDirection: "column", alignItems: "center", margin: "16px 0 12px",
   },
@@ -576,7 +614,6 @@ const STYLES: Record<string, React.CSSProperties> = {
   billingKnobOn: { left: 22 },
   billingKnobPulse: { animation: "knob-pulse 2.4s ease-in-out infinite" },
 
-  /* PRODUCTS */
   products: { display: "flex", flexDirection: "column", gap: 14 },
   selector: {
     position: "relative", minHeight: 86, display: "flex", alignItems: "center",
@@ -585,7 +622,6 @@ const STYLES: Record<string, React.CSSProperties> = {
     background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
     boxShadow: SHADOW_DEEP,
   },
-  // 40px circular tap target with a visible ring — was a bare ~30px icon.
   stepBtn: {
     flexShrink: 0, width: 40, height: 40, borderRadius: "50%",
     display: "flex", alignItems: "center", justifyContent: "center",
@@ -602,8 +638,6 @@ const STYLES: Record<string, React.CSSProperties> = {
     textTransform: "uppercase", textShadow: SHADOW_TEXT,
   },
   selectorMeta: { fontSize: 11.5, color: "#a4b0c4" },
-  selectorSavings: { fontSize: 10.5, fontWeight: 600, color: "#fbbf24", textShadow: SHADOW_TEXT },
-  // Badge now shows the quantity accumulated from the +/- buttons (hidden at 0).
   inventoryCircle: {
     position: "absolute", top: -10, right: -8, minWidth: 28, height: 28, padding: "0 4px",
     borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
@@ -611,14 +645,12 @@ const STYLES: Record<string, React.CSSProperties> = {
     fontSize: 11, fontWeight: 700, zIndex: 4, boxShadow: SHADOW_DEEP,
   },
 
-  /* CHECKOUT */
   checkoutWrap: { display: "flex", flexDirection: "column", alignItems: "center", marginTop: 10, gap: 10 },
   totalRow: {
     display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6,
   },
   totalLabel: { fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6b7691" },
   totalPrice: { color: "#cbd5e1", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em" },
-  savingsLine: { fontSize: 11, fontWeight: 600, color: "#fbbf24", textShadow: SHADOW_TEXT, paddingRight: 0 },
   checkout: {
     height: 50, padding: "0 26px", minWidth: 168, borderRadius: 11, border: `1px solid ${TEAL}`,
     background: PANEL, color: "#fff", fontSize: 13, fontWeight: 700, letterSpacing: "0.1em",
