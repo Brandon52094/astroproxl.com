@@ -549,6 +549,7 @@ export default function ReadingResultsPage() {
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
+  const lastWheelNavigationAt = useRef(0);
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
@@ -782,7 +783,7 @@ export default function ReadingResultsPage() {
     }
   }, [activeStage, bottomLineExpanded, goToStage]);
 
-  // ─── Touch handler for swipe navigation ──────────────────────
+  // ─── Touch + wheel handlers for stage navigation ─────────────
 
   useEffect(() => {
     const container = document.querySelector(".results-root");
@@ -791,6 +792,8 @@ export default function ReadingResultsPage() {
     let startX = 0;
     let startY = 0;
     let isSwiping = false;
+    let wheelDistance = 0;
+    let wheelResetTimer: ReturnType<typeof setTimeout> | null = null;
 
     const handleTouchStart = (e: TouchEvent) => {
       startX = e.touches[0].clientX;
@@ -813,19 +816,61 @@ export default function ReadingResultsPage() {
         if (deltaY < -30) {
           handleSwipeUp();
         } else if (deltaY > 30) {
+          // Once Going Deeper is open, let the user scroll its content
+          // normally. Only a downward swipe from the top collapses it.
+          if (activeStage === 6 && bottomLineExpanded && window.scrollY > 2) return;
           handleSwipeDown();
         }
       }
     };
 
+    const handleWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+
+      // Trackpads keep emitting momentum events after the stage changes.
+      // Keep the lock in a ref so it survives that React re-render.
+      if (Date.now() - lastWheelNavigationAt.current < 520) {
+        e.preventDefault();
+        return;
+      }
+
+      // The expanded final stage can be taller than the viewport. Preserve
+      // native scrolling there; collapse it only when scrolling upward from
+      // the very top.
+      if (activeStage === 6 && bottomLineExpanded) {
+        if (e.deltaY > 0 || window.scrollY > 2) return;
+      }
+
+      e.preventDefault();
+      wheelDistance += e.deltaY;
+
+      if (wheelResetTimer) clearTimeout(wheelResetTimer);
+      wheelResetTimer = setTimeout(() => {
+        wheelDistance = 0;
+      }, 140);
+
+      if (Math.abs(wheelDistance) < 45) return;
+
+      lastWheelNavigationAt.current = Date.now();
+      if (wheelDistance > 0) {
+        handleSwipeUp();
+      } else {
+        handleSwipeDown();
+      }
+      wheelDistance = 0;
+    };
+
     container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
     container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
+    container.addEventListener("wheel", handleWheel as EventListener, { passive: false });
 
     return () => {
       container.removeEventListener("touchstart", handleTouchStart as EventListener);
       container.removeEventListener("touchend", handleTouchEnd as EventListener);
+      container.removeEventListener("wheel", handleWheel as EventListener);
+      if (wheelResetTimer) clearTimeout(wheelResetTimer);
     };
-  }, [activeStage, handleSwipeUp, handleSwipeDown]);
+  }, [activeStage, bottomLineExpanded, handleSwipeUp, handleSwipeDown]);
 
   // ─── Action handlers ───────────────────────────────────────────
 
