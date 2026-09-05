@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Download, ChevronDown, CalendarDays } from "lucide-react";
+import { Download, ChevronDown, CalendarDays } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import {
@@ -516,13 +516,13 @@ export default function ReadingResultsPage() {
   const router = useRouter();
   const [reading, setReading] = useState<StoredReading | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showSources, setShowSources] = useState(false);
   const [followups, setFollowups] = useState<FollowupEntry[]>([]);
   const [followupQuestion, setFollowupQuestion] = useState("");
   const [isGeneratingFollowup, setIsGeneratingFollowup] = useState(false);
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showGoingDeeper, setShowGoingDeeper] = useState(false);
 
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -535,6 +535,8 @@ export default function ReadingResultsPage() {
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
+  const bottomLineRef = useRef<HTMLDivElement | null>(null);
+  const goingDeeperTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
@@ -676,6 +678,40 @@ export default function ReadingResultsPage() {
     };
     fetchCredits();
   }, [followups.length]);
+
+  // ── Intersection Observer for Bottom Line ──
+  useEffect(() => {
+    if (!bottomLineRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            // Start timer when Bottom Line becomes visible
+            if (goingDeeperTimerRef.current) {
+              clearTimeout(goingDeeperTimerRef.current);
+            }
+            goingDeeperTimerRef.current = setTimeout(() => {
+              setShowGoingDeeper(true);
+            }, 7000);
+          }
+        }
+      },
+      {
+        root: null,
+        threshold: 0.5,
+      }
+    );
+
+    observer.observe(bottomLineRef.current);
+
+    return () => {
+      observer.disconnect();
+      if (goingDeeperTimerRef.current) {
+        clearTimeout(goingDeeperTimerRef.current);
+      }
+    };
+  }, [parsedSections]);
 
   const page = reading?.pages?.[0] ?? null;
 
@@ -951,6 +987,22 @@ export default function ReadingResultsPage() {
           z-index: 0;
         }
 
+        /* ─── Reading stage ─────────────────────────────────────────────── */
+        .reading-stage {
+          min-height: 100svh;
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .reading-stage-inner {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          padding: 40px 0;
+        }
+
         /* ─── Reading sections ──────────────────────────────────────────── */
         .reading-title {
           font-family: var(--font-display, Georgia, serif);
@@ -1039,35 +1091,22 @@ export default function ReadingResultsPage() {
           box-shadow: 0 0 40px rgba(94, 234, 212, 0.4);
         }
 
-        .reply-count {
+        /* ─── Final balance line ───────────────────────────────────────── */
+        .final-balance-line {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-top: 8px;
           font-size: 11px;
-          color: #94a3b8;
+          color: #64748b;
           text-align: center;
-          margin-bottom: 4px;
-        }
-
-        .reply-count strong {
-          color: #cbd5e1;
-        }
-
-        /* ─── Additional prose block ───────────────────────────────────── */
-        .additional-prose-block {
-          width: 100%;
-          margin-top: 22px;
-        }
-
-        .additional-prose-block .reading-body {
-          margin-top: 0;
-        }
-
-        .additional-prose-block .reading-body + .reading-body {
-          margin-top: 14px;
         }
 
         /* ─── Prediction (hero) ─────────────────────────────────────────── */
         .prediction-feature {
           position: relative;
-          margin-top: 4px;
           padding: 28px 8px 30px;
         }
 
@@ -1116,12 +1155,18 @@ export default function ReadingResultsPage() {
           text-align: left;
         }
 
-        /* ─── Normal paragraph sections ────────────────────────────────── */
-        .context-section {
+        /* ─── Context section (Stage 2) ────────────────────────────────── */
+        .context-stage .context-section {
           width: 100%;
           margin-top: 34px;
           padding-top: 28px;
           border-top: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .context-stage .context-section:first-child {
+          margin-top: 0;
+          padding-top: 0;
+          border-top: none;
         }
 
         .context-section .section-label {
@@ -1139,11 +1184,14 @@ export default function ReadingResultsPage() {
           margin-top: 10px;
         }
 
+        /* ─── Prose stage ───────────────────────────────────────────────── */
+        .prose-stage .reading-body {
+          margin-top: 0;
+        }
+
         /* ─── Timing (teal) ────────────────────────────────────────────── */
         .reveal-zone {
-          margin-top: 38px;
-          padding-top: 30px;
-          border-top: 1px solid rgba(255, 255, 255, 0.075);
+          width: 100%;
         }
 
         .reveal-zone-heading {
@@ -1265,26 +1313,8 @@ export default function ReadingResultsPage() {
 
         /* ─── Bottom Line ──────────────────────────────────────────────── */
         .bottom-line-wrap {
-          position: relative;
-          margin-top: 54px;
-          padding: 52px 10px 48px;
+          width: 100%;
           text-align: center;
-        }
-
-        .bottom-line-wrap::before {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: 16%;
-          right: 16%;
-          height: 1px;
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(94, 234, 212, 0.28),
-              transparent
-            );
         }
 
         .bottom-line-label {
@@ -1307,82 +1337,6 @@ export default function ReadingResultsPage() {
           text-align: center;
           white-space: pre-wrap;
           text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
-        }
-
-        /* ─── Sources ───────────────────────────────────────────────────── */
-        .sources-wrap {
-          margin-top: 34px;
-          padding-top: 22px;
-          border-top: 1px solid rgba(255, 255, 255, 0.07);
-          text-align: center;
-        }
-
-        .sources-toggle {
-          position: relative;
-          overflow: hidden;
-          margin: 0 auto;
-          padding: 8px 14px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          color: #94a3b8;
-          transition: color 0.25s ease, text-shadow 0.25s ease;
-        }
-
-        .sources-toggle::before {
-          content: "";
-          position: absolute;
-          top: -50%;
-          bottom: -50%;
-          width: 34%;
-          left: -45%;
-          transform: skewX(-18deg);
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(191, 219, 254, 0.26),
-              rgba(94, 234, 212, 0.38),
-              transparent
-            );
-          filter: blur(4px);
-          animation: sourceStarlight 5.4s ease-in-out infinite;
-          pointer-events: none;
-        }
-
-        .sources-toggle:hover {
-          color: #cbd5e1;
-          text-shadow: 0 0 18px rgba(94, 234, 212, 0.28);
-        }
-
-        .sources-toggle.open {
-          color: #bae6fd;
-          text-shadow: 0 0 18px rgba(94, 234, 212, 0.24);
-        }
-
-        .sources-chevron {
-          transition: transform 0.3s ease, filter 0.3s ease;
-        }
-
-        .sources-toggle.open .sources-chevron {
-          transform: rotate(180deg);
-          filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.5));
-        }
-
-        @keyframes sourceStarlight {
-          0%, 68% { left: -45%; opacity: 0; }
-          74% { opacity: 1; }
-          92% { left: 115%; opacity: 0.85; }
-          100% { left: 115%; opacity: 0; }
         }
 
         /* ─── Follow-up styles ──────────────────────────────────────────── */
@@ -1482,350 +1436,281 @@ export default function ReadingResultsPage() {
       <ResultsStarfield />
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[620px] px-4 pt-8"
+        className="relative z-10 mx-auto w-full max-w-[620px] px-4"
         style={{
-          paddingBottom: "calc(80px + env(safe-area-inset-bottom))",
+          paddingBottom: "env(safe-area-inset-bottom)",
           minHeight: "100vh",
         }}
       >
-        {/* ── Header ── */}
-        <header className="flex items-start gap-3">
-          <button
-            type="button"
-            onClick={handleDone}
-            aria-label="Back"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div className="flex-1 text-center">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Your Direct Insights</p>
-            <p className="mt-0.5 text-[13px] text-slate-300">What We've Gathered</p>
-          </div>
-          <div className="h-11 w-11 shrink-0" aria-hidden="true" />
-        </header>
-
-        {/* ── Topic + title ── */}
-        <div className="mb-4 text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300/80">{reading.topic}</p>
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className="reading-title mt-2 text-[27px] text-white sm:text-[31px]"
-          >
-            {page.title}
-          </motion.h1>
-        </div>
-
-        {/* ── Credits/reply count (top) ── */}
-        {credits && !credits.isSubscribed && (
-          <p className="reply-count">
-            <strong>{credits.credits}</strong> credits remaining
-          </p>
-        )}
-
-        {isSubscribed && freeRemainingClient > 0 && (
-          <p className="reply-count">
-            <strong>{freeRemainingClient}</strong> free {freeRemainingClient === 1 ? "reply" : "replies"} this reading
-          </p>
-        )}
-
-        {!isSubscribed && freeRemainingClient > 0 && (
-          <p className="reply-count">
-            <strong>{freeRemainingClient}</strong> free {freeRemainingClient === 1 ? "reply" : "replies"} remaining
-          </p>
-        )}
-
-        {!isSubscribed && replyCreditsRemaining !== null && replyCreditsRemaining > 0 && (
-          <p className="reply-count">
-            <strong>{replyCreditsRemaining}</strong> {replyCreditsRemaining === 1 ? "reply" : "replies"} remaining
-          </p>
-        )}
-
         {/* ── THE READING ── */}
-        <motion.article
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-        >
-          {parsedSections ? (
-            <>
-              {/* ── 1. THE PREDICTION ── */}
-              {predictionSections.map((section, i) => {
-                const { lead, rest } = splitPredictionLead(section.body);
+        {parsedSections ? (
+          <>
+            {/* ── STAGE 1: THE ASTROLOGICAL PREDICTION ── */}
+            <section className="reading-stage">
+              <div className="reading-stage-inner">
+                {predictionSections.map((section, i) => {
+                  const { lead, rest } = splitPredictionLead(section.body);
 
-                return (
-                  <section key={`prediction-${i}`} className="prediction-feature">
-                    <p className="prediction-label">The Prediction</p>
-                    <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
-                    {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
-                  </section>
-                );
-              })}
+                  return (
+                    <div key={`prediction-${i}`} className="prediction-feature">
+                      <p className="prediction-label">The Astrological Prediction</p>
+                      <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
+                      {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
-              {/* ── 2. WHERE YOU ARE NOW ── */}
-              {currentStateSections.map((section, i) => (
-                <section key={`current-${i}`} className="context-section">
-                  <p className="section-label">Where You Are Now</p>
-                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-                </section>
-              ))}
-
-              {/* ── 3. WHY THIS IS ACTIVE NOW ── */}
-              {whyNowSections.map((section, i) => (
-                <section key={`why-${i}`} className="context-section">
-                  <p className="section-label">Why This Is Active Now</p>
-                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-                </section>
-              ))}
-
-              {/* ── 4. HOW THIS IS MOST LIKELY TO SHOW UP ── */}
-              {manifestationSections.map((section, i) => (
-                <section key={`manifestation-${i}`} className="context-section">
-                  <p className="section-label">How This Is Most Likely To Show Up</p>
-                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
-                </section>
-              ))}
-
-              {/* ── Additional prose — consolidated block, max 3 paragraphs ── */}
-              {additionalProseSections.length > 0 && (
-                <section className="additional-prose-block">
-                  {additionalProseSections.slice(0, 3).map((section, i) => (
-                    <p key={`additional-${i}`} className="reading-body">
-                      {renderContentWithBadges(section.body)}
-                    </p>
-                  ))}
-                </section>
-              )}
-
-              {/* ── 5. DATED WINDOWS / TIMING ── */}
-              {timingSections.length > 0 && (
-                <section className="reveal-zone">
-                  <p className="reveal-zone-heading">Timing</p>
-                  <div className="action-zone-frame">
-                    {timingSections.map((section, i) => (
-                      <div key={`timing-${i}`} className="action-card window">
-                        <div className="action-card-head">
-                          <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
-                          <span className="action-card-label">
-                            {section.date ? "Dated Window" : "Timing"}
-                          </span>
-                          {section.date && <span className="date-badge">{section.date}</span>}
-                          {section.note && <span className="action-card-note">— {section.note}</span>}
-                        </div>
-                        <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-                      </div>
-                    ))}
+            {/* ── STAGE 2: CONTEXT / MANIFESTATION ── */}
+            <section className="reading-stage">
+              <div className="reading-stage-inner context-stage">
+                {/* WHERE YOU ARE NOW */}
+                {currentStateSections.map((section, i) => (
+                  <div key={`current-${i}`} className="context-section">
+                    <p className="section-label">Where You Are Now</p>
+                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
                   </div>
-                </section>
-              )}
+                ))}
 
-              {/* ── 6. THE DIRECTIVE / YOUR MOVE ── */}
-              {directiveSections.length > 0 && (
-                <section className="reveal-zone directive-zone">
-                  <p className="reveal-zone-heading">Your Move</p>
-                  <div className="action-zone-frame">
-                    {directiveSections.map((section, i) => {
-                      const variant =
-                        section.directive === "DROP"
-                          ? "drop"
-                          : section.directive === "EXECUTE"
-                            ? "execute"
-                            : section.directive === "LOCK"
-                              ? "lock"
-                              : "general";
+                {/* WHY THIS IS ACTIVE NOW */}
+                {whyNowSections.map((section, i) => (
+                  <div key={`why-${i}`} className="context-section">
+                    <p className="section-label">Why This Is Active Now</p>
+                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                  </div>
+                ))}
 
-                      const visibleLabel =
-                        section.directive === "DROP"
-                          ? "Drop"
-                          : section.directive === "EXECUTE"
-                            ? "Execute"
-                            : section.directive === "LOCK"
-                              ? "Lock In"
-                              : "Directive";
+                {/* HOW THIS IS MOST LIKELY TO SHOW UP */}
+                {manifestationSections.map((section, i) => (
+                  <div key={`manifestation-${i}`} className="context-section">
+                    <p className="section-label">How This Is Most Likely To Show Up</p>
+                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
 
-                      return (
-                        <div key={`directive-${i}`} className={`action-card ${variant}`}>
+            {/* ── STAGE 3: ADDITIONAL PROSE ── */}
+            {additionalProseSections.length > 0 && (
+              <section className="reading-stage prose-stage">
+                <div className="reading-stage-inner">
+                  <p className="reading-body">
+                    {renderContentWithBadges(
+                      additionalProseSections
+                        .map((section) => section.body)
+                        .join(" ")
+                    )}
+                  </p>
+                </div>
+              </section>
+            )}
+
+            {/* ── STAGE 4: TIMING ── */}
+            {timingSections.length > 0 && (
+              <section className="reading-stage">
+                <div className="reading-stage-inner">
+                  <div className="reveal-zone">
+                    <p className="reveal-zone-heading">Timing</p>
+                    <div className="action-zone-frame">
+                      {timingSections.map((section, i) => (
+                        <div key={`timing-${i}`} className="action-card window">
                           <div className="action-card-head">
-                            <span className="action-card-label">{visibleLabel}</span>
+                            <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
+                            <span className="action-card-label">
+                              {section.date ? "Dated Window" : "Timing"}
+                            </span>
                             {section.date && <span className="date-badge">{section.date}</span>}
+                            {section.note && <span className="action-card-note">— {section.note}</span>}
                           </div>
                           <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </section>
-              )}
-
-              {/* ── 7. BOTTOM LINE ── */}
-              {closingSections.length > 0 && (
-                <div className="bottom-line-wrap">
-                  <p className="bottom-line-label">Bottom Line</p>
-                  {closingSections.map((section, i) => (
-                    <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
-                  ))}
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="reading-body">{renderContentWithBadges(page.content)}</div>
-          )}
+              </section>
+            )}
 
-          {/* ── Sources ── */}
-          {page.sources && page.sources.length > 0 && (
-            <div className="sources-wrap">
-              <button
-                type="button"
-                className={`sources-toggle ${showSources ? "open" : ""}`}
-                onClick={() => setShowSources((s) => !s)}
-                aria-expanded={showSources}
-              >
-                <span>Astrological Sources</span>
-                <ChevronDown className="sources-chevron h-3.5 w-3.5" />
-              </button>
+            {/* ── STAGE 5: YOUR MOVE ── */}
+            {directiveSections.length > 0 && (
+              <section className="reading-stage">
+                <div className="reading-stage-inner">
+                  <div className="reveal-zone directive-zone">
+                    <p className="reveal-zone-heading">Your Move</p>
+                    <div className="action-zone-frame">
+                      {directiveSections.map((section, i) => {
+                        const variant =
+                          section.directive === "DROP"
+                            ? "drop"
+                            : section.directive === "EXECUTE"
+                              ? "execute"
+                              : section.directive === "LOCK"
+                                ? "lock"
+                                : "general";
 
-              <AnimatePresence>
-                {showSources && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: "easeOut" }}
-                    className="overflow-hidden text-left"
-                  >
-                    <div className="mt-3 space-y-2.5">
-                      {page.sources.map((src, i) => {
-                        const hasDate = src.placements.includes("exact on");
+                        const visibleLabel =
+                          section.directive === "DROP"
+                            ? "Drop"
+                            : section.directive === "EXECUTE"
+                              ? "Execute"
+                              : section.directive === "LOCK"
+                                ? "Lock In"
+                                : "Directive";
+
                         return (
-                          <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
-                              {src.section}
-                              {hasDate && <span className="ml-2 text-[9px] text-yellow-400/60">⚡ dated</span>}
-                            </p>
-                            <p className="mt-1 text-[12px] leading-5 text-slate-400">{src.placements}</p>
+                          <div key={`directive-${i}`} className={`action-card ${variant}`}>
+                            <div className="action-card-head">
+                              <span className="action-card-label">{visibleLabel}</span>
+                              {section.date && <span className="date-badge">{section.date}</span>}
+                            </div>
+                            <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
                           </div>
                         );
                       })}
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ── STAGE 6: BOTTOM LINE ── */}
+            {closingSections.length > 0 && (
+              <section className="reading-stage">
+                <div className="reading-stage-inner" ref={bottomLineRef}>
+                  <div className="bottom-line-wrap">
+                    <p className="bottom-line-label">Bottom Line</p>
+                    {closingSections.map((section, i) => (
+                      <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+          </>
+        ) : (
+          <section className="reading-stage">
+            <div className="reading-stage-inner">
+              <div className="reading-body">{renderContentWithBadges(page.content)}</div>
             </div>
-          )}
-        </motion.article>
+          </section>
+        )}
 
-        {/* ── GOING DEEPER — follow-ups ── */}
-        <section className="mt-10">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.07]" />
-            <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
-            <div className="h-px flex-1 bg-white/[0.07]" />
-          </div>
-
-          {followups.map((f) => (
-            <div key={f.id} className="mb-5">
-              <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
-              <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
-              <div className="reading-body" style={{ fontSize: 15 }}>
-                {renderContentWithBadges(f.content)}
+        {/* ── GOING DEEPER — follow-ups (delayed reveal) ── */}
+        <AnimatePresence>
+          {showGoingDeeper && (
+            <motion.section
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8 }}
+              className="mt-10"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/[0.07]" />
+                <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
+                <div className="h-px flex-1 bg-white/[0.07]" />
               </div>
-            </div>
-          ))}
-          <div ref={followupEndRef} />
 
-          {justPurchased && (
-            <div className="purchase-success">
-              ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
-            </div>
-          )}
+              {followups.map((f) => (
+                <div key={f.id} className="mb-5">
+                  <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
+                  <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
+                  <div className="reading-body" style={{ fontSize: 15 }}>
+                    {renderContentWithBadges(f.content)}
+                  </div>
+                </div>
+              ))}
+              <div ref={followupEndRef} />
 
-          {paywallVisible ? (
-            <div className="paywall-card">
-              <p className="paywall-title">
-                {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
-              </p>
-              <p className="paywall-sub">
-                {isSubscribed
-                  ? "As a subscriber, 4 more are half-price."
-                  : "Keep the conversation going and get even more clarity."}
-              </p>
-              <button
-                type="button"
-                className="paywall-buy"
-                onClick={handleBuyReplyPack}
-                disabled={isPurchasing}
-              >
-                {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
-              </button>
-              {!isSubscribed && (
-                <button
-                  type="button"
-                  className="paywall-sub-link"
-                  onClick={handleSubscribe}
-                  disabled={isPurchasing}
-                >
-                  or subscribe for more each month
-                </button>
+              {justPurchased && (
+                <div className="purchase-success">
+                  ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
+                </div>
               )}
-              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-            </div>
-          ) : (
-            <>
-              <p className="mb-2 px-1 text-[12px] text-slate-500">
-                Don't over think this. Just say what's on your mind.
-              </p>
-              <textarea
-                className="followup-input"
-                rows={3}
-                value={followupQuestion}
-                onChange={(e) => setFollowupQuestion(e.target.value)}
-                placeholder="Ask a follow up…"
-                disabled={isGeneratingFollowup}
-              />
-              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-              <button
-                type="button"
-                onClick={handleFollowup}
-                disabled={isGeneratingFollowup || !followupQuestion.trim()}
-                className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
-              >
-                {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
-              </button>
 
-              {isSubscribed ? (
-                <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {freeRemainingClient > 0 ? `${freeRemainingClient} free ${freeRemainingClient === 1 ? "reply" : "replies"} this reading` : "Half-price replies available"}
-                </p>
-              ) : freeRemainingClient > 0 ? (
-                <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"} remaining
-                </p>
-              ) : replyCreditsRemaining && replyCreditsRemaining > 0 ? (
-                <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"} remaining
-                </p>
-              ) : null}
+              {paywallVisible ? (
+                <div className="paywall-card">
+                  <p className="paywall-title">
+                    {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
+                  </p>
+                  <p className="paywall-sub">
+                    {isSubscribed
+                      ? "As a subscriber, 4 more are half-price."
+                      : "Keep the conversation going and get even more clarity."}
+                  </p>
+                  <button
+                    type="button"
+                    className="paywall-buy"
+                    onClick={handleBuyReplyPack}
+                    disabled={isPurchasing}
+                  >
+                    {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
+                  </button>
+                  {!isSubscribed && (
+                    <button
+                      type="button"
+                      className="paywall-sub-link"
+                      onClick={handleSubscribe}
+                      disabled={isPurchasing}
+                    >
+                      or subscribe for more each month
+                    </button>
+                  )}
+                  {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+                </div>
+              ) : (
+                <>
+                  <p className="mb-2 px-1 text-[12px] text-slate-500">
+                    Don't over think this. Just say what's on your mind.
+                  </p>
+                  <textarea
+                    className="followup-input"
+                    rows={3}
+                    value={followupQuestion}
+                    onChange={(e) => setFollowupQuestion(e.target.value)}
+                    placeholder="Ask a follow up…"
+                    disabled={isGeneratingFollowup}
+                  />
+                  {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+                  <button
+                    type="button"
+                    onClick={handleFollowup}
+                    disabled={isGeneratingFollowup || !followupQuestion.trim()}
+                    className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+                  >
+                    {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
+                  </button>
 
-              {/* ── Top actions moved here ── */}
-              <div className="top-actions">
-                <button
-                  type="button"
-                  className="download-btn"
-                  onClick={handleDownload}
-                  disabled={isDownloading}
-                  aria-label="Download reading"
-                >
-                  <Download className="h-5 w-5" />
-                </button>
-                <button type="button" className="done-btn" onClick={handleDone}>
-                  Done
-                </button>
-              </div>
-            </>
+                  {/* ── Download + Done ── */}
+                  <div className="top-actions">
+                    <button
+                      type="button"
+                      className="download-btn"
+                      onClick={handleDownload}
+                      disabled={isDownloading}
+                      aria-label="Download reading"
+                    >
+                      <Download className="h-5 w-5" />
+                    </button>
+                    <button type="button" className="done-btn" onClick={handleDone}>
+                      Done
+                    </button>
+                  </div>
+
+                  {/* ── Final balance line ── */}
+                  <div className="final-balance-line">
+                    <span>{credits?.credits ?? 0} credits remaining</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {freeRemainingClient} free{" "}
+                      {freeRemainingClient === 1 ? "reply" : "replies"} remaining
+                    </span>
+                  </div>
+                </>
+              )}
+            </motion.section>
           )}
-        </section>
+        </AnimatePresence>
       </div>
 
       {/* ── Embedded Stripe checkout modal ── */}
