@@ -994,8 +994,8 @@ export default function ReadingResultsPage() {
         /* ─── Top actions ────────────────────────────────────────────────── */
         .top-actions {
           width: 100%;
-          margin-top: 14px;
-          margin-bottom: 24px;
+          margin-top: 10px;
+          margin-bottom: 4px;
           display: flex;
           gap: 12px;
           align-items: center;
@@ -1048,6 +1048,20 @@ export default function ReadingResultsPage() {
 
         .reply-count strong {
           color: #cbd5e1;
+        }
+
+        /* ─── Additional prose block ───────────────────────────────────── */
+        .additional-prose-block {
+          width: 100%;
+          margin-top: 22px;
+        }
+
+        .additional-prose-block .reading-body {
+          margin-top: 0;
+        }
+
+        .additional-prose-block .reading-body + .reading-body {
+          margin-top: 14px;
         }
 
         /* ─── Prediction (hero) ─────────────────────────────────────────── */
@@ -1504,22 +1518,7 @@ export default function ReadingResultsPage() {
           </motion.h1>
         </div>
 
-        {/* ── Top actions + reply count ── */}
-        <div className="top-actions">
-          <button
-            type="button"
-            className="download-btn"
-            onClick={handleDownload}
-            disabled={isDownloading}
-            aria-label="Download reading"
-          >
-            <Download className="h-5 w-5" />
-          </button>
-          <button type="button" className="done-btn" onClick={handleDone}>
-            Done
-          </button>
-        </div>
-
+        {/* ── Credits/reply count (top) ── */}
         {credits && !credits.isSubscribed && (
           <p className="reply-count">
             <strong>{credits.credits}</strong> credits remaining
@@ -1589,13 +1588,16 @@ export default function ReadingResultsPage() {
                 </section>
               ))}
 
-              {/* ── Any additional prose ── */}
-              {additionalProseSections.map((section, i) => (
-                <section key={`additional-${i}`} className="context-section">
-                  {section.label && <p className="section-label">{section.label}</p>}
-                  <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+              {/* ── Additional prose — consolidated block, max 3 paragraphs ── */}
+              {additionalProseSections.length > 0 && (
+                <section className="additional-prose-block">
+                  {additionalProseSections.slice(0, 3).map((section, i) => (
+                    <p key={`additional-${i}`} className="reading-body">
+                      {renderContentWithBadges(section.body)}
+                    </p>
+                  ))}
                 </section>
-              ))}
+              )}
 
               {/* ── 5. DATED WINDOWS / TIMING ── */}
               {timingSections.length > 0 && (
@@ -1805,6 +1807,22 @@ export default function ReadingResultsPage() {
                   {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"} remaining
                 </p>
               ) : null}
+
+              {/* ── Top actions moved here ── */}
+              <div className="top-actions">
+                <button
+                  type="button"
+                  className="download-btn"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  aria-label="Download reading"
+                >
+                  <Download className="h-5 w-5" />
+                </button>
+                <button type="button" className="done-btn" onClick={handleDone}>
+                  Done
+                </button>
+              </div>
             </>
           )}
         </section>
