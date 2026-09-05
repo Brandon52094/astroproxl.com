@@ -14,6 +14,8 @@ import {
 import {
   validateAndFilterAspects,
 } from "@/lib/reading/engine";
+import { generateOpenAIText } from "@/lib/ai/openai";
+import type { MembershipStatus } from "@/lib/paywallConfig";
 
 // ── NEW: Import advanced calculation types ──
 import {
@@ -736,10 +738,10 @@ export async function POST(request: NextRequest) {
 
     // ── Reply-access gating ──
     //
-    // Every REGULAR READING includes 2 replies.
+    // Every REGULAR READING includes 1 reply.
     // Those replies belong to that specific reading.
     //
-    // After the 2 included replies are used,
+    // After the 1 included reply is used,
     // the user can keep that same conversation going
     // by spending universal replyCredits.
     //
@@ -747,13 +749,20 @@ export async function POST(request: NextRequest) {
     // do not consume included replies or replyCredits.
     //
 
-    const INCLUDED_READING_REPLIES = 2;
+    const INCLUDED_READING_REPLIES = 1;
 
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
-    const isSubscribed = metadata?.isSubscribed === true;
+    // ── UPDATED: Use membershipStatus for subscription detection ──
+    const storedMembershipStatus = metadata?.membershipStatus as MembershipStatus | undefined;
+
+    const membershipStatus: MembershipStatus =
+      storedMembershipStatus ??
+      (metadata?.isSubscribed === true ? "active" : "canceled");
+
+    const isSubscribed = membershipStatus === "active";
 
     // Universal purchased replies.
     // These can continue either a Regular Reading or JXL conversation.
@@ -809,7 +818,7 @@ export async function POST(request: NextRequest) {
       1. XL member
            → unlimited
 
-      2. Reading still has one of its 2 included replies
+      2. Reading still has its 1 included reply
            → use included reply
 
       3. Included replies exhausted but user has
@@ -843,7 +852,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "You've used the 2 replies included with this reading.",
+            "You've used the 1 reply included with this reading.",
 
           code: "NEEDS_REPLY_CREDITS",
 
@@ -856,24 +865,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: "API configuration error." }, { status: 500 });
-    }
-
     const prompt = buildFollowupPrompt(normalizedBody);
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1400,
-        temperature: 0.3,
+    let rawText: string;
+
+    try {
+      rawText = await generateOpenAIText({
         system:
           "You are a precision astrologer answering a follow-up question after an initial reading, for a real " +
           "person who may know nothing about astrology. Write so they understand every sentence. " +
@@ -881,25 +878,30 @@ export async function POST(request: NextRequest) {
           "reading is context only; the chart data is evidence. " +
           "The transit aspects are calculated and given to you — never compute or invent one. " +
           "CRITICAL: no degrees, no orbs, and no astrological jargon in your prose. This is a conversation, not " +
-          "a technical readout. You lose no precision — precision lives in the sharpness of the consequence, " +
-          "not in decimal places. " +
-          "Speak directly to the person as 'you'. State outcomes as facts. Keep it tight and mobile-optimized. " +
+          "a technical readout. Precision lives in the sharpness of the consequence, not in decimal places. " +
+          "Speak directly to the person as 'you'. State outcomes directly. Keep it tight and mobile-optimized. " +
           "Output ONLY raw valid JSON — no markdown, no code fences, no preamble.",
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("[followup] Claude error:", err);
+        prompt,
+
+        maxTokens: 3000,
+      });
+    } catch (error) {
+      console.error(
+        "[followup] OpenAI generation error:",
+        error
+      );
+
       return NextResponse.json(
-        { error: "Failed to generate response. Please try again." },
-        { status: 502 }
+        {
+          error:
+            "Failed to generate response. Please try again.",
+        },
+        {
+          status: 502,
+        }
       );
     }
-
-    const claudeData = await response.json();
-    const rawText = claudeData.content?.[0]?.text;
 
     if (!rawText) {
       return NextResponse.json(
@@ -948,7 +950,7 @@ export async function POST(request: NextRequest) {
     // ── Spend a UNIVERSAL purchased reply ──
     //
     // Only spend from the user's global reply wallet
-    // after this reading's 2 included replies are gone.
+    // after this reading's 1 included reply is gone.
     //
     // Members never spend reply credits here.
     //
