@@ -28,15 +28,23 @@ interface UserCredits {
   freeRepliesRemaining: number;
 }
 
+// ─── EDIT 1: Updated ParsedSection type ──────────────────────────
+
 type ParsedSection =
   | { kind: "prediction"; label: string; body: string }
+  | { kind: "currentState"; label: string; body: string }
   | { kind: "whyNow"; label: string; body: string }
   | { kind: "manifestation"; label: string; body: string }
   | { kind: "prose"; label: string; body: string }
-  | { kind: "window"; date: string; note: string | null; body: string }
+  | {
+      kind: "window";
+      date: string | null;
+      note: string | null;
+      body: string;
+    }
   | {
       kind: "directive";
-      directive: "DROP" | "EXECUTE" | "LOCK";
+      directive: "GENERAL" | "DROP" | "EXECUTE" | "LOCK";
       label: string;
       date: string | null;
       body: string;
@@ -277,8 +285,10 @@ function ResultsStarfield() {
 
 // ─── 2. Parser ──────────────────────────────────────────────────────
 
+// ─── EDIT 2: Updated part regex to recognize Parts 1-7 ──────────
+
 const INTERNAL_PART_RE =
-  /^\s*Part\s*(1|2|2B|3|4|5)\s*[:—–-]\s*/i;
+  /^\s*Part\s*([1-7])\s*[:—–-]\s*/i;
 
 const HUMAN_HEADERS = [
   "The Prediction",
@@ -372,16 +382,21 @@ function splitWindowNote(body: string): { note: string | null; rest: string } {
   return { note: null, rest: body };
 }
 
+// ─── EDIT 3: Updated classifyProseKind() ──────────────────────────
+
 function classifyProseKind(
   label: string,
   isFirst: boolean
-): "prediction" | "whyNow" | "manifestation" | "prose" {
+): "prediction" | "currentState" | "whyNow" | "manifestation" | "prose" {
   const normalized = label.trim().toLowerCase();
+
+  if (normalized === "where you are now") {
+    return "currentState";
+  }
 
   if (
     isFirst ||
-    normalized === "the prediction" ||
-    normalized === "where you are now"
+    normalized === "the prediction"
   ) {
     return "prediction";
   }
@@ -400,6 +415,8 @@ function classifyProseKind(
   return "prose";
 }
 
+// ─── EDIT 4: Replaced parseReadingSections() ──────────────────────
+
 function parseReadingSections(content: string): ParsedSection[] | null {
   const paragraphs = content
     .split(/\n{2,}/)
@@ -417,9 +434,14 @@ function parseReadingSections(content: string): ParsedSection[] | null {
     | "closing" = "opening";
 
   let pendingLabel: string | null = null;
+  let sawStructuredHeader = false;
 
   for (const rawParagraph of paragraphs) {
     const parsedHeader = splitHumanHeader(rawParagraph);
+
+    if (parsedHeader.label) {
+      sawStructuredHeader = true;
+    }
 
     // Standalone human-facing heading.
     if (parsedHeader.label && !parsedHeader.body) {
@@ -447,10 +469,39 @@ function parseReadingSections(content: string): ParsedSection[] | null {
       continue;
     }
 
-    const para = parsedHeader.body || cleanInternalPartLabel(rawParagraph);
+    const para =
+      parsedHeader.body ||
+      cleanInternalPartLabel(rawParagraph);
+
     const labelFromParagraph = parsedHeader.label;
 
     if (!para) continue;
+
+    // Support heading + content in the same paragraph.
+    if (labelFromParagraph === "Dated Windows") {
+      phase = "windows";
+      pendingLabel = null;
+    } else if (labelFromParagraph === "The Directive") {
+      phase = "directives";
+      pendingLabel = null;
+    } else if (labelFromParagraph === "Bottom Line") {
+      phase = "closing";
+      pendingLabel = "Bottom Line";
+    }
+
+    // Bottom Line always wins once entered.
+    if (
+      phase === "closing" ||
+      labelFromParagraph === "Bottom Line"
+    ) {
+      sections.push({
+        kind: "closing",
+        body: para,
+      });
+
+      pendingLabel = null;
+      continue;
+    }
 
     const isWindow = DATE_LEAD_RE.test(para);
     const isDrop = DROP_RE.test(para);
@@ -458,6 +509,7 @@ function parseReadingSections(content: string): ParsedSection[] | null {
     const isLock = LOCK_RE.test(para);
     const isDirective = isDrop || isExecute || isLock;
 
+    // Special directive formats remain supported.
     if (isDirective) {
       phase = "directives";
       pendingLabel = null;
@@ -495,7 +547,8 @@ function parseReadingSections(content: string): ParsedSection[] | null {
       continue;
     }
 
-    if (isWindow && phase !== "closing") {
+    // Calculator-supported dated window.
+    if (isWindow) {
       phase = "windows";
       pendingLabel = null;
 
@@ -505,7 +558,7 @@ function parseReadingSections(content: string): ParsedSection[] | null {
 
       sections.push({
         kind: "window",
-        date: match ? match[1].trim() : "",
+        date: match ? match[1].trim() : null,
         note,
         body: rest.trim(),
       });
@@ -513,14 +566,26 @@ function parseReadingSections(content: string): ParsedSection[] | null {
       continue;
     }
 
-    if (
-      phase === "closing" ||
-      labelFromParagraph === "Bottom Line"
-    ) {
-      phase = "closing";
-
+    // Part 5 still renders when there is NO exact date.
+    if (phase === "windows") {
       sections.push({
-        kind: "closing",
+        kind: "window",
+        date: null,
+        note: null,
+        body: para,
+      });
+
+      pendingLabel = null;
+      continue;
+    }
+
+    // Ordinary prose is a valid Part 6 directive.
+    if (phase === "directives") {
+      sections.push({
+        kind: "directive",
+        directive: "GENERAL",
+        label: "Directive",
+        date: null,
         body: para,
       });
 
@@ -548,11 +613,9 @@ function parseReadingSections(content: string): ParsedSection[] | null {
     pendingLabel = null;
   }
 
-  const hasStructure =
-    sections.some((s) => s.kind === "window") ||
-    sections.some((s) => s.kind === "directive");
-
-  return hasStructure ? sections : null;
+  return sawStructuredHeader && sections.length > 0
+    ? sections
+    : null;
 }
 
 // ─── 3. Main Component ─────────────────────────────────────────────
@@ -753,10 +816,13 @@ export default function ReadingResultsPage() {
     return () => observer.disconnect();
   }, [parsedSections]);
 
-  // ─── Group sections ─────────────────────────────────────────────
+  // ─── EDIT 5: Group sections with currentState ──────────────────
 
   const predictionSections =
     parsedSections?.filter((section) => section.kind === "prediction") ?? [];
+
+  const currentStateSections =
+    parsedSections?.filter((section) => section.kind === "currentState") ?? [];
 
   const whyNowSections =
     parsedSections?.filter((section) => section.kind === "whyNow") ?? [];
@@ -1284,6 +1350,12 @@ export default function ReadingResultsPage() {
           border-color: rgba(251, 191, 36, 0.2);
         }
 
+        /* ─── EDIT 6: Add general directive styling ──────────────────── */
+
+        .action-card.general {
+          border-color: rgba(94, 234, 212, 0.15);
+        }
+
         .action-card-head {
           display: flex;
           align-items: center;
@@ -1313,6 +1385,10 @@ export default function ReadingResultsPage() {
 
         .action-card.lock .action-card-label {
           color: #fbbf24;
+        }
+
+        .action-card.general .action-card-label {
+          color: #5eead4;
         }
 
         .action-card-note {
@@ -1692,6 +1768,8 @@ export default function ReadingResultsPage() {
           }`}
         >
           {parsedSections ? (
+            // ─── EDIT 7: Updated reading render with seven parts ──────
+
             <>
               {/* ── 1. THE PREDICTION ── */}
               {predictionSections.map((section, i) => {
@@ -1719,7 +1797,23 @@ export default function ReadingResultsPage() {
                 );
               })}
 
-              {/* ── 2. WHY NOW ── */}
+              {/* ── 2. WHERE YOU ARE NOW ── */}
+              {currentStateSections.map((section, i) => (
+                <section
+                  key={`current-${i}`}
+                  className="context-section reading-focusable"
+                >
+                  <p className="section-label">
+                    Where You Are Now
+                  </p>
+
+                  <p className="reading-body">
+                    {renderContentWithBadges(section.body)}
+                  </p>
+                </section>
+              ))}
+
+              {/* ── 3. WHY THIS IS ACTIVE NOW ── */}
               {whyNowSections.map((section, i) => (
                 <section
                   key={`why-${i}`}
@@ -1735,7 +1829,7 @@ export default function ReadingResultsPage() {
                 </section>
               ))}
 
-              {/* ── 3. HOW THIS SHOWS UP ── */}
+              {/* ── 4. HOW THIS IS MOST LIKELY TO SHOW UP ── */}
               {manifestationSections.map((section, i) => (
                 <section
                   key={`manifestation-${i}`}
@@ -1769,7 +1863,7 @@ export default function ReadingResultsPage() {
                 </section>
               ))}
 
-              {/* ── 4. TIMING ── */}
+              {/* ── 5. DATED WINDOWS / TIMING ── */}
               {timingSections.length > 0 && (
                 <section className="reveal-zone reading-focusable">
                   <p className="reveal-zone-heading">
@@ -1789,12 +1883,14 @@ export default function ReadingResultsPage() {
                           />
 
                           <span className="action-card-label">
-                            Dated Window
+                            {section.date ? "Dated Window" : "Timing"}
                           </span>
 
-                          <span className="date-badge">
-                            {section.date}
-                          </span>
+                          {section.date && (
+                            <span className="date-badge">
+                              {section.date}
+                            </span>
+                          )}
 
                           {section.note && (
                             <span className="action-card-note">
@@ -1812,7 +1908,7 @@ export default function ReadingResultsPage() {
                 </section>
               )}
 
-              {/* ── 5. YOUR MOVE ── */}
+              {/* ── 6. THE DIRECTIVE / YOUR MOVE ── */}
               {directiveSections.length > 0 && (
                 <section className="reveal-zone directive-zone reading-focusable">
                   <p className="reveal-zone-heading">
@@ -1826,14 +1922,18 @@ export default function ReadingResultsPage() {
                           ? "drop"
                           : section.directive === "EXECUTE"
                             ? "execute"
-                            : "lock";
+                            : section.directive === "LOCK"
+                              ? "lock"
+                              : "general";
 
                       const visibleLabel =
                         section.directive === "DROP"
                           ? "Drop"
                           : section.directive === "EXECUTE"
                             ? "Execute"
-                            : "Lock In";
+                            : section.directive === "LOCK"
+                              ? "Lock In"
+                              : "Directive";
 
                       return (
                         <div
@@ -1862,7 +1962,7 @@ export default function ReadingResultsPage() {
                 </section>
               )}
 
-              {/* ── Bottom Line focus moment ── */}
+              {/* ── 7. BOTTOM LINE ── */}
               {closingSections.length > 0 && (
                 <div
                   ref={bottomLineRef}
@@ -2073,8 +2173,7 @@ export default function ReadingResultsPage() {
 
       {/* ── Embedded Stripe checkout modal ── */}
       {clientSecret && (
-        <div
-          style={{
+        <div          style={{
             position: "fixed",
             inset: 0,
             zIndex: 60,
