@@ -1990,7 +1990,7 @@ export default function ReadingResultsPage() {
 
           {/* ── Astrological Sources ── */}
           {page.sources && page.sources.length > 0 && (
-            <div className="sources-wrap reading-focusable">
+  <div className="sources-wrap">
               <button
                 type="button"
                 className={`sources-toggle ${
