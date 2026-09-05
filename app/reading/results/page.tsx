@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, CalendarDays } from "lucide-react";
+import { Download, ChevronDown, CalendarDays } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import {
@@ -48,8 +48,6 @@ type ParsedSection =
       body: string;
     }
   | { kind: "closing"; body: string };
-
-type ReadingStage = 1 | 2 | 3 | 4 | 5 | 6;
 
 // ─── ResultsStarfield Component ────────────────────────────────
 
@@ -512,12 +510,6 @@ function parseReadingSections(content: string): ParsedSection[] | null {
   return sawStructuredHeader && sections.length > 0 ? sections : null;
 }
 
-// ─── Touch/Gesture helpers ─────────────────────────────────────
-
-function isVerticalGesture(deltaX: number, deltaY: number): boolean {
-  return Math.abs(deltaY) > Math.abs(deltaX) * 1.25;
-}
-
 // ─── Main Component ─────────────────────────────────────────────
 
 export default function ReadingResultsPage() {
@@ -530,14 +522,7 @@ export default function ReadingResultsPage() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-
-  // ── Stage state ──
-  const [activeStage, setActiveStage] = useState<ReadingStage>(1);
-  const [contextStep, setContextStep] = useState<1 | 2 | 3>(1);
-  const [proseProgress, setProseProgress] = useState(0);
-  const [revealedTimingCount, setRevealedTimingCount] = useState(0);
-  const [revealedDirectiveCount, setRevealedDirectiveCount] = useState(0);
-  const [bottomLineExpanded, setBottomLineExpanded] = useState(false);
+  const [showGoingDeeper, setShowGoingDeeper] = useState(false);
 
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -550,11 +535,8 @@ export default function ReadingResultsPage() {
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
-  const proseContainerRef = useRef<HTMLDivElement | null>(null);
-  const proseTrackRef = useRef<HTMLDivElement | null>(null);
-  const proseProgressRef = useRef(0);
-  const proseDragStartProgressRef = useRef(0);
-  const proseMaxTravelRef = useRef(1);
+  const bottomLineRef = useRef<HTMLDivElement | null>(null);
+  const goingDeeperTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
@@ -730,228 +712,38 @@ export default function ReadingResultsPage() {
   const closingSections =
     parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
-  // ─── Navigation ──────────────────────────────────────────────────
-
-  const goToStage = useCallback((stage: ReadingStage) => {
-    setActiveStage(stage);
-  }, []);
-
-  const handleSwipeUp = useCallback(() => {
-    switch (activeStage) {
-      case 1:
-        goToStage(2);
-        break;
-      case 2:
-        if (contextStep < 3) {
-          setContextStep((s) => (s + 1) as 1 | 2 | 3);
-        } else {
-          goToStage(3);
-        }
-        break;
-      case 3:
-        if (proseProgressRef.current >= 1) {
-          goToStage(4);
-        }
-        break;
-      case 4:
-        if (revealedTimingCount === timingSections.length) {
-          goToStage(5);
-        }
-        break;
-      case 5:
-        if (revealedDirectiveCount === directiveSections.length) {
-          goToStage(6);
-        }
-        break;
-      case 6:
-        if (!bottomLineExpanded) {
-          setBottomLineExpanded(true);
-        }
-        break;
-    }
-  }, [activeStage, contextStep, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage, timingSections.length, directiveSections.length]);
-
-  const handleSwipeDown = useCallback(() => {
-    switch (activeStage) {
-      case 2:
-        if (contextStep > 1) {
-          setContextStep((s) => (s - 1) as 1 | 2 | 3);
-        } else {
-          goToStage(1);
-        }
-        break;
-      case 3:
-        if (proseProgressRef.current <= 0) {
-          goToStage(2);
-        }
-        break;
-      case 4:
-        if (revealedTimingCount > 0) {
-          setRevealedTimingCount((n) => Math.max(0, n - 1));
-        } else {
-          goToStage(3);
-        }
-        break;
-      case 5:
-        if (revealedDirectiveCount > 0) {
-          setRevealedDirectiveCount((n) => Math.max(0, n - 1));
-        } else {
-          goToStage(4);
-        }
-        break;
-      case 6:
-        if (bottomLineExpanded) {
-          setBottomLineExpanded(false);
-        } else {
-          goToStage(5);
-        }
-        break;
-      default:
-        break;
-    }
-  }, [activeStage, contextStep, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage]);
-
-  // ─── Prose drag handler ────────────────────────────────────────
-
+  // ── Intersection Observer for Bottom Line ──
   useEffect(() => {
-    if (activeStage !== 3 || !proseContainerRef.current || !proseTrackRef.current) {
-      return;
-    }
+    if (!bottomLineRef.current) return;
 
-    const container = proseContainerRef.current;
-    const track = proseTrackRef.current;
-
-    let touchStartY = 0;
-    let dragging = false;
-
-    const measureTravel = () => {
-      const viewportHeight = container.clientHeight;
-      const trackHeight = track.scrollHeight;
-
-      const entranceRunway = viewportHeight * 0.38;
-      const exitRunway = viewportHeight * 0.42;
-      const readableTravel = Math.max(0, trackHeight - viewportHeight * 0.35);
-
-      proseMaxTravelRef.current = Math.max(1, entranceRunway + readableTravel + exitRunway);
-    };
-
-    measureTravel();
-
-    const handleResize = () => {
-      measureTravel();
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (!e.touches.length) return;
-
-      touchStartY = e.touches[0].clientY;
-      proseDragStartProgressRef.current = proseProgressRef.current;
-      dragging = true;
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!dragging || !e.touches.length) return;
-
-      const currentY = e.touches[0].clientY;
-      const deltaY = touchStartY - currentY;
-      const deltaProgress = deltaY / proseMaxTravelRef.current;
-      const nextProgress = Math.max(0, Math.min(1, proseDragStartProgressRef.current + deltaProgress));
-
-      proseProgressRef.current = nextProgress;
-      setProseProgress(nextProgress);
-
-      e.preventDefault();
-    };
-
-    const handleTouchEnd = () => {
-      dragging = false;
-
-      const current = proseProgressRef.current;
-
-      if (current > 0.985) {
-        proseProgressRef.current = 1;
-        setProseProgress(1);
-      } else if (current < 0.015) {
-        proseProgressRef.current = 0;
-        setProseProgress(0);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            if (goingDeeperTimerRef.current) {
+              clearTimeout(goingDeeperTimerRef.current);
+            }
+            goingDeeperTimerRef.current = setTimeout(() => {
+              setShowGoingDeeper(true);
+            }, 7000);
+          }
+        }
+      },
+      {
+        root: null,
+        threshold: 0.5,
       }
-    };
+    );
 
-    container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
-    container.addEventListener("touchmove", handleTouchMove as EventListener, { passive: false });
-    container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
-
-    window.addEventListener("resize", handleResize);
+    observer.observe(bottomLineRef.current);
 
     return () => {
-      container.removeEventListener("touchstart", handleTouchStart as EventListener);
-      container.removeEventListener("touchmove", handleTouchMove as EventListener);
-      container.removeEventListener("touchend", handleTouchEnd as EventListener);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [activeStage]);
-
-  // ─── Directive drag handler ────────────────────────────────────
-
-  const handleDirectiveDrag = useCallback((index: number, offsetX: number, cardWidth: number) => {
-    if (index !== revealedDirectiveCount) return;
-    const threshold = cardWidth * 0.7;
-    if (offsetX >= threshold) {
-      setRevealedDirectiveCount((n) => Math.min(n + 1, directiveSections.length));
-    }
-  }, [revealedDirectiveCount, directiveSections.length]);
-
-  // ─── Touch handler for swipe navigation ──────────────────────
-
-  useEffect(() => {
-    const container = document.querySelector(".results-root");
-    if (!container) return;
-
-    let startX = 0;
-    let startY = 0;
-    let isSwiping = false;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      isSwiping = true;
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (!isSwiping) return;
-      isSwiping = false;
-
-      // Stage 3 owns vertical dragging until prose is complete
-      if (activeStage === 3 && proseProgressRef.current < 1) {
-        return;
-      }
-
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      const deltaX = endX - startX;
-      const deltaY = endY - startY;
-
-      if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) return;
-
-      if (isVerticalGesture(deltaX, deltaY)) {
-        if (deltaY < -30) {
-          handleSwipeUp();
-        } else if (deltaY > 30) {
-          handleSwipeDown();
-        }
+      observer.disconnect();
+      if (goingDeeperTimerRef.current) {
+        clearTimeout(goingDeeperTimerRef.current);
       }
     };
-
-    container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
-    container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
-
-    return () => {
-      container.removeEventListener("touchstart", handleTouchStart as EventListener);
-      container.removeEventListener("touchend", handleTouchEnd as EventListener);
-    };
-  }, [activeStage, handleSwipeUp, handleSwipeDown]);
-
-  // ─── Action handlers ───────────────────────────────────────────
+  }, [parsedSections]);
 
   const renderContentWithBadges = (content: string) => {
     const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
@@ -1147,8 +939,6 @@ export default function ReadingResultsPage() {
     router.push("/reading/intake");
   };
 
-  // ─── EARLY RETURN — AFTER ALL HOOKS ──────────────────────────
-
   if (isLoading || !reading || !page) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e27" }}>
@@ -1166,397 +956,6 @@ export default function ReadingResultsPage() {
     replyCreditsRemaining !== null &&
     replyCreditsRemaining <= 0;
   const paywallVisible = !isSubscribed && (showPaywall || outOfReplies);
-
-  // ─── Render stages ─────────────────────────────────────────────
-
-  const renderStage1 = () => (
-    <section className="reading-stage" data-stage="1">
-      <div className="reading-stage-inner">
-        {predictionSections.map((section, i) => {
-          const { lead, rest } = splitPredictionLead(section.body);
-
-          return (
-            <div key={`prediction-${i}`} className="prediction-feature">
-              <p className="prediction-label">The Astrological Prediction</p>
-              <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
-              {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-
-  const renderStage2 = () => {
-    const sections = [
-      ...currentStateSections.map((s, i) => ({ key: `current-${i}`, label: "Where You Are Now", body: s.body })),
-      ...whyNowSections.map((s, i) => ({ key: `why-${i}`, label: "Why This Is Active Now", body: s.body })),
-      ...manifestationSections.map((s, i) => ({ key: `manifestation-${i}`, label: "How This Is Most Likely To Show Up", body: s.body })),
-    ];
-
-    const visibleSections = sections.slice(0, contextStep);
-
-    return (
-      <section className="reading-stage" data-stage="2">
-        <div className="reading-stage-inner context-stage">
-          <AnimatePresence>
-            {visibleSections.map((s, i) => (
-              <motion.div
-                key={s.key}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                transition={{ duration: 0.45, ease: "easeOut" }}
-                className="context-section"
-              >
-                <p className="section-label">{s.label}</p>
-                <p className="reading-body">{renderContentWithBadges(s.body)}</p>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </section>
-    );
-  };
-
- const renderStage3 = () => {
-  const proseContent = additionalProseSections
-    .map((section) => section.body)
-    .join(" ");
-
-  const entranceOffset =
-    typeof window !== "undefined"
-      ? window.innerHeight * 0.38
-      : 300;
-
-  const trackY =
-    entranceOffset -
-    proseProgress * proseMaxTravelRef.current;
-
-  return (
-    <section className="reading-stage prose-stage" data-stage="3">
-      <div className="prose-window" ref={proseContainerRef}>
-        <motion.div
-          className="prose-track"
-          ref={proseTrackRef}
-          animate={{ y: trackY }}
-          transition={{
-            type: "spring",
-            stiffness: 240,
-            damping: 32,
-            mass: 0.7,
-          }}
-        >
-          <p className="reading-body">
-            {renderContentWithBadges(proseContent)}
-          </p>
-        </motion.div>
-
-        {/* TOP EXIT PORTAL */}
-        <div className="prose-top-glass" />
-        <div className="prose-top-fade" />
-        <div className="prose-top-line" />
-
-        {/* BOTTOM ENTRY PORTAL */}
-        <div className="prose-bottom-glass" />
-        <div className="prose-bottom-fade" />
-        <div className="prose-bottom-line" />
-      </div>
-    </section>
-  );
-};
-
-  const renderStage4 = () => (
-    <section className="reading-stage" data-stage="4">
-      <div className="reading-stage-inner">
-        <div className="reveal-zone">
-          <p className="reveal-zone-heading">Timing</p>
-          <div className="action-zone-frame">
-            {timingSections.map((section, i) => {
-              const revealed = i < revealedTimingCount;
-              const available = i === revealedTimingCount;
-              const locked = i > revealedTimingCount;
-
-              return (
-                <div key={`timing-${i}`} className={`action-card window ${available ? "is-available" : ""}`}>
-                  <div className="action-card-head">
-                    <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
-                    <span className="action-card-label">
-                      {section.date ? "Dated Window" : "Timing"}
-                    </span>
-                    {section.date && <span className="date-badge">{section.date}</span>}
-                    {section.note && <span className="action-card-note">— {section.note}</span>}
-                  </div>
-                  <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-
-                  {!revealed && (
-                    <button
-                      type="button"
-                      className={`timing-veil ${locked ? "is-locked" : ""}`}
-                      disabled={locked}
-                      onClick={() => {
-                        if (available) {
-                          setRevealedTimingCount((n) => n + 1);
-                        }
-                      }}
-                    >
-                      {available && <span className="timing-reveal-label">Tap to reveal</span>}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-
-  const renderStage5 = () => {
-    const cardWidth = typeof window !== "undefined" ? Math.min(window.innerWidth - 64, 556) : 400;
-
-    return (
-      <section className="reading-stage" data-stage="5">
-        <div className="reading-stage-inner">
-          <div className="reveal-zone directive-zone">
-            <p className="reveal-zone-heading">Your Move</p>
-            <div className="action-zone-frame">
-              {directiveSections.map((section, i) => {
-                const revealed = i < revealedDirectiveCount;
-                const available = i === revealedDirectiveCount;
-                const locked = i > revealedDirectiveCount;
-
-                const variant =
-                  section.directive === "DROP"
-                    ? "drop"
-                    : section.directive === "EXECUTE"
-                      ? "execute"
-                      : section.directive === "LOCK"
-                        ? "lock"
-                        : "general";
-
-                const visibleLabel =
-                  section.directive === "DROP"
-                    ? "Drop"
-                    : section.directive === "EXECUTE"
-                      ? "Execute"
-                      : section.directive === "LOCK"
-                        ? "Lock In"
-                        : "Directive";
-
-                return (
-                  <div key={`directive-${i}`} className={`action-card ${variant} ${available ? "is-available" : ""}`}>
-                    <div className="action-card-head">
-                      <span className="action-card-label">{visibleLabel}</span>
-                      {section.date && <span className="date-badge">{section.date}</span>}
-                    </div>
-                    <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
-
-                    {!revealed && (
-                      <motion.div
-                        className="directive-frost"
-                        drag="x"
-                        dragConstraints={{ left: 0, right: cardWidth }}
-                        dragElastic={0.08}
-                        dragMomentum={false}
-                        onDragEnd={(_, info) => {
-                          if (available && info.offset.x >= cardWidth * 0.7) {
-                            setRevealedDirectiveCount((n) => Math.min(n + 1, directiveSections.length));
-                          }
-                        }}
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          borderRadius: "inherit",
-                          background: locked
-                            ? "linear-gradient(135deg, rgba(157, 177, 205, 0.35), rgba(58, 77, 111, 0.45))"
-                            : "linear-gradient(135deg, rgba(157, 177, 205, 0.23), rgba(58, 77, 111, 0.34))",
-                          backdropFilter: "blur(16px) saturate(0.75)",
-                          pointerEvents: locked ? "none" : "auto",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          cursor: available ? "grab" : "default",
-                        }}
-                      >
-                        {available && (
-                          <span className="directive-reveal-label">← Swipe to reveal →</span>
-                        )}
-                      </motion.div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  };
-
-  const renderStage6 = () => {
-    const followUpContent = (
-      <div className="going-deeper-panel">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="h-px flex-1 bg-white/[0.07]" />
-          <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
-          <div className="h-px flex-1 bg-white/[0.07]" />
-        </div>
-
-        {followups.map((f) => (
-          <div key={f.id} className="mb-5">
-            <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
-            <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
-            <div className="reading-body" style={{ fontSize: 15 }}>
-              {renderContentWithBadges(f.content)}
-            </div>
-          </div>
-        ))}
-        <div ref={followupEndRef} />
-
-        {justPurchased && (
-          <div className="purchase-success">
-            ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
-          </div>
-        )}
-
-        {paywallVisible ? (
-          <div className="paywall-card">
-            <p className="paywall-title">
-              {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
-            </p>
-            <p className="paywall-sub">
-              {isSubscribed
-                ? "As a subscriber, 4 more are half-price."
-                : "Keep the conversation going and get even more clarity."}
-            </p>
-            <button
-              type="button"
-              className="paywall-buy"
-              onClick={handleBuyReplyPack}
-              disabled={isPurchasing}
-            >
-              {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
-            </button>
-            {!isSubscribed && (
-              <button
-                type="button"
-                className="paywall-sub-link"
-                onClick={handleSubscribe}
-                disabled={isPurchasing}
-              >
-                or subscribe for more each month
-              </button>
-            )}
-            {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-          </div>
-        ) : (
-          <>
-            <p className="mb-2 px-1 text-[12px] text-slate-500">
-              Don't over think this. Just say what's on your mind.
-            </p>
-            <textarea
-              className="followup-input"
-              rows={3}
-              value={followupQuestion}
-              onChange={(e) => setFollowupQuestion(e.target.value)}
-              placeholder="Ask a follow up…"
-              disabled={isGeneratingFollowup}
-            />
-            {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-            <button
-              type="button"
-              onClick={handleFollowup}
-              disabled={isGeneratingFollowup || !followupQuestion.trim()}
-              className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
-            >
-              {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
-            </button>
-
-            <div className="top-actions">
-              <button
-                type="button"
-                className="download-btn"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                aria-label="Download reading"
-              >
-                <Download className="h-5 w-5" />
-              </button>
-              <button type="button" className="done-btn" onClick={handleDone}>
-                Done
-              </button>
-            </div>
-
-            <div className="final-balance-line">
-              <span>{credits?.credits ?? 0} credits remaining</span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {freeRemainingClient} free{" "}
-                {freeRemainingClient === 1 ? "reply" : "replies"} remaining
-              </span>
-            </div>
-          </>
-        )}
-      </div>
-    );
-
-    return (
-      <section className={`reading-stage final-stage ${bottomLineExpanded ? "is-expanded" : ""}`} data-stage="6">
-        <div className="reading-stage-inner">
-          <motion.div
-            className="bottom-line-wrap"
-            animate={{
-              y: bottomLineExpanded ? "-18svh" : 0,
-            }}
-            transition={{
-              duration: 0.65,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-          >
-            <p className="bottom-line-label">Bottom Line</p>
-            {closingSections.map((section, i) => (
-              <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
-            ))}
-          </motion.div>
-
-          <AnimatePresence>
-            {bottomLineExpanded && (
-              <motion.div
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.12 }}
-                className="going-deeper-wrapper"
-              >
-                {followUpContent}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </section>
-    );
-  };
-
-  // ─── Stage switcher ────────────────────────────────────────────
-
-  const renderActiveStage = () => {
-    switch (activeStage) {
-      case 1:
-        return renderStage1();
-      case 2:
-        return renderStage2();
-      case 3:
-        return renderStage3();
-      case 4:
-        return renderStage4();
-      case 5:
-        return renderStage5();
-      case 6:
-        return renderStage6();
-      default:
-        return null;
-    }
-  };
 
   return (
     <div
@@ -1593,7 +992,6 @@ export default function ReadingResultsPage() {
           position: relative;
           display: flex;
           align-items: center;
-          scroll-snap-align: start;
         }
 
         .reading-stage-inner {
@@ -1698,39 +1096,17 @@ export default function ReadingResultsPage() {
           justify-content: center;
           align-items: center;
           gap: 6px;
-          white-space: nowrap;
+          flex-wrap: wrap;
           margin-top: 8px;
           font-size: 11px;
           color: #64748b;
           text-align: center;
         }
 
-        @media (max-width: 380px) {
-          .final-balance-line {
-            font-size: 10px;
-          }
-        }
-
         /* ─── Prediction (hero) ─────────────────────────────────────────── */
         .prediction-feature {
           position: relative;
-          isolation: isolate;
           padding: 28px 8px 30px;
-        }
-
-        .prediction-feature::before {
-          content: "";
-          position: absolute;
-          inset: -60px -30px;
-          background: radial-gradient(
-            ellipse at center,
-            rgba(94, 234, 212, 0.10),
-            rgba(59, 130, 246, 0.05) 45%,
-            transparent 72%
-          );
-          filter: blur(28px);
-          pointer-events: none;
-          z-index: -1;
         }
 
         .prediction-feature::after {
@@ -1779,11 +1155,6 @@ export default function ReadingResultsPage() {
         }
 
         /* ─── Context stage (Stage 2) ────────────────────────────────── */
-        .context-stage {
-          justify-content: center;
-          transition: all 0.45s ease;
-        }
-
         .context-stage .context-section {
           width: 100%;
           margin-top: 34px;
@@ -1812,150 +1183,12 @@ export default function ReadingResultsPage() {
           margin-top: 10px;
         }
 
-        /* ─── Prose stage (Stage 3) ────────────────────────────────────── */
-.prose-stage {
-  overflow: hidden;
-  touch-action: none;
-}
+        /* ─── Prose stage ───────────────────────────────────────────────── */
+        .prose-stage .reading-body {
+          margin-top: 0;
+        }
 
-.prose-window {
-  /* one knob per edge — line, fade, and glass all follow it */
-  --portal-top: 7svh;
-  --portal-bottom: 7svh;
-  position: relative;
-  width: 100%;
-  height: 100svh;
-  overflow: hidden;
-}
-
-.prose-track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  width: 100%;
-  padding: 0 2px;
-  will-change: transform;
-  z-index: 2;
-}
-
-.prose-track .reading-body {
-  font-size: 17px;
-  line-height: 2;
-  margin: 0;
-}
-
-/* ── liquid-glass bands: blur peak centered on each line ── */
-.prose-top-glass {
-  position: absolute;
-  top: calc(var(--portal-top) - 7.5svh);
-  left: -8px;
-  right: -8px;
-  height: 15svh;
-  z-index: 4;
-  pointer-events: none;
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-          mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-}
-.prose-bottom-glass {
-  position: absolute;
-  bottom: calc(var(--portal-bottom) - 7.5svh);
-  left: -8px;
-  right: -8px;
-  height: 15svh;
-  z-index: 4;
-  pointer-events: none;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  -webkit-mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-          mask-image: linear-gradient(to top, transparent 0%, rgba(0,0,0,.12) 34%, rgba(0,0,0,.95) 50%, rgba(0,0,0,.12) 66%, transparent 100%);
-}
-
-/* ── TOP PORTAL ── (color dissolve, no blur here) */
-.prose-top-fade {
-  position: absolute;
-  top: 0;
-  left: -8px;
-  right: -8px;
-  height: var(--portal-top);
-  z-index: 5;
-  pointer-events: none;
-  background: linear-gradient(to bottom, rgba(2,3,12,1) 0%, rgba(2,3,12,.85) 55%, transparent 100%);
-}
-
-.prose-top-line {
-  position: absolute;
-  top: var(--portal-top);
-  left: 2%;
-  right: 2%;
-  height: 1px;
-  z-index: 6;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(226,232,255,.16) 16%, rgba(240,245,255,.85) 50%, rgba(226,232,255,.16) 84%, transparent);
-  box-shadow: 0 0 10px rgba(190,214,255,.5), 0 0 26px rgba(120,160,255,.26);
-}
-
-/* ── BOTTOM PORTAL ── */
-.prose-bottom-fade {
-  position: absolute;
-  bottom: 0;
-  left: -8px;
-  right: -8px;
-  height: var(--portal-bottom);
-  z-index: 5;
-  pointer-events: none;
-  background: linear-gradient(to top, rgba(13,36,78,.98) 0%, rgba(18,48,92,.8) 55%, transparent 100%);
-}
-
-.prose-bottom-line {
-  position: absolute;
-  bottom: var(--portal-bottom);
-  left: 2%;
-  right: 2%;
-  height: 1px;
-  z-index: 6;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(94,234,212,.16) 16%, rgba(150,225,255,.9) 50%, rgba(94,234,212,.16) 84%, transparent);
-  box-shadow: 0 0 10px rgba(120,220,235,.45), 0 0 26px rgba(59,130,246,.2);
-}
-
-/* ── shimmer sweep + star field on each line (no extra DOM) ── */
-.prose-top-line::after,
-.prose-bottom-line::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -32%;
-  height: 100%;
-  width: 32%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent);
-  filter: blur(1px);
-  animation: prose-sweep 5.5s ease-in-out infinite;
-}
-.prose-top-line::before,
-.prose-bottom-line::before {
-  content: "";
-  position: absolute;
-  left: 12%;
-  top: 0;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: #fff;
-  opacity: .5;
-  box-shadow:
-    30px 6px 0 rgba(255,255,255,.7), 90px -4px 0 rgba(255,255,255,.5),
-    150px 8px 0 rgba(255,255,255,.6), 210px -6px 0 rgba(255,255,255,.45),
-    260px 5px 0 rgba(255,255,255,.6), 60px 10px 0 rgba(255,255,255,.4),
-    180px -9px 0 rgba(255,255,255,.5);
-  animation: prose-twinkle 3.6s ease-in-out infinite;
-}
-@keyframes prose-sweep   { 0% { transform: translateX(0); }   100% { transform: translateX(430%); } }
-@keyframes prose-twinkle { 0%, 100% { opacity: .22; }         50%  { opacity: .85; } }
-
-        /* ─── Timing (Stage 4) ──────────────────────────────────────────── */
+        /* ─── Timing (teal) ────────────────────────────────────────────── */
         .reveal-zone {
           width: 100%;
         }
@@ -1988,7 +1221,6 @@ export default function ReadingResultsPage() {
           border-radius: 18px;
           padding: 16px 17px;
           background: rgba(17, 22, 51, 0.46);
-          overflow: hidden;
         }
 
         .action-card + .action-card {
@@ -1997,17 +1229,6 @@ export default function ReadingResultsPage() {
 
         .action-card.window {
           border-color: rgba(94, 234, 212, 0.15);
-        }
-
-        .action-card.is-available {
-          border-color: rgba(94, 234, 212, 0.5);
-          box-shadow: 0 0 30px rgba(94, 234, 212, 0.08);
-          animation: pulse-glow 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse-glow {
-          0%, 100% { box-shadow: 0 0 30px rgba(94, 234, 212, 0.08); }
-          50% { box-shadow: 0 0 45px rgba(94, 234, 212, 0.16); }
         }
 
         .action-card-head {
@@ -2044,49 +1265,7 @@ export default function ReadingResultsPage() {
           white-space: pre-wrap;
         }
 
-        /* ─── Timing veil ────────────────────────────────────────────────── */
-        .timing-veil {
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          border: 0;
-          background: linear-gradient(
-            135deg,
-            rgba(157, 177, 205, 0.23),
-            rgba(58, 77, 111, 0.34)
-          );
-          backdrop-filter: blur(16px) saturate(0.75);
-          -webkit-backdrop-filter: blur(16px) saturate(0.75);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: opacity 0.3s ease;
-        }
-
-        .timing-veil.is-locked {
-          cursor: default;
-          opacity: 0.6;
-        }
-
-        .timing-veil:hover:not(.is-locked) {
-          opacity: 0.8;
-        }
-
-        .timing-reveal-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: rgba(226, 232, 240, 0.6);
-          background: rgba(0, 0, 0, 0.3);
-          padding: 6px 16px;
-          border-radius: 9999px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* ─── Your Move (Stage 5) ───────────────────────────────────────── */
+        /* ─── Your Move (gold) ──────────────────────────────────────────── */
         .directive-zone {
           margin-top: 28px;
         }
@@ -2131,70 +1310,10 @@ export default function ReadingResultsPage() {
           color: #fbbf24;
         }
 
-        .action-card.is-available {
-          border-color: rgba(251, 191, 36, 0.5);
-          box-shadow: 0 0 30px rgba(251, 191, 36, 0.08);
-          animation: pulse-glow-gold 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse-glow-gold {
-          0%, 100% { box-shadow: 0 0 30px rgba(251, 191, 36, 0.08); }
-          50% { box-shadow: 0 0 45px rgba(251, 191, 36, 0.16); }
-        }
-
-        .directive-frost {
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          background: linear-gradient(
-            135deg,
-            rgba(157, 177, 205, 0.23),
-            rgba(58, 77, 111, 0.34)
-          );
-          backdrop-filter: blur(16px) saturate(0.75);
-          -webkit-backdrop-filter: blur(16px) saturate(0.75);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: grab;
-          touch-action: pan-y;
-        }
-
-        .directive-frost:active {
-          cursor: grabbing;
-        }
-
-        .directive-reveal-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: rgba(226, 232, 240, 0.5);
-          background: rgba(0, 0, 0, 0.3);
-          padding: 6px 16px;
-          border-radius: 9999px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          pointer-events: none;
-          user-select: none;
-        }
-
-        /* ─── Bottom Line (Stage 6) ────────────────────────────────────── */
-        .final-stage {
-          overflow: hidden;
-        }
-
-        .final-stage .reading-stage-inner {
-          position: relative;
-          min-height: 100svh;
-          justify-content: flex-start;
-          padding-top: 10vh;
-        }
-
+        /* ─── Bottom Line ──────────────────────────────────────────────── */
         .bottom-line-wrap {
           width: 100%;
           text-align: center;
-          z-index: 2;
         }
 
         .bottom-line-label {
@@ -2217,16 +1336,6 @@ export default function ReadingResultsPage() {
           text-align: center;
           white-space: pre-wrap;
           text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
-        }
-
-        .going-deeper-wrapper {
-          width: 100%;
-          margin-top: 12px;
-          z-index: 1;
-        }
-
-        .going-deeper-panel {
-          width: 100%;
         }
 
         /* ─── Follow-up styles ──────────────────────────────────────────── */
@@ -2315,29 +1424,10 @@ export default function ReadingResultsPage() {
 
         .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
 
-        /* ─── Desktop ────────────────────────────────────────────────────── */
-        @media (min-width: 768px) {
-          .results-root {
-            overflow-y: auto;
-          }
-
-          .reading-stage {
-            min-height: 100vh;
-            scroll-snap-align: start;
-          }
-
-          .prose-window {
-            height: 100vh;
-          }
-        }
-
         /* ─── Reduced motion ────────────────────────────────────────────── */
         @media (prefers-reduced-motion: reduce) {
-          .prediction-feature::before {
-            display: none;
-          }
-          .action-card.is-available {
-            animation: none;
+          .sources-toggle::before {
+            animation: none !important;
           }
         }
       `}</style>
@@ -2351,8 +1441,152 @@ export default function ReadingResultsPage() {
           minHeight: "100vh",
         }}
       >
+        {/* ── THE READING ── */}
         {parsedSections ? (
-          renderActiveStage()
+          <>
+            {/* ── STAGE 1: THE ASTROLOGICAL PREDICTION ── */}
+            <section className="reading-stage">
+              <div className="reading-stage-inner">
+                {predictionSections.map((section, i) => {
+                  const { lead, rest } = splitPredictionLead(section.body);
+
+                  return (
+                    <div key={`prediction-${i}`} className="prediction-feature">
+                      <p className="prediction-label">The Astrological Prediction</p>
+                      <p className="prediction-lead">{renderContentWithBadges(lead)}</p>
+                      {rest && <p className="prediction-support">{renderContentWithBadges(rest)}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* ── STAGE 2: CONTEXT / MANIFESTATION ── */}
+            <section className="reading-stage">
+              <div className="reading-stage-inner context-stage">
+                {/* WHERE YOU ARE NOW */}
+                {currentStateSections.map((section, i) => (
+                  <div key={`current-${i}`} className="context-section">
+                    <p className="section-label">Where You Are Now</p>
+                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                  </div>
+                ))}
+
+                {/* WHY THIS IS ACTIVE NOW */}
+                {whyNowSections.map((section, i) => (
+                  <div key={`why-${i}`} className="context-section">
+                    <p className="section-label">Why This Is Active Now</p>
+                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                  </div>
+                ))}
+
+                {/* HOW THIS IS MOST LIKELY TO SHOW UP */}
+                {manifestationSections.map((section, i) => (
+                  <div key={`manifestation-${i}`} className="context-section">
+                    <p className="section-label">How This Is Most Likely To Show Up</p>
+                    <p className="reading-body">{renderContentWithBadges(section.body)}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* ── STAGE 3: ADDITIONAL PROSE ── */}
+            {additionalProseSections.length > 0 && (
+              <section className="reading-stage prose-stage">
+                <div className="reading-stage-inner">
+                  <p className="reading-body">
+                    {renderContentWithBadges(
+                      additionalProseSections
+                        .map((section) => section.body)
+                        .join(" ")
+                    )}
+                  </p>
+                </div>
+              </section>
+            )}
+
+            {/* ── STAGE 4: TIMING ── */}
+            {timingSections.length > 0 && (
+              <section className="reading-stage">
+                <div className="reading-stage-inner">
+                  <div className="reveal-zone">
+                    <p className="reveal-zone-heading">Timing</p>
+                    <div className="action-zone-frame">
+                      {timingSections.map((section, i) => (
+                        <div key={`timing-${i}`} className="action-card window">
+                          <div className="action-card-head">
+                            <CalendarDays className="h-4 w-4 text-teal-300/80" aria-hidden="true" />
+                            <span className="action-card-label">
+                              {section.date ? "Dated Window" : "Timing"}
+                            </span>
+                            {section.date && <span className="date-badge">{section.date}</span>}
+                            {section.note && <span className="action-card-note">— {section.note}</span>}
+                          </div>
+                          <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ── STAGE 5: YOUR MOVE ── */}
+            {directiveSections.length > 0 && (
+              <section className="reading-stage">
+                <div className="reading-stage-inner">
+                  <div className="reveal-zone directive-zone">
+                    <p className="reveal-zone-heading">Your Move</p>
+                    <div className="action-zone-frame">
+                      {directiveSections.map((section, i) => {
+                        const variant =
+                          section.directive === "DROP"
+                            ? "drop"
+                            : section.directive === "EXECUTE"
+                              ? "execute"
+                              : section.directive === "LOCK"
+                                ? "lock"
+                                : "general";
+
+                        const visibleLabel =
+                          section.directive === "DROP"
+                            ? "Drop"
+                            : section.directive === "EXECUTE"
+                              ? "Execute"
+                              : section.directive === "LOCK"
+                                ? "Lock In"
+                                : "Directive";
+
+                        return (
+                          <div key={`directive-${i}`} className={`action-card ${variant}`}>
+                            <div className="action-card-head">
+                              <span className="action-card-label">{visibleLabel}</span>
+                              {section.date && <span className="date-badge">{section.date}</span>}
+                            </div>
+                            <p className="action-card-body">{renderContentWithBadges(section.body)}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ── STAGE 6: BOTTOM LINE ── */}
+            {closingSections.length > 0 && (
+              <section className="reading-stage">
+                <div className="reading-stage-inner" ref={bottomLineRef}>
+                  <div className="bottom-line-wrap">
+                    <p className="bottom-line-label">Bottom Line</p>
+                    {closingSections.map((section, i) => (
+                      <p key={i} className="closing-line">{renderContentWithBadges(section.body)}</p>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+          </>
         ) : (
           <section className="reading-stage">
             <div className="reading-stage-inner">
@@ -2360,6 +1594,122 @@ export default function ReadingResultsPage() {
             </div>
           </section>
         )}
+
+        {/* ── GOING DEEPER — follow-ups (delayed reveal) ── */}
+        <AnimatePresence>
+          {showGoingDeeper && (
+            <motion.section
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8 }}
+              className="mt-10"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/[0.07]" />
+                <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
+
+              {followups.map((f) => (
+                <div key={f.id} className="mb-5">
+                  <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
+                  <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
+                  <div className="reading-body" style={{ fontSize: 15 }}>
+                    {renderContentWithBadges(f.content)}
+                  </div>
+                </div>
+              ))}
+              <div ref={followupEndRef} />
+
+              {justPurchased && (
+                <div className="purchase-success">
+                  ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
+                </div>
+              )}
+
+              {paywallVisible ? (
+                <div className="paywall-card">
+                  <p className="paywall-title">
+                    {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
+                  </p>
+                  <p className="paywall-sub">
+                    {isSubscribed
+                      ? "As a subscriber, 4 more are half-price."
+                      : "Keep the conversation going and get even more clarity."}
+                  </p>
+                  <button
+                    type="button"
+                    className="paywall-buy"
+                    onClick={handleBuyReplyPack}
+                    disabled={isPurchasing}
+                  >
+                    {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
+                  </button>
+                  {!isSubscribed && (
+                    <button
+                      type="button"
+                      className="paywall-sub-link"
+                      onClick={handleSubscribe}
+                      disabled={isPurchasing}
+                    >
+                      or subscribe for more each month
+                    </button>
+                  )}
+                  {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+                </div>
+              ) : (
+                <>
+                  <p className="mb-2 px-1 text-[12px] text-slate-500">
+                    Don't over think this. Just say what's on your mind.
+                  </p>
+                  <textarea
+                    className="followup-input"
+                    rows={3}
+                    value={followupQuestion}
+                    onChange={(e) => setFollowupQuestion(e.target.value)}
+                    placeholder="Ask a follow up…"
+                    disabled={isGeneratingFollowup}
+                  />
+                  {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+                  <button
+                    type="button"
+                    onClick={handleFollowup}
+                    disabled={isGeneratingFollowup || !followupQuestion.trim()}
+                    className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+                  >
+                    {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
+                  </button>
+
+                  {/* ── Download + Done ── */}
+                  <div className="top-actions">
+                    <button
+                      type="button"
+                      className="download-btn"
+                      onClick={handleDownload}
+                      disabled={isDownloading}
+                      aria-label="Download reading"
+                    >
+                      <Download className="h-5 w-5" />
+                    </button>
+                    <button type="button" className="done-btn" onClick={handleDone}>
+                      Done
+                    </button>
+                  </div>
+
+                  {/* ── Final balance line ── */}
+                  <div className="final-balance-line">
+                    <span>{credits?.credits ?? 0} credits remaining</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {freeRemainingClient} free{" "}
+                      {freeRemainingClient === 1 ? "reply" : "replies"} remaining
+                    </span>
+                  </div>
+                </>
+              )}
+            </motion.section>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── Embedded Stripe checkout modal ── */}
