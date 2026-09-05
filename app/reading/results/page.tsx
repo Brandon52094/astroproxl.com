@@ -518,10 +518,6 @@ function isVerticalGesture(deltaX: number, deltaY: number): boolean {
   return Math.abs(deltaY) > Math.abs(deltaX) * 1.25;
 }
 
-function isHorizontalGesture(deltaX: number, deltaY: number): boolean {
-  return Math.abs(deltaX) > Math.abs(deltaY) * 1.25;
-}
-
 // ─── Main Component ─────────────────────────────────────────────
 
 export default function ReadingResultsPage() {
@@ -556,7 +552,9 @@ export default function ReadingResultsPage() {
   const hasMarkedComplete = useRef(false);
   const proseContainerRef = useRef<HTMLDivElement | null>(null);
   const proseTrackRef = useRef<HTMLDivElement | null>(null);
-  const proseStartY = useRef(0);
+  const proseProgressRef = useRef(0);
+  const proseDragStartProgressRef = useRef(0);
+  const proseMaxTravelRef = useRef(1);
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
@@ -751,7 +749,7 @@ export default function ReadingResultsPage() {
         }
         break;
       case 3:
-        if (proseProgress >= 1) {
+        if (proseProgressRef.current >= 1) {
           goToStage(4);
         }
         break;
@@ -771,7 +769,7 @@ export default function ReadingResultsPage() {
         }
         break;
     }
-  }, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage, timingSections.length, directiveSections.length]);
+  }, [activeStage, contextStep, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage, timingSections.length, directiveSections.length]);
 
   const handleSwipeDown = useCallback(() => {
     switch (activeStage) {
@@ -783,9 +781,7 @@ export default function ReadingResultsPage() {
         }
         break;
       case 3:
-        if (proseProgress > 0) {
-          setProseProgress((p) => Math.max(0, p - 0.15));
-        } else {
+        if (proseProgressRef.current <= 0) {
           goToStage(2);
         }
         break;
@@ -813,53 +809,87 @@ export default function ReadingResultsPage() {
       default:
         break;
     }
-  }, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage]);
+  }, [activeStage, contextStep, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, goToStage]);
 
   // ─── Prose drag handler ────────────────────────────────────────
 
   useEffect(() => {
-    if (activeStage !== 3 || !proseContainerRef.current || !proseTrackRef.current) return;
+    if (activeStage !== 3 || !proseContainerRef.current || !proseTrackRef.current) {
+      return;
+    }
 
     const container = proseContainerRef.current;
     const track = proseTrackRef.current;
-    let startY = 0;
-    let isDragging = false;
 
-    const trackHeight = track.scrollHeight;
-    const containerHeight = container.clientHeight;
-    const maxTravel = Math.max(0, trackHeight - containerHeight + 80);
+    let touchStartY = 0;
+    let dragging = false;
+
+    const measureTravel = () => {
+      const viewportHeight = container.clientHeight;
+      const trackHeight = track.scrollHeight;
+
+      const entranceRunway = viewportHeight * 0.38;
+      const exitRunway = viewportHeight * 0.42;
+      const readableTravel = Math.max(0, trackHeight - viewportHeight * 0.35);
+
+      proseMaxTravelRef.current = Math.max(1, entranceRunway + readableTravel + exitRunway);
+    };
+
+    measureTravel();
+
+    const handleResize = () => {
+      measureTravel();
+    };
 
     const handleTouchStart = (e: TouchEvent) => {
-      startY = e.touches[0].clientY;
-      isDragging = true;
+      if (!e.touches.length) return;
+
+      touchStartY = e.touches[0].clientY;
+      proseDragStartProgressRef.current = proseProgressRef.current;
+      dragging = true;
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (!isDragging) return;
-      const deltaY = startY - e.touches[0].clientY;
-      const progress = Math.max(0, Math.min(1, deltaY / maxTravel));
-      setProseProgress(progress);
+      if (!dragging || !e.touches.length) return;
+
+      const currentY = e.touches[0].clientY;
+      const deltaY = touchStartY - currentY;
+      const deltaProgress = deltaY / proseMaxTravelRef.current;
+      const nextProgress = Math.max(0, Math.min(1, proseDragStartProgressRef.current + deltaProgress));
+
+      proseProgressRef.current = nextProgress;
+      setProseProgress(nextProgress);
+
+      e.preventDefault();
     };
 
     const handleTouchEnd = () => {
-      isDragging = false;
-      if (proseProgress > 0.85) {
+      dragging = false;
+
+      const current = proseProgressRef.current;
+
+      if (current > 0.985) {
+        proseProgressRef.current = 1;
         setProseProgress(1);
-      } else if (proseProgress < 0.15) {
+      } else if (current < 0.015) {
+        proseProgressRef.current = 0;
         setProseProgress(0);
       }
     };
 
     container.addEventListener("touchstart", handleTouchStart as EventListener, { passive: true });
-    container.addEventListener("touchmove", handleTouchMove as EventListener, { passive: true });
+    container.addEventListener("touchmove", handleTouchMove as EventListener, { passive: false });
     container.addEventListener("touchend", handleTouchEnd as EventListener, { passive: true });
+
+    window.addEventListener("resize", handleResize);
 
     return () => {
       container.removeEventListener("touchstart", handleTouchStart as EventListener);
       container.removeEventListener("touchmove", handleTouchMove as EventListener);
       container.removeEventListener("touchend", handleTouchEnd as EventListener);
+      window.removeEventListener("resize", handleResize);
     };
-  }, [activeStage]); // Removed proseProgress from deps to prevent tearing down listeners during drag
+  }, [activeStage]);
 
   // ─── Directive drag handler ────────────────────────────────────
 
@@ -891,6 +921,11 @@ export default function ReadingResultsPage() {
       if (!isSwiping) return;
       isSwiping = false;
 
+      // Stage 3 owns vertical dragging until prose is complete
+      if (activeStage === 3 && proseProgressRef.current < 1) {
+        return;
+      }
+
       const endX = e.changedTouches[0].clientX;
       const endY = e.changedTouches[0].clientY;
       const deltaX = endX - startX;
@@ -914,7 +949,7 @@ export default function ReadingResultsPage() {
       container.removeEventListener("touchstart", handleTouchStart as EventListener);
       container.removeEventListener("touchend", handleTouchEnd as EventListener);
     };
-  }, [activeStage, contextStep, proseProgress, revealedTimingCount, revealedDirectiveCount, bottomLineExpanded, handleSwipeUp, handleSwipeDown]);
+  }, [activeStage, handleSwipeUp, handleSwipeDown]);
 
   // ─── Action handlers ───────────────────────────────────────────
 
@@ -1189,23 +1224,41 @@ export default function ReadingResultsPage() {
       .map((section) => section.body)
       .join(" ");
 
-    const trackY = -proseProgress * 200;
+    const entranceOffset =
+      typeof window !== "undefined"
+        ? window.innerHeight * 0.38
+        : 300;
+
+    const trackY =
+      entranceOffset -
+      proseProgress * proseMaxTravelRef.current;
 
     return (
       <section className="reading-stage prose-stage" data-stage="3">
-        <div className="prose-viewport" ref={proseContainerRef}>
+        <div className="prose-window" ref={proseContainerRef}>
           <motion.div
             className="prose-track"
             ref={proseTrackRef}
-            style={{ y: trackY }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            animate={{ y: trackY }}
+            transition={{
+              type: "spring",
+              stiffness: 240,
+              damping: 32,
+              mass: 0.7,
+            }}
           >
             <p className="reading-body">
               {renderContentWithBadges(proseContent)}
             </p>
           </motion.div>
-          <div className="prose-top-void" />
-          <div className="prose-bottom-well" />
+
+          {/* TOP EXIT PORTAL */}
+          <div className="prose-top-fade" />
+          <div className="prose-top-line" />
+
+          {/* BOTTOM ENTRY PORTAL */}
+          <div className="prose-bottom-fade" />
+          <div className="prose-bottom-line" />
         </div>
       </section>
     );
@@ -1517,7 +1570,6 @@ export default function ReadingResultsPage() {
       }}
     >
       <style jsx global>{`
-        /* ... (all CSS styles remain the same) ... */
         html, body {
           overflow: auto !important;
           height: auto !important;
@@ -1764,57 +1816,112 @@ export default function ReadingResultsPage() {
           touch-action: none;
         }
 
-        .prose-viewport {
+        .prose-window {
           position: relative;
           width: 100%;
           height: 100svh;
           overflow: hidden;
-          display: flex;
-          align-items: center;
-          justify-content: center;
         }
 
         .prose-track {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 50%;
           width: 100%;
-          padding: 20px 0;
+          padding: 0 2px;
           will-change: transform;
+          z-index: 2;
         }
 
         .prose-track .reading-body {
           font-size: 17px;
           line-height: 2;
+          margin: 0;
         }
 
-        .prose-bottom-well {
+        /* ── TOP PORTAL ── */
+        .prose-top-fade {
           position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          height: 24%;
-          pointer-events: none;
-          background: linear-gradient(
-            to top,
-            rgba(18, 48, 92, 0.88),
-            rgba(18, 48, 92, 0.42) 45%,
-            transparent
-          );
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-        }
-
-        .prose-top-void {
-          position: absolute;
-          left: 0;
-          right: 0;
           top: 0;
-          height: 20%;
+          left: -8px;
+          right: -8px;
+          height: 22svh;
+          z-index: 5;
           pointer-events: none;
-          background: linear-gradient(
-            to bottom,
-            rgba(0, 0, 0, 0.98),
-            rgba(0, 0, 0, 0.55) 50%,
-            transparent
-          );
+          background:
+            linear-gradient(
+              to bottom,
+              rgba(2, 3, 12, 1) 0%,
+              rgba(2, 3, 12, 0.97) 28%,
+              rgba(2, 3, 12, 0.76) 52%,
+              rgba(2, 3, 12, 0.34) 76%,
+              transparent 100%
+            );
+          backdrop-filter: blur(2px);
+          -webkit-backdrop-filter: blur(2px);
+        }
+
+        .prose-top-line {
+          position: absolute;
+          top: 22svh;
+          left: 2%;
+          right: 2%;
+          height: 1px;
+          z-index: 6;
+          pointer-events: none;
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(148, 163, 184, 0.18) 18%,
+              rgba(203, 213, 225, 0.28) 50%,
+              rgba(148, 163, 184, 0.18) 82%,
+              transparent
+            );
+        }
+
+        /* ── BOTTOM PORTAL ── */
+        .prose-bottom-fade {
+          position: absolute;
+          bottom: 0;
+          left: -8px;
+          right: -8px;
+          height: 24svh;
+          z-index: 5;
+          pointer-events: none;
+          background:
+            linear-gradient(
+              to top,
+              rgba(13, 36, 78, 0.98) 0%,
+              rgba(18, 48, 92, 0.90) 26%,
+              rgba(18, 48, 92, 0.62) 53%,
+              rgba(18, 48, 92, 0.28) 77%,
+              transparent 100%
+            );
+          backdrop-filter: blur(5px);
+          -webkit-backdrop-filter: blur(5px);
+        }
+
+        .prose-bottom-line {
+          position: absolute;
+          bottom: 24svh;
+          left: 2%;
+          right: 2%;
+          height: 1px;
+          z-index: 6;
+          pointer-events: none;
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(94, 234, 212, 0.18) 18%,
+              rgba(125, 211, 252, 0.32) 50%,
+              rgba(94, 234, 212, 0.18) 82%,
+              transparent
+            );
+          box-shadow:
+            0 0 16px rgba(59, 130, 246, 0.08);
         }
 
         /* ─── Timing (Stage 4) ──────────────────────────────────────────── */
@@ -2188,7 +2295,7 @@ export default function ReadingResultsPage() {
             scroll-snap-align: start;
           }
 
-          .prose-viewport {
+          .prose-window {
             height: 100vh;
           }
         }
