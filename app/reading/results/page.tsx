@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronUp, Download, ChevronDown, CalendarDays } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
@@ -279,7 +280,10 @@ function extractDateText(raw: string): string {
   return (raw.match(/\[\[DATE:\s*([^\]]+)\]\]/i)?.[1] ?? raw).trim();
 }
 
-function splitHumanHeader(paragraph: string): { label: string | null; body: string } {
+function splitHumanHeader(paragraph: string): {
+  label: string | null;
+  body: string;
+} {
   const cleaned = paragraph
     .trim()
     .replace(/^#{1,6}\s+/, "")
@@ -358,7 +362,12 @@ function parseReadingSections(content: string): ParsedSection[] | null {
       phase = "windows";
       const date = body.match(DATE_LEAD_RE);
       const rest = date ? body.slice(date[0].length).trim() : body;
-      sections.push({ kind: "window", date: date?.[1].trim() ?? null, note: null, body: rest });
+      sections.push({
+        kind: "window",
+        date: date?.[1].trim() ?? null,
+        note: null,
+        body: rest,
+      });
       continue;
     }
     const kind =
@@ -647,7 +656,9 @@ function Calendar({
     return () => timers.forEach(clearTimeout);
   }, [active, index, monthWindows, reduceMotion]);
   if (!month) return null;
-  const monthName = new Date(month.y, month.m, 1).toLocaleString("en-US", { month: "long" });
+  const monthName = new Date(month.y, month.m, 1).toLocaleString("en-US", {
+    month: "long",
+  });
   return (
     <div className={`cal-card ${active ? "on" : ""}`}>
       <div className="cal-head">
@@ -825,7 +836,11 @@ type PanelKind =
   | "prose"
   | "directive"
   | "closing";
-type DeckStep = { panelIndex: number; label: string; contextStage?: "where" | "why" | "how" };
+type DeckStep = {
+  panelIndex: number;
+  label: string;
+  contextStage?: "where" | "why" | "how";
+};
 
 function ReadingDeck({
   topic,
@@ -1020,7 +1035,12 @@ function ReadingDeck({
       }
     };
 
-    let touch: { x: number; y: number; atTop: boolean; atBottom: boolean } | null = null;
+    let touch: {
+      x: number;
+      y: number;
+      atTop: boolean;
+      atBottom: boolean;
+    } | null = null;
     const onTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1 || interactive(event.target)) {
         touch = null;
@@ -1208,31 +1228,37 @@ function ReadingDeck({
           />
         ))}
       </nav>
-      <div
-        className={`bottom-bar ${step > 0 ? "show" : ""}`}
-        aria-hidden={step === 0}
-        ref={(node) => {
-          node?.toggleAttribute("inert", step === 0 || checkoutOpen);
-        }}
-      >
-        <div className="bottom-row">
-          <button
-            type="button"
-            className="download-btn"
-            aria-label="Download reading"
-            onClick={onDownload}
-            disabled={isDownloading}
-          >
-            <Download />
-          </button>
-          <button type="button" className="done-btn" onClick={onDone}>
-            Done
-          </button>
-        </div>
-        {credits && !credits.isSubscribed && (
-          <p className="bottom-credits">{credits.credits} credits remaining</p>
+      {mounted &&
+        createPortal(
+          <div className="reading-results results-fixed-controls">
+            <div
+              className={`bottom-bar ${step > 0 ? "show" : ""}`}
+              aria-hidden={step === 0}
+              ref={(node) => {
+                node?.toggleAttribute("inert", step === 0 || checkoutOpen);
+              }}
+            >
+              <div className="bottom-row">
+                <button
+                  type="button"
+                  className="download-btn"
+                  aria-label="Download reading"
+                  onClick={onDownload}
+                  disabled={isDownloading}
+                >
+                  <Download />
+                </button>
+                <button type="button" className="done-btn" onClick={onDone}>
+                  Done
+                </button>
+              </div>
+              {credits && !credits.isSubscribed && (
+                <p className="bottom-credits">{credits.credits} credits remaining</p>
+              )}
+            </div>
+          </div>,
+          document.body,
         )}
-      </div>
     </div>
   );
 }
@@ -1874,7 +1900,13 @@ export default function ReadingResultsPage() {
           }}
         >
           <div style={{ width: "100%", maxWidth: 480 }}>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: 8,
+              }}
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -1898,7 +1930,13 @@ export default function ReadingResultsPage() {
                 ✕
               </button>
             </div>
-            <div style={{ borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+            <div
+              style={{
+                borderRadius: 16,
+                overflow: "hidden",
+                background: "#fff",
+              }}
+            >
               <EmbeddedCheckoutProvider
                 stripe={stripePromise}
                 options={{
@@ -2295,11 +2333,15 @@ const css = `
   }
   .reading-results .prose-body p:last-child { margin-bottom: 0; }
 
+  /* Portaled to document.body so animated or scrolling app containers cannot move it. */
+  .reading-results.results-fixed-controls {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  }
   /* Fixed bottom bar (pinned to the screen) */
   .reading-results .bottom-bar {
-    position: absolute;
+    position: fixed;
     left: 0; right: 0; bottom: 0;
-    z-index: 30;
+    z-index: 50;
     padding: 12px 16px calc(10px + env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
