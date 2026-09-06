@@ -1,19 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Download, ChevronDown, CalendarDays } from "lucide-react";
+import { ChevronUp, Download, ChevronDown, CalendarDays } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import {
-  loadReading,
-  loadChart,
-  clearIntake,
-  type StoredReading,
-} from "@/lib/chartStore";
+import { loadReading, loadChart, clearIntake, type StoredReading } from "@/lib/chartStore";
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+const stripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 interface FollowupEntry {
   id: string;
@@ -28,7 +24,11 @@ interface UserCredits {
   freeRepliesRemaining: number;
 }
 
-// ─── EDIT 1: Updated ParsedSection type ──────────────────────────
+/**
+ * AstroProXL results — production TSX conversion of reading-deck-prototype.jsx.
+ * Keeps the prototype's page order and carries the original closing experience.
+ * Uses the existing chartStore and API contracts. No engine changes are required.
+ */
 
 type ParsedSection =
   | { kind: "prediction"; label: string; body: string }
@@ -51,9 +51,7 @@ type ParsedSection =
     }
   | { kind: "closing"; body: string };
 
-// ─── 1. ResultsStarfield Component ────────────────────────────────
-
-function ResultsStarfield() {
+function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -173,13 +171,7 @@ function ResultsStarfield() {
 
         ctx.fillStyle = `rgba(226,232,240,${0.2 + twinkle * 0.6})`;
         ctx.beginPath();
-        ctx.arc(
-          star.x * w,
-          star.y * h,
-          star.r * (0.7 + twinkle * 0.4),
-          0,
-          Math.PI * 2
-        );
+        ctx.arc(star.x * w, star.y * h, star.r * (0.7 + twinkle * 0.4), 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -212,32 +204,17 @@ function ResultsStarfield() {
         if (shooter.life < 10) {
           fade = shooter.life / 10;
         } else if (shooter.life > shooter.maxLife - 15) {
-          fade = Math.max(
-            0,
-            (shooter.maxLife - shooter.life) / 15
-          );
+          fade = Math.max(0, (shooter.maxLife - shooter.life) / 15);
         }
 
-        const magnitude = Math.sqrt(
-          shooter.vx * shooter.vx + shooter.vy * shooter.vy
-        );
+        const magnitude = Math.sqrt(shooter.vx * shooter.vx + shooter.vy * shooter.vy);
 
-        const tailX =
-          shooter.x - (shooter.vx / magnitude) * shooter.len;
-        const tailY =
-          shooter.y - (shooter.vy / magnitude) * shooter.len;
+        const tailX = shooter.x - (shooter.vx / magnitude) * shooter.len;
+        const tailY = shooter.y - (shooter.vy / magnitude) * shooter.len;
 
-        const gradient = ctx.createLinearGradient(
-          shooter.x,
-          shooter.y,
-          tailX,
-          tailY
-        );
+        const gradient = ctx.createLinearGradient(shooter.x, shooter.y, tailX, tailY);
 
-        gradient.addColorStop(
-          0,
-          `rgba(226,232,240,${0.9 * fade})`
-        );
+        gradient.addColorStop(0, `rgba(226,232,240,${0.9 * fade})`);
         gradient.addColorStop(1, "rgba(147,197,253,0)");
 
         ctx.strokeStyle = gradient;
@@ -254,16 +231,12 @@ function ResultsStarfield() {
         ctx.arc(shooter.x, shooter.y, 1.5, 0, Math.PI * 2);
         ctx.fill();
 
-        if (
-          shooter.life >= shooter.maxLife ||
-          shooter.x > w + 60 ||
-          shooter.y > h + 60
-        ) {
+        if (shooter.life >= shooter.maxLife || shooter.x > w + 60 || shooter.y > h + 60) {
           shooters.splice(i, 1);
         }
       }
 
-      raf = requestAnimationFrame(frame);
+      if (!reduceMotion) raf = requestAnimationFrame(frame);
     };
 
     frame();
@@ -272,39 +245,29 @@ function ResultsStarfield() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
-  }, []);
+  }, [reduceMotion]);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      className="results-starfield"
-    />
-  );
+  return <canvas ref={canvasRef} aria-hidden="true" className="results-starfield" />;
 }
 
-// ─── 2. Parser ──────────────────────────────────────────────────────
-
-// ─── EDIT 2: Updated part regex to recognize Parts 1-7 ──────────
-
-const INTERNAL_PART_RE =
-  /^\s*Part\s*([1-7])\s*[:—–-]\s*/i;
-
+// Parse the existing engine's headings without requiring an engine change.
 const HUMAN_HEADERS = [
   "The Prediction",
   "Where You Are Now",
-  "Why This Is Active",
   "Why This Is Active Now",
+  "Why This Is Active",
   "How This Is Most Likely To Show Up",
   "Dated Windows",
+  "Timing",
+  "The Read",
   "The Directive",
+  "Your Move",
   "Bottom Line",
-];
-
-const DATE_LEAD_RE = /^\s*\[\[DATE:\s*([^\]]+)\]\]\s*[—–-]?\s*/;
+] as const;
+const DATE_LEAD_RE = /^\s*\[\[DATE:\s*([^\]]+)\]\]\s*[—–-]?\s*/i;
 const DROP_RE = /^\s*DROP\s*:\s*/i;
-const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
-const LOCK_RE = /^\s*LOCK\s+IN\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[A-Za-z]+\s+\d+(?:\s*[-–]\s*\d+)?)\s*:\s*/i;
+const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[^:\n]+)\s*:\s*/i;
+const LOCK_RE = /^\s*LOCK\s+IN\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[^:\n]+)\s*:\s*/i;
 
 function hashKey(s: string): string {
   let h = 5381;
@@ -313,312 +276,966 @@ function hashKey(s: string): string {
 }
 
 function extractDateText(raw: string): string {
-  const m = raw.match(/\[\[DATE:\s*([^\]]+)\]\]/);
-  return m ? m[1].trim() : raw.trim();
+  return (raw.match(/\[\[DATE:\s*([^\]]+)\]\]/i)?.[1] ?? raw).trim();
 }
 
-function cleanInternalPartLabel(text: string): string {
-  return text.replace(INTERNAL_PART_RE, "").trim();
-}
-
-function splitHumanHeader(
-  paragraph: string
-): { label: string | null; body: string } {
-  const cleaned = cleanInternalPartLabel(paragraph);
-
+function splitHumanHeader(paragraph: string): { label: string | null; body: string } {
+  const cleaned = paragraph
+    .trim()
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/\*\*/g, "")
+    .replace(/^Part\s*\d+\s*[:—–-]\s*/i, "");
   for (const header of HUMAN_HEADERS) {
-    const exact = new RegExp(
-      `^${header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
-      "i"
+    const match = cleaned.match(
+      new RegExp(`^${header}(?:\\s*[:—–-]\\s*|\\s*\\n+|\\s*$)([\\s\\S]*)$`, "i"),
     );
-
-    if (exact.test(cleaned)) {
-      return {
-        label: header,
-        body: "",
-      };
-    }
-
-    const withColon = new RegExp(
-      `^${header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:—–-]\\s*([\\s\\S]+)$`,
-      "i"
-    );
-
-    const colonMatch = cleaned.match(withColon);
-
-    if (colonMatch) {
-      return {
-        label: header,
-        body: colonMatch[1].trim(),
-      };
-    }
-
-    const withLineBreak = new RegExp(
-      `^${header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n+([\\s\\S]+)$`,
-      "i"
-    );
-
-    const lineMatch = cleaned.match(withLineBreak);
-
-    if (lineMatch) {
-      return {
-        label: header,
-        body: lineMatch[1].trim(),
-      };
-    }
+    if (match) return { label: header, body: match[1].trim() };
   }
-
-  return {
-    label: null,
-    body: cleaned,
-  };
+  return { label: null, body: paragraph.trim() };
 }
-
-function splitWindowNote(body: string): { note: string | null; rest: string } {
-  const dashLead = body.match(/^\s*[—–-]\s*([^.?!]{2,40})[.?!]\s+/);
-  if (dashLead) {
-    return { note: dashLead[1].trim(), rest: body.slice(dashLead[0].length) };
-  }
-  return { note: null, rest: body };
-}
-
-// ─── EDIT 3: Updated classifyProseKind() ──────────────────────────
-
-function classifyProseKind(
-  label: string,
-  isFirst: boolean
-): "prediction" | "currentState" | "whyNow" | "manifestation" | "prose" {
-  const normalized = label.trim().toLowerCase();
-
-  if (normalized === "where you are now") {
-    return "currentState";
-  }
-
-  if (
-    isFirst ||
-    normalized === "the prediction"
-  ) {
-    return "prediction";
-  }
-
-  if (
-    normalized === "why this is active" ||
-    normalized === "why this is active now"
-  ) {
-    return "whyNow";
-  }
-
-  if (normalized === "how this is most likely to show up") {
-    return "manifestation";
-  }
-
-  return "prose";
-}
-
-// ─── EDIT 4: Replaced parseReadingSections() ──────────────────────
 
 function parseReadingSections(content: string): ParsedSection[] | null {
-  const paragraphs = content
-    .split(/\n{2,}/)
+  // Also accept headings separated by one newline, and Markdown headings.
+  const normalized = content
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => (splitHumanHeader(line).label ? `\n${line}\n` : line))
+    .join("\n");
+  const paragraphs = normalized
+    .split(/\n\s*\n/)
     .map((p) => p.trim())
     .filter(Boolean);
-
-  if (paragraphs.length < 2) return null;
-
   const sections: ParsedSection[] = [];
+  let phase: "opening" | "windows" | "directives" | "closing" = "opening";
+  let activeLabel = "";
+  let sawHeader = false;
 
-  let phase:
-    | "opening"
-    | "windows"
-    | "directives"
-    | "closing" = "opening";
-
-  let pendingLabel: string | null = null;
-  let sawStructuredHeader = false;
-
-  for (const rawParagraph of paragraphs) {
-    const parsedHeader = splitHumanHeader(rawParagraph);
-
-    if (parsedHeader.label) {
-      sawStructuredHeader = true;
+  for (const paragraph of paragraphs) {
+    const { label, body } = splitHumanHeader(paragraph);
+    if (label) {
+      sawHeader = true;
+      activeLabel = label;
+      phase =
+        label === "Bottom Line"
+          ? "closing"
+          : label === "Dated Windows" || label === "Timing"
+            ? "windows"
+            : label === "The Directive" || label === "Your Move"
+              ? "directives"
+              : "opening";
     }
-
-    // Standalone human-facing heading.
-    if (parsedHeader.label && !parsedHeader.body) {
-      const label = parsedHeader.label;
-
-      if (label === "Dated Windows") {
-        phase = "windows";
-        pendingLabel = null;
-        continue;
-      }
-
-      if (label === "The Directive") {
-        phase = "directives";
-        pendingLabel = null;
-        continue;
-      }
-
-      if (label === "Bottom Line") {
-        phase = "closing";
-        pendingLabel = "Bottom Line";
-        continue;
-      }
-
-      pendingLabel = label;
+    if (!body) continue;
+    if (phase === "closing") {
+      sections.push({ kind: "closing", body });
       continue;
     }
-
-    const para =
-      parsedHeader.body ||
-      cleanInternalPartLabel(rawParagraph);
-
-    const labelFromParagraph = parsedHeader.label;
-
-    if (!para) continue;
-
-    // Support heading + content in the same paragraph.
-    if (labelFromParagraph === "Dated Windows") {
-      phase = "windows";
-      pendingLabel = null;
-    } else if (labelFromParagraph === "The Directive") {
+    const execute = body.match(EXECUTE_RE);
+    const lock = body.match(LOCK_RE);
+    if (DROP_RE.test(body) || execute || lock) {
       phase = "directives";
-      pendingLabel = null;
-    } else if (labelFromParagraph === "Bottom Line") {
-      phase = "closing";
-      pendingLabel = "Bottom Line";
-    }
-
-    // Bottom Line always wins once entered.
-    if (
-      phase === "closing" ||
-      labelFromParagraph === "Bottom Line"
-    ) {
+      const directive = execute ? "EXECUTE" : lock ? "LOCK" : "DROP";
       sections.push({
-        kind: "closing",
-        body: para,
+        kind: "directive",
+        directive,
+        label: execute ? "Execute by" : lock ? "Lock in by" : "Drop",
+        date: execute || lock ? extractDateText((execute ?? lock)![1]) : null,
+        body: body.replace(execute ? EXECUTE_RE : lock ? LOCK_RE : DROP_RE, "").trim(),
       });
-
-      pendingLabel = null;
       continue;
     }
-
-    const isWindow = DATE_LEAD_RE.test(para);
-    const isDrop = DROP_RE.test(para);
-    const isExecute = EXECUTE_RE.test(para);
-    const isLock = LOCK_RE.test(para);
-    const isDirective = isDrop || isExecute || isLock;
-
-    // Special directive formats remain supported.
-    if (isDirective) {
-      phase = "directives";
-      pendingLabel = null;
-
-      if (isDrop) {
-        sections.push({
-          kind: "directive",
-          directive: "DROP",
-          label: "Drop",
-          date: null,
-          body: para.replace(DROP_RE, "").trim(),
-        });
-      } else if (isExecute) {
-        const match = para.match(EXECUTE_RE);
-
-        sections.push({
-          kind: "directive",
-          directive: "EXECUTE",
-          label: "Execute by",
-          date: match ? extractDateText(match[1]) : null,
-          body: para.replace(EXECUTE_RE, "").trim(),
-        });
-      } else {
-        const match = para.match(LOCK_RE);
-
-        sections.push({
-          kind: "directive",
-          directive: "LOCK",
-          label: "Lock in by",
-          date: match ? extractDateText(match[1]) : null,
-          body: para.replace(LOCK_RE, "").trim(),
-        });
-      }
-
-      continue;
-    }
-
-    // Calculator-supported dated window.
-    if (isWindow) {
-      phase = "windows";
-      pendingLabel = null;
-
-      const match = para.match(DATE_LEAD_RE);
-      const rawBody = para.replace(DATE_LEAD_RE, "");
-      const { note, rest } = splitWindowNote(rawBody);
-
-      sections.push({
-        kind: "window",
-        date: match ? match[1].trim() : null,
-        note,
-        body: rest.trim(),
-      });
-
-      continue;
-    }
-
-    // Part 5 still renders when there is NO exact date.
-    if (phase === "windows") {
-      sections.push({
-        kind: "window",
-        date: null,
-        note: null,
-        body: para,
-      });
-
-      pendingLabel = null;
-      continue;
-    }
-
-    // Ordinary prose is a valid Part 6 directive.
     if (phase === "directives") {
+      // A date-led directive is still a directive, not a timing card.
       sections.push({
         kind: "directive",
         directive: "GENERAL",
         label: "Directive",
         date: null,
-        body: para,
+        body,
       });
-
-      pendingLabel = null;
       continue;
     }
-
-    // Normal reading prose.
-    const resolvedLabel =
-      labelFromParagraph ||
-      pendingLabel ||
-      (sections.length === 0 ? "The Prediction" : "");
-
-    const kind = classifyProseKind(
-      resolvedLabel,
-      sections.length === 0
-    );
-
-    sections.push({
-      kind,
-      label: resolvedLabel,
-      body: para,
-    });
-
-    pendingLabel = null;
+    if (phase === "windows" || (!activeLabel && DATE_LEAD_RE.test(body))) {
+      phase = "windows";
+      const date = body.match(DATE_LEAD_RE);
+      const rest = date ? body.slice(date[0].length).trim() : body;
+      sections.push({ kind: "window", date: date?.[1].trim() ?? null, note: null, body: rest });
+      continue;
+    }
+    const kind =
+      activeLabel === "Where You Are Now"
+        ? "currentState"
+        : activeLabel === "Why This Is Active" || activeLabel === "Why This Is Active Now"
+          ? "whyNow"
+          : activeLabel === "How This Is Most Likely To Show Up"
+            ? "manifestation"
+            : activeLabel === "The Prediction" || (!activeLabel && sections.length === 0)
+              ? "prediction"
+              : "prose";
+    sections.push({ kind, label: activeLabel, body });
   }
-
-  return sawStructuredHeader && sections.length > 0
-    ? sections
-    : null;
+  return sawHeader && sections.length ? sections : null;
 }
 
-// ─── 3. Main Component ─────────────────────────────────────────────
+function renderWithDates(content: string): React.ReactNode {
+  return content.split(/(\[\[DATE:\s*[^\]]+\]\])/gi).map((part, i) => {
+    const match = part.match(/\[\[DATE:\s*([^\]]+)\]\]/i);
+    return match ? (
+      <span key={i} className="date-badge">
+        {match[1].trim()}
+      </span>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    );
+  });
+}
+
+type CalendarDate = { y: number; m: number; d: number };
+type CalendarWindow = { date: string; start: CalendarDate; end: CalendarDate };
+type TimingSection = Extract<ParsedSection, { kind: "window" }>;
+type DirectiveSection = Extract<ParsedSection, { kind: "directive" }>;
+const MONTHS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+const dayValue = (date: CalendarDate) => Date.UTC(date.y, date.m, date.d);
+
+function validCalendarDate(date: CalendarDate): boolean {
+  const parsed = new Date(dayValue(date));
+  return (
+    date.y >= 1900 &&
+    date.y <= 2200 &&
+    parsed.getUTCFullYear() === date.y &&
+    parsed.getUTCMonth() === date.m &&
+    parsed.getUTCDate() === date.d
+  );
+}
+
+function parseCalendarWindow(date: string): CalendarWindow | null {
+  const text = date.replace(/(\d)(st|nd|rd|th)\b/gi, "$1").trim();
+  let start: CalendarDate;
+  let end: CalendarDate;
+  const iso = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:\s*(?:to|[–—-])\s*(\d{4})-(\d{2})-(\d{2}))?$/i,
+  );
+  if (iso) {
+    start = { y: +iso[1], m: +iso[2] - 1, d: +iso[3] };
+    end = iso[4] ? { y: +iso[4], m: +iso[5] - 1, d: +iso[6] } : start;
+  } else {
+    const named = text.match(
+      /^([A-Za-z]+)\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?(?:\s*(?:to|[–—-])\s*(?:([A-Za-z]+)\.?\s+)?(\d{1,2})(?:,?\s+(\d{4}))?)?$/i,
+    );
+    // Keep unclear/yearless text visible in Timing; never invent calendar dates.
+    if (!named || (!named[3] && !named[6])) return null;
+    const monthIndex = (name: string) =>
+      MONTHS.findIndex((month) => {
+        const lower = name.toLowerCase();
+        return (
+          lower === month ||
+          lower === month.slice(0, 3) ||
+          (lower === "sept" && month === "september")
+        );
+      });
+    const startMonth = monthIndex(named[1]);
+    const endMonth = named[4] ? monthIndex(named[4]) : startMonth;
+    if (startMonth < 0 || endMonth < 0) return null;
+    let startYear = Number(named[3] ?? named[6]);
+    let endYear = Number(named[6] ?? named[3]);
+    if (endMonth < startMonth) {
+      if (!named[3]) startYear--;
+      else if (!named[6]) endYear++;
+    }
+    start = { y: startYear, m: startMonth, d: +named[2] };
+    end = { y: endYear, m: endMonth, d: Number(named[5] ?? named[2]) };
+  }
+  const duration = dayValue(end) - dayValue(start);
+  if (
+    !validCalendarDate(start) ||
+    !validCalendarDate(end) ||
+    duration < 0 ||
+    duration > 366 * 86400000
+  )
+    return null;
+  return { date, start, end };
+}
+
+function calendarMonths(windows: CalendarWindow[]): { key: string; y: number; m: number }[] {
+  const months = new Map<string, { key: string; y: number; m: number }>();
+  for (const window of windows) {
+    for (
+      let serial = window.start.y * 12 + window.start.m;
+      serial <= window.end.y * 12 + window.end.m;
+      serial++
+    ) {
+      const y = Math.floor(serial / 12),
+        m = serial % 12,
+        key = `${y}-${m}`;
+      months.set(key, { key, y, m });
+    }
+  }
+  return [...months.values()].sort((a, b) => a.y - b.y || a.m - b.m);
+}
+
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
+function useTyped(text: string, play: boolean, instant: boolean, speed: number): string {
+  // Date tokens arrive together so unfinished [[DATE: ...]] markup never flashes.
+  const units = useMemo(() => text.match(/\[\[DATE:\s*[^\]]+\]\]|[\s\S]/gi) ?? [], [text]);
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (instant) {
+      setCount(units.length);
+      return;
+    }
+    setCount(0);
+    if (!play) return;
+    let i = 0;
+    const timer = setInterval(() => {
+      setCount(++i);
+      if (i >= units.length) clearInterval(timer);
+    }, speed);
+    return () => clearInterval(timer);
+  }, [units, play, instant, speed]);
+  return instant ? text : units.slice(0, count).join("");
+}
+
+function HeroReveal({
+  label,
+  body,
+  active,
+  seen,
+  onSeen,
+  speed = 22,
+  titleDelay = 520,
+}: {
+  label: string;
+  body: string;
+  active: boolean;
+  seen: boolean;
+  onSeen: () => void;
+  speed?: number;
+  titleDelay?: number;
+}) {
+  const [phase, setPhase] = useState<"hidden" | "title" | "typing" | "done">("hidden");
+  useEffect(() => {
+    if (!active) {
+      setPhase("hidden");
+      return;
+    }
+    if (seen) {
+      setPhase("done");
+      return;
+    }
+    setPhase("title");
+    const timer = setTimeout(() => setPhase("typing"), titleDelay);
+    return () => clearTimeout(timer);
+  }, [active, seen, titleDelay]);
+  const typed = useTyped(body, phase === "typing", phase === "done", speed);
+  useEffect(() => {
+    if (phase === "typing" && typed.length === body.length) {
+      setPhase("done");
+      onSeen();
+    }
+  }, [phase, typed, body, onSeen]);
+  if (!active) return null;
+  const titleOn = phase !== "hidden";
+  return (
+    <div className="hero">
+      <div className="hero-head">
+        <span className="hero-glow" aria-hidden="true" />
+        <div className={`hero-title-wrap ${titleOn ? "shine" : ""}`}>
+          <h2 className={`hero-title ${titleOn ? "on" : ""}`}>{label}</h2>
+        </div>
+      </div>
+      <p className="hero-body" aria-hidden="true">
+        {renderWithDates(phase === "done" ? body : phase === "typing" ? typed : "")}
+        {phase === "typing" && <span className="caret" />}
+      </p>
+      <p className="sr-only">{extractPlainText(body)}</p>
+    </div>
+  );
+}
+
+function extractPlainText(text: string): string {
+  return text.replace(/\[\[DATE:\s*([^\]]+)\]\]/gi, "$1");
+}
+
+function FadeIn({
+  active,
+  delay = 0,
+  children,
+  className = "",
+}: {
+  active: boolean;
+  delay?: number;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setShown(false);
+      return;
+    }
+    const timer = setTimeout(() => setShown(true), delay);
+    return () => clearTimeout(timer);
+  }, [active, delay]);
+  return <div className={`fade ${shown ? "on" : ""} ${className}`}>{children}</div>;
+}
+
+function ZoneReveal({ label, body, active }: { label: string; body: string; active: boolean }) {
+  return active ? (
+    <FadeIn active={active} className="zone on">
+      <p className="zone-label">{label}</p>
+      <p className="zone-body">{renderWithDates(body)}</p>
+    </FadeIn>
+  ) : null;
+}
+
+function Calendar({
+  windows,
+  active,
+  reduceMotion,
+}: {
+  windows: CalendarWindow[];
+  active: boolean;
+  reduceMotion: boolean;
+}) {
+  const months = useMemo(() => calendarMonths(windows), [windows]);
+  const [index, setIndex] = useState(0);
+  const [revealed, setRevealed] = useState(0);
+  const month = months[Math.min(index, Math.max(0, months.length - 1))];
+  const monthWindows = useMemo(
+    () =>
+      month
+        ? windows.filter(
+            (w) =>
+              dayValue(w.start) <= Date.UTC(month.y, month.m + 1, 0) &&
+              dayValue(w.end) >= Date.UTC(month.y, month.m, 1),
+          )
+        : [],
+    [windows, month],
+  );
+  useEffect(() => {
+    if (!active) setIndex(0);
+  }, [active]);
+  useEffect(() => {
+    setRevealed(reduceMotion ? monthWindows.length : 0);
+    if (!active || reduceMotion) return;
+    const timers = monthWindows.map((_, i) =>
+      setTimeout(() => setRevealed(i + 1), (index === 0 ? 850 : 300) + i * 950),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [active, index, monthWindows, reduceMotion]);
+  if (!month) return null;
+  const monthName = new Date(month.y, month.m, 1).toLocaleString("en-US", { month: "long" });
+  return (
+    <div className={`cal-card ${active ? "on" : ""}`}>
+      <div className="cal-head">
+        <button
+          type="button"
+          className={`cal-nav ${index === 0 ? "hidden" : ""}`}
+          disabled={index === 0}
+          onClick={() => setIndex((i) => Math.max(0, i - 1))}
+          aria-label="Previous month"
+        >
+          ‹
+        </button>
+        <span className="cal-title" aria-live="polite">
+          {monthName} {month.y}
+        </span>
+        <button
+          type="button"
+          className={`cal-nav ${index >= months.length - 1 ? "hidden" : ""}`}
+          disabled={index >= months.length - 1}
+          onClick={() => setIndex((i) => Math.min(months.length - 1, i + 1))}
+          aria-label="Next month"
+        >
+          ›
+        </button>
+      </div>
+      <MonthGrid y={month.y} m={month.m} windows={monthWindows} revealed={revealed} />
+      <p className="sr-only">Highlighted windows: {monthWindows.map((w) => w.date).join("; ")}</p>
+    </div>
+  );
+}
+
+function MonthGrid({
+  y,
+  m,
+  windows,
+  revealed,
+}: {
+  y: number;
+  m: number;
+  windows: CalendarWindow[];
+  revealed: number;
+}) {
+  const cells: (number | null)[] = Array.from({ length: new Date(y, m, 1).getDay() }, () => null);
+  for (let d = 1; d <= new Date(y, m + 1, 0).getDate(); d++) cells.push(d);
+  return (
+    <>
+      <div className="cal-grid cal-dow" aria-hidden="true">
+        {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
+          <span key={i} className="cal-dow-cell">
+            {day}
+          </span>
+        ))}
+      </div>
+      <div className="cal-grid" aria-hidden="true">
+        {cells.map((day, i) => {
+          if (day === null) return <div key={i} className="cal-cell empty" />;
+          const value = Date.UTC(y, m, day);
+          const lit = windows
+            .slice(0, revealed)
+            .some((w) => value >= dayValue(w.start) && value <= dayValue(w.end));
+          return (
+            <div key={i} className={`cal-cell ${lit ? "ring" : ""}`}>
+              <span className="cal-num">{day}</span>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function WindowCard({ section }: { section: TimingSection }) {
+  return (
+    <div className="act-card">
+      <div className="act-head">
+        <CalendarDays className="act-icon" aria-hidden="true" />
+        <span className="act-label">{section.date ? "Dated Window" : "Timing"}</span>
+        {section.date && <span className="date-badge">{section.date}</span>}
+        {section.note && <span className="act-note">— {section.note}</span>}
+      </div>
+      <p className="act-body">{renderWithDates(section.body)}</p>
+    </div>
+  );
+}
+
+function DirectiveCard({ section }: { section: DirectiveSection }) {
+  return (
+    <div className="act-card">
+      <div className="act-head">
+        <span className="act-label">{section.label}</span>
+        {section.date && <span className="date-badge">{section.date}</span>}
+      </div>
+      <p className="act-body">{renderWithDates(section.body)}</p>
+    </div>
+  );
+}
+
+// Retained from the approved prototype. Engine integration is a separate step:
+// these answers are local to this reading and do not rewrite generated prose.
+const QUESTIONS = [
+  "You'd rather have one honest conversation now than keep the peace for another month.",
+  "When something feels off, you tend to name it out loud fairly quickly.",
+  "You're willing to lose a little goodwill in exchange for a clearer agreement.",
+  "You already have a sense of what you want to ask for — you just haven't said it yet.",
+  "If the answer is no, you'd rather know now than keep hoping it turns into a yes.",
+];
+type QuizAnswers = Record<number, "yes" | "no">;
+
+function Quiz({ readingKey }: { readingKey: string }) {
+  const [answers, setAnswers] = useState<QuizAnswers>({});
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(`dfp_align_${readingKey}`) ?? "{}");
+      if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+        const restored: QuizAnswers = {};
+        Object.entries(saved).forEach(([key, value]) => {
+          const i = Number(key);
+          if (
+            Number.isInteger(i) &&
+            i >= 0 &&
+            i < QUESTIONS.length &&
+            (value === "yes" || value === "no")
+          )
+            restored[i] = value;
+        });
+        setAnswers(restored);
+      }
+    } catch {
+      /* A blocked or malformed cache does not prevent answering. */
+    }
+  }, [readingKey]);
+  const pick = (i: number, value: "yes" | "no") => {
+    const next = { ...answers, [i]: value };
+    setAnswers(next);
+    try {
+      localStorage.setItem(`dfp_align_${readingKey}`, JSON.stringify(next));
+    } catch {
+      /* Optional persistence. */
+    }
+  };
+  return (
+    <div className="quiz-list">
+      {QUESTIONS.map((question, i) => (
+        <div className="quiz-item" key={i}>
+          <p className="quiz-q" id={`align-question-${i}`}>
+            <span className="quiz-n">{i + 1}</span>
+            <span>{question}</span>
+          </p>
+          <div className="quiz-btns" role="group" aria-labelledby={`align-question-${i}`}>
+            {(["yes", "no"] as const).map((value) => (
+              <button
+                type="button"
+                key={value}
+                className={`quiz-btn ${answers[i] === value ? "sel" : ""}`}
+                aria-pressed={answers[i] === value}
+                onClick={() => pick(i, value)}
+              >
+                {value === "yes" ? "Yes" : "No"}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type PanelKind =
+  | "topic"
+  | "prediction"
+  | "context"
+  | "calendar"
+  | "timing"
+  | "quiz"
+  | "prose"
+  | "directive"
+  | "closing";
+type DeckStep = { panelIndex: number; label: string; contextStage?: "where" | "why" | "how" };
+
+function ReadingDeck({
+  topic,
+  content,
+  sections,
+  readingKey,
+  credits,
+  isDownloading,
+  onDownload,
+  onDone,
+  checkoutOpen,
+  isSafeResponse,
+  children,
+}: {
+  topic: string;
+  content: string;
+  sections: ParsedSection[] | null;
+  readingKey: string;
+  credits: UserCredits | null;
+  isDownloading: boolean;
+  onDownload: () => Promise<void>;
+  onDone: () => void;
+  checkoutOpen: boolean;
+  isSafeResponse: boolean;
+  children: React.ReactNode;
+}) {
+  const reduceMotion = useReducedMotion();
+  const [step, setStep] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const [seenPrediction, setSeenPrediction] = useState(false);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const deckRef = useRef<HTMLDivElement | null>(null);
+  const stepRef = useRef(0);
+  const lock = useRef(false);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const groups = useMemo(() => {
+    const join = (kind: ParsedSection["kind"]) =>
+      (sections ?? [])
+        .filter((s) => s.kind === kind)
+        .map((s) => s.body)
+        .join("\n\n");
+    const timing = (sections ?? []).filter((s): s is TimingSection => s.kind === "window");
+    const directives = (sections ?? []).filter(
+      (s): s is DirectiveSection => s.kind === "directive",
+    );
+    const windows = timing
+      .flatMap((s) => {
+        const window = s.date ? parseCalendarWindow(s.date) : null;
+        return window ? [window] : [];
+      })
+      .sort((a, b) => dayValue(a.start) - dayValue(b.start));
+    return {
+      prediction: join("prediction"),
+      where: join("currentState"),
+      why: join("whyNow"),
+      how: join("manifestation"),
+      prose: sections ? sections.filter((s) => s.kind === "prose").map((s) => s.body) : [content],
+      timing,
+      directives,
+      windows,
+    };
+  }, [sections, content]);
+
+  const panels = useMemo<PanelKind[]>(() => {
+    const result: PanelKind[] = ["topic"];
+    if (groups.prediction) result.push("prediction");
+    if (groups.where || groups.why || groups.how) result.push("context");
+    if (groups.windows.length) result.push("calendar");
+    if (groups.timing.length) result.push("timing");
+    if (sections && !isSafeResponse) result.push("quiz");
+    if (groups.prose.length) result.push("prose");
+    if (groups.directives.length) result.push("directive");
+    result.push("closing");
+    // Preserve the prototype order; omit empty stages until the engine supplies them.
+    return result;
+  }, [groups, sections, isSafeResponse]);
+
+  const steps = useMemo<DeckStep[]>(
+    () =>
+      panels.flatMap((kind, panelIndex): DeckStep[] => {
+        if (kind === "context") {
+          return (["where", "why", "how"] as const)
+            .filter((stage) => !!groups[stage])
+            .map((contextStage) => ({
+              panelIndex,
+              contextStage,
+              label: contextStage === "where" ? "Where" : contextStage === "why" ? "Why" : "How",
+            }));
+        }
+        const labels: Record<Exclude<PanelKind, "context">, string> = {
+          topic,
+          prediction: "The Prediction",
+          calendar: "Dated Windows",
+          timing: "Timing",
+          quiz: "Direct Align",
+          prose: "The Read",
+          directive: "Your Move",
+          closing: "Bottom Line",
+        };
+        return [{ panelIndex, label: labels[kind] }];
+      }),
+    [panels, groups, topic],
+  );
+  const current = steps[Math.min(step, steps.length - 1)];
+  const pageIndex = current.panelIndex;
+  const bottomActive = panels[pageIndex] === "closing";
+  const markPredictionSeen = useCallback(() => setSeenPrediction(true), []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 80);
+    return () => {
+      clearTimeout(timer);
+      if (lockTimer.current) clearTimeout(lockTimer.current);
+    };
+  }, []);
+
+  const navigate = useCallback(
+    (next: number) => {
+      if (checkoutOpen || lock.current) return;
+      const bounded = Math.min(steps.length - 1, Math.max(0, next));
+      if (bounded === stepRef.current) return;
+      stepRef.current = bounded;
+      setStep(bounded);
+      lock.current = true;
+      if (lockTimer.current) clearTimeout(lockTimer.current);
+      lockTimer.current = setTimeout(
+        () => {
+          lock.current = false;
+        },
+        reduceMotion ? 120 : 740,
+      );
+    },
+    [steps.length, reduceMotion, checkoutOpen],
+  );
+  const go = useCallback((direction: number) => navigate(stepRef.current + direction), [navigate]);
+
+  useEffect(() => {
+    const panel = deckRef.current?.children[pageIndex] as HTMLElement | undefined;
+    if (panel) panel.scrollTop = 0;
+    // Only page changes reset scroll; Where/Why/How reveals keep their scroll position.
+  }, [pageIndex]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || checkoutOpen) return;
+    const activePanel = () =>
+      deckRef.current?.children[steps[stepRef.current]?.panelIndex] as HTMLElement | undefined;
+    const edge = (direction: number) => {
+      const panel = activePanel();
+      if (!panel || panel.scrollHeight <= panel.clientHeight + 2) return true;
+      return direction > 0
+        ? panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 2
+        : panel.scrollTop <= 2;
+    };
+    const interactive = (target: EventTarget | null) =>
+      target instanceof Element &&
+      !!target.closest(
+        "input, textarea, select, button, a, [contenteditable]:not([contenteditable='false']), [role='dialog']",
+      );
+
+    let wheelTime = 0,
+      wheelTotal = 0,
+      wheelHandled = false,
+      wheelDirection = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX))
+        return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest("textarea, select, [contenteditable]")
+      )
+        return;
+      const now = performance.now();
+      const direction = event.deltaY > 0 ? 1 : -1;
+      if (now - wheelTime > 180 || direction !== wheelDirection) {
+        wheelTotal = 0;
+        // A gesture that starts inside a tall page belongs to its native scroll.
+        wheelHandled = !edge(direction);
+      }
+      wheelTime = now;
+      wheelDirection = direction;
+      if (!edge(direction)) return;
+      event.preventDefault();
+      if (wheelHandled || lock.current) return;
+      wheelTotal +=
+        Math.abs(event.deltaY) *
+        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1);
+      if (wheelTotal >= 40) {
+        wheelHandled = true;
+        go(direction);
+      }
+    };
+
+    let touch: { x: number; y: number; atTop: boolean; atBottom: boolean } | null = null;
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || interactive(event.target)) {
+        touch = null;
+        return;
+      }
+      touch = {
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY,
+        atTop: edge(-1),
+        atBottom: edge(1),
+      };
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      const start = touch;
+      touch = null;
+      if (!start || !event.changedTouches[0]) return;
+      const dy = event.changedTouches[0].clientY - start.y;
+      const dx = event.changedTouches[0].clientX - start.x;
+      if (Math.abs(dy) <= 45 || Math.abs(dy) <= Math.abs(dx)) return;
+      const direction = dy < 0 ? 1 : -1;
+      if ((direction > 0 ? start.atBottom : start.atTop) && edge(direction)) go(direction);
+    };
+    const onTouchCancel = () => {
+      touch = null;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        interactive(event.target)
+      )
+        return;
+      const forward =
+        ["ArrowDown", "PageDown"].includes(event.key) || (event.key === " " && !event.shiftKey);
+      const backward =
+        ["ArrowUp", "PageUp"].includes(event.key) || (event.key === " " && event.shiftKey);
+      if (!forward && !backward) return;
+      event.preventDefault();
+      const direction = forward ? 1 : -1;
+      if (edge(direction)) go(direction);
+      else {
+        const panel = activePanel();
+        panel?.scrollBy({
+          top: direction * (event.key.startsWith("Arrow") ? 60 : panel.clientHeight * 0.8),
+          behavior: "auto",
+        });
+      }
+    };
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    viewport.addEventListener("touchend", onTouchEnd, { passive: true });
+    viewport.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      viewport.removeEventListener("wheel", onWheel);
+      viewport.removeEventListener("touchstart", onTouchStart);
+      viewport.removeEventListener("touchend", onTouchEnd);
+      viewport.removeEventListener("touchcancel", onTouchCancel);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [go, steps, checkoutOpen]);
+
+  const contextVisible = (stage: "where" | "why" | "how") => {
+    const index = steps.findIndex((s) => s.contextStage === stage);
+    return index >= 0 && step >= index;
+  };
+  return (
+    <div className="reading-results deck-viewport" ref={viewportRef} aria-label="Your reading">
+      <style>{css}</style>
+      <ResultsStarfield reduceMotion={reduceMotion} />
+      <div className="deck" ref={deckRef} style={{ transform: `translateY(${-pageIndex * 100}%)` }}>
+        {panels.map((kind, index) => {
+          const active = index === pageIndex;
+          const centered = kind === "topic" || kind === "prediction" || kind === "calendar";
+          return (
+            <section
+              key={kind}
+              data-panel={kind}
+              className={`panel ${centered ? "panel-center" : kind === "context" ? "panel-top" : "panel-scroll"}`}
+              aria-hidden={!active}
+              aria-label={steps.find((s) => s.panelIndex === index)?.label}
+              ref={(node) => {
+                node?.toggleAttribute("inert", !active || checkoutOpen);
+              }}
+            >
+              {kind === "topic" && (
+                <div className={`career ${mounted ? "in" : ""}`}>
+                  <span className="career-mark" aria-hidden="true">
+                    ✦
+                  </span>
+                  <h1 className="career-word">{topic}</h1>
+                </div>
+              )}
+              {kind === "prediction" && (
+                <HeroReveal
+                  label="The Prediction"
+                  body={groups.prediction}
+                  active={active}
+                  seen={seenPrediction || reduceMotion}
+                  onSeen={markPredictionSeen}
+                />
+              )}
+              {kind === "context" && (
+                <div className="card">
+                  <ZoneReveal label="Where" body={groups.where} active={contextVisible("where")} />
+                  <ZoneReveal label="Why" body={groups.why} active={contextVisible("why")} />
+                  <ZoneReveal label="How" body={groups.how} active={contextVisible("how")} />
+                </div>
+              )}
+              {kind === "calendar" && (
+                <div className="cal-page">
+                  <p className="cal-page-heading">Dated Windows</p>
+                  <Calendar windows={groups.windows} active={active} reduceMotion={reduceMotion} />
+                </div>
+              )}
+              {kind === "timing" && (
+                <div className="framed-page">
+                  <p className="page-eyebrow">Timing</p>
+                  <FadeIn active={active} delay={100}>
+                    <div className="zone-frame">
+                      {groups.timing.map((section, i) => (
+                        <WindowCard key={i} section={section} />
+                      ))}
+                    </div>
+                  </FadeIn>
+                </div>
+              )}
+              {kind === "quiz" && (
+                <div className="framed-page">
+                  <p className="page-eyebrow">Direct Align</p>
+                  <FadeIn active={active} delay={100}>
+                    <Quiz readingKey={readingKey} />
+                  </FadeIn>
+                </div>
+              )}
+              {kind === "prose" && (
+                <div className="framed-page prose-page">
+                  <p className="page-eyebrow">The Read</p>
+                  <FadeIn active={active} delay={100}>
+                    <div className="prose-body">
+                      {groups.prose.map((body, i) => (
+                        <p key={i}>{renderWithDates(body)}</p>
+                      ))}
+                    </div>
+                  </FadeIn>
+                </div>
+              )}
+              {kind === "directive" && (
+                <div className="framed-page">
+                  <p className="page-eyebrow">Your Move</p>
+                  <FadeIn active={active} delay={100}>
+                    <div className="zone-frame">
+                      {groups.directives.map((section, i) => (
+                        <DirectiveCard key={i} section={section} />
+                      ))}
+                    </div>
+                  </FadeIn>
+                </div>
+              )}
+              {kind === "closing" && (
+                <div className={`framed-page closing-page ${bottomActive ? "bottom-focus" : ""}`}>
+                  {children}
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+      <div className={`cue ${step === 0 ? "show" : ""}`} aria-hidden="true">
+        <ChevronUp className="cue-chev" />
+        <span>swipe up</span>
+      </div>
+      <nav className="dots" aria-label="Reading sections">
+        {steps.map((item, i) => (
+          <button
+            type="button"
+            key={i}
+            className={`dot ${i === step ? "on" : ""} ${i < step ? "past" : ""}`}
+            onClick={() => navigate(i)}
+            aria-label={item.label}
+            aria-current={i === step ? "step" : undefined}
+            disabled={checkoutOpen}
+          />
+        ))}
+      </nav>
+      <div
+        className={`bottom-bar ${step > 0 ? "show" : ""}`}
+        aria-hidden={step === 0}
+        ref={(node) => {
+          node?.toggleAttribute("inert", step === 0 || checkoutOpen);
+        }}
+      >
+        <div className="bottom-row">
+          <button
+            type="button"
+            className="download-btn"
+            aria-label="Download reading"
+            onClick={onDownload}
+            disabled={isDownloading}
+          >
+            <Download />
+          </button>
+          <button type="button" className="done-btn" onClick={onDone}>
+            Done
+          </button>
+        </div>
+        {credits && !credits.isSubscribed && (
+          <p className="bottom-credits">{credits.credits} credits remaining</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ReadingResultsPage() {
   const router = useRouter();
@@ -629,11 +1246,9 @@ export default function ReadingResultsPage() {
   const [followupQuestion, setFollowupQuestion] = useState("");
   const [isGeneratingFollowup, setIsGeneratingFollowup] = useState(false);
   const [followupError, setFollowupError] = useState<string | null>(null);
+  const [creditsRefresh, setCreditsRefresh] = useState(0);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-
-  // ── Bottom Line focus state ──
-  const [bottomLineFocused, setBottomLineFocused] = useState(false);
 
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -645,7 +1260,6 @@ export default function ReadingResultsPage() {
   const [tailMode, setTailMode] = useState<"reply_pack" | "sub_reply_tail_regular">("reply_pack");
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
-  const bottomLineRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
 
   const readingKey = useMemo(() => {
@@ -654,13 +1268,18 @@ export default function ReadingResultsPage() {
   }, [reading]);
 
   useEffect(() => {
-    const stored = loadReading();
-    if (!stored) {
-      router.push("/reading/intake");
-      return;
+    try {
+      const stored = loadReading();
+      if (!stored) {
+        router.replace("/reading/intake");
+        return;
+      }
+      setReading(stored);
+    } catch {
+      // The recovery view below handles an unreadable stored reading.
+    } finally {
+      setIsLoading(false);
     }
-    setReading(stored);
-    setIsLoading(false);
   }, [router]);
 
   useEffect(() => {
@@ -715,7 +1334,8 @@ export default function ReadingResultsPage() {
     }
 
     try {
-      setFreeRepliesUsed(Math.max(0, Number(localStorage.getItem(`dfp_free_used_${readingKey}`) ?? 0)));
+      const used = Number(localStorage.getItem(`dfp_free_used_${readingKey}`) ?? 0);
+      setFreeRepliesUsed(Number.isFinite(used) ? Math.max(0, used) : 0);
     } catch {
       setFreeRepliesUsed(0);
     }
@@ -724,7 +1344,17 @@ export default function ReadingResultsPage() {
       const raw = localStorage.getItem(`dfp_followups_${readingKey}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setFollowups(parsed as FollowupEntry[]);
+        if (Array.isArray(parsed))
+          setFollowups(
+            parsed.filter(
+              (entry): entry is FollowupEntry =>
+                !!entry &&
+                typeof entry.id === "string" &&
+                typeof entry.question === "string" &&
+                typeof entry.title === "string" &&
+                typeof entry.content === "string",
+            ),
+          );
       }
     } catch {
       // ignore malformed cache
@@ -772,6 +1402,7 @@ export default function ReadingResultsPage() {
     const fetchCredits = async () => {
       try {
         const res = await fetch("/api/user/credits");
+        if (!res.ok) return;
         const data = await res.json();
         setCredits({
           credits: Number(data.credits ?? 0),
@@ -783,99 +1414,18 @@ export default function ReadingResultsPage() {
       }
     };
     fetchCredits();
-  }, [followups.length]);
+  }, [followups.length, creditsRefresh]);
 
-  // ─── page + parsedSections (moved BEFORE Bottom Line effect) ───
+  // The parser accepts the existing engine output and the new The Read heading.
 
   const page = reading?.pages?.[0] ?? null;
 
   const parsedSections = useMemo(
     () => (page?.content ? parseReadingSections(page.content) : null),
-    [page?.content]
+    [page?.content],
   );
 
-  // ─── Bottom Line focus observer ────────────────────────────────
-
-  useEffect(() => {
-    const element = bottomLineRef.current;
-    if (!element) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setBottomLineFocused(entry.isIntersecting);
-      },
-      {
-        root: null,
-        threshold: 0,
-        rootMargin: "-34% 0px -34% 0px",
-      }
-    );
-
-    observer.observe(element);
-
-    return () => observer.disconnect();
-  }, [parsedSections]);
-
-  // ─── EDIT 5: Group sections with currentState ──────────────────
-
-  const predictionSections =
-    parsedSections?.filter((section) => section.kind === "prediction") ?? [];
-
-  const currentStateSections =
-    parsedSections?.filter((section) => section.kind === "currentState") ?? [];
-
-  const whyNowSections =
-    parsedSections?.filter((section) => section.kind === "whyNow") ?? [];
-
-  const manifestationSections =
-    parsedSections?.filter((section) => section.kind === "manifestation") ?? [];
-
-  const additionalProseSections =
-    parsedSections?.filter((section) => section.kind === "prose") ?? [];
-
-  const timingSections =
-    parsedSections?.filter((section) => section.kind === "window") ?? [];
-
-  const directiveSections =
-    parsedSections?.filter((section) => section.kind === "directive") ?? [];
-
-  const closingSections =
-    parsedSections?.filter((section) => section.kind === "closing") ?? [];
-
-  const renderContentWithBadges = (content: string) => {
-    const parts = content.split(/(\[\[DATE:\s*[^\]]+\]\])/g);
-    return parts.map((part, i) => {
-      const match = part.match(/\[\[DATE:\s*([^\]]+)\]\]/);
-      if (match) {
-        // Check if it's a date range (has a dash or "to")
-        const dateText = match[1].trim();
-        const isRange = dateText.includes("-") || dateText.includes("to");
-        return (
-          <span key={i} className={`date-badge ${isRange ? "date-range" : ""}`}>
-            {dateText}
-          </span>
-        );
-      }
-      return <React.Fragment key={i}>{part}</React.Fragment>;
-    });
-  };
-
-  const splitPredictionLead = (body: string) => {
-    const sentences =
-      body.match(/[^.!?]+[.!?]+(?:["'’”)]*)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
-
-    if (sentences.length <= 2) {
-      return {
-        lead: body.trim(),
-        rest: "",
-      };
-    }
-
-    return {
-      lead: sentences.slice(0, 2).join(" "),
-      rest: sentences.slice(2).join(" "),
-    };
-  };
+  const closingSections = parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
   const handleDownload = async () => {
     if (!reading || !page) return;
@@ -952,7 +1502,8 @@ export default function ReadingResultsPage() {
       const data = await response.json();
       if (!response.ok) {
         if (response.status === 402 || data.code === "NEEDS_REPLY_PACK") {
-          if (data.tailMode) setTailMode(data.tailMode);
+          if (data.tailMode === "reply_pack" || data.tailMode === "sub_reply_tail_regular")
+            setTailMode(data.tailMode);
           setShowPaywall(true);
           try {
             if (readingKey) localStorage.setItem(`dfp_paywall_${readingKey}`, "1");
@@ -965,6 +1516,10 @@ export default function ReadingResultsPage() {
         return;
       }
 
+      if (typeof data.content !== "string" || !data.content.trim()) {
+        setFollowupError("The reply came back empty. Please try again.");
+        return;
+      }
       const meta = data.replyMeta;
       if (meta?.usedFreeReply) {
         const nextUsed = freeRepliesUsed + 1;
@@ -988,19 +1543,34 @@ export default function ReadingResultsPage() {
       const newEntry: FollowupEntry = {
         id: crypto.randomUUID(),
         question,
-        title: data.title,
+        title: typeof data.title === "string" ? data.title : "Going Deeper",
         content: data.content,
       };
       const nextFollowups = [...followups, newEntry];
       setFollowups(nextFollowups);
       try {
-        if (readingKey) localStorage.setItem(`dfp_followups_${readingKey}`, JSON.stringify(nextFollowups));
+        if (readingKey)
+          localStorage.setItem(`dfp_followups_${readingKey}`, JSON.stringify(nextFollowups));
       } catch {
         // ignore
       }
       setFollowupQuestion("");
       setTimeout(() => {
-        followupEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        const end = followupEndRef.current;
+        const panel = end?.closest<HTMLElement>(".panel");
+        if (end && panel) {
+          panel.scrollTo({
+            top:
+              panel.scrollTop +
+              end.getBoundingClientRect().bottom -
+              panel.getBoundingClientRect().top -
+              panel.clientHeight +
+              140,
+            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+              ? "auto"
+              : "smooth",
+          });
+        }
       }, 120);
     } catch {
       setFollowupError("Something went wrong. Please try again.");
@@ -1011,6 +1581,10 @@ export default function ReadingResultsPage() {
 
   const startCheckout = async (mode: "reply_pack" | "sub_reply_tail_regular" | "subscription") => {
     if (isPurchasing) return;
+    if (!stripePromise) {
+      setFollowupError("Checkout is unavailable right now. Please try again later.");
+      return;
+    }
     setIsPurchasing(true);
     setFollowupError(null);
     try {
@@ -1040,14 +1614,37 @@ export default function ReadingResultsPage() {
     router.push("/reading/intake");
   };
 
-  if (isLoading || !reading || !page) {
+  if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e27" }}>
-        <div className="text-sm text-slate-400">Loading your reading…</div>
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ background: "#0a0e27" }}
+      >
+        <p className="text-sm text-slate-400" role="status">
+          Loading your reading…
+        </p>
+      </div>
+    );
+  }
+  if (!reading || !page || typeof page.content !== "string" || !page.content.trim()) {
+    return (
+      <div
+        className="flex min-h-screen flex-col items-center justify-center gap-4"
+        style={{ background: "#0a0e27", color: "#e2e8f0" }}
+      >
+        <p>This reading couldn’t load.</p>
+        <button
+          type="button"
+          onClick={handleDone}
+          className="rounded-xl border border-teal-400/30 px-5 py-3 text-teal-200"
+        >
+          Start a new reading
+        </button>
       </div>
     );
   }
 
+  // Existing reply allowances and purchase modes are carried over from the source.
   const isSubscribed = credits?.isSubscribed === true;
   const freeBand = isSubscribed ? 4 : 1;
   const freeRemainingClient = Math.max(0, freeBand - freeRepliesUsed);
@@ -1059,1020 +1656,108 @@ export default function ReadingResultsPage() {
   const paywallVisible = !isSubscribed && (showPaywall || outOfReplies);
 
   return (
-    <div 
-      className="results-root"
-      style={{
-        position: "relative",
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #0a0e27 0%, #0b1030 12%, #080c24 24%, #050718 36%, #02030c 48%, #000000 60%, #000000 100%)",
-        color: "#e2e8f0",
-        fontFamily: "var(--font-sans, ui-sans-serif, system-ui)",
-        overflowX: "hidden",
-        overflowY: "auto",
-      }}
-    >
-      <style jsx global>{`
-        html, body {
-          overflow: auto !important;
-          height: auto !important;
-          min-height: 100vh;
+    <>
+      <ReadingDeck
+        key={readingKey}
+        readingKey={readingKey}
+        topic={reading.topic}
+        content={page.content}
+        sections={parsedSections}
+        credits={credits}
+        isDownloading={isDownloading}
+        onDownload={handleDownload}
+        onDone={handleDone}
+        checkoutOpen={!!clientSecret}
+        isSafeResponse={
+          (reading as StoredReading & { isSafeResponse?: boolean }).isSafeResponse === true
         }
-
-        /* ─── Starfield ──────────────────────────────────────────────────── */
-        .results-starfield {
-          position: fixed;
-          inset: 0;
-          width: 100vw;
-          height: 100vh;
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        /* ─── Reading sections ──────────────────────────────────────────── */
-        .reading-title {
-          font-family: var(--font-display, Georgia, serif);
-          font-weight: 600;
-          letter-spacing: -0.01em;
-          line-height: 1.15;
-        }
-
-        .reading-body {
-          width: 100%;
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 16px;
-          line-height: 1.9;
-          color: #e2e8f0;
-          white-space: pre-wrap;
-        }
-
-        .date-badge {
-          display: inline-block;
-          padding: 1px 10px;
-          margin: 0 2px;
-          border-radius: 9999px;
-          background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(217, 119, 6, 0.12));
-          border: 1px solid rgba(251, 191, 36, 0.35);
-          color: #fbbf24;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 12px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          box-shadow: 0 0 18px rgba(251, 191, 36, 0.12);
-          white-space: nowrap;
-        }
-        .date-badge.date-range {
-          background: linear-gradient(135deg, rgba(94, 234, 212, 0.18), rgba(45, 212, 191, 0.12));
-          border-color: rgba(94, 234, 212, 0.35);
-          color: #5eead4;
-          box-shadow: 0 0 18px rgba(94, 234, 212, 0.12);
-        }
-
-        .section-block {
-          position: relative;
-          margin-top: 32px;
-          padding-top: 30px;
-          border-top: 1px solid rgba(255, 255, 255, 0.075);
-          transition:
-            filter 0.72s ease,
-            opacity 0.72s ease,
-            transform 0.72s ease;
-        }
-
-        .section-block.first {
-          margin-top: 0;
-          padding-top: 0;
-          border-top: none;
-        }
-
-        .section-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 650;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.9);
-        }
-
-        .section-block.opening-feature {
-          text-align: center;
-          padding-left: 12px;
-          padding-right: 12px;
-        }
-
-        .section-block.opening-feature .section-label {
-          text-align: center;
-        }
-
-        .section-block.opening-feature .reading-body {
-          width: 100%;
-          max-width: none;
-          margin-left: auto;
-          margin-right: auto;
-          text-align: center;
-        }
-
-        /* ─── Guided reveal ─────────────────────────────────────────────── */
-
-        .prediction-feature {
-          position: relative;
-          margin-top: 4px;
-          padding: 28px 8px 30px;
-          text-align: center;
-        }
-
-        .prediction-feature::after {
-          content: "";
-          position: absolute;
-          left: 18%;
-          right: 18%;
-          bottom: 0;
-          height: 1px;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(94, 234, 212, 0.22),
-            transparent
-          );
-        }
-
-        .prediction-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.88);
-        }
-
-        .prediction-lead {
-          max-width: 560px;
-          margin: 14px auto 0;
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 21px;
-          line-height: 1.65;
-          color: #f8fafc;
-          text-align: center;
-        }
-
-        .prediction-support {
-          max-width: 540px;
-          margin: 16px auto 0;
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 15px;
-          line-height: 1.85;
-          color: #aebbd0;
-          text-align: center;
-        }
-
-        .context-section {
-          width: 100%;
-          margin-top: 34px;
-          padding-top: 28px;
-          border-top: 1px solid rgba(255, 255, 255, 0.07);
-        }
-
-        .context-section .section-label {
-          text-align: left;
-        }
-
-        .context-section .reading-body {
-          width: 100%;
-          margin-top: 10px;
-        }
-
-        .manifestation-feature {
-          position: relative;
-          width: 100%;
-          margin-top: 34px;
-          padding: 22px 16px;
-          border: 1px solid rgba(94, 234, 212, 0.14);
-          border-radius: 22px;
-          background:
-            linear-gradient(
-              145deg,
-              rgba(94, 234, 212, 0.055),
-              rgba(15, 23, 42, 0.22)
-            );
-        }
-
-        .manifestation-feature .section-label {
-          color: rgba(94, 234, 212, 0.95);
-        }
-
-        .manifestation-feature .reading-body {
-          margin-top: 11px;
-          color: #e2e8f0;
-        }
-
-        .reveal-zone {
-          margin-top: 38px;
-          padding-top: 30px;
-          border-top: 1px solid rgba(255, 255, 255, 0.075);
-        }
-
-        .reveal-zone-heading {
-          margin-bottom: 13px;
-          text-align: center;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 650;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.92);
-        }
-
-        .directive-zone {
-          margin-top: 28px;
-        }
-
-        .directive-zone .action-zone-frame {
-          border-color: rgba(251, 191, 36, 0.14);
-        }
-
-        .action-zone {
-          margin-top: 34px;
-          padding-top: 30px;
-          border-top: 1px solid rgba(255, 255, 255, 0.075);
-          transition:
-            filter 0.72s ease,
-            opacity 0.72s ease,
-            transform 0.72s ease;
-        }
-
-        .action-zone-heading {
-          margin-bottom: 13px;
-          text-align: center;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 650;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.92);
-        }
-
-        .action-zone-frame {
-          border: 1px solid rgba(148, 163, 184, 0.2);
-          border-radius: 26px;
-          padding: 10px;
-          background: rgba(5, 8, 24, 0.2);
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.025),
-            0 22px 70px rgba(0, 0, 0, 0.12);
-          backdrop-filter: blur(5px);
-        }
-
-        .action-card {
-          position: relative;
-          border: 1px solid rgba(255, 255, 255, 0.075);
-          border-radius: 18px;
-          padding: 16px 17px;
-          background: rgba(17, 22, 51, 0.46);
-        }
-
-        .action-card + .action-card {
-          margin-top: 9px;
-        }
-
-        .action-card.window {
-          border-color: rgba(94, 234, 212, 0.15);
-        }
-
-        .action-card.drop {
-          border-color: rgba(248, 113, 113, 0.2);
-        }
-
-        .action-card.execute {
-          border-color: rgba(45, 212, 191, 0.2);
-        }
-
-        .action-card.lock {
-          border-color: rgba(251, 191, 36, 0.2);
-        }
-
-        /* ─── EDIT 6: Add general directive styling ──────────────────── */
-
-        .action-card.general {
-          border-color: rgba(94, 234, 212, 0.15);
-        }
-
-        .action-card-head {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .action-card-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-        }
-
-        .action-card.window .action-card-label {
-          color: #5eead4;
-        }
-
-        .action-card.drop .action-card-label {
-          color: #f87171;
-        }
-
-        .action-card.execute .action-card-label {
-          color: #2dd4bf;
-        }
-
-        .action-card.lock .action-card-label {
-          color: #fbbf24;
-        }
-
-        .action-card.general .action-card-label {
-          color: #5eead4;
-        }
-
-        .action-card-note {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 12px;
-          color: #64748b;
-        }
-
-        .action-card-body {
-          margin-top: 8px;
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 15px;
-          line-height: 1.8;
-          color: #cbd5e1;
-          white-space: pre-wrap;
-        }
-
-        .bottom-line-wrap {
-          position: relative;
-          margin-top: 54px;
-          padding: 52px 10px 48px;
-          text-align: center;
-          transition:
-            transform 0.72s ease,
-            opacity 0.72s ease;
-        }
-
-        .bottom-line-wrap::before {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: 16%;
-          right: 16%;
-          height: 1px;
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(94, 234, 212, 0.28),
-              transparent
-            );
-        }
-
-        .bottom-line-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.9);
-        }
-
-        .closing-line {
-          max-width: 540px;
-          margin: 15px auto 0;
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 18px;
-          line-height: 1.8;
-          color: #f8fafc;
-          font-style: italic;
-          text-align: center;
-          white-space: pre-wrap;
-          text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
-        }
-
-        .reading-focusable {
-          transition:
-            filter 0.72s ease,
-            opacity 0.72s ease,
-            transform 0.72s ease;
-        }
-
-        .reading-article.bottom-focus .reading-focusable {
-          filter: blur(6px);
-          opacity: 0.2;
-          transform: scale(0.992);
-        }
-
-        .reading-article.bottom-focus .bottom-line-wrap {
-          transform: scale(1.025);
-        }
-
-        /* ─── Astrological Sources ──────────────────────────────────────── */
-
-        .sources-wrap {
-          margin-top: 34px;
-          padding-top: 22px;
-          border-top: 1px solid rgba(255, 255, 255, 0.07);
-          text-align: center;
-          transition:
-            filter 0.72s ease,
-            opacity 0.72s ease;
-        }
-
-        .sources-toggle {
-          position: relative;
-          overflow: hidden;
-          margin: 0 auto;
-          padding: 8px 14px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-
-          color: #94a3b8;
-          transition:
-            color 0.25s ease,
-            text-shadow 0.25s ease;
-        }
-
-        .sources-toggle::before {
-          content: "";
-          position: absolute;
-          top: -50%;
-          bottom: -50%;
-          width: 34%;
-          left: -45%;
-          transform: skewX(-18deg);
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(191, 219, 254, 0.26),
-              rgba(94, 234, 212, 0.38),
-              transparent
-            );
-          filter: blur(4px);
-          animation: sourceStarlight 5.4s ease-in-out infinite;
-          pointer-events: none;
-        }
-
-        .sources-toggle:hover {
-          color: #cbd5e1;
-          text-shadow: 0 0 18px rgba(94, 234, 212, 0.28);
-        }
-
-        .sources-toggle.open {
-          color: #bae6fd;
-          text-shadow: 0 0 18px rgba(94, 234, 212, 0.24);
-        }
-
-        .sources-chevron {
-          transition:
-            transform 0.3s ease,
-            filter 0.3s ease;
-        }
-
-        .sources-toggle.open .sources-chevron {
-          transform: rotate(180deg);
-          filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.5));
-        }
-
-        @keyframes sourceStarlight {
-          0%, 68% {
-            left: -45%;
-            opacity: 0;
-          }
-
-          74% {
-            opacity: 1;
-          }
-
-          92% {
-            left: 115%;
-            opacity: 0.85;
-          }
-
-          100% {
-            left: 115%;
-            opacity: 0;
-          }
-        }
-
-        /* ─── Follow-up styles ──────────────────────────────────────────── */
-
-        .followup-input {
-          width: 100%;
-          background: rgba(10, 14, 39, 0.6);
-          border: 1px solid rgba(45, 212, 191, 0.25);
-          border-radius: 18px;
-          color: #e2e8f0;
-          font-size: 16px;
-          padding: 14px 16px;
-          outline: none;
-          resize: none;
-          transition: border-color 0.25s ease, box-shadow 0.25s ease;
-        }
-        .followup-input:focus {
-          border-color: rgba(45, 212, 191, 0.6);
-          box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
-        }
-
-        .purchase-success {
-          margin-bottom: 12px;
-          padding: 10px 14px;
-          border-radius: 12px;
-          background: rgba(45, 212, 191, 0.1);
-          border: 1px solid rgba(45, 212, 191, 0.3);
-          color: #5eead4;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 13px;
-          text-align: center;
-        }
-
-        .paywall-card {
-          background: rgba(20, 25, 55, 0.5);
-          border: 1px solid rgba(251, 191, 36, 0.28);
-          border-radius: 20px;
-          padding: 22px 18px;
-          text-align: center;
-          backdrop-filter: blur(8px);
-        }
-        .paywall-title {
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 19px;
-          color: #ffffff;
-          font-weight: 600;
-        }
-        .paywall-sub {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 13px;
-          line-height: 1.6;
-          color: #94a3b8;
-          margin-top: 8px;
-        }
-        .paywall-buy {
-          margin-top: 18px;
-          width: 100%;
-          height: 54px;
-          border-radius: 16px;
-          border: none;
-          background: linear-gradient(135deg, #fbbf24, #d97706);
-          color: #1a1206;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 15px;
-          font-weight: 700;
-          cursor: pointer;
-          box-shadow: 0 0 34px rgba(251, 191, 36, 0.22);
-        }
-        .paywall-buy:disabled { opacity: 0.6; cursor: default; }
-        .paywall-sub-link {
-          margin-top: 12px;
-          background: none;
-          border: none;
-          color: #5eead4;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 13px;
-          cursor: pointer;
-          text-decoration: underline;
-          text-underline-offset: 2px;
-        }
-        .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
-
-        .bottom-bar {
-          position: fixed;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
-          display: flex;
-          gap: 12px;
-          align-items: center;
-          background: linear-gradient(180deg, rgba(10, 14, 39, 0) 0%, rgba(10, 14, 39, 0.94) 40%);
-          z-index: 40;
-        }
-
-        @keyframes downloadPulse {
-          0%, 100% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.4), 0 0 22px rgba(251, 191, 36, 0.18); }
-          50% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.7), 0 0 34px rgba(251, 191, 36, 0.32); }
-        }
-
-        .download-btn {
-          width: 56px;
-          height: 56px;
-          border-radius: 18px;
-          border: 1px solid rgba(251, 191, 36, 0.5);
-          background: rgba(251, 191, 36, 0.08);
-          color: #fbbf24;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          animation: downloadPulse 2.6s ease-in-out infinite;
-          cursor: pointer;
-          flex-shrink: 0;
-        }
-
-        .done-btn {
-          flex: 1;
-          height: 56px;
-          border-radius: 18px;
-          border: none;
-          background: #5eead4;
-          color: #042f2e;
-          font-size: 17px;
-          font-weight: 600;
-          cursor: pointer;
-          box-shadow: 0 0 40px rgba(94, 234, 212, 0.35);
-        }
-
-        /* ─── Reduced motion ────────────────────────────────────────────── */
-
-        @media (prefers-reduced-motion: reduce) {
-          .download-btn,
-          .sources-toggle::before {
-            animation: none !important;
-          }
-
-          .reading-article.bottom-focus .reading-focusable {
-            filter: none;
-            opacity: 1;
-            transform: none;
-          }
-        }
-      `}</style>
-
-      {/* ─── Fixed starfield behind everything ── */}
-      <ResultsStarfield />
-
-      <div
-        className="relative z-10 mx-auto w-full max-w-[620px] px-4 pt-14"
-        style={{ 
-          paddingBottom: "calc(160px + env(safe-area-inset-bottom))",
-          minHeight: "calc(100vh - 40px)",
-        }}
       >
-        {/* ── Header ── */}
-        <header className="mb-6 flex items-start gap-3">
-          <button
-            type="button"
-            onClick={handleDone}
-            aria-label="Back"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div className="flex-1 text-center">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Your Direct Insights</p>
-            <p className="mt-0.5 text-[13px] text-slate-300">What We've Gathered</p>
+        {closingSections.length > 0 && (
+          <div className="bottom-line-wrap">
+            <p className="bottom-line-label">Bottom Line</p>
+
+            {closingSections.map((section, i) => (
+              <p key={i} className="closing-line">
+                {renderWithDates(section.body)}
+              </p>
+            ))}
           </div>
-          <div className="h-11 w-11 shrink-0" aria-hidden="true" />
-        </header>
+        )}
+        {/* ── Astrological Sources ── */}
+        {page.sources && page.sources.length > 0 && (
+          <div className="sources-wrap">
+            <button
+              type="button"
+              className={`sources-toggle ${showSources ? "open" : ""}`}
+              onClick={() => setShowSources((s) => !s)}
+              aria-expanded={showSources}
+              aria-controls="reading-sources"
+            >
+              <span>Astrological Sources</span>
 
-        {/* ── Topic + title, centered ── */}
-        <div className="mb-6 text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300/80">{reading.topic}</p>
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className="reading-title mt-2 text-[27px] text-white sm:text-[31px]"
-          >
-            {page.title}
-          </motion.h1>
-        </div>
+              <ChevronDown className="sources-chevron h-3.5 w-3.5" />
+            </button>
 
-        {/* ── THE READING ── */}
-        <motion.article
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: 0.45,
-            delay: 0.08,
-            ease: "easeOut",
-          }}
-          className={`reading-article ${
-            bottomLineFocused ? "bottom-focus" : ""
-          }`}
-        >
-          {parsedSections ? (
-            // ─── EDIT 7: Updated reading render with seven parts ──────
-
-            <>
-              {/* ── 1. THE PREDICTION ── */}
-              {predictionSections.map((section, i) => {
-                const { lead, rest } = splitPredictionLead(section.body);
-
-                return (
-                  <section
-                    key={`prediction-${i}`}
-                    className="prediction-feature reading-focusable"
-                  >
-                    <p className="prediction-label">
-                      The Prediction
-                    </p>
-
-                    <p className="prediction-lead">
-                      {renderContentWithBadges(lead)}
-                    </p>
-
-                    {rest && (
-                      <p className="prediction-support">
-                        {renderContentWithBadges(rest)}
-                      </p>
-                    )}
-                  </section>
-                );
-              })}
-
-              {/* ── 2. WHERE YOU ARE NOW ── */}
-              {currentStateSections.map((section, i) => (
-                <section
-                  key={`current-${i}`}
-                  className="context-section reading-focusable"
+            <AnimatePresence>
+              {showSources && (
+                <motion.div
+                  id="reading-sources"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{
+                    height: "auto",
+                    opacity: 1,
+                  }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{
+                    duration: 0.22,
+                    ease: "easeOut",
+                  }}
+                  className="overflow-hidden text-left"
                 >
-                  <p className="section-label">
-                    Where You Are Now
-                  </p>
-
-                  <p className="reading-body">
-                    {renderContentWithBadges(section.body)}
-                  </p>
-                </section>
-              ))}
-
-              {/* ── 3. WHY THIS IS ACTIVE NOW ── */}
-              {whyNowSections.map((section, i) => (
-                <section
-                  key={`why-${i}`}
-                  className="context-section reading-focusable"
-                >
-                  <p className="section-label">
-                    Why This Is Active Now
-                  </p>
-
-                  <p className="reading-body">
-                    {renderContentWithBadges(section.body)}
-                  </p>
-                </section>
-              ))}
-
-              {/* ── 4. HOW THIS IS MOST LIKELY TO SHOW UP ── */}
-              {manifestationSections.map((section, i) => (
-                <section
-                  key={`manifestation-${i}`}
-                  className="manifestation-feature reading-focusable"
-                >
-                  <p className="section-label">
-                    How This Is Most Likely To Show Up
-                  </p>
-
-                  <p className="reading-body">
-                    {renderContentWithBadges(section.body)}
-                  </p>
-                </section>
-              ))}
-
-              {/* ── Any additional prose the parser does not recognize ── */}
-              {additionalProseSections.map((section, i) => (
-                <section
-                  key={`additional-${i}`}
-                  className="context-section reading-focusable"
-                >
-                  {section.label && (
-                    <p className="section-label">
-                      {section.label}
-                    </p>
-                  )}
-
-                  <p className="reading-body">
-                    {renderContentWithBadges(section.body)}
-                  </p>
-                </section>
-              ))}
-
-              {/* ── 5. DATED WINDOWS / TIMING ── */}
-              {timingSections.length > 0 && (
-                <section className="reveal-zone reading-focusable">
-                  <p className="reveal-zone-heading">
-                    Timing
-                  </p>
-
-                  <div className="action-zone-frame">
-                    {timingSections.map((section, i) => (
-                      <div
-                        key={`timing-${i}`}
-                        className="action-card window"
-                      >
-                        <div className="action-card-head">
-                          <CalendarDays
-                            className="h-4 w-4 text-teal-300/80"
-                            aria-hidden="true"
-                          />
-
-                          <span className="action-card-label">
-                            {section.date ? "Dated Window" : "Timing"}
-                          </span>
-
-                          {section.date && (
-                            <span className="date-badge">
-                              {section.date}
-                            </span>
-                          )}
-
-                          {section.note && (
-                            <span className="action-card-note">
-                              — {section.note}
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="action-card-body">
-                          {renderContentWithBadges(section.body)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* ── 6. THE DIRECTIVE / YOUR MOVE ── */}
-              {directiveSections.length > 0 && (
-                <section className="reveal-zone directive-zone reading-focusable">
-                  <p className="reveal-zone-heading">
-                    Your Move
-                  </p>
-
-                  <div className="action-zone-frame">
-                    {directiveSections.map((section, i) => {
-                      const variant =
-                        section.directive === "DROP"
-                          ? "drop"
-                          : section.directive === "EXECUTE"
-                            ? "execute"
-                            : section.directive === "LOCK"
-                              ? "lock"
-                              : "general";
-
-                      const visibleLabel =
-                        section.directive === "DROP"
-                          ? "Drop"
-                          : section.directive === "EXECUTE"
-                            ? "Execute"
-                            : section.directive === "LOCK"
-                              ? "Lock In"
-                              : "Directive";
+                  <div className="mt-3 space-y-2.5">
+                    {page.sources.map((src, i) => {
+                      const hasDate = src.placements.includes("exact on");
 
                       return (
-                        <div
-                          key={`directive-${i}`}
-                          className={`action-card ${variant}`}
-                        >
-                          <div className="action-card-head">
-                            <span className="action-card-label">
-                              {visibleLabel}
-                            </span>
+                        <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
+                            {src.section}
 
-                            {section.date && (
-                              <span className="date-badge">
-                                {section.date}
-                              </span>
+                            {hasDate && (
+                              <span className="ml-2 text-[9px] text-yellow-400/60">⚡ dated</span>
                             )}
-                          </div>
+                          </p>
 
-                          <p className="action-card-body">
-                            {renderContentWithBadges(section.body)}
+                          <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                            {src.placements}
                           </p>
                         </div>
                       );
                     })}
                   </div>
-                </section>
+                </motion.div>
               )}
-
-              {/* ── 7. BOTTOM LINE ── */}
-              {closingSections.length > 0 && (
-                <div
-                  ref={bottomLineRef}
-                  className="bottom-line-wrap"
-                >
-                  <p className="bottom-line-label">
-                    Bottom Line
-                  </p>
-
-                  {closingSections.map((section, i) => (
-                    <p key={i} className="closing-line">
-                      {renderContentWithBadges(
-                        section.body
-                      )}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="reading-body">
-              {renderContentWithBadges(page.content)}
-            </div>
-          )}
-
-          {/* ── Astrological Sources ── */}
-          {page.sources && page.sources.length > 0 && (
-  <div className="sources-wrap">
-              <button
-                type="button"
-                className={`sources-toggle ${
-                  showSources ? "open" : ""
-                }`}
-                onClick={() => setShowSources((s) => !s)}
-                aria-expanded={showSources}
-              >
-                <span>Astrological Sources</span>
-
-                <ChevronDown
-                  className="sources-chevron h-3.5 w-3.5"
-                />
-              </button>
-
-              <AnimatePresence>
-                {showSources && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{
-                      height: "auto",
-                      opacity: 1,
-                    }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{
-                      duration: 0.22,
-                      ease: "easeOut",
-                    }}
-                    className="overflow-hidden text-left"
-                  >
-                    <div className="mt-3 space-y-2.5">
-                      {page.sources.map((src, i) => {
-                        const hasDate =
-                          src.placements.includes("exact on");
-
-                        return (
-                          <div
-                            key={i}
-                            className="rounded-xl bg-black/25 px-3.5 py-2.5"
-                          >
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
-                              {src.section}
-
-                              {hasDate && (
-                                <span className="ml-2 text-[9px] text-yellow-400/60">
-                                  ⚡ dated
-                                </span>
-                              )}
-                            </p>
-
-                            <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                              {src.placements}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </motion.article>
-
-        {credits && !credits.isSubscribed && (
-          <p className="mt-4 text-right text-[11px] text-slate-500">{credits.credits} credits remaining</p>
+            </AnimatePresence>
+          </div>
         )}
-
         {/* ── GOING DEEPER — follow-ups ── */}
         <section className="mt-10">
           <div className="mb-4 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.07]" />
-            <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">Going Deeper</span>
+            <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">
+              Going Deeper
+            </span>
             <div className="h-px flex-1 bg-white/[0.07]" />
           </div>
 
           {followups.map((f) => (
             <div key={f.id} className="mb-5">
-              <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">"{f.question}"</p>
+              <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">
+                "{f.question}"
+              </p>
               <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
               <div className="reading-body" style={{ fontSize: 15 }}>
-                {renderContentWithBadges(f.content)}
+                {renderWithDates(f.content)}
               </div>
             </div>
           ))}
@@ -2100,7 +1785,11 @@ export default function ReadingResultsPage() {
                 onClick={handleBuyReplyPack}
                 disabled={isPurchasing}
               >
-                {isPurchasing ? "Opening checkout…" : (isSubscribed ? "Get 4 more replies · $2" : "Get 2 more replies · $2")}
+                {isPurchasing
+                  ? "Opening checkout…"
+                  : isSubscribed
+                    ? "Get 4 more replies · $2"
+                    : "Get 2 more replies · $2"}
               </button>
               {!isSubscribed && (
                 <button
@@ -2117,10 +1806,11 @@ export default function ReadingResultsPage() {
           ) : (
             <>
               <p className="mb-2 px-1 text-[12px] text-slate-500">
-                Don't over think this. Just say what's on your mind.
+                Don't overthink this. Just say what's on your mind.
               </p>
               <textarea
                 className="followup-input"
+                aria-label="Ask a follow-up question"
                 rows={3}
                 value={followupQuestion}
                 onChange={(e) => setFollowupQuestion(e.target.value)}
@@ -2139,41 +1829,38 @@ export default function ReadingResultsPage() {
 
               {isSubscribed ? (
                 <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {freeRemainingClient > 0 ? `${freeRemainingClient} free ${freeRemainingClient === 1 ? "reply" : "replies"} this reading` : "Half-price replies available"}
+                  {freeRemainingClient > 0
+                    ? `${freeRemainingClient} free ${freeRemainingClient === 1 ? "reply" : "replies"} this reading`
+                    : "Half-price replies available"}
                 </p>
               ) : freeRemainingClient > 0 ? (
                 <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"} remaining
+                  {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"}{" "}
+                  remaining
                 </p>
               ) : replyCreditsRemaining && replyCreditsRemaining > 0 ? (
                 <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"} remaining
+                  {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"}{" "}
+                  remaining
                 </p>
               ) : null}
             </>
           )}
         </section>
-      </div>
-
-      {/* ── Fixed bottom bar ── */}
-      <div className="bottom-bar">
-        <button
-          type="button"
-          className="download-btn"
-          onClick={handleDownload}
-          disabled={isDownloading}
-          aria-label="Download reading"
-        >
-          <Download className="h-5 w-5" />
-        </button>
-        <button type="button" className="done-btn" onClick={handleDone}>
-          Done
-        </button>
-      </div>
-
+      </ReadingDeck>
       {/* ── Embedded Stripe checkout modal ── */}
       {clientSecret && (
-        <div          style={{
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Reply checkout"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setClientSecret(null);
+              setIsPurchasing(false);
+            }
+          }}
+          style={{
             position: "fixed",
             inset: 0,
             zIndex: 60,
@@ -2206,6 +1893,7 @@ export default function ReadingResultsPage() {
                   lineHeight: 1,
                 }}
                 aria-label="Close checkout"
+                autoFocus
               >
                 ✕
               </button>
@@ -2221,6 +1909,7 @@ export default function ReadingResultsPage() {
                     setJustPurchased(true);
                     setShowPaywall(false);
                     setReplyCreditsRemaining(null);
+                    setCreditsRefresh((value) => value + 1);
                     try {
                       if (readingKey) localStorage.removeItem(`dfp_paywall_${readingKey}`);
                     } catch {
@@ -2235,6 +1924,767 @@ export default function ReadingResultsPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
+
+const css = `
+
+  .reading-results, .reading-results * { box-sizing: border-box; }
+
+  .reading-results.deck-viewport {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    height: 100dvh;
+    width: 100%;
+    overflow: hidden;
+    background: linear-gradient(180deg,#0a0e27 0%,#0b1030 12%,#080c24 24%,#050718 36%,#02030c 48%,#000 62%,#000 100%);
+    color: #e2e8f0;
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    -webkit-tap-highlight-color: transparent;
+    user-select: text;
+    touch-action: pan-y;
+  }
+
+  .reading-results .results-starfield { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+  .reading-results .deck {
+    height: 100%;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .reading-results .panel {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overscroll-behavior-y: contain;
+    overflow-x: hidden;
+    padding: 0 26px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    scrollbar-width: none;
+  }
+  .reading-results .panel::-webkit-scrollbar { display: none; }
+  .reading-results .panel-center { align-items: center; justify-content: center; }
+  .reading-results .panel-scroll {
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: calc(env(safe-area-inset-top) + 28px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 132px);
+  }
+  .reading-results .panel-top {
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: calc(env(safe-area-inset-top) + 22px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 26px);
+  }
+
+  /* ── Page 1 — CAREER ── */
+  .reading-results .career {
+    text-align: center;
+    opacity: 0;
+    transform: translateY(8px);
+    letter-spacing: 0.42em;
+    transition: opacity 1.7s ease, transform 1.7s ease, letter-spacing 1.7s ease;
+  }
+  .reading-results .career.in { opacity: 1; transform: none; letter-spacing: 0.12em; }
+  .reading-results .career-mark {
+    display: block;
+    color: rgba(94,234,212,0.55);
+    font-size: 15px;
+    margin-bottom: 22px;
+    text-shadow: 0 0 16px rgba(94,234,212,0.4);
+  }
+  .reading-results .career-word {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    font-size: clamp(46px, 15vw, 96px);
+    text-transform: uppercase;
+    color: #fff;
+    text-shadow: 0 0 44px rgba(94,234,212,0.22), 0 0 100px rgba(94,234,212,0.10);
+  }
+
+  /* ── Hero (Page 2 prediction) ── */
+  .reading-results .hero { max-width: 32rem; margin: 0 auto; }
+  .reading-results .hero-head { position: relative; display: flex; justify-content: center; margin-bottom: 26px; }
+  .reading-results .hero-glow {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 320px; height: 150px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(ellipse at center, rgba(94,234,212,0.22), rgba(94,234,212,0) 68%);
+    filter: blur(26px);
+    opacity: 0;
+    transition: opacity 1s ease;
+    pointer-events: none;
+  }
+  .reading-results .hero-head:has(.hero-title.on) .hero-glow { opacity: 1; }
+  .reading-results .hero-title-wrap { position: relative; display: inline-block; overflow: hidden; padding: 2px 8px; }
+  .reading-results .hero-title {
+    margin: 0;
+    font-family: Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(32px, 8.5vw, 46px);
+    color: #fff;
+    letter-spacing: -0.01em;
+    text-shadow: 0 0 30px rgba(94,234,212,0.15);
+    opacity: 0;
+    transform: translateY(5px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+  .reading-results .hero-title.on { opacity: 1; transform: none; }
+  .reading-results .hero-title-wrap::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 32%, rgba(255,255,255,0.55) 50%, transparent 68%);
+    transform: translateX(-130%);
+    pointer-events: none;
+  }
+  .reading-results .hero-title-wrap.shine::after { animation: reading-sweep 1.15s ease-out 0.25s 1 forwards; }
+  @keyframes reading-sweep { to { transform: translateX(130%); } }
+  .reading-results .hero-body {
+    margin: 0;
+    font-family: Georgia, serif;
+    font-size: 19px;
+    line-height: 1.72;
+    color: #dbe4f0;
+    text-align: left;
+    min-height: 1.72em;
+  }
+
+  /* ── Page 3 card + zones ── */
+  .reading-results .card {
+    width: 100%;
+    max-width: 30rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(148,163,184,0.16);
+    border-radius: 26px;
+    background: rgba(5,8,24,0.22);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 30px 80px rgba(0,0,0,0.25);
+    backdrop-filter: blur(4px);
+    padding: 24px 22px 26px;
+  }
+  .reading-results .zone {
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transform: translateY(7px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reading-results .zone.on { opacity: 1; transform: none; }
+  .reading-results .zone + .zone { margin-top: 18px; }
+  .reading-results .zone-label {
+    margin: 0 0 7px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(94,234,212,0.9);
+  }
+  .reading-results .zone-body {
+    margin: 0;
+    font-family: Georgia, serif;
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: #cdd7e6;
+  }
+
+  /* ── Page 4 / 5 — Calendar + Windows ── */
+  .reading-results .fade {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reading-results .fade.on { opacity: 1; transform: none; }
+  .reading-results .fade + .fade { margin-top: 12px; }
+
+  /* Calendar page — standalone, centered, no wrapping card */
+  .reading-results .cal-page { width: 100%; max-width: 22rem; margin: 0 auto; text-align: center; }
+  .reading-results .cal-page-heading {
+    margin: 0 0 22px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.22em;
+    text-transform: uppercase; color: rgba(94,234,212,0.9);
+  }
+  .reading-results .cal-card {
+    border: 1px solid rgba(148,163,184,0.16);
+    border-radius: 24px;
+    background: rgba(9,13,33,0.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 30px 80px rgba(0,0,0,0.3);
+    backdrop-filter: blur(4px);
+    padding: 18px 16px 20px;
+    opacity: 0;
+    transform: translateY(10px) scale(0.965);
+    transition: opacity 0.85s ease, transform 0.85s cubic-bezier(0.22,1,0.36,1);
+  }
+  .reading-results .cal-card.on { opacity: 1; transform: none; }
+  .reading-results .cal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; padding: 0 2px;
+  }
+  .reading-results .cal-title {
+    margin: 0;
+    font-family: Georgia, serif;
+    font-size: 17px; color: #eaf1fd; letter-spacing: 0.01em;
+  }
+  .reading-results .cal-nav {
+    width: 30px; height: 30px;
+    border-radius: 9999px;
+    border: 1px solid rgba(148,163,184,0.2);
+    background: transparent;
+    color: #9fb0c8;
+    font-size: 18px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .reading-results .cal-nav:hover { color: #e2e8f0; border-color: rgba(94,234,212,0.45); }
+  .reading-results .cal-nav.hidden { visibility: hidden; }
+  .reading-results .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .reading-results .cal-dow { margin-bottom: 5px; }
+  .reading-results .cal-dow-cell {
+    text-align: center;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    color: #5b6b83; text-transform: uppercase;
+  }
+  .reading-results .cal-cell {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    display: flex; align-items: center; justify-content: center;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 13.5px; color: #aeb9cc;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+  }
+  .reading-results .cal-cell.empty { visibility: hidden; }
+  .reading-results .cal-num { position: relative; z-index: 1; }
+  .reading-results .cal-cell.ring .cal-num { color: #f2f8ff; font-weight: 600; }
+  .reading-results .cal-cell.ring::before {
+    content: "";
+    position: absolute;
+    inset: 10%;
+    border-radius: 9999px;
+    border: 1.5px solid rgba(94,234,212,0.9);
+    animation: reading-ringIn 0.5s ease both, reading-ringGlow 2.6s ease-in-out 0.5s infinite;
+  }
+  @keyframes reading-ringIn {
+    from { opacity: 0; transform: scale(0.55); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes reading-ringGlow {
+    0%, 100% { box-shadow: 0 0 7px rgba(94,234,212,0.4), inset 0 0 5px rgba(94,234,212,0.18); }
+    50% { box-shadow: 0 0 16px rgba(94,234,212,0.75), inset 0 0 8px rgba(94,234,212,0.3); }
+  }
+
+  /* Framed card pages (Timing + Your Move) */
+  .reading-results .framed-page { width: 100%; max-width: 30rem; margin: 0 auto; }
+  .reading-results .page-eyebrow {
+    margin: 0 0 16px;
+    text-align: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.22em;
+    text-transform: uppercase; color: rgba(94,234,212,0.9);
+  }
+  .reading-results .zone-frame {
+    border: 1px solid rgba(148,163,184,0.18);
+    border-radius: 24px;
+    padding: 10px;
+    background: rgba(5,8,24,0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.03),
+      0 22px 70px rgba(0,0,0,0.18),
+      0 0 44px rgba(94,234,212,0.05);
+    backdrop-filter: blur(5px);
+  }
+  .reading-results .act-card {
+    border: 1px solid rgba(255,255,255,0.075);
+    border-radius: 18px;
+    padding: 16px 17px;
+    background: rgba(17,22,51,0.5);
+  }
+  .reading-results .act-card + .act-card { margin-top: 9px; }
+  .reading-results .act-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .reading-results .act-icon { width: 15px; height: 15px; color: rgba(94,234,212,0.85); flex-shrink: 0; }
+  .reading-results .act-label {
+    font-family: ui-sans-serif, system-ui;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
+    text-transform: uppercase; color: #5eead4;
+  }
+  .reading-results .act-label-block { display: block; margin: 0 0 8px; }
+  .reading-results .act-body {
+    margin: 0;
+    font-family: Georgia, serif;
+    font-size: 15px; line-height: 1.8; color: #cbd5e1;
+  }
+
+  .reading-results .date-badge {
+    display: inline-block;
+    padding: 1px 10px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, rgba(251,191,36,0.18), rgba(217,119,6,0.12));
+    border: 1px solid rgba(251,191,36,0.35);
+    color: #fbbf24;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; white-space: nowrap;
+    box-shadow: 0 0 18px rgba(251,191,36,0.12);
+    vertical-align: baseline;
+  }
+
+  /* Direct Align quiz */
+  .reading-results .quiz-item {
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding-top: 16px;
+  }
+  .reading-results .quiz-item:first-child { border-top: none; padding-top: 0; }
+  .reading-results .quiz-item + .quiz-item { margin-top: 16px; }
+  .reading-results .quiz-q {
+    display: flex;
+    gap: 11px;
+    margin: 0;
+    font-family: Georgia, serif;
+    font-size: 15px; line-height: 1.45; color: #dbe4f0;
+  }
+  .reading-results .quiz-n {
+    flex-shrink: 0;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 13px; font-weight: 700; color: #5eead4;
+    padding-top: 1px;
+  }
+  .reading-results .quiz-btns { display: flex; gap: 10px; margin-top: 11px; }
+  .reading-results .quiz-btn {
+    flex: 1;
+    height: 42px;
+    border-radius: 13px;
+    border: 1px solid rgba(148,163,184,0.25);
+    background: rgba(17,22,51,0.4);
+    color: #cbd5e1;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .reading-results .quiz-btn:hover { border-color: rgba(94,234,212,0.4); }
+  .reading-results .quiz-btn.sel {
+    border-color: rgba(94,234,212,0.7);
+    background: linear-gradient(135deg, rgba(94,234,212,0.92), rgba(45,212,191,0.82));
+    color: #04231f;
+    box-shadow: 0 0 22px rgba(94,234,212,0.3);
+  }
+
+  /* The Read — prose page */
+  .reading-results .prose-body p {
+    margin: 0 0 16px;
+    font-family: Georgia, serif;
+    font-size: 16px; line-height: 1.85; color: #dbe4f0;
+  }
+  .reading-results .prose-body p:last-child { margin-bottom: 0; }
+
+  /* Fixed bottom bar (pinned to the screen) */
+  .reading-results .bottom-bar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 30;
+    padding: 12px 16px calc(10px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    background: linear-gradient(180deg, rgba(2,3,12,0) 0%, rgba(2,3,12,0.85) 34%, rgba(2,3,12,0.96) 100%);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+  }
+  .reading-results .bottom-bar.show { opacity: 1; transform: none; pointer-events: auto; }
+  .reading-results .bottom-row { display: flex; gap: 12px; align-items: center; }
+  .reading-results .download-btn {
+    width: 52px; height: 52px; flex-shrink: 0;
+    border-radius: 16px;
+    border: 1px solid rgba(251,191,36,0.5);
+    background: rgba(251,191,36,0.08);
+    color: #fbbf24;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    animation: reading-dlPulse 2.6s ease-in-out infinite;
+  }
+  .reading-results .download-btn svg { width: 20px; height: 20px; }
+  @keyframes reading-dlPulse {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(251,191,36,0.35), 0 0 20px rgba(251,191,36,0.16); }
+    50% { box-shadow: 0 0 0 1px rgba(251,191,36,0.6), 0 0 30px rgba(251,191,36,0.3); }
+  }
+  .reading-results .done-btn {
+    flex: 1; height: 52px;
+    border-radius: 16px; border: none;
+    background: #5eead4; color: #042f2e;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 16px; font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 0 34px rgba(94,234,212,0.3);
+  }
+  .reading-results .bottom-credits {
+    margin: 0;
+    text-align: center;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 11px; color: #64748b;
+  }
+
+  /* ── Typing caret ── */
+  .reading-results .caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-left: 2px;
+    vertical-align: -0.15em;
+    background: rgba(94,234,212,0.9);
+    animation: reading-blink 1s steps(1) infinite;
+  }
+  @keyframes reading-blink { 50% { opacity: 0; } }
+
+  /* ── Swipe cue ── */
+  .reading-results .cue {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom) + 30px);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: rgba(148,163,184,0.8);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+  }
+  .reading-results .cue.show { opacity: 1; }
+  .reading-results .cue-chev { width: 20px; height: 20px; animation: reading-bob 1.9s ease-in-out infinite; }
+  @keyframes reading-bob { 0%,100% { transform: translateY(0); opacity: 0.6; } 50% { transform: translateY(-6px); opacity: 1; } }
+
+  /* ── Step dots ── */
+  .reading-results .dots {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .reading-results .dot {
+    width: 6px; height: 6px;
+    border-radius: 9999px;
+    background: rgba(148,163,184,0.25);
+    transition: all 0.4s ease;
+  }
+  .reading-results .dot.past { background: rgba(94,234,212,0.4); }
+  .reading-results .dot.on {
+    background: rgba(94,234,212,0.95);
+    box-shadow: 0 0 10px rgba(94,234,212,0.6);
+    height: 16px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reading-results .deck { transition: none; }
+    .reading-results .career, .reading-results .hero-title, .reading-results .zone, .reading-results .fade, .reading-results .cal-card { transition: none; }
+    .reading-results .cue-chev, .reading-results .caret, .reading-results .cal-cell.ring::before { animation: none; }
+    .reading-results .hero-title-wrap.shine::after { animation: none; }
+  }
+
+        .reading-results .reading-title {
+          font-family: var(--font-display, Georgia, serif);
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          line-height: 1.15;
+        }
+
+        .reading-results .reading-body {
+          width: 100%;
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 16px;
+          line-height: 1.9;
+          color: #e2e8f0;
+          white-space: pre-wrap;
+        }
+
+        .reading-results .bottom-line-wrap {
+          position: relative;
+          margin-top: 54px;
+          padding: 52px 10px 48px;
+          text-align: center;
+          transition:
+            transform 0.72s ease,
+            opacity 0.72s ease;
+        }
+
+        .reading-results .bottom-line-wrap::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 16%;
+          right: 16%;
+          height: 1px;
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(94, 234, 212, 0.28),
+              transparent
+            );
+        }
+
+        .reading-results .bottom-line-label {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: rgba(94, 234, 212, 0.9);
+        }
+
+        .reading-results .closing-line {
+          max-width: 540px;
+          margin: 15px auto 0;
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 18px;
+          line-height: 1.8;
+          color: #f8fafc;
+          font-style: italic;
+          text-align: center;
+          white-space: pre-wrap;
+          text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
+        }
+
+        .reading-results .sources-wrap {
+          margin-top: 34px;
+          padding-top: 22px;
+          border-top: 1px solid rgba(255, 255, 255, 0.07);
+          text-align: center;
+          transition:
+            filter 0.72s ease,
+            opacity 0.72s ease;
+        }
+
+        .reading-results .sources-toggle {
+          position: relative;
+          overflow: hidden;
+          margin: 0 auto;
+          padding: 8px 14px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+
+          color: #94a3b8;
+          transition:
+            color 0.25s ease,
+            text-shadow 0.25s ease;
+        }
+
+        .reading-results .sources-toggle::before {
+          content: "";
+          position: absolute;
+          top: -50%;
+          bottom: -50%;
+          width: 34%;
+          left: -45%;
+          transform: skewX(-18deg);
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(191, 219, 254, 0.26),
+              rgba(94, 234, 212, 0.38),
+              transparent
+            );
+          filter: blur(4px);
+          animation: reading-sourceStarlight 5.4s ease-in-out infinite;
+          pointer-events: none;
+        }
+
+        .reading-results .sources-toggle:hover {
+          color: #cbd5e1;
+          text-shadow: 0 0 18px rgba(94, 234, 212, 0.28);
+        }
+
+        .reading-results .sources-toggle.open {
+          color: #bae6fd;
+          text-shadow: 0 0 18px rgba(94, 234, 212, 0.24);
+        }
+
+        .reading-results .sources-chevron {
+          transition:
+            transform 0.3s ease,
+            filter 0.3s ease;
+        }
+
+        .reading-results .sources-toggle.open .sources-chevron {
+          transform: rotate(180deg);
+          filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.5));
+        }
+
+        @keyframes reading-sourceStarlight {
+          0%, 68% {
+            left: -45%;
+            opacity: 0;
+          }
+
+          74% {
+            opacity: 1;
+          }
+
+          92% {
+            left: 115%;
+            opacity: 0.85;
+          }
+
+          100% {
+            left: 115%;
+            opacity: 0;
+          }
+        }
+
+        /* ─── Follow-up styles ──────────────────────────────────────────── */
+
+        .reading-results .followup-input {
+          width: 100%;
+          background: rgba(10, 14, 39, 0.6);
+          border: 1px solid rgba(45, 212, 191, 0.25);
+          border-radius: 18px;
+          color: #e2e8f0;
+          font-size: 16px;
+          padding: 14px 16px;
+          outline: none;
+          resize: none;
+          transition: border-color 0.25s ease, box-shadow 0.25s ease;
+        }
+        .reading-results .followup-input:focus {
+          border-color: rgba(45, 212, 191, 0.6);
+          box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
+        }
+
+        .reading-results .purchase-success {
+          margin-bottom: 12px;
+          padding: 10px 14px;
+          border-radius: 12px;
+          background: rgba(45, 212, 191, 0.1);
+          border: 1px solid rgba(45, 212, 191, 0.3);
+          color: #5eead4;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 13px;
+          text-align: center;
+        }
+
+        .reading-results .paywall-card {
+          background: rgba(20, 25, 55, 0.5);
+          border: 1px solid rgba(251, 191, 36, 0.28);
+          border-radius: 20px;
+          padding: 22px 18px;
+          text-align: center;
+          backdrop-filter: blur(8px);
+        }
+        .reading-results .paywall-title {
+          font-family: var(--font-display, Georgia, serif);
+          font-size: 19px;
+          color: #ffffff;
+          font-weight: 600;
+        }
+        .reading-results .paywall-sub {
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 13px;
+          line-height: 1.6;
+          color: #94a3b8;
+          margin-top: 8px;
+        }
+        .reading-results .paywall-buy {
+          margin-top: 18px;
+          width: 100%;
+          height: 54px;
+          border-radius: 16px;
+          border: none;
+          background: linear-gradient(135deg, #fbbf24, #d97706);
+          color: #1a1206;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 15px;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 0 34px rgba(251, 191, 36, 0.22);
+        }
+        .reading-results .paywall-buy:disabled { opacity: 0.6; cursor: default; }
+        .reading-results .paywall-sub-link {
+          margin-top: 12px;
+          background: none;
+          border: none;
+          color: #5eead4;
+          font-family: var(--font-sans, ui-sans-serif);
+          font-size: 13px;
+          cursor: pointer;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .reading-results .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
+
+
+  .reading-results .panel-center, .reading-results .panel-top, .reading-results .panel-scroll {
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: calc(env(safe-area-inset-top) + 28px);
+    padding-bottom: calc(env(safe-area-inset-bottom) + 132px);
+  }
+  .reading-results .panel > * { flex-shrink: 0; max-width: 100%; }
+  .reading-results .panel-center > *, .reading-results .panel-scroll > .framed-page { margin-top: auto; margin-bottom: auto; }
+  .reading-results .panel[data-panel="topic"] { padding-bottom: calc(env(safe-area-inset-bottom) + 28px); }
+  .reading-results .panel .card { max-width: 30rem; }
+  .reading-results .panel .hero { width: 100%; max-width: 32rem; }
+  .reading-results .panel .cal-page { max-width: 22rem; }
+  .reading-results .panel .framed-page { max-width: 30rem; }
+  .reading-results .panel .closing-page { max-width: 34rem; margin-top: 0; margin-bottom: 0; }
+  .reading-results .career-word { overflow-wrap: anywhere; }
+  .reading-results .hero-body, .reading-results .zone-body, .reading-results .act-body, .reading-results .prose-body p { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .reading-results .date-badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .reading-results .act-note { color: #94a3b8; font-size: 12px; }
+  .reading-results .bottom-line-wrap { margin-top: 0; padding: 40px 10px 34px; }
+  .reading-results .closing-page.bottom-focus .bottom-line-wrap { transform: scale(1.025); }
+  .reading-results .bottom-line-label { margin: 0; }
+  .reading-results .sources-chevron { width: 14px; height: 14px; }
+  .reading-results .dots { gap: 7px; }
+  .reading-results .dot { position: relative; padding: 0; border: 0; cursor: pointer; flex-shrink: 0; }
+  .reading-results .dot::after { content: ""; position: absolute; inset: -3px -7px; }
+  .reading-results .download-btn:disabled { opacity: 0.5; cursor: default; }
+  .reading-results button:focus-visible, .reading-results textarea:focus-visible { outline: 2px solid #5eead4; outline-offset: 4px; }
+  .reading-results .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    .reading-results, .reading-results *, .reading-results *::before, .reading-results *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    .reading-results .closing-page.bottom-focus .bottom-line-wrap { transform: none; }
+  }
+
+`;
