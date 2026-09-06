@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { clerkClient } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
 
 import { trackServerPurchase } from "@/lib/tiktokEvents";
-import { recordRedemption, REFERRAL_REWARD_CREDITS } from "@/lib/referrals";
-import { db } from "@/lib/db";
-import { stripeFulfillments } from "@/lib/db/schema";
+import {
+  getReferralOwnerById,
+  grantReferralReward,
+  REFERRAL_REWARD_CREDITS,
+} from "@/lib/referrals";
 import type { MembershipStatus } from "@/lib/paywallConfig";
+import { ensureUsageAccount, fulfillUsageAccount, mutateUsageAccount } from "@/lib/reading/account-store";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -22,83 +24,47 @@ async function processReferralReward(
   client: Awaited<ReturnType<typeof clerkClient>>
 ) {
   const codeId = session.metadata?.referralCodeId;
-  const ownerUserId = session.metadata?.referralOwnerUserId;
   const referredUserId = session.metadata?.userId;
 
-  if (!codeId || !ownerUserId || !referredUserId) return;
-
-  const isNewRedemption = await recordRedemption({
-    codeId,
-    referredUserId,
-    stripeSessionId: session.id,
-    rewardCreditsGranted: REFERRAL_REWARD_CREDITS,
-  });
-
-  if (!isNewRedemption) {
-    console.log(
-      `[webhook] referral — session ${session.id} already redeemed, skipping reward.`
-    );
-    return;
-  }
+  if (!codeId || !referredUserId) return;
 
   try {
-    const owner = await client.users.getUser(ownerUserId);
-    const ownerCredits = Number(owner.publicMetadata?.credits ?? 0);
+    // Resolve the owner from the referral table, never from mutable Stripe metadata.
+    const storedOwner = await getReferralOwnerById(codeId);
+    if (!storedOwner) throw new Error("Referral code not found.");
+    // Initialize before the transactional grant; ensureAccount never overwrites.
+    const owner = await client.users.getUser(storedOwner);
+    await ensureUsageAccount(storedOwner, owner.publicMetadata);
+    const result = await grantReferralReward({
+      codeId,
+      referredUserId,
+      stripeSessionId: session.id,
+      rewardCreditsGranted: REFERRAL_REWARD_CREDITS,
+    });
+    if (result.ownerUserId !== storedOwner) throw new Error("Referral owner changed during grant.");
 
-    await client.users.updateUserMetadata(ownerUserId, {
+    await client.users.updateUserMetadata(result.ownerUserId, {
       publicMetadata: {
         ...owner.publicMetadata,
-        credits: ownerCredits + REFERRAL_REWARD_CREDITS,
+        credits: result.credits,
       },
     });
 
     console.log(
       `[webhook] referral — granted ${REFERRAL_REWARD_CREDITS} reading credit(s) ` +
-        `to referrer ${ownerUserId} for referring ${referredUserId}`
+        `to referrer ${result.ownerUserId} for referring ${referredUserId}`
     );
   } catch (err) {
     console.error(
       "[webhook] CRITICAL — referral redemption recorded but reward grant failed.",
       {
-        ownerUserId,
+        ownerUserId: session.metadata?.referralOwnerUserId,
         referredUserId,
         sessionId: session.id,
         error: String(err),
       }
     );
   }
-}
-
-/* ─────────────────────────────────────────────
-   General Stripe fulfillment idempotency
-   Prevents a retried Checkout Session / invoice
-   from granting the same purchase twice.
-───────────────────────────────────────────── */
-
-async function claimFulfillment(args: {
-  stripeObjectId: string;
-  eventType: string;
-  userId?: string | null;
-}): Promise<boolean> {
-  const inserted = await db
-    .insert(stripeFulfillments)
-    .values({
-      stripeObjectId: args.stripeObjectId,
-      eventType: args.eventType,
-      userId: args.userId ?? null,
-    })
-    .onConflictDoNothing({
-      target: stripeFulfillments.stripeObjectId,
-    })
-    .returning({ id: stripeFulfillments.id });
-
-  return inserted.length > 0;
-}
-
-async function releaseFulfillment(stripeObjectId: string) {
-  await db
-    .delete(stripeFulfillments)
-    .where(eq(stripeFulfillments.stripeObjectId, stripeObjectId));
 }
 
 /* ─────────────────────────────────────────────
@@ -140,6 +106,8 @@ async function syncSubscriptionState(subscription: Stripe.Subscription) {
 
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
+  await ensureUsageAccount(userId, user.publicMetadata);
+  await mutateUsageAccount(userId, { membershipStatus });
 
   await client.users.updateUserMetadata(userId, {
     publicMetadata: {
@@ -222,29 +190,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const claimed = await claimFulfillment({
-      stripeObjectId: session.id,
-      eventType: event.type,
-      userId,
-    });
-
-    if (!claimed) {
-      console.log(
-        `[webhook] checkout — ${session.id} already fulfilled, skipping.`
-      );
-
-      return NextResponse.json({ received: true });
-    }
-
     try {
       const client = await clerkClient();
       const user = await client.users.getUser(userId);
       const meta = user.publicMetadata;
       const userEmail = user.emailAddresses[0]?.emailAddress;
 
-      const currentCredits = Number(meta?.credits ?? 0);
-      const currentReplyCredits = Number(meta?.replyCredits ?? 0);
-      const currentJxlCredits = Number(meta?.jxlCredits ?? 0);
+      await ensureUsageAccount(userId, meta);
+      const ledgerMutation =
+        mode === "one_time"
+          ? { credits: 1 }
+          : mode === "subscription"
+            ? { membershipStatus: "active" as const }
+            : mode === "jxl_session"
+              ? { jxlCredits: 1 }
+              : mode === "reply_pack"
+                ? { replyCredits: Math.max(0, Number(session.metadata?.replyCredits ?? 0)) }
+                : mode === "bundle_pack"
+                  ? {
+                      credits: Math.max(0, Number(session.metadata?.credits ?? 0)),
+                      jxlCredits: Math.max(0, Number(session.metadata?.jxlCredits ?? 0)),
+                    }
+                  : mode === "cart"
+                    ? {
+                        credits: Math.max(0, Number(session.metadata?.grantCredits ?? 0)),
+                        jxlCredits: Math.max(0, Number(session.metadata?.grantJxlCredits ?? 0)),
+                        replyCredits: Math.max(0, Number(session.metadata?.grantReplyCredits ?? 0)),
+                      }
+                    : { replyCredits: 1 };
+      const fulfillment = await fulfillUsageAccount(
+        userId,
+        session.id,
+        event.type,
+        ledgerMutation,
+      );
+      if (!fulfillment.applied) {
+        console.log(`[webhook] checkout — ${session.id} already fulfilled.`);
+      }
 
       await trackServerPurchase({
         email: userEmail,
@@ -260,7 +242,7 @@ export async function POST(request: NextRequest) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
-            credits: currentCredits + 1,
+            credits: fulfillment.account.credits,
             firstReadingUsed: true,
             firstPaidReadingUsed: true,
             lastPurchaseAt: new Date().toISOString(),
@@ -313,7 +295,7 @@ export async function POST(request: NextRequest) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
-            jxlCredits: currentJxlCredits + 1,
+            jxlCredits: fulfillment.account.jxlCredits,
             firstJxlUsed: true,
             lastPurchaseAt: new Date().toISOString(),
           },
@@ -334,7 +316,7 @@ export async function POST(request: NextRequest) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
-            replyCredits: currentReplyCredits + grant,
+            replyCredits: fulfillment.account.replyCredits,
             lastPurchaseAt: new Date().toISOString(),
           },
         });
@@ -359,8 +341,8 @@ export async function POST(request: NextRequest) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
-            credits: currentCredits + creditsToGrant,
-            jxlCredits: currentJxlCredits + jxlToGrant,
+            credits: fulfillment.account.credits,
+            jxlCredits: fulfillment.account.jxlCredits,
             lastPurchaseAt: new Date().toISOString(),
           },
         });
@@ -392,9 +374,9 @@ export async function POST(request: NextRequest) {
           publicMetadata: {
             ...meta,
 
-            credits: currentCredits + readingGrant,
-            jxlCredits: currentJxlCredits + jxlGrant,
-            replyCredits: currentReplyCredits + replyGrant,
+            credits: fulfillment.account.credits,
+            jxlCredits: fulfillment.account.jxlCredits,
+            replyCredits: fulfillment.account.replyCredits,
 
             ...(readingGrant > 0
               ? {
@@ -426,7 +408,7 @@ export async function POST(request: NextRequest) {
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
-            replyCredits: currentReplyCredits + 1,
+            replyCredits: fulfillment.account.replyCredits,
             lastPurchaseAt: new Date().toISOString(),
           },
         });
@@ -439,19 +421,6 @@ export async function POST(request: NextRequest) {
       await processReferralReward(session, client);
 
     } catch (err) {
-      // Remove the claim so Stripe's retry can attempt fulfillment again.
-      try {
-        await releaseFulfillment(session.id);
-      } catch (releaseError) {
-        console.error(
-          "[webhook] CRITICAL — could not release failed fulfillment claim.",
-          {
-            sessionId: session.id,
-            error: String(releaseError),
-          }
-        );
-      }
-
       console.error(
         "[webhook] CRITICAL — Stripe charged but fulfillment failed.",
         {
@@ -496,19 +465,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    const claimed = await claimFulfillment({
-      stripeObjectId: invoice.id,
-      eventType: event.type,
-    });
-
-    if (!claimed) {
-      console.log(
-        `[webhook] invoice — ${invoice.id} already handled, skipping.`
-      );
-
-      return NextResponse.json({ received: true });
-    }
-
     try {
       const subscription = await stripe.subscriptions.retrieve(subId);
       const userId = subscription.metadata?.userId;
@@ -524,6 +480,13 @@ export async function POST(request: NextRequest) {
 
       const client = await clerkClient();
       const user = await client.users.getUser(userId);
+      await ensureUsageAccount(userId, user.publicMetadata);
+      await fulfillUsageAccount(
+        userId,
+        invoice.id,
+        event.type,
+        { membershipStatus: "active" },
+      );
 
       await client.users.updateUserMetadata(userId, {
         publicMetadata: {
@@ -544,10 +507,6 @@ export async function POST(request: NextRequest) {
       );
 
     } catch (err) {
-      try {
-        await releaseFulfillment(invoice.id);
-      } catch {}
-
       console.error(
         "[webhook] CRITICAL — renewal membership sync failed.",
         {
@@ -603,6 +562,8 @@ export async function POST(request: NextRequest) {
       try {
         const client = await clerkClient();
         const user = await client.users.getUser(userId);
+        await ensureUsageAccount(userId, user.publicMetadata);
+        await mutateUsageAccount(userId, { membershipStatus: "canceled" });
 
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {

@@ -7,7 +7,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronUp, Download, ChevronDown, CalendarDays } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { loadReading, loadChart, clearIntake, type StoredReading } from "@/lib/chartStore";
+import {
+  loadReading,
+  saveReading,
+  loadChart,
+  clearIntake,
+  type StoredReading,
+} from "@/lib/chartStore";
+import {
+  isReadingDelivery,
+  type ReadingAlignment,
+  type DirectAlignAnswer,
+} from "@/lib/reading/contracts";
+import { REGULAR_READING_REPLIES, SUBSCRIBER_READING_REPLIES } from "@/lib/reading/usage-policy";
 
 const stripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
@@ -28,7 +40,8 @@ interface UserCredits {
 /**
  * AstroProXL results — production TSX conversion of reading-deck-prototype.jsx.
  * Keeps the prototype's page order and carries the original closing experience.
- * Uses the existing chartStore and API contracts. No engine changes are required.
+ * Staged readings use generated questions and one authenticated continuation.
+ * Older saved readings remain readable without a pretend alignment quiz.
  */
 
 type ParsedSection =
@@ -756,65 +769,47 @@ function DirectiveCard({ section }: { section: DirectiveSection }) {
   );
 }
 
-// Retained from the approved prototype. Engine integration is a separate step:
-// these answers are local to this reading and do not rewrite generated prose.
-const QUESTIONS = [
-  "You'd rather have one honest conversation now than keep the peace for another month.",
-  "When something feels off, you tend to name it out loud fairly quickly.",
-  "You're willing to lose a little goodwill in exchange for a clearer agreement.",
-  "You already have a sense of what you want to ask for — you just haven't said it yet.",
-  "If the answer is no, you'd rather know now than keep hoping it turns into a yes.",
-];
-type QuizAnswers = Record<number, "yes" | "no">;
-
-function Quiz({ readingKey }: { readingKey: string }) {
-  const [answers, setAnswers] = useState<QuizAnswers>({});
-  useEffect(() => {
-    try {
-      const saved: unknown = JSON.parse(localStorage.getItem(`dfp_align_${readingKey}`) ?? "{}");
-      if (saved && typeof saved === "object" && !Array.isArray(saved)) {
-        const restored: QuizAnswers = {};
-        Object.entries(saved).forEach(([key, value]) => {
-          const i = Number(key);
-          if (
-            Number.isInteger(i) &&
-            i >= 0 &&
-            i < QUESTIONS.length &&
-            (value === "yes" || value === "no")
-          )
-            restored[i] = value;
-        });
-        setAnswers(restored);
-      }
-    } catch {
-      /* A blocked or malformed cache does not prevent answering. */
-    }
-  }, [readingKey]);
-  const pick = (i: number, value: "yes" | "no") => {
-    const next = { ...answers, [i]: value };
-    setAnswers(next);
-    try {
-      localStorage.setItem(`dfp_align_${readingKey}`, JSON.stringify(next));
-    } catch {
-      /* Optional persistence. */
-    }
-  };
+function Quiz({
+  alignment,
+  busy,
+  error,
+  onAnswer,
+  onSubmit,
+}: {
+  alignment: ReadingAlignment;
+  busy: boolean;
+  error: string | null;
+  onAnswer: (questionId: string, answer: "yes" | "no") => void;
+  onSubmit: () => Promise<void>;
+}) {
+  const completed = alignment.phase === "complete";
+  const locked = busy || completed || !!alignment.submittedAnswers;
+  const answers = alignment.submittedAnswers ?? alignment.answers;
+  const allAnswered = alignment.directAlign.every((q) =>
+    answers.some((a) => a.questionId === q.id),
+  );
   return (
-    <div className="quiz-list">
-      {QUESTIONS.map((question, i) => (
-        <div className="quiz-item" key={i}>
+    <div className="quiz-list" aria-busy={busy}>
+      <p className="align-intro">
+        Five questions to bring your reading closer to where you are now.
+      </p>
+      {alignment.directAlign.map((question, i) => (
+        <div className="quiz-item" key={question.id}>
           <p className="quiz-q" id={`align-question-${i}`}>
             <span className="quiz-n">{i + 1}</span>
-            <span>{question}</span>
+            <span>{question.question}</span>
           </p>
           <div className="quiz-btns" role="group" aria-labelledby={`align-question-${i}`}>
             {(["yes", "no"] as const).map((value) => (
               <button
                 type="button"
                 key={value}
-                className={`quiz-btn ${answers[i] === value ? "sel" : ""}`}
-                aria-pressed={answers[i] === value}
-                onClick={() => pick(i, value)}
+                className={`quiz-btn ${answers.some((a) => a.questionId === question.id && a.answer === value) ? "sel" : ""}`}
+                aria-pressed={answers.some(
+                  (a) => a.questionId === question.id && a.answer === value,
+                )}
+                disabled={locked}
+                onClick={() => onAnswer(question.id, value)}
               >
                 {value === "yes" ? "Yes" : "No"}
               </button>
@@ -822,6 +817,36 @@ function Quiz({ readingKey }: { readingKey: string }) {
           </div>
         </div>
       ))}
+      <div className="align-action">
+        {completed ? (
+          <p role="status">Your answers are included in The Read.</p>
+        ) : (
+          <>
+            <p className="align-progress" role="status">
+              {busy
+                ? "Bringing your answers into your reading…"
+                : `${answers.length} of 5 answered`}
+            </p>
+            <button
+              type="button"
+              className="align-submit"
+              disabled={!allAnswered || busy}
+              onClick={onSubmit}
+            >
+              {busy
+                ? "Aligning your reading…"
+                : error || alignment.submittedAnswers
+                  ? "Continue My Reading"
+                  : "Reveal My Reading"}
+            </button>
+            {error && (
+              <p className="align-error" role="alert">
+                {error}
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -846,7 +871,11 @@ function ReadingDeck({
   topic,
   content,
   sections,
-  readingKey,
+  alignment,
+  alignmentBusy,
+  alignmentError,
+  onAlignmentAnswer,
+  onAlignmentSubmit,
   credits,
   isDownloading,
   onDownload,
@@ -858,7 +887,11 @@ function ReadingDeck({
   topic: string;
   content: string;
   sections: ParsedSection[] | null;
-  readingKey: string;
+  alignment?: ReadingAlignment;
+  alignmentBusy: boolean;
+  alignmentError: string | null;
+  onAlignmentAnswer: (questionId: string, answer: "yes" | "no") => void;
+  onAlignmentSubmit: () => Promise<void>;
   credits: UserCredits | null;
   isDownloading: boolean;
   onDownload: () => Promise<void>;
@@ -887,12 +920,17 @@ function ReadingDeck({
     const directives = (sections ?? []).filter(
       (s): s is DirectiveSection => s.kind === "directive",
     );
-    const windows = timing
-      .flatMap((s) => {
-        const window = s.date ? parseCalendarWindow(s.date) : null;
-        return window ? [window] : [];
-      })
-      .sort((a, b) => dayValue(a.start) - dayValue(b.start));
+    const windows = alignment
+      ? alignment.calendar.flatMap((anchor) => {
+          const window = parseCalendarWindow(anchor.isoDate);
+          return window ? [{ ...window, date: anchor.date }] : [];
+        })
+      : timing
+          .flatMap((s) => {
+            const window = s.date ? parseCalendarWindow(s.date) : null;
+            return window ? [window] : [];
+          })
+          .sort((a, b) => dayValue(a.start) - dayValue(b.start));
     return {
       prediction: join("prediction"),
       where: join("currentState"),
@@ -903,21 +941,32 @@ function ReadingDeck({
       directives,
       windows,
     };
-  }, [sections, content]);
+  }, [sections, content, alignment]);
 
   const panels = useMemo<PanelKind[]>(() => {
+    if (alignment && !isSafeResponse)
+      return [
+        "topic",
+        "prediction",
+        "context",
+        "calendar",
+        "timing",
+        "quiz",
+        "prose",
+        "directive",
+        "closing",
+      ];
     const result: PanelKind[] = ["topic"];
     if (groups.prediction) result.push("prediction");
     if (groups.where || groups.why || groups.how) result.push("context");
     if (groups.windows.length) result.push("calendar");
     if (groups.timing.length) result.push("timing");
-    if (sections && !isSafeResponse) result.push("quiz");
     if (groups.prose.length) result.push("prose");
     if (groups.directives.length) result.push("directive");
     result.push("closing");
-    // Preserve the prototype order; omit empty stages until the engine supplies them.
+    // Legacy readings retain their existing content, without static questions.
     return result;
-  }, [groups, sections, isSafeResponse]);
+  }, [groups, alignment, isSafeResponse]);
 
   const steps = useMemo<DeckStep[]>(
     () =>
@@ -945,6 +994,25 @@ function ReadingDeck({
       }),
     [panels, groups, topic],
   );
+  const waitingForAlignment = alignment?.phase === "awaiting_alignment";
+  const maxStep = waitingForAlignment
+    ? steps.findIndex((item) => panels[item.panelIndex] === "quiz")
+    : steps.length - 1;
+  const wasWaiting = useRef(waitingForAlignment);
+  useEffect(() => {
+    if (
+      wasWaiting.current &&
+      !waitingForAlignment &&
+      panels[steps[stepRef.current]?.panelIndex] === "quiz"
+    ) {
+      const next = steps.findIndex((item) => panels[item.panelIndex] === "prose");
+      if (next >= 0) {
+        stepRef.current = next;
+        setStep(next);
+      }
+    }
+    wasWaiting.current = waitingForAlignment;
+  }, [waitingForAlignment, panels, steps]);
   const current = steps[Math.min(step, steps.length - 1)];
   const pageIndex = current.panelIndex;
   const bottomActive = panels[pageIndex] === "closing";
@@ -961,7 +1029,7 @@ function ReadingDeck({
   const navigate = useCallback(
     (next: number) => {
       if (checkoutOpen || lock.current) return;
-      const bounded = Math.min(steps.length - 1, Math.max(0, next));
+      const bounded = Math.min(maxStep, Math.max(0, next));
       if (bounded === stepRef.current) return;
       stepRef.current = bounded;
       setStep(bounded);
@@ -974,7 +1042,7 @@ function ReadingDeck({
         reduceMotion ? 120 : 740,
       );
     },
-    [steps.length, reduceMotion, checkoutOpen],
+    [maxStep, reduceMotion, checkoutOpen],
   );
   const go = useCallback((direction: number) => navigate(stepRef.current + direction), [navigate]);
 
@@ -1155,7 +1223,18 @@ function ReadingDeck({
               {kind === "calendar" && (
                 <div className="cal-page">
                   <p className="cal-page-heading">Dated Windows</p>
-                  <Calendar windows={groups.windows} active={active} reduceMotion={reduceMotion} />
+                  {groups.windows.length ? (
+                    <Calendar
+                      windows={groups.windows}
+                      active={active}
+                      reduceMotion={reduceMotion}
+                    />
+                  ) : (
+                    <p className="calendar-empty">
+                      No exact dates are supported for this question. Timing explains the broader
+                      pattern.
+                    </p>
+                  )}
                 </div>
               )}
               {kind === "timing" && (
@@ -1170,11 +1249,17 @@ function ReadingDeck({
                   </FadeIn>
                 </div>
               )}
-              {kind === "quiz" && (
+              {kind === "quiz" && alignment && (
                 <div className="framed-page">
                   <p className="page-eyebrow">Direct Align</p>
                   <FadeIn active={active} delay={100}>
-                    <Quiz readingKey={readingKey} />
+                    <Quiz
+                      alignment={alignment}
+                      busy={alignmentBusy}
+                      error={alignmentError}
+                      onAnswer={onAlignmentAnswer}
+                      onSubmit={onAlignmentSubmit}
+                    />
                   </FadeIn>
                 </div>
               )}
@@ -1204,7 +1289,7 @@ function ReadingDeck({
               )}
               {kind === "closing" && (
                 <div className={`framed-page closing-page ${bottomActive ? "bottom-focus" : ""}`}>
-                  {children}
+                  {!waitingForAlignment && children}
                 </div>
               )}
             </section>
@@ -1224,7 +1309,7 @@ function ReadingDeck({
             onClick={() => navigate(i)}
             aria-label={item.label}
             aria-current={i === step ? "step" : undefined}
-            disabled={checkoutOpen}
+            disabled={checkoutOpen || i > maxStep}
           />
         ))}
       </nav>
@@ -1244,7 +1329,7 @@ function ReadingDeck({
                   className="download-btn"
                   aria-label="Download reading"
                   onClick={onDownload}
-                  disabled={isDownloading}
+                  disabled={isDownloading || waitingForAlignment}
                 >
                   <Download />
                 </button>
@@ -1275,6 +1360,10 @@ export default function ReadingResultsPage() {
   const [creditsRefresh, setCreditsRefresh] = useState(0);
   const [credits, setCredits] = useState<UserCredits | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isAligning, setIsAligning] = useState(false);
+  const [alignmentError, setAlignmentError] = useState<string | null>(null);
+  const alignmentRequest = useRef(false);
+  const followupRequestId = useRef<string | null>(null);
 
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -1289,6 +1378,8 @@ export default function ReadingResultsPage() {
   const hasMarkedComplete = useRef(false);
 
   const readingKey = useMemo(() => {
+    // Completion adds content; it is still the same reading and credit event.
+    if (reading?.alignment) return reading.id;
     const p = reading?.pages?.[0];
     return p ? hashKey(p.title + "::" + p.content) : "";
   }, [reading]);
@@ -1307,6 +1398,131 @@ export default function ReadingResultsPage() {
       setIsLoading(false);
     }
   }, [router]);
+
+  useEffect(() => {
+    if (!reading?.alignment || reading.alignment.phase === "complete") return;
+    const expected = reading;
+    let active = true;
+    alignmentRequest.current = true;
+    setIsAligning(true);
+    fetch(`/api/readings/direct-align?readingId=${encodeURIComponent(expected.id)}`, {
+      cache: "no-store",
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok)
+          throw new Error(data.error || "Couldn’t restore your reading. Try continuing below.");
+        if (
+          !isReadingDelivery(data.reading) ||
+          data.reading.id !== expected.id ||
+          data.reading.alignment?.initialId !== expected.alignment?.initialId
+        )
+          throw new Error("The saved reading did not match. Reload and try again.");
+        if (!active) return;
+        // A fresh server snapshot has no unsubmitted draft answers.
+        const restored: StoredReading = data.reading;
+        if (
+          restored.alignment?.phase === "awaiting_alignment" &&
+          !restored.alignment.submittedAnswers
+        ) {
+          restored.alignment.answers = expected.alignment?.answers ?? [];
+        }
+        saveReading(restored);
+        setReading(restored);
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setAlignmentError(
+            error instanceof Error
+              ? error.message
+              : "Couldn’t restore your reading. Try continuing below.",
+          );
+      })
+      .finally(() => {
+        if (active) {
+          alignmentRequest.current = false;
+          setIsAligning(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+    // Recover once per reading, not again every time an answer changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading?.id]);
+
+  const handleAlignmentAnswer = (questionId: string, answer: "yes" | "no") => {
+    if (
+      !reading?.alignment ||
+      alignmentRequest.current ||
+      reading.alignment.phase === "complete" ||
+      reading.alignment.submittedAnswers ||
+      !reading.alignment.directAlign.some((q) => q.id === questionId)
+    )
+      return;
+    const values = new Map(
+      reading.alignment.answers.map((entry) => [entry.questionId, entry.answer]),
+    );
+    values.set(questionId, answer);
+    const answers = reading.alignment.directAlign.flatMap((question): DirectAlignAnswer[] => {
+      const value = values.get(question.id);
+      return value ? [{ questionId: question.id, answer: value }] : [];
+    });
+    const next = { ...reading, alignment: { ...reading.alignment, answers } };
+    saveReading(next);
+    setReading(next);
+    setAlignmentError(null);
+  };
+
+  const handleAlignmentSubmit = async () => {
+    if (!reading?.alignment || alignmentRequest.current || reading.alignment.phase === "complete")
+      return;
+    const alignment = reading.alignment;
+    const answers = alignment.submittedAnswers ?? alignment.answers;
+    if (answers.length !== alignment.directAlign.length) return;
+    const pending = { ...reading, alignment: { ...alignment, answers, submittedAnswers: answers } };
+    // Persist the exact submission before sending it so refresh/retry can recover it.
+    saveReading(pending);
+    setReading(pending);
+    alignmentRequest.current = true;
+    setIsAligning(true);
+    setAlignmentError(null);
+    try {
+      const response = await fetch("/api/readings/direct-align", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ readingId: reading.id, initialId: alignment.initialId, answers }),
+      });
+      const data = await response.json();
+      // Conflict/pending responses may carry the owned server snapshot for recovery.
+      if (
+        isReadingDelivery(data.reading) &&
+        data.reading.id === reading.id &&
+        data.reading.alignment?.initialId === alignment.initialId
+      ) {
+        saveReading(data.reading);
+        setReading(data.reading);
+        if (data.reading.alignment.phase === "complete") return;
+      }
+      if (!response.ok || response.status === 202) {
+        throw new Error(
+          data.error || "Your reading is still being prepared. Continue again in a moment.",
+        );
+      }
+      throw new Error(
+        "The completed reading couldn’t be verified. Your answers are saved; try again.",
+      );
+    } catch (error) {
+      setAlignmentError(
+        error instanceof Error
+          ? error.message
+          : "Couldn’t complete your reading. Your answers are saved; try again.",
+      );
+    } finally {
+      alignmentRequest.current = false;
+      setIsAligning(false);
+    }
+  };
 
   useEffect(() => {
     if (!reading || !readingKey) return;
@@ -1329,7 +1545,16 @@ export default function ReadingResultsPage() {
 
     if (!hasMarkedComplete.current) {
       hasMarkedComplete.current = true;
-      fetch("/api/user/reading-complete", { method: "POST" })
+      fetch(
+        "/api/user/reading-complete",
+        reading.alignment
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ readingId: reading.id }),
+            }
+          : { method: "POST" },
+      )
         .then((res) => {
           if (!res.ok) throw new Error("reading-complete failed");
           try {
@@ -1454,7 +1679,7 @@ export default function ReadingResultsPage() {
   const closingSections = parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
   const handleDownload = async () => {
-    if (!reading || !page) return;
+    if (!reading || !page || reading.alignment?.phase === "awaiting_alignment") return;
     setIsDownloading(true);
     try {
       const plain = page.content.replace(/\[\[DATE:\s*([^\]]+)\]\]/g, "$1");
@@ -1475,10 +1700,18 @@ export default function ReadingResultsPage() {
 
   const handleFollowup = async () => {
     const question = followupQuestion.trim();
-    if (!question || isGeneratingFollowup || !reading || !page) return;
+    if (
+      !question ||
+      isGeneratingFollowup ||
+      !reading ||
+      !page ||
+      reading.alignment?.phase === "awaiting_alignment"
+    )
+      return;
 
     setIsGeneratingFollowup(true);
     setFollowupError(null);
+    followupRequestId.current ??= crypto.randomUUID();
 
     try {
       const chart = loadChart();
@@ -1495,6 +1728,8 @@ export default function ReadingResultsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          readingId: reading.id,
+          requestId: followupRequestId.current,
           question,
           originalReading: page.content,
           originalTitle: page.title,
@@ -1521,7 +1756,6 @@ export default function ReadingResultsPage() {
           eclipseActivations: chart.chartData.eclipseActivations,
           dispositorTree: chart.chartData.dispositorTree,
           conversationHistory: conversationHistory || undefined,
-          freeRepliesUsed,
         }),
       });
 
@@ -1547,7 +1781,7 @@ export default function ReadingResultsPage() {
         return;
       }
       const meta = data.replyMeta;
-      if (meta?.usedFreeReply) {
+      if (meta?.usedIncludedReply) {
         const nextUsed = freeRepliesUsed + 1;
         setFreeRepliesUsed(nextUsed);
         try {
@@ -1572,6 +1806,7 @@ export default function ReadingResultsPage() {
         title: typeof data.title === "string" ? data.title : "Going Deeper",
         content: data.content,
       };
+      followupRequestId.current = null;
       const nextFollowups = [...followups, newEntry];
       setFollowups(nextFollowups);
       try {
@@ -1672,7 +1907,7 @@ export default function ReadingResultsPage() {
 
   // Existing reply allowances and purchase modes are carried over from the source.
   const isSubscribed = credits?.isSubscribed === true;
-  const freeBand = isSubscribed ? 4 : 1;
+  const freeBand = isSubscribed ? SUBSCRIBER_READING_REPLIES : REGULAR_READING_REPLIES;
   const freeRemainingClient = Math.max(0, freeBand - freeRepliesUsed);
   const outOfReplies =
     !isSubscribed &&
@@ -1685,7 +1920,11 @@ export default function ReadingResultsPage() {
     <>
       <ReadingDeck
         key={readingKey}
-        readingKey={readingKey}
+        alignment={reading.alignment}
+        alignmentBusy={isAligning}
+        alignmentError={alignmentError}
+        onAlignmentAnswer={handleAlignmentAnswer}
+        onAlignmentSubmit={handleAlignmentSubmit}
         topic={reading.topic}
         content={page.content}
         sections={parsedSections}
@@ -2283,6 +2522,21 @@ const css = `
   }
 
   /* Direct Align quiz */
+  .reading-results .align-intro, .reading-results .calendar-empty {
+    color: #94a3b8; font-size: 14px; line-height: 1.7; margin: 0 0 24px;
+  }
+  .reading-results .calendar-empty { max-width: 380px; text-align: center; }
+  .reading-results .align-action { margin-top: 28px; color: #94a3b8; font-size: 13px; line-height: 1.6; }
+  .reading-results .align-progress { margin: 0 0 12px; }
+  .reading-results .align-submit {
+    width: 100%; padding: 14px 20px; border-radius: 12px;
+    border: 1px solid rgba(94,234,212,0.45); background: rgba(94,234,212,0.12);
+    color: #ccfbf1; font: inherit; cursor: pointer;
+  }
+  .reading-results .align-submit:disabled { opacity: 0.5; cursor: default; }
+  .reading-results .align-error { color: #fda4af; margin-top: 14px; }
+  .reading-results .quiz-btn:disabled { cursor: default; }
+  .reading-results .dot:disabled { opacity: 0.25; cursor: default; }
   .reading-results .quiz-item {
     border-top: 1px solid rgba(255,255,255,0.08);
     padding-top: 16px;

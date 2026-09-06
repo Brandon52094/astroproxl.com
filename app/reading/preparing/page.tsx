@@ -4,7 +4,8 @@ import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, saveChart, isChartFresh, isSkyFresh } from "@/lib/chartStore";
-import type { ReadingPage, StoredChart } from "@/lib/chartStore";
+import type { StoredChart } from "@/lib/chartStore";
+import { isReadingDelivery, type ReadingDelivery } from "@/lib/reading/contracts";
 
 const LOADING_MESSAGES = [
   "Reading your natal structure…",
@@ -89,6 +90,24 @@ async function refreshSky(chart: StoredChart): Promise<StoredChart> {
   } catch {
     return chart;
   }
+}
+
+async function recoverRecordedReading(readingId: string): Promise<ReadingDelivery> {
+  const recorded = await fetch("/api/user/reading-complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ readingId }),
+  });
+  if (!recorded.ok) throw new Error("Your reading is ready, but could not be recorded yet. Please retry.");
+
+  const recovered = await fetch(
+    `/api/readings/direct-align?readingId=${encodeURIComponent(readingId)}`,
+    { cache: "no-store" },
+  );
+  const data = await recovered.json();
+  if (!recovered.ok || !isReadingDelivery(data.reading))
+    throw new Error(data.error ?? "Your reading is ready, but could not be restored.");
+  return data.reading;
 }
 
 function PreparingPageInner() {
@@ -252,12 +271,27 @@ function PreparingPageInner() {
 
         const data = await response.json();
 
-        if (!response.ok || !data.reading) {
+        if (!response.ok) {
           if (response.status === 403) {
             router.replace("/reading/intake?openCredits=1");
             return;
           }
+          if (
+            response.status === 503 &&
+            data.code === "READING_RECORDING_PENDING" &&
+            typeof data.readingId === "string"
+          ) {
+            const recovered = await recoverRecordedReading(data.readingId);
+            if (!saveReading(recovered)) throw new Error("Could not save the restored reading.");
+            setProgress(100);
+            setTimeout(() => router.replace("/reading/results"), 400);
+            return;
+          }
           throw new Error(data.error ?? "Failed to generate reading.");
+        }
+
+        if (!isReadingDelivery(data.reading)) {
+          throw new Error("The reading engine returned an invalid result.");
         }
 
         // ── 6. Record actual duration ──
@@ -271,13 +305,11 @@ function PreparingPageInner() {
           // Ignore storage errors
         }
 
-        saveReading({
-          id: data.reading.id,
-          pages: data.reading.pages as ReadingPage[],
-          topic: intake.topic,
-          question: intake.question,
-          generatedAt: new Date().toISOString(),
-        });
+        // Preserve the complete staged contract: Direct Align questions,
+        // calendar, context IDs, status, and the server generation timestamp.
+        if (!saveReading(data.reading)) {
+          throw new Error("Could not save the generated reading.");
+        }
 
         setProgress(100);
         setTimeout(() => {
