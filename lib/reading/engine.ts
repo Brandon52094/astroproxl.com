@@ -691,14 +691,17 @@ export function prepareReadingContext(
   for (const aspect of aspects) {
     const relevance =
       (aspect.band === "exact" ? 50 : aspect.band === "live" ? 30 : 5) +
-      priority([aspect.transitPlanet, aspect.natalPlanet], aspect.natalHouse) +
+      priority(
+  [aspect.transitPlanet, aspect.natalPlanet],
+  aspect.natalHouse ?? undefined
+) +
       (topic.relevantAspects.has(aspect.aspectType) ? 10 : 0) +
       (aspect.isApplying ? 5 : 0) +
       (SLOW.has(aspect.transitPlanet) && personal(aspect.natalPlanet) ? 10 : 0) -
       aspect.orbDegrees;
     const record = add("transitAspect", "Transit-to-natal aspect", aspect, relevance);
     if (aspect.band !== "background" && timingSensitive(aspect.natalPlanet))
-      addDate(aspect.exactDate, record);
+      addDate(aspect.exactDate ?? undefined, record);
   }
   const trigger = body.upcomingTrigger;
   const triggerRecord = add(
