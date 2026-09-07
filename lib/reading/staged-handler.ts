@@ -219,9 +219,7 @@ export function createReadingHandlers(sessions: ReadingSessionStore, usage: Read
       const client = await clerkClient();
       const clerkUser = await client.users.getUser(userId);
       await usage.ensureAccount(userId, clerkUser.publicMetadata);
-      const admission = await usage.transaction(userId, async (tx) =>
-        admitReading(await tx.getAccount()),
-      );
+      const admission = admitReading(clerkUser.publicMetadata);
       if (
         !Array.isArray(raw.transits) ||
         !raw.profection ||

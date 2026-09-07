@@ -1,90 +1,39 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import type { MembershipStatus } from "@/lib/paywallConfig";
+import { ensureUsageAccount, getUsageAccount } from "@/lib/reading/account-store";
 
-// ── GET /api/user/credits ─────────────────────────────────────────────────────
-// Central user access/balance endpoint.
-//
-// Membership:
-//   active   → unlimited Reading + JXL access and member-only content
-//   paused   → falls back to normal purchased-credit access
-//   canceled → falls back to normal purchased-credit access
-//
-// Purchased balances remain on the account even while someone is a member.
-// They can be used again if membership becomes paused/canceled.
 export async function GET() {
+  const respond = (body: unknown, status = 200) =>
+    NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
   try {
     const { userId } = await auth();
+    if (!userId) return respond({ error: "Unauthorized" }, 401);
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
+    // Clerk seeds an account once for migration. After that, Postgres is the
+    // authority used by reading admission, completion, Stripe, and follow-ups.
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
-    const metadata = user.publicMetadata;
+    await ensureUsageAccount(userId, user.publicMetadata);
+    const account = await getUsageAccount(userId);
+    if (!account) throw new Error("Usage account unavailable after initialization.");
 
-    const storedMembershipStatus =
-      metadata?.membershipStatus as MembershipStatus | undefined;
-
-    // Backward compatibility for users who existed before
-    // membershipStatus was introduced.
-    const membershipStatus: MembershipStatus =
-      storedMembershipStatus ??
-      (metadata?.isSubscribed === true
-        ? "active"
-        : "canceled");
-
-    return NextResponse.json({
-      // ── Purchased balances ──
-      credits: Number(metadata?.credits ?? 0),
-      jxlCredits: Number(metadata?.jxlCredits ?? 0),
-      replyCredits: Number(metadata?.replyCredits ?? 0),
-
-      // TEMPORARY LEGACY BALANCE.
-      // Remove only after all JXL/follow-up consumers use replyCredits.
-      jxlReplyCredits: Number(
-        metadata?.jxlReplyCredits ?? 0
-      ),
-
-      // ── Membership ──
-      membershipStatus,
-
-      // Compatibility convenience flag for existing UI.
-      isSubscribed:
-        membershipStatus === "active",
-
-      // TEMPORARY legacy field.
-      // New membership has no Base/Plus tier.
-      subscriptionTier:
-        (metadata?.subscriptionTier as string) ?? null,
-
-      // ── Usage ──
-      readingsCompleted: Number(
-        metadata?.readingsCompleted ?? 0
-      ),
-
-      // Downloads are free for everyone.
+    return respond({
+      credits: account.credits,
+      jxlCredits: account.jxlCredits,
+      replyCredits: account.replyCredits,
+      membershipStatus: account.membershipStatus,
+      isSubscribed: account.membershipStatus === "active",
+      readingsCompleted: account.readingsCompleted,
       downloadUnlocked: true,
-
-      // TEMPORARY legacy reply field.
-      freeRepliesRemaining: Number(
-        metadata?.freeRepliesRemaining ?? 0
-      ),
-
-      // One free PWA Reading, once ever.
-      pwaFreeReadingUsed:
-        metadata?.pwaFreeReadingUsed === true,
+      // Temporary display-only compatibility fields. Never use these for access.
+      jxlReplyCredits: Number(user.publicMetadata?.jxlReplyCredits ?? 0),
+      subscriptionTier: (user.publicMetadata?.subscriptionTier as string) ?? null,
+      freeRepliesRemaining: 0,
+      pwaFreeReadingUsed: user.publicMetadata?.pwaFreeReadingUsed === true,
     });
   } catch (error) {
-    console.error("[credits GET] Error:", error);
-
-    return NextResponse.json(
-      { error: "Failed to get credits." },
-      { status: 500 }
-    );
+    console.error("[credits GET] Error:", error instanceof Error ? error.name : "UnknownError");
+    return respond({ error: "Failed to get credits." }, 500);
   }
 }
+
