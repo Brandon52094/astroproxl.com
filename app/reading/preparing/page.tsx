@@ -115,6 +115,8 @@ function PreparingPageInner() {
   const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [errorDestination, setErrorDestination] = useState("/reading/intake");
+  const [errorAction, setErrorAction] = useState("Back to your question");
   const [progress, setProgress] = useState(0);
   const [estimatedDuration, setEstimatedDuration] = useState<number>(88000); // ~88s baseline
   const hasStarted = useRef(false);
@@ -177,7 +179,7 @@ function PreparingPageInner() {
   useEffect(() => {
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
-      router.replace("/reading/intake");
+      setError("Checkout was cancelled. Return to your question to continue.");
       return;
     }
 
@@ -203,13 +205,15 @@ function PreparingPageInner() {
         const intake = loadIntake();
 
         if (!chart || !isChartFresh()) {
-          router.push("/chart-data");
-          return;
+          setErrorDestination("/chart-data");
+          setErrorAction("Refresh your chart");
+          throw new Error(!chart
+            ? "Your saved chart could not be found. Please load your chart again."
+            : "Your saved chart has expired. Please refresh it before starting this reading.");
         }
 
-        if (!intake) {
-          router.push("/reading/intake");
-          return;
+        if (!intake || typeof intake.question !== "string" || !intake.question.trim()) {
+          throw new Error("Your reading question was not saved or could not be read. Return to intake and enter it again.");
         }
 
         // Sky-freshness gate (#1): the natal half is fine for 24h (isChartFresh),
@@ -269,12 +273,17 @@ function PreparingPageInner() {
           }),
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => {
+          throw new Error(`The reading service returned an unreadable response (HTTP ${response.status}). Please try again later.`);
+        });
 
         if (!response.ok) {
           if (response.status === 403) {
-            router.replace("/reading/intake?openCredits=1");
-            return;
+            setErrorDestination("/reading/intake?openCredits=1");
+            setErrorAction("Review reading access");
+            throw new Error(typeof data?.error === "string"
+              ? data.error
+              : "Your account does not currently have access to this reading (HTTP 403).");
           }
           if (
             response.status === 503 &&
@@ -415,10 +424,10 @@ function PreparingPageInner() {
                 </p>
               </div>
               <button
-                onClick={() => router.push("/reading/intake")}
+                onClick={() => router.push(errorDestination)}
                 className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
               >
-                Try again
+                {errorAction}
               </button>
             </motion.div>
           ) : (
