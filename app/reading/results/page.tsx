@@ -1317,10 +1317,10 @@ function ReadingDeck({
         createPortal(
           <div className="reading-results results-fixed-controls">
             <div
-              className={`bottom-bar ${step > 0 ? "show" : ""}`}
-              aria-hidden={step === 0}
+              className={`bottom-bar ${bottomActive ? "show" : ""}`}
+              aria-hidden={!bottomActive}
               ref={(node) => {
-                node?.toggleAttribute("inert", step === 0 || checkoutOpen);
+                node?.toggleAttribute("inert", !bottomActive || checkoutOpen);
               }}
             >
               <div className="bottom-row">
