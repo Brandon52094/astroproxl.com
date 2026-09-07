@@ -745,83 +745,12 @@ function DirectiveCard({ section }: { section: DirectiveSection }) {
   );
 }
 
-// Retained from the approved prototype. Engine integration is a separate step:
-// these answers are local to this reading and do not rewrite generated prose.
-const QUESTIONS = [
-  "You'd rather have one honest conversation now than keep the peace for another month.",
-  "When something feels off, you tend to name it out loud fairly quickly.",
-  "You're willing to lose a little goodwill in exchange for a clearer agreement.",
-  "You already have a sense of what you want to ask for — you just haven't said it yet.",
-  "If the answer is no, you'd rather know now than keep hoping it turns into a yes.",
-];
-type QuizAnswers = Record<number, "yes" | "no">;
-
-function Quiz({ readingKey }: { readingKey: string }) {
-  const [answers, setAnswers] = useState<QuizAnswers>({});
-  useEffect(() => {
-    try {
-      const saved: unknown = JSON.parse(localStorage.getItem(`dfp_align_${readingKey}`) ?? "{}");
-      if (saved && typeof saved === "object" && !Array.isArray(saved)) {
-        const restored: QuizAnswers = {};
-        Object.entries(saved).forEach(([key, value]) => {
-          const i = Number(key);
-          if (
-            Number.isInteger(i) &&
-            i >= 0 &&
-            i < QUESTIONS.length &&
-            (value === "yes" || value === "no")
-          )
-            restored[i] = value;
-        });
-        setAnswers(restored);
-      }
-    } catch {
-      /* A blocked or malformed cache does not prevent answering. */
-    }
-  }, [readingKey]);
-  const pick = (i: number, value: "yes" | "no") => {
-    const next = { ...answers, [i]: value };
-    setAnswers(next);
-    try {
-      localStorage.setItem(`dfp_align_${readingKey}`, JSON.stringify(next));
-    } catch {
-      /* Optional persistence. */
-    }
-  };
-  return (
-    <div className="quiz-list">
-      {QUESTIONS.map((question, i) => (
-        <div className="quiz-item" key={i}>
-          <p className="quiz-q" id={`align-question-${i}`}>
-            <span className="quiz-n">{i + 1}</span>
-            <span>{question}</span>
-          </p>
-          <div className="quiz-btns" role="group" aria-labelledby={`align-question-${i}`}>
-            {(["yes", "no"] as const).map((value) => (
-              <button
-                type="button"
-                key={value}
-                className={`quiz-btn ${answers[i] === value ? "sel" : ""}`}
-                aria-pressed={answers[i] === value}
-                onClick={() => pick(i, value)}
-              >
-                {value === "yes" ? "Yes" : "No"}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 type PanelKind =
   | "topic"
   | "prediction"
   | "context"
   | "calendar"
   | "timing"
-  | "quiz"
   | "prose"
   | "directive"
   | "closing";
@@ -831,25 +760,21 @@ function ReadingDeck({
   topic,
   content,
   sections,
-  readingKey,
   credits,
   isDownloading,
   onDownload,
   onDone,
   checkoutOpen,
-  isSafeResponse,
   children,
 }: {
   topic: string;
   content: string;
   sections: ParsedSection[] | null;
-  readingKey: string;
   credits: UserCredits | null;
   isDownloading: boolean;
   onDownload: () => Promise<void>;
   onDone: () => void;
   checkoutOpen: boolean;
-  isSafeResponse: boolean;
   children: React.ReactNode;
 }) {
   const reduceMotion = useReducedMotion();
@@ -896,13 +821,12 @@ function ReadingDeck({
     if (groups.where || groups.why || groups.how) result.push("context");
     if (groups.windows.length) result.push("calendar");
     if (groups.timing.length) result.push("timing");
-    if (sections && !isSafeResponse) result.push("quiz");
     if (groups.prose.length) result.push("prose");
     if (groups.directives.length) result.push("directive");
     result.push("closing");
     // Preserve the prototype order; omit empty stages until the engine supplies them.
     return result;
-  }, [groups, sections, isSafeResponse]);
+  }, [groups]);
 
   const steps = useMemo<DeckStep[]>(
     () =>
@@ -921,7 +845,6 @@ function ReadingDeck({
           prediction: "The Prediction",
           calendar: "Dated Windows",
           timing: "Timing",
-          quiz: "Direct Align",
           prose: "The Read",
           directive: "Your Move",
           closing: "Bottom Line",
@@ -1150,14 +1073,6 @@ function ReadingDeck({
                   </FadeIn>
                 </div>
               )}
-              {kind === "quiz" && (
-                <div className="framed-page">
-                  <p className="page-eyebrow">Direct Align</p>
-                  <FadeIn active={active} delay={100}>
-                    <Quiz readingKey={readingKey} />
-                  </FadeIn>
-                </div>
-              )}
               {kind === "prose" && (
                 <div className="framed-page prose-page">
                   <p className="page-eyebrow">The Read</p>
@@ -1209,10 +1124,10 @@ function ReadingDeck({
         ))}
       </nav>
       <div
-        className={`bottom-bar ${step > 0 ? "show" : ""}`}
-        aria-hidden={step === 0}
+        className={`bottom-bar ${bottomActive ? "show" : ""}`}
+        aria-hidden={!bottomActive}
         ref={(node) => {
-          node?.toggleAttribute("inert", step === 0 || checkoutOpen);
+          node?.toggleAttribute("inert", !bottomActive || checkoutOpen);
         }}
       >
         <div className="bottom-row">
@@ -1659,7 +1574,6 @@ export default function ReadingResultsPage() {
     <>
       <ReadingDeck
         key={readingKey}
-        readingKey={readingKey}
         topic={reading.topic}
         content={page.content}
         sections={parsedSections}
@@ -1668,9 +1582,6 @@ export default function ReadingResultsPage() {
         onDownload={handleDownload}
         onDone={handleDone}
         checkoutOpen={!!clientSecret}
-        isSafeResponse={
-          (reading as StoredReading & { isSafeResponse?: boolean }).isSafeResponse === true
-        }
       >
         {closingSections.length > 0 && (
           <div className="bottom-line-wrap">
@@ -2242,49 +2153,6 @@ const css = `
     text-transform: uppercase; white-space: nowrap;
     box-shadow: 0 0 18px rgba(251,191,36,0.12);
     vertical-align: baseline;
-  }
-
-  /* Direct Align quiz */
-  .reading-results .quiz-item {
-    border-top: 1px solid rgba(255,255,255,0.08);
-    padding-top: 16px;
-  }
-  .reading-results .quiz-item:first-child { border-top: none; padding-top: 0; }
-  .reading-results .quiz-item + .quiz-item { margin-top: 16px; }
-  .reading-results .quiz-q {
-    display: flex;
-    gap: 11px;
-    margin: 0;
-    font-family: Georgia, serif;
-    font-size: 15px; line-height: 1.45; color: #dbe4f0;
-  }
-  .reading-results .quiz-n {
-    flex-shrink: 0;
-    font-family: ui-sans-serif, system-ui;
-    font-size: 13px; font-weight: 700; color: #5eead4;
-    padding-top: 1px;
-  }
-  .reading-results .quiz-btns { display: flex; gap: 10px; margin-top: 11px; }
-  .reading-results .quiz-btn {
-    flex: 1;
-    height: 42px;
-    border-radius: 13px;
-    border: 1px solid rgba(148,163,184,0.25);
-    background: rgba(17,22,51,0.4);
-    color: #cbd5e1;
-    font-family: ui-sans-serif, system-ui;
-    font-size: 13px; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-  }
-  .reading-results .quiz-btn:hover { border-color: rgba(94,234,212,0.4); }
-  .reading-results .quiz-btn.sel {
-    border-color: rgba(94,234,212,0.7);
-    background: linear-gradient(135deg, rgba(94,234,212,0.92), rgba(45,212,191,0.82));
-    color: #04231f;
-    box-shadow: 0 0 22px rgba(94,234,212,0.3);
   }
 
   /* The Read — prose page */
