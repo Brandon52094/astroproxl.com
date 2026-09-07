@@ -15,13 +15,7 @@ import {
   validateAndFilterAspects,
 } from "@/lib/reading/engine";
 import { generateOpenAIText } from "@/lib/ai/openai";
-import { ensureUsageAccount } from "@/lib/reading/account-store";
-import {
-  claimFollowup,
-  completeFollowup,
-  releaseFollowup,
-  type FollowupResponse,
-} from "@/lib/reading/followup-store";
+import type { MembershipStatus } from "@/lib/paywallConfig";
 
 // ── NEW: Import advanced calculation types ──
 import {
@@ -147,8 +141,6 @@ type DatedTransitToAngle = TransitToAngle & {
 
 // ── NEW: Extended FollowupRequestBody with all 10 calculations ──
 interface FollowupRequestBody {
-  readingId: string;
-  requestId: string;
   question: string;
   originalReading: string;
   originalTitle: string;
@@ -177,6 +169,8 @@ interface FollowupRequestBody {
   eclipseActivations?: EclipseActivation[];
   transitsToAngles?: DatedTransitToAngle[];
   dispositorTree?: DispositorResult[];
+  
+  freeRepliesUsed?: number;
 }
 
 const NL = "\n";
@@ -723,8 +717,6 @@ export async function POST(request: NextRequest) {
       !body.originalReading ||
       !body.originalTitle ||
       !body.topic ||
-      !body.readingId ||
-      !body.requestId ||
       !body.tropical ||
       !body.tropical.planets ||
       !body.profection ||
@@ -732,9 +724,6 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuid.test(body.readingId) || !uuid.test(body.requestId))
-      return NextResponse.json({ error: "Invalid reading or request ID." }, { status: 400 });
 
     // ── VALIDATE ASPECTS ──
     const validatedAspects = validateAndFilterAspects(body.transitAspects);
@@ -747,10 +736,47 @@ export async function POST(request: NextRequest) {
     // ── BUILD DATE INDEX ──
     const dateIndex = buildValidDateIndex(normalizedBody, validatedAspects);
 
-    // Seed once from Clerk for migration. Postgres owns all access decisions.
+    // ── Reply-access gating ──
+    //
+    // Every REGULAR READING includes 1 reply.
+    // Those replies belong to that specific reading.
+    //
+    // After the 1 included reply is used,
+    // the user can keep that same conversation going
+    // by spending universal replyCredits.
+    //
+    // XL members have unlimited replies and therefore
+    // do not consume included replies or replyCredits.
+    //
+
+    const INCLUDED_READING_REPLIES = 1;
+
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
-    await ensureUsageAccount(userId, user.publicMetadata);
+    const metadata = user.publicMetadata;
+
+    // ── UPDATED: Use membershipStatus for subscription detection ──
+    const storedMembershipStatus = metadata?.membershipStatus as MembershipStatus | undefined;
+
+    const membershipStatus: MembershipStatus =
+      storedMembershipStatus ??
+      (metadata?.isSubscribed === true ? "active" : "canceled");
+
+    const isSubscribed = membershipStatus === "active";
+
+    // Universal purchased replies.
+    // These can continue either a Regular Reading or JXL conversation.
+    const replyCredits = Math.max(
+      0,
+      Number(metadata?.replyCredits ?? 0)
+    );
+
+    // Number of INCLUDED replies already used
+    // on THIS specific regular reading.
+    const includedRepliesUsed = Math.max(
+      0,
+      Number(body.freeRepliesUsed ?? 0)
+    );
 
     // ── LAYER 1: crisis check ──
     const risk = assessRisk(body?.question ?? "");
@@ -766,7 +792,19 @@ export async function POST(request: NextRequest) {
           content: safe.answer + "\n\n" + safe.confirmation,
           isSafeResponse: true,
           riskLevel: risk.level,
-            replyMeta: { accessTier: null, usedIncludedReply: false },
+          replyMeta: {
+            accessTier: null,
+            usedIncludedReply: false,
+            includedRepliesRemaining: isSubscribed
+              ? null
+              : Math.max(
+                  0,
+                  INCLUDED_READING_REPLIES - includedRepliesUsed
+                ),
+            replyCreditsRemaining: replyCredits,
+            isSubscribed,
+            unlimitedReplies: isSubscribed,
+          },
         },
         { status: 200 }
       );
@@ -774,22 +812,52 @@ export async function POST(request: NextRequest) {
 
     const careNote = getCareNote(risk);
 
-    // The allowance was created with the reading: 1 normally, 8 when that
-    // reading was admitted for an active member. The browser cannot alter it.
-    const claim = await claimFollowup(userId, body.readingId, body.requestId);
-    if (claim.state === "complete") return NextResponse.json(claim.response);
-    if (claim.state === "busy")
-      return NextResponse.json(
-        { error: "This reply is already being generated.", code: "REPLY_IN_PROGRESS" },
-        { status: 202 },
-      );
-    if (claim.state === "not_found")
-      return NextResponse.json({ error: "Reading not found." }, { status: 404 });
-    if (claim.state === "payment_required") {
+    /*
+      ACCESS ORDER
+
+      1. XL member
+           → unlimited
+
+      2. Reading still has its 1 included reply
+           → use included reply
+
+      3. Included replies exhausted but user has
+         purchased universal replies
+           → use 1 replyCredit
+
+      4. Neither available
+           → ask them to purchase replies
+    */
+
+    let accessTier:
+      | "member"
+      | "included"
+      | "credit"
+      | null;
+
+    if (isSubscribed) {
+      accessTier = "member";
+    } else if (
+      includedRepliesUsed <
+      INCLUDED_READING_REPLIES
+    ) {
+      accessTier = "included";
+    } else if (replyCredits > 0) {
+      accessTier = "credit";
+    } else {
+      accessTier = null;
+    }
+
+    if (accessTier === null) {
       return NextResponse.json(
         {
-          error: "You've used the replies included with this reading.",
+          error:
+            "You've used the 1 reply included with this reading.",
+
           code: "NEEDS_REPLY_CREDITS",
+
+          isSubscribed: false,
+
           includedRepliesRemaining: 0,
           replyCreditsRemaining: 0,
         },
@@ -824,7 +892,6 @@ export async function POST(request: NextRequest) {
         error
       );
 
-      await releaseFollowup(userId, body.readingId, body.requestId);
       return NextResponse.json(
         {
           error:
@@ -837,7 +904,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!rawText) {
-      await releaseFollowup(userId, body.readingId, body.requestId);
       return NextResponse.json(
         { error: "No response from reading engine." },
         { status: 502 }
@@ -862,7 +928,6 @@ export async function POST(request: NextRequest) {
       console.error("[followup] Failed to parse response:", String(parseErr));
       console.error("[followup] Raw response start:", rawText.slice(0, 300));
       console.error("[followup] Raw response end:", rawText.slice(-200));
-      await releaseFollowup(userId, body.readingId, body.requestId);
       return NextResponse.json(
         { error: "Failed to parse response. Please try again." },
         { status: 422 }
@@ -874,7 +939,6 @@ export async function POST(request: NextRequest) {
 
     if (unsupported.length > 0) {
       console.error(`[followup] Unsupported dates: ${unsupported.join(" | ")}`);
-      await releaseFollowup(userId, body.readingId, body.requestId);
       return NextResponse.json(
         {
           error: "Could not verify the timing in this reply. Please try again.",
@@ -883,23 +947,87 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const responseBody: FollowupResponse = {
-      title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : "Going Deeper",
-      content: typeof parsed.content === "string" ? parsed.content.trim() : "",
-      careNote,
-      replyMeta: claim.meta,
-    };
-    if (!responseBody.content) {
-      await releaseFollowup(userId, body.readingId, body.requestId);
-      return NextResponse.json({ error: "The reply came back empty. Please try again." }, { status: 422 });
+    // ── Spend a UNIVERSAL purchased reply ──
+    //
+    // Only spend from the user's global reply wallet
+    // after this reading's 1 included reply is gone.
+    //
+    // Members never spend reply credits here.
+    //
+
+    let replyCreditsRemaining =
+      replyCredits;
+
+    if (accessTier === "credit") {
+      replyCreditsRemaining =
+        Math.max(
+          0,
+          replyCredits - 1
+        );
+
+      await client.users.updateUserMetadata(
+        userId,
+        {
+          publicMetadata: {
+            ...metadata,
+
+            replyCredits:
+              replyCreditsRemaining,
+          },
+        }
+      );
+
+      console.log(
+        `[followup] spent 1 universal reply credit for ${userId}. ` +
+          `Remaining: ${replyCreditsRemaining}`
+      );
     }
-    try {
-      await completeFollowup(userId, body.readingId, body.requestId, responseBody);
-    } catch (error) {
-      await releaseFollowup(userId, body.readingId, body.requestId);
-      throw error;
-    }
-    return NextResponse.json(responseBody, { status: 200 });
+
+    /*
+      An included reply belongs to this reading.
+
+      We return that fact to the client so the reading's
+      own freeRepliesUsed / included-reply count can advance.
+    */
+
+    const usedIncludedReply =
+      accessTier === "included";
+
+    const includedRepliesRemaining =
+      isSubscribed
+        ? null
+        : Math.max(
+            0,
+            INCLUDED_READING_REPLIES -
+              (
+                includedRepliesUsed +
+                (usedIncludedReply ? 1 : 0)
+              )
+          );
+
+    return NextResponse.json(
+      {
+        title: parsed.title,
+        content: parsed.content,
+        careNote,
+
+        replyMeta: {
+          accessTier,
+
+          usedIncludedReply,
+
+          includedRepliesRemaining,
+
+          replyCreditsRemaining,
+
+          isSubscribed,
+
+          unlimitedReplies:
+            isSubscribed,
+        },
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error("[followup] Unexpected error:", error);
     return NextResponse.json(

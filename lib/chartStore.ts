@@ -3,7 +3,6 @@
  */
 
 import type { ChartCalculateResponse } from "@/app/api/chart-calculate/route";
-import { isReadingDelivery, type ReadingDelivery } from "@/lib/reading/contracts";
 
 export interface StoredChart {
   currentTimezone: string;
@@ -48,7 +47,17 @@ export interface ReadingPage {
   sources?: ReadingSource[];
 }
 
-export type StoredReading = ReadingDelivery;
+export interface StoredReading {
+  id: string;
+  pages: ReadingPage[];
+  topic: string;
+  question: string;
+  generatedAt: string;
+  // Set when the reading is a crisis safe-response, not a real reading. The
+  // results page reads this to skip reading-complete (never bill a crisis).
+  isSafeResponse?: boolean;
+  riskLevel?: string | null;
+}
 
 const KEYS = {
   chart: "dfp_chart",
@@ -134,13 +143,11 @@ export function clearDraftQuestion(): void {
 }
 
 export function saveReading(reading: StoredReading): boolean {
-  if (!isReadingDelivery(reading)) return false;
   return safeSet(KEYS.reading, reading);
 }
 
 export function loadReading(): StoredReading | null {
-  const reading = safeGet<unknown>(KEYS.reading);
-  return isReadingDelivery(reading) ? reading : null;
+  return safeGet<StoredReading>(KEYS.reading);
 }
 
 export function clearReading(): void {

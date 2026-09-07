@@ -4,8 +4,7 @@ import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, saveChart, isChartFresh, isSkyFresh } from "@/lib/chartStore";
-import type { StoredChart } from "@/lib/chartStore";
-import { isReadingDelivery, type ReadingDelivery } from "@/lib/reading/contracts";
+import type { ReadingPage, StoredChart } from "@/lib/chartStore";
 
 const LOADING_MESSAGES = [
   "Reading your natal structure…",
@@ -92,31 +91,11 @@ async function refreshSky(chart: StoredChart): Promise<StoredChart> {
   }
 }
 
-async function recoverRecordedReading(readingId: string): Promise<ReadingDelivery> {
-  const recorded = await fetch("/api/user/reading-complete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ readingId }),
-  });
-  if (!recorded.ok) throw new Error("Your reading is ready, but could not be recorded yet. Please retry.");
-
-  const recovered = await fetch(
-    `/api/readings/direct-align?readingId=${encodeURIComponent(readingId)}`,
-    { cache: "no-store" },
-  );
-  const data = await recovered.json();
-  if (!recovered.ok || !isReadingDelivery(data.reading))
-    throw new Error(data.error ?? "Your reading is ready, but could not be restored.");
-  return data.reading;
-}
-
 function PreparingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [errorDestination, setErrorDestination] = useState("/reading/intake");
-  const [errorAction, setErrorAction] = useState("Back to your question");
   const [progress, setProgress] = useState(0);
   const [estimatedDuration, setEstimatedDuration] = useState<number>(88000); // ~88s baseline
   const hasStarted = useRef(false);
@@ -179,7 +158,7 @@ function PreparingPageInner() {
   useEffect(() => {
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") {
-      setError("Checkout was cancelled. Return to your question to continue.");
+      router.replace("/reading/intake");
       return;
     }
 
@@ -205,15 +184,13 @@ function PreparingPageInner() {
         const intake = loadIntake();
 
         if (!chart || !isChartFresh()) {
-          setErrorDestination("/chart-data");
-          setErrorAction("Refresh your chart");
-          throw new Error(!chart
-            ? "Your saved chart could not be found. Please load your chart again."
-            : "Your saved chart has expired. Please refresh it before starting this reading.");
+          router.push("/chart-data");
+          return;
         }
 
-        if (!intake || typeof intake.question !== "string" || !intake.question.trim()) {
-          throw new Error("Your reading question was not saved or could not be read. Return to intake and enter it again.");
+        if (!intake) {
+          router.push("/reading/intake");
+          return;
         }
 
         // Sky-freshness gate (#1): the natal half is fine for 24h (isChartFresh),
@@ -273,34 +250,14 @@ function PreparingPageInner() {
           }),
         });
 
-        const data = await response.json().catch(() => {
-          throw new Error(`The reading service returned an unreadable response (HTTP ${response.status}). Please try again later.`);
-        });
+        const data = await response.json();
 
-        if (!response.ok) {
+        if (!response.ok || !data.reading) {
           if (response.status === 403) {
-            setErrorDestination("/reading/intake?openCredits=1");
-            setErrorAction("Review reading access");
-            throw new Error(typeof data?.error === "string"
-              ? data.error
-              : "Your account does not currently have access to this reading (HTTP 403).");
-          }
-          if (
-            response.status === 503 &&
-            data.code === "READING_RECORDING_PENDING" &&
-            typeof data.readingId === "string"
-          ) {
-            const recovered = await recoverRecordedReading(data.readingId);
-            if (!saveReading(recovered)) throw new Error("Could not save the restored reading.");
-            setProgress(100);
-            setTimeout(() => router.replace("/reading/results"), 400);
+            router.replace("/reading/intake?openCredits=1");
             return;
           }
           throw new Error(data.error ?? "Failed to generate reading.");
-        }
-
-        if (!isReadingDelivery(data.reading)) {
-          throw new Error("The reading engine returned an invalid result.");
         }
 
         // ── 6. Record actual duration ──
@@ -314,11 +271,13 @@ function PreparingPageInner() {
           // Ignore storage errors
         }
 
-        // Preserve the complete staged contract: Direct Align questions,
-        // calendar, context IDs, status, and the server generation timestamp.
-        if (!saveReading(data.reading)) {
-          throw new Error("Could not save the generated reading.");
-        }
+        saveReading({
+          id: data.reading.id,
+          pages: data.reading.pages as ReadingPage[],
+          topic: intake.topic,
+          question: intake.question,
+          generatedAt: new Date().toISOString(),
+        });
 
         setProgress(100);
         setTimeout(() => {
@@ -424,10 +383,10 @@ function PreparingPageInner() {
                 </p>
               </div>
               <button
-                onClick={() => router.push(errorDestination)}
+                onClick={() => router.push("/reading/intake")}
                 className="h-12 w-full rounded-2xl bg-teal-300 text-sm font-medium text-slate-950 transition hover:bg-teal-200"
               >
-                {errorAction}
+                Try again
               </button>
             </motion.div>
           ) : (
