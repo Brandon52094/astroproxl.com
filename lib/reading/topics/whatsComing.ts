@@ -7,6 +7,12 @@ export const whatsComing: TopicConfig = {
   relevantPlanets: new Set(["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Chiron"]),
   relevantHouses: new Set([1, 4, 7, 10]),
   relevantAspects: new Set(["conjunction", "opposition", "square", "trine", "sextile"]),
+  relevantAngles: new Set([
+  "Ascendant",
+  "Midheaven",
+  "Descendant",
+  "Imum Coeli",
+]),
   focusLine: "GENERAL — No topic filter, use all significant transits",
   windowInstruction: [
     "GENERAL READING — Focus on significant transits:",

@@ -25,6 +25,12 @@ export const love: TopicConfig = {
   "trine",
   "sextile",
 ]),
+relevantAngles: new Set([
+  "Descendant",
+  "Ascendant",
+  "Imum Coeli",
+  "Midheaven",
+]),
   focusLine: "LOVE & RELATIONSHIPS — Focus on Venus, Mars, Moon, 5th/7th/8th houses",
   windowInstruction: [
     "LOVE READING — Focus on these transits:",

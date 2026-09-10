@@ -8,6 +8,7 @@ export interface TopicConfig {
   relevantPlanets: Set<string>;
   relevantHouses: Set<number>;
   relevantAspects: Set<string>;
+  relevantAngles: Set<string>; // ← ADD THIS
   focusLine: string;         // was topicFocusMap[topic]
   windowInstruction: string; // was getTopicWindowInstruction(topic)
 

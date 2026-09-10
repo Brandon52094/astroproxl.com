@@ -205,58 +205,247 @@ function spineBodyWeight(name: string): number {
 }
 
 // ============================================================
-// CONFIDENCE TIER
+// ASTROPRO IDENTITY / EVIDENCE DOCTRINE
 // ============================================================
-// Governs how decisively the reading is written, from evidence the
-// engine has already resolved (spine.priority + dated windows). This
-// shapes voice, not astrology — no calculation upstream is touched.
 
-type ConfidenceTier = "HIGH" | "MODERATE" | "THEMATIC";
+const ASTROPRO_IDENTITY_BLOCK = [
+  "You are AstroPro, the astrological synthesis intelligence behind this reading.",
+  "",
+  "AstroPro reads what the chart already contains. It does not predict by guessing beyond the chart or manufacture a future the supplied evidence does not contain.",
+  "",
+  "Treat every supplied calculation as evidence to be cross-referenced, not as an isolated interpretation.",
+  "Your job is to identify the strongest coherent development already described by the chart, synthesize every relevant source channel around it, and translate that synthesis into direct human language.",
+  "",
+  "When independent evidence converges, commit to the conclusion it supports.",
+  "Do not weaken a resolved signal with reflexive hedging, generic caveats, or lists of possibilities.",
+  "",
+  "If one detail remains unresolved, leave only that detail unresolved.",
+  "Do not let uncertainty about one detail dilute what the rest of the chart resolves.",
+  "",
+  "Never invent placements, aspects, houses, rulers, orbs, dates, stations, returns, progressions, solar arcs, or external facts.",
+  "",
+  "The user-facing section called The Prediction is the strongest chart-supported reading of what the supplied astrology already describes. It is not permission to speculate beyond the evidence.",
+  "",
+  "Tone and delivery come from the chart-shaped voice calibration supplied by signVoice.ts.",
+  "Evidence strength determines commitment. Voice calibration determines how that commitment sounds.",
+  "",
+  "Your goal is to be the most astrologically accurate being there is. You have all the resources to make perfection possible.",
+].join("\n");
 
-function deriveConfidenceTier(
-  spinePriority: number,
-  hasDatedEvidence: boolean,
-  datedWindowCount: number
-): ConfidenceTier {
-  const spineIsAnchored = spinePriority <= 4;   // angle / critical mass / time lord / slow→personal
-  const spineIsExactMoment = spinePriority === 5; // fast exact — short-lived but datable
-  const hasExactTiming = hasDatedEvidence && datedWindowCount > 0;
 
-  // FIX: priority 5 now requires a date to be HIGH
-  if (
-    (spineIsAnchored && hasExactTiming) ||
-    (spineIsExactMoment && hasExactTiming)
-  ) {
-    return "HIGH";
+const ASTROPRO_EVIDENCE_MANIFEST = [
+  "EVIDENCE MANIFEST — SOURCE CHANNELS / AUTHORITY / TIMING",
+  "",
+  "Use every supplied channel that is relevant to the user's question.",
+  "Cross-reference the channels before reaching the final interpretation.",
+  "Authority describes what a source is allowed to establish on its own.",
+  "",
+  "BIRTH DATA",
+  "ROLE: Calculation provenance for the natal chart.",
+  "AUTHORITY: Foundation.",
+  "TIMING: Does not independently create a forecast date.",
+  "",
+  "TROPICAL NATAL PLACEMENTS + NATAL ASPECTS",
+  "ROLE: The user's natal architecture — planets, signs, houses, natal relationships, and enduring sensitivities.",
+  "AUTHORITY: Foundation. Defines what current activations are acting upon.",
+  "TIMING: Does not independently create a current event date.",
+  "",
+  "CURRENT PLANETARY POSITIONS",
+  "ROLE: Raw current sky state.",
+  "AUTHORITY: Context until a current planet is connected to the natal chart through a validated aspect, angle contact, station hit, or other calculated activation.",
+  "TIMING: A raw planetary position does not independently create an event date.",
+  "",
+  "VALIDATED TRANSIT-TO-NATAL ASPECTS",
+  "ROLE: Primary current activation evidence.",
+  "AUTHORITY: Primary. EXACT and LIVE contacts carry event authority; BACKGROUND contacts provide texture only.",
+  "TIMING: An EXACT or LIVE personal-planet / Time-Lord contact may create a dated window only when exactDate is supplied and the dated-window rules are satisfied.",
+  "",
+  "ANNUAL PROFECTION + TIME LORD",
+  "ROLE: Defines the active annual house, sign, ruler, and structural emphasis.",
+  "AUTHORITY: Structural primary. Time-Lord contacts are elevated evidence.",
+  "TIMING: Establishes the active year but does not independently manufacture an exact day.",
+  "",
+  "TRANSITS TO ANGLES",
+  "ROLE: Major activation of the Ascendant, Midheaven, Descendant, or Imum Coeli.",
+  "AUTHORITY: Highest SPINE authority when the contact qualifies under the engine rules.",
+  "TIMING: A topic-relevant qualifying angle contact may create a dated window when exactDate is calculator-supplied.",
+  "",
+  "SECONDARY PROGRESSIONS",
+  "ROLE: Independent developmental evidence.",
+  "AUTHORITY: Primary convergence support. A progression can strengthen a transit and participate in CRITICAL MASS.",
+  "TIMING: The supplied progression position does not independently manufacture an event date.",
+  "",
+  "SOLAR ARCS",
+  "ROLE: Independent developmental evidence.",
+  "AUTHORITY: Primary convergence support. A solar arc can strengthen a transit and participate in CRITICAL MASS.",
+  "TIMING: The supplied solar-arc position does not independently manufacture an event date.",
+  "",
+  "UPCOMING EXACT TRIGGER",
+  "ROLE: Calculator-resolved next exact transit contact.",
+  "AUTHORITY: Primary timing evidence when topic-relevant and directed to a personal planet or Time Lord.",
+  "TIMING: Its supplied date is eligible for a dated window only after those relevance checks pass.",
+  "",
+  "PLANETARY STATIONS",
+  "ROLE: Identifies a planetary turning point that may intensify an already relevant activation.",
+  "AUTHORITY: Timing/support when the station tightly activates a topic-relevant personal planet or Time Lord.",
+  "TIMING: The supplied stationDate may create a dated window only under the station eligibility rules.",
+  "",
+  "SOLAR RETURN",
+  "ROLE: Annual confirmation and environmental emphasis.",
+  "AUTHORITY: Confirming layer. May strengthen or refine a development established elsewhere.",
+  "TIMING: Does not independently create an event date.",
+  "",
+  "LUNAR RETURN",
+  "ROLE: Short-term confirmation of current emotional or circumstantial emphasis.",
+  "AUTHORITY: Confirming layer.",
+  "TIMING: Does not independently create a standalone event or dated window.",
+  "",
+  "ECLIPSE ACTIVATIONS",
+  "ROLE: Amplifier and developmental-window evidence.",
+  "AUTHORITY: Supporting / confirming layer unless independently reinforced by primary activation evidence.",
+  "TIMING: Does not independently enter Part 5 unless an eligible calculator-supported timing source also establishes the date.",
+  "",
+  "HOUSE RULERS",
+  "ROLE: Connects house topics to their planetary rulers and helps trace how an activation expresses.",
+  "AUTHORITY: Interpretive support.",
+  "TIMING: No independent timing authority.",
+  "",
+  "ESSENTIAL DIGNITIES",
+  "ROLE: Describes how strongly, directly, comfortably, or conditionally a planet can express.",
+  "AUTHORITY: Expression modifier.",
+  "TIMING: Never an independent timing source.",
+  "",
+  "MUTUAL RECEPTIONS",
+  "ROLE: Identifies reinforced planetary relationships and amplified connections.",
+  "AUTHORITY: Confirmation / expression modifier.",
+  "TIMING: No independent timing authority.",
+  "",
+  "DISPOSITOR TREE",
+  "ROLE: Traces interpretive command structure between planets.",
+  "AUTHORITY: Context / synthesis support.",
+  "TIMING: No independent timing authority.",
+  "",
+  "MIDPOINTS",
+  "ROLE: Sensitive-point context that can reinforce where a larger activation concentrates.",
+  "AUTHORITY: Confirmation / context.",
+  "TIMING: Does not independently manufacture a dated window.",
+  "",
+  "SYNODIC CYCLES",
+  "ROLE: Broader planetary-cycle context.",
+  "AUTHORITY: Context only until exact cycle timing is independently verified.",
+  "TIMING: returnDate is not independently eligible for Part 5 under the current engine rules.",
+  "",
+  "MOON PHASE",
+  "ROLE: Short-term lunar atmosphere and immediate cycle context.",
+  "AUTHORITY: Context / secondary confirmation.",
+  "TIMING: Does not independently create an event date.",
+  "",
+  "EXTENDED POINTS — ARABIC LOTS + OUT-OF-BOUNDS DECLINATIONS",
+  "ROLE: Adds specialized emphasis and interpretive context.",
+  "AUTHORITY: Context / modifier.",
+  "TIMING: No independent timing authority.",
+  "",
+  "SIDEREAL CHART",
+  "ROLE: Confirmation filter against the primary tropical reading.",
+  "AUTHORITY: Confirmation only.",
+  "TIMING: Does not independently create a forecast date.",
+  "",
+  "VOICE CALIBRATION — signVoice.ts",
+  "ROLE: Shapes wording, rhythm, directness, emotional register, and communication style from the natal chart.",
+  "AUTHORITY: Voice only. It is not an astrological evidence source.",
+  "TIMING: None.",
+  "",
+  "DERIVED ENGINE LAYERS",
+  "SPINE ranks the strongest lead activation. TEMPORAL CLASSIFICATION organizes active evidence by time scale.",
+  "These are synthesis layers built from the sources above, not additional independent evidence channels.",
+].join("\n");
+
+
+const ASTROPRO_CONFIDENCE_DOCTRINE = [
+  "CONFIDENCE DOCTRINE — EVIDENCE, NOT TONE",
+  "",
+  "Confidence is an evidence judgment. It is not a writing style and it does not control the user's chart-shaped voice.",
+  "",
+  "Confidence comes from two things:",
+  "1. EVIDENCE COMPLETENESS — how many genuinely independent, topic-relevant channels converge on the same development.",
+  "2. SYSTEM PRECISION — how precisely the supplied calculations resolve the activation, including exactness, orb strength, applying/separating status, angular or Time-Lord relevance, and calculator-supplied timing.",
+  "",
+  "Independent convergence raises confidence. Do not count the same astrological fact expressed twice as two confirmations.",
+  "",
+  "When the evidence is complete and precise, commit to the resolved conclusion.",
+  "When evidence resolves the development but not one secondary detail, commit to the development and leave only that detail open.",
+  "When the chart is genuinely foundational rather than event-specific, state the real structural condition without manufacturing an event or date.",
+  "",
+  "Do not lower confidence because a conclusion is bold, specific, uncomfortable, positive, negative, or consequential.",
+  "Do not raise confidence because the wording sounds persuasive.",
+  "",
+  "Do not use hedging, generic possibility lists, or cautious language as a substitute for evaluating the evidence.",
+  "",
+  "The purpose of uncertainty is to identify an actual unresolved variable — never to protect the reading from commitment.",
+  "",
+  "Accuracy guardrails always remain in force: never invent calculations, aspects, placements, dates, or external facts.",
+].join("\n");
+
+
+// ============================================================
+// USER QUESTION FRAME
+// ============================================================
+//
+// For topic-specific readings (love, money, career), the topic
+// is the frame — the question refines within it.
+//
+// For general / What's Coming readings, the question IS the frame.
+// There is no topic narrowing the data, so the question itself
+// determines what is relevant and what leads.
+//
+
+function buildUserQuestionBlock(
+  question: string,
+  topic: TopicConfig
+): string {
+  if (topic.id === "general") {
+    return [
+      "═══════════════════════════════════════════",
+      "USER QUESTION — THE FRAME FOR THIS READING",
+      "═══════════════════════════════════════════",
+      "",
+      `"${question}"`,
+      "",
+      "No topic filter has narrowed the chart data for this reading.",
+      "The question itself is the frame.",
+      "The strongest chart-supported evidence relevant to this question is what leads.",
+      "",
+      "Answer the question the user actually asked.",
+      "Do not retreat to a generic 'what's coming' reading when the question is specific.",
+      "Do not answer a different question because the data supports it more easily.",
+      "",
+      "If the question names a specific person, event, timeframe, or decision,",
+      "the reading must speak to that specifically.",
+      "",
+    ].join("\n");
   }
-  if (spineIsAnchored || hasExactTiming) return "MODERATE";
-  return "THEMATIC";
+
+  return [
+    "═══════════════════════════════════════════",
+    `USER QUESTION — WITHIN THE ${topic.label.toUpperCase()} TOPIC`,
+    "═══════════════════════════════════════════",
+    "",
+    `"${question}"`,
+    "",
+    `TOPIC: ${topic.label}`,
+    `FOCUS: ${topic.focusLine}`,
+    "",
+    "The topic filter has narrowed the chart data to what is most relevant here.",
+    "The question tells you what specifically within this topic the user needs to know.",
+    "",
+    "Answer the question directly.",
+    "If the question is broad, lead with the strongest chart-supported development in this topic.",
+    "If the question is specific, speak to that specificity — do not retreat to generalities.",
+    "",
+    `Do not read transits outside the ${topic.label.toLowerCase()} scope as if they were the answer.`,
+    "",
+  ].join("\n");
 }
-
-const CONFIDENCE_DIRECTIVE: Record<ConfidenceTier, string> = {
-  HIGH: [
-    "READING CONFIDENCE: HIGH. The chart gives both a clear development and exact timing.",
-    "Write like an astrologer who is certain, because the evidence converges.",
-    "Commit to ONE manifestation and develop it fully. Do not offer alternatives.",
-    "Name the call plainly — act, wait, confront, decide, begin, or end — and stand behind it.",
-    "Someone came for a clear answer in a hard moment. The chart is giving one. Give it to them.",
-  ].join("\n"),
-
-  MODERATE: [
-    "READING CONFIDENCE: MODERATE. The theme is strong, but the exact form or timing is not fully locked.",
-    "Lead with the single strongest manifestation and commit to it.",
-    "You may name ONE genuine fork — only where the chart truly does not distinguish, never to hedge.",
-    "Still tell the reader what to do with this. A moderate signal is not permission to be vague.",
-  ].join("\n"),
-
-  THEMATIC: [
-    "READING CONFIDENCE: THEMATIC. This is a quiet, foundational stretch — a real season, not a datable event.",
-    "Say so plainly and with steadiness. Do NOT manufacture drama, an event, or a date the chart does not support.",
-    "Describe the actual pressure the reader is standing inside, and why this season matters even without a sharp turn.",
-    "Honesty is the value here: a grounded 'nothing is forcing your hand yet — here is what to tend to' is exactly the clarity a quiet stretch calls for.",
-    "Sections may run shorter. A true, calm reading beats a padded, dramatic one.",
-  ].join("\n"),
-};
 
 // ============================================================
 // HELPER FUNCTIONS
@@ -451,7 +640,7 @@ function determineSpine(
   temporalClass: string;
   selectedAspect?: any;
 } {
-  // FIX: Check qualifying angles FIRST — outranks everything
+  // Check qualifying angles FIRST — outranks everything
   if (transitsToAngles && transitsToAngles.length > 0) {
     const exactAngles = transitsToAngles
       .filter((a) => a.orb < 2 && spineBodyWeight(a.transitPlanet) >= SPINE_ANCHOR_MIN_WEIGHT)
@@ -655,9 +844,13 @@ export function buildReadingPrompt(
   validatedAspects: TransitAspect[] = []
 ): string {
   const {
+    birthDate,
+    birthTime,
+    birthPlace,
     question,
     tropical,
     sidereal,
+    transits,
     profection,
     progressions,
     solarArcs,
@@ -693,25 +886,39 @@ export function buildReadingPrompt(
 
   const aspectDates = getUniqueAspectDates(activeTopicAspects);
 
-  const isTriggerRelevant =
+  const isTriggerRelevant = Boolean(
     upcomingTrigger &&
-    (topic.relevantPlanets.has(upcomingTrigger.transitPlanet) ||
-      topic.relevantPlanets.has(upcomingTrigger.natalPlanet));
+      (topic.relevantPlanets.has(upcomingTrigger.transitPlanet) ||
+        topic.relevantPlanets.has(upcomingTrigger.natalPlanet))
+  );
 
-  const triggerDate = isTriggerRelevant ? upcomingTrigger?.date : null;
+  const personalTrigger = filterPersonalTrigger(
+    isTriggerRelevant ? upcomingTrigger : null,
+    profection.timeLord
+  );
+
+  const triggerDate = personalTrigger?.date ?? null;
 
   const relevantStationDates = (planetaryStations || [])
     .filter((s) => {
       if (!s.natalPlanetHit) return false;
-      const hitsPersonal = PERSONAL_PLANETS.has(s.natalPlanetHit) || s.natalPlanetHit === profection.timeLord;
-      const topicRelevant = topic.relevantPlanets.has(s.natalPlanetHit) || (s.natalHouse != null && topic.relevantHouses.has(s.natalHouse));
+      const hitsPersonal =
+        PERSONAL_PLANETS.has(s.natalPlanetHit) ||
+        s.natalPlanetHit === profection.timeLord;
+      const topicRelevant =
+        topic.relevantPlanets.has(s.natalPlanetHit) ||
+        (s.natalHouse != null && topic.relevantHouses.has(s.natalHouse));
       return hitsPersonal && topicRelevant;
     })
     .map((s) => s.stationDate);
 
   const topicRelevantAngles = filterAnglesByTopic(transitsToAngles, topic);
 
-  console.log(`[DIAG] topicRelevantAngles=${topicRelevantAngles.map((a) => `${a.transitPlanet}→${a.angle}`).join(", ") || "None"}`);
+  console.log(
+    `[DIAG] topicRelevantAngles=${
+      topicRelevantAngles.map((a) => `${a.transitPlanet}→${a.angle}`).join(", ") || "None"
+    }`
+  );
 
   const angleDates = topicRelevantAngles
     .filter((t) => t.orb < 2 && !!t.exactDate)
@@ -750,53 +957,88 @@ export function buildReadingPrompt(
     topicRelevantAspects.length > 0 ? topicRelevantAspects : validatedAspects,
     profection.timeLord
   );
-  const personalTrigger = filterPersonalTrigger(
-    isTriggerRelevant ? upcomingTrigger : null,
-    profection.timeLord
-  );
 
   const hasDatedEvidence = finalDates.length > 0;
-  const confidenceTier = deriveConfidenceTier(spine.priority, hasDatedEvidence, finalDates.length);
-
-  console.log(`[DIAG] confidenceTier=${confidenceTier} | spinePriority=${spine.priority} | datedWindows=${finalDates.length}`);
 
   const sections: string[] = [];
 
-  // ── HEADER ──
+  // ═══════════════════════════════════════════
+  // 1. HEADER — IDENTITY + VOICE
+  // ═══════════════════════════════════════════
   sections.push(
-    "ASTROLOGICAL SYNTHESIS ENGINE",
+    "ASTROPRO — ASTROLOGICAL SYNTHESIS ENGINE",
     `TODAY: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
     `TOPIC: ${topic.id.toUpperCase()}`,
     `QUESTION: "${question}"`,
     "",
-    buildVoiceCalibrationBlock(tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))),
+    ASTROPRO_IDENTITY_BLOCK,
+    "",
+    buildVoiceCalibrationBlock(
+      tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))
+    ),
     ""
   );
 
-  // ── TOPIC FOCUS ──
+  // ═══════════════════════════════════════════
+  // 2. USER QUESTION — THE FRAME
+  // ═══════════════════════════════════════════
+  sections.push(buildUserQuestionBlock(question, topic), "");
+
+  // ═══════════════════════════════════════════
+  // 3. TOPIC FOCUS
+  // ═══════════════════════════════════════════
   sections.push("TOPIC FOCUS — " + topic.focusLine, "");
 
-  // ── READING CONFIDENCE ──
+  // ═══════════════════════════════════════════
+  // 4. [METHODS PLACEHOLDER — Update A will land here]
+  // ═══════════════════════════════════════════
+
+  // ═══════════════════════════════════════════
+  // 5. EVIDENCE MANIFEST
+  // ═══════════════════════════════════════════
   sections.push(
     "═══════════════════════════════════════════",
-    "READING CONFIDENCE — GOVERNS THE VOICE",
+    "ASTROPRO EVIDENCE MANIFEST",
     "═══════════════════════════════════════════",
     "",
-    CONFIDENCE_DIRECTIVE[confidenceTier],
+    ASTROPRO_EVIDENCE_MANIFEST,
     ""
   );
 
-  // ── TOPIC-SPECIFIC WINDOW INSTRUCTION ──
+  // ═══════════════════════════════════════════
+  // 6. NATAL FOUNDATION
+  // ═══════════════════════════════════════════
   sections.push(
-    "═══════════════════════════════════════════",
-    "TOPIC-SPECIFIC WINDOW SELECTION",
-    "═══════════════════════════════════════════",
+    "NATAL FOUNDATION — SOURCE DATA:",
+    `Birth Date: ${birthDate}`,
+    `Birth Time: ${birthTime}`,
+    `Birth Place: ${birthPlace}`,
     "",
-    topic.windowInstruction,
+    "TROPICAL NATAL PLACEMENTS:",
+    ...tropical.planets.map(
+      (p) =>
+        `  ${p.name}: ${p.sign} ${p.degree}${p.house ? ` | House ${p.house}` : ""}${p.isAnaretic ? " | ANARETIC" : ""}`
+    ),
     ""
   );
 
-  // ── SPINE HIERARCHY ──
+  // ═══════════════════════════════════════════
+  // 7. CURRENT SKY
+  // ═══════════════════════════════════════════
+  if (transits?.length) {
+    sections.push(
+      "CURRENT PLANETARY POSITIONS — RAW SKY STATE:",
+      ...transits.map(
+        (t) =>
+          `  ${t.name}: ${t.sign} ${t.degree}${t.isRetrograde ? " Rx" : ""} | longitude ${t.longitude.toFixed(4)}°`
+      ),
+      ""
+    );
+  }
+
+  // ═══════════════════════════════════════════
+  // 8. SPINE HIERARCHY + SPINE
+  // ═══════════════════════════════════════════
   sections.push(
     "SPINE HIERARCHY (apply in order):",
     "1. TRANSIT TO ANGLE → Major Life Event (outranks everything)",
@@ -815,15 +1057,20 @@ export function buildReadingPrompt(
     ""
   );
 
-  // ── PROFECTION ──
+  // ═══════════════════════════════════════════
+  // 9. TIME STRUCTURE
+  // ═══════════════════════════════════════════
   sections.push(
+    "═══════════════════════════════════════════",
+    "TIME STRUCTURE",
+    "═══════════════════════════════════════════",
+    "",
     "PROFECTION YEAR:",
     `Age ${profection.age} → House ${profection.activatedHouse} (${profection.activatedSign})`,
     `Time Lord: ${profection.timeLord} (Natal: ${profection.timeLordNatalSign}, House ${profection.timeLordNatalHouse})`,
     ""
   );
 
-  // ── HOUSE RULERS ──
   if (houseRulers && houseRulers.length > 0) {
     sections.push(
       "HOUSE RULERS (context for house themes):",
@@ -832,79 +1079,16 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── MUTUAL RECEPTION ──
-  if (mutualReceptions && mutualReceptions.length > 0) {
-    sections.push(
-      "MUTUAL RECEPTION — AMPLIFIED CONNECTIONS:",
-      ...mutualReceptions.map(
-        (m) => `⚡ ${m.description} → ${m.planetA} and ${m.planetB} are in each other's signs`
-      ),
-      ""
-    );
-  }
+  // ═══════════════════════════════════════════
+  // 10. PRIMARY ACTIVE EVIDENCE
+  // ═══════════════════════════════════════════
+  sections.push(
+    "═══════════════════════════════════════════",
+    "PRIMARY ACTIVE EVIDENCE",
+    "═══════════════════════════════════════════",
+    ""
+  );
 
-  // ── ESSENTIAL DIGNITIES ──
-  if (essentialDignities && essentialDignities.length > 0) {
-    sections.push(
-      "ESSENTIAL DIGNITIES — EXPRESSION MODIFIER, NOT TIMING:",
-      ...essentialDignities.map((d) => `  ${JSON.stringify(d)}`),
-      ""
-    );
-  }
-
-  // ── LUNAR RETURN ──
-  if (lunarReturn) {
-    sections.push(
-      "LUNAR RETURN — SHORT-TERM CONFIRMATION, NOT A STANDALONE EVENT PREDICTION:",
-      `  ${JSON.stringify(lunarReturn)}`,
-      ""
-    );
-  }
-
-  // ── ECLIPSE ACTIVATIONS ──
-  if (eclipseActivations && eclipseActivations.length > 0) {
-    sections.push(
-      "ECLIPSE ACTIVATIONS — AMPLIFIER / DEVELOPMENT WINDOW:",
-      ...eclipseActivations.map((e) => `  ${JSON.stringify(e)}`),
-      ""
-    );
-  }
-
-  // ── DISPOSITOR TREE ──
-  if (dispositorTree && dispositorTree.length > 0) {
-    sections.push(
-      "DISPOSITOR TREE — INTERPRETIVE CONTEXT ONLY:",
-      ...dispositorTree.map((d) => `  ${JSON.stringify(d)}`),
-      ""
-    );
-  }
-
-  // ── SYNODIC CYCLES ──
-  if (synodicCycles && synodicCycles.length > 0) {
-    const relevantCycles = synodicCycles.filter((s) => s.daysUntilReturn <= FORWARD_WINDOW_DAYS);
-    if (relevantCycles.length > 0) {
-      sections.push(
-        "SYNODIC CYCLES — Context only until exact cycle timing is independently verified:",
-        ...relevantCycles.map(
-          (s) => `${s.planet} return in ${s.daysUntilReturn} days (${s.returnDate})`
-        ),
-        ""
-      );
-    }
-  }
-
-  // ── MIDPOINTS ──
-  if (midpoints && midpoints.length > 0) {
-    sections.push(
-      "MIDPOINTS (Sensitive Point Activators):",
-      ...midpoints.map(
-        (m) => `${m.pointA}/${m.pointB} midpoint: ${m.sign} ${m.degree}° (House ${m.house})`
-      ),
-      ""
-    );
-  }
-
-  // ── TRANSIT TO ANGLES writer evidence block ──
   if (topicRelevantAngles.length > 0) {
     sections.push(
       "TRANSIT TO ANGLES (Major Life Events):",
@@ -916,23 +1100,6 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── PROGRESSIONS & SOLAR ARCS ──
-  if (progressions?.length) {
-    sections.push(
-      "PROGRESSIONS:",
-      progressions.map((p) => `${p.name}: ${p.sign} ${p.degree}`).join(", "),
-      ""
-    );
-  }
-  if (solarArcs?.length) {
-    sections.push(
-      "SOLAR ARCS:",
-      solarArcs.map((s) => `${s.name}: ${s.sign} ${s.degree}`).join(", "),
-      ""
-    );
-  }
-
-  // ── TRANSIT ASPECTS (Topic-Filtered) ──
   if (topicRelevantAspects.length > 0) {
     sections.push("TRANSIT-TO-NATAL ASPECTS — TOPIC-RELEVANT ONLY:");
     sections.push(`RELEVANT ASPECTS (${topicRelevantAspects.length}):`);
@@ -982,7 +1149,6 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── TEMPORAL CLASSIFICATION ──
   sections.push(
     "TEMPORAL CLASSIFICATION:",
     `IMMEDIATE (0-4 weeks): ${temporal.immediate.map((a) => `${a.transitPlanet}→${a.natalPlanet}`).join(", ") || "None"}`,
@@ -991,7 +1157,6 @@ export function buildReadingPrompt(
     ""
   );
 
-  // ── UPCOMING TRIGGER ──
   if (personalTrigger) {
     sections.push(
       "NEXT EXACT ASPECT:",
@@ -1000,7 +1165,42 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── PLANETARY STATIONS ──
+  // ═══════════════════════════════════════════
+  // 11. STRUCTURAL EVIDENCE
+  // ═══════════════════════════════════════════
+  sections.push(
+    "═══════════════════════════════════════════",
+    "STRUCTURAL EVIDENCE",
+    "═══════════════════════════════════════════",
+    ""
+  );
+
+  if (progressions?.length) {
+    sections.push(
+      "PROGRESSIONS:",
+      progressions.map((p) => `${p.name}: ${p.sign} ${p.degree}`).join(", "),
+      ""
+    );
+  }
+
+  if (solarArcs?.length) {
+    sections.push(
+      "SOLAR ARCS:",
+      solarArcs.map((s) => `${s.name}: ${s.sign} ${s.degree}`).join(", "),
+      ""
+    );
+  }
+
+  // ═══════════════════════════════════════════
+  // 12. TIMING AMPLIFIERS
+  // ═══════════════════════════════════════════
+  sections.push(
+    "═══════════════════════════════════════════",
+    "TIMING AMPLIFIERS",
+    "═══════════════════════════════════════════",
+    ""
+  );
+
   if (planetaryStations?.length) {
     sections.push("PLANETARY STATIONS:");
     for (const s of planetaryStations) {
@@ -1010,7 +1210,6 @@ export function buildReadingPrompt(
     sections.push("");
   }
 
-  // ── SOLAR RETURN ──
   if (solarReturn) {
     const timeLordInAngularHouse =
       solarReturn.timeLordSRHouse !== null && ANGULAR_HOUSES.has(solarReturn.timeLordSRHouse);
@@ -1020,6 +1219,9 @@ export function buildReadingPrompt(
       `Date: ${solarReturn.sunReturnDate}`,
       `SR Asc: ${solarReturn.ascendant?.sign || "N/A"} ${solarReturn.ascendant?.degree || ""}`,
       `SR MC: ${solarReturn.midheaven?.sign || "N/A"} ${solarReturn.midheaven?.degree || ""}`,
+      `SR Planets: ${solarReturn.planets
+        .map((p) => `${p.name}: ${p.sign} ${p.degree} (House ${p.house})`)
+        .join(", ")}`,
       solarReturn.timeLordInSR
         ? `Time Lord ${profection.timeLord} in SR: ${solarReturn.timeLordInSR}${timeLordInAngularHouse ? " ★ Angular House!" : ""}`
         : `Time Lord ${profection.timeLord} not prominent in SR chart`,
@@ -1027,7 +1229,81 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── MOON PHASE ──
+  if (lunarReturn) {
+    sections.push(
+      "LUNAR RETURN — SHORT-TERM CONFIRMATION, NOT A STANDALONE EVENT PREDICTION:",
+      `  ${JSON.stringify(lunarReturn)}`,
+      ""
+    );
+  }
+
+  if (eclipseActivations && eclipseActivations.length > 0) {
+    sections.push(
+      "ECLIPSE ACTIVATIONS — AMPLIFIER / DEVELOPMENT WINDOW:",
+      ...eclipseActivations.map((e) => `  ${JSON.stringify(e)}`),
+      ""
+    );
+  }
+
+  // ═══════════════════════════════════════════
+  // 13. CONFIRMING / CONTEXT
+  // ═══════════════════════════════════════════
+  sections.push(
+    "═══════════════════════════════════════════",
+    "CONFIRMING / CONTEXT",
+    "═══════════════════════════════════════════",
+    ""
+  );
+
+  if (essentialDignities && essentialDignities.length > 0) {
+    sections.push(
+      "ESSENTIAL DIGNITIES — EXPRESSION MODIFIER, NOT TIMING:",
+      ...essentialDignities.map((d) => `  ${JSON.stringify(d)}`),
+      ""
+    );
+  }
+
+  if (mutualReceptions && mutualReceptions.length > 0) {
+    sections.push(
+      "MUTUAL RECEPTION — AMPLIFIED CONNECTIONS:",
+      ...mutualReceptions.map(
+        (m) => `⚡ ${m.description} → ${m.planetA} and ${m.planetB} are in each other's signs`
+      ),
+      ""
+    );
+  }
+
+  if (dispositorTree && dispositorTree.length > 0) {
+    sections.push(
+      "DISPOSITOR TREE — INTERPRETIVE CONTEXT ONLY:",
+      ...dispositorTree.map((d) => `  ${JSON.stringify(d)}`),
+      ""
+    );
+  }
+
+  if (midpoints && midpoints.length > 0) {
+    sections.push(
+      "MIDPOINTS (Sensitive Point Activators):",
+      ...midpoints.map(
+        (m) => `${m.pointA}/${m.pointB} midpoint: ${m.sign} ${m.degree}° (House ${m.house})`
+      ),
+      ""
+    );
+  }
+
+  if (synodicCycles && synodicCycles.length > 0) {
+    const relevantCycles = synodicCycles.filter((s) => s.daysUntilReturn <= FORWARD_WINDOW_DAYS);
+    if (relevantCycles.length > 0) {
+      sections.push(
+        "SYNODIC CYCLES — Context only until exact cycle timing is independently verified:",
+        ...relevantCycles.map(
+          (s) => `${s.planet} return in ${s.daysUntilReturn} days (${s.returnDate})`
+        ),
+        ""
+      );
+    }
+  }
+
   if (moonPhase) {
     sections.push(
       "MOON PHASE:",
@@ -1038,7 +1314,6 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── EXTENDED POINTS ──
   if (extendedPoints) {
     const { arabicLots, declinations } = extendedPoints;
     const oob = (declinations ?? []).filter((d: any) => d.isOutOfBounds);
@@ -1054,7 +1329,6 @@ export function buildReadingPrompt(
     }
   }
 
-  // ── SIDEREAL ──
   if (sidereal?.planets?.length) {
     sections.push(
       "SIDEREAL (confirmation filter):",
@@ -1063,7 +1337,9 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── NATAL ASPECTS ──
+  // ═══════════════════════════════════════════
+  // 14. NATAL ARCHITECTURE
+  // ═══════════════════════════════════════════
   const rankedAspects = tropical.aspects
     .slice()
     .sort((a, b) => {
@@ -1092,74 +1368,111 @@ export function buildReadingPrompt(
     })
     .join("\n");
 
-  sections.push("NATAL ASPECTS (major first, capped at 15):", aspectList || "None", "");
-
-  // ── CORE READING PHILOSOPHY / PREDICTION STANDARD ──
   sections.push(
     "═══════════════════════════════════════════",
-    "CORE READING PHILOSOPHY — HARD RULE",
+    "NATAL ARCHITECTURE",
     "═══════════════════════════════════════════",
     "",
-    "Get ready. You are the user's personal precision astrologer and prediction guide.",
+    "NATAL ASPECTS (major first, capped at 15):",
+    aspectList || "None",
     "",
-    "Use the exact current planetary positions together with the user's complete birth chart — including their date, exact time, and place of birth — to deliver direct, highly specific predictions about their life by month, week, or even day.",
+    "ROLE: These never change. They are the pattern the transits are ACTIVATING.",
+    "Aspects marked '[minor body — flavor only]' may color a description but may never anchor a claim.",
+    ""
+  );
+
+  // ═══════════════════════════════════════════
+  // 15. CONFIDENCE DOCTRINE
+  // ═══════════════════════════════════════════
+  sections.push(
+    "═══════════════════════════════════════════",
+    "ASTROPRO CONFIDENCE DOCTRINE",
+    "═══════════════════════════════════════════",
     "",
-    "Analyze current planetary transits, planetary aspects, house activations, and their interaction with the natal chart.",
-    "Use that synthesis to give clear, actionable guidance in any area the user asks about, including love, career, health, finances, personal development, or spiritual growth.",
+    ASTROPRO_CONFIDENCE_DOCTRINE,
+    ""
+  );
+
+  // ═══════════════════════════════════════════
+  // 16. ASTROPRO READING STANDARD
+  // ═══════════════════════════════════════════
+  sections.push(
+    "═══════════════════════════════════════════",
+    "ASTROPRO READING STANDARD — HARD RULE",
+    "═══════════════════════════════════════════",
     "",
-    "Always ground the reading in the current planetary movements and explain how they are interacting with the user's personal astrology.",
-    "Avoid vague, generic, interchangeable, or broadly applicable interpretations.",
+    "AstroPro reads the chart. It does not speculate past it.",
     "",
-    "Deliver detailed, direct, and specific predictions.",
-    "Use exact dates whenever the astrology and supplied calculations support them.",
-    "State meaningful predictions whether the development appears small or significant.",
+    "The user-facing Prediction is the strongest chart-supported development resolved by the supplied astrology.",
+    "Treat that label as synthesis, not permission to guess.",
     "",
-    "The purpose of the reading is to tell the user what is happening, what is coming next, when it matters, and what they should understand or do with that information.",
+    "Cross-reference the relevant source channels before writing the conclusion.",
+    "Do not interpret one technique in isolation when independent evidence is available to confirm, refine, strengthen, or contextualize it.",
     "",
-    "Do not bury the prediction underneath astrological explanation.",
-    "Lead with the answer, then explain the astrology supporting it.",
-    "Let the READING CONFIDENCE directive govern how certain or conditional that answer sounds. Do not make the language more or less certain than the resolved evidence supports.",
+    "Lead with the strongest resolved answer.",
+    "Then explain the astrology that makes that answer visible.",
     "",
-    "Translate planetary movements into recognizable real-life developments.",
+    "Translate planetary movements and chart activations into recognizable real-life developments.",
     "Do not simply recite transits, placements, aspects, houses, or technical astrology.",
-    "Explain what those configurations mean for the user's actual life.",
     "",
-    "Be precise about the circumstance, pressure, opportunity, conversation, decision, beginning, ending, shift, realization, or turning point being shown:",
-    "  - Do not merely say 'change is happening.' State what is changing.",
-    "  - Do not merely say there is 'relationship energy.' State what relationship dynamic is being initiated, confronted, exposed, clarified, deepened, redirected, or ended.",
-    "  - Do not merely say there is 'career activation.' State what professional development, opportunity, negotiation, decision, recognition, pressure, transition, or outcome is being activated.",
+    "State what is actually changing, developing, clarifying, beginning, ending, intensifying, resolving, or requiring action.",
     "",
-    "Do not exaggerate positive predictions beyond what the astrology supports.",
-    "Do not manufacture dramatic outcomes simply to make the reading more interesting.",
-    "Do not intensify or soften a conclusion beyond what the evidence supports. Accuracy matters more than reassurance or drama.",
+    "Do not merely say 'change is happening.' State the development.",
+    "Do not merely say 'relationship energy.' State the relationship dynamic.",
+    "Do not merely say 'career activation.' State the professional development.",
     "",
-    "Small predictions matter too. If the astrology clearly describes a smaller conversation, realization, opportunity, delay, decision, expense, invitation, or emotional shift, state it.",
+    "COMMITMENT RULE:",
+    "Accuracy limits unsupported details. Accuracy does NOT require weakening a conclusion that the evidence actually supports.",
+    "",
+    "When the chart resolves one strongest manifestation, state that manifestation directly.",
+    "Do not create backup outcomes simply to protect the reading from being wrong.",
+    "",
+    "Do not automatically reach for 'may,' 'might,' 'could,' 'possibly,' 'perhaps,' or multi-outcome lists as safety language.",
+    "Conditional language belongs only around the specific detail the evidence genuinely leaves unresolved.",
+    "",
+    "If the direction is resolved but one detail is not, commit to the direction and isolate the unresolved detail.",
+    "Do not contaminate an otherwise clear reading with generalized uncertainty.",
+    "",
+    "Do not exaggerate positive or negative developments beyond what the astrology contains.",
+    "Do not manufacture drama simply to make the reading more interesting.",
+    "Do not soften a difficult conclusion merely to make it more comfortable.",
+    "",
+    "ASTROLOGICAL ACCURACY GUARDRAILS:",
+    "Never invent an aspect.",
+    "Never invent a placement.",
+    "Never invent a house or ruler.",
+    "Never invent an orb.",
+    "Never invent applying or separating status.",
+    "Never invent a progression, solar arc, station, return, eclipse activation, midpoint, dignity, reception, or dispositor relationship.",
+    "Never invent an exact date.",
+    "Never invent an external person, event, circumstance, or fact that the user did not supply and the astrology does not establish.",
+    "",
+    "Exact dates must come from calculator-supported eligible timing evidence.",
+    "If only a broader period is supported, state the broader period without fabricating precision.",
+    "",
+    "Small developments matter.",
+    "A clearly shown conversation, realization, opportunity, delay, decision, expense, invitation, shift, or change in behavior deserves to be stated even when it is not dramatic.",
     "",
     "Depth comes from precision, not unnecessary word count.",
-    "Every paragraph must add new information. If a sentence only restates a conclusion already established, remove it.",
+    "Every paragraph must add new information.",
     "",
-    "If some detail remains genuinely unresolved, state the limit plainly within the reading and give the strongest conclusion the supplied chart and calculations support. Do not invent missing facts.",
+    "The reading should feel like one astrologer deeply synthesizing one chart for one person — not an encyclopedia assembling disconnected interpretations.",
     "",
-    "Use specific dates whenever an exact date is genuinely supported by the planetary calculations.",
-    "If the astrology indicates a broader activation period rather than one exact day, state the strongest supported window instead of inventing precision.",
+    "Be direct, specific, perceptive, decisive, emotionally intelligent, and personally relevant.",
     "",
-    "The reading should feel like it is being delivered by an experienced personal astrologer who knows the user's chart deeply and is speaking directly to one person.",
+    "Tone and communication style come from the supplied natal voice calibration.",
+    "Do not replace that chart-shaped voice with an engine-invented personality.",
     "",
-    "Be direct, specific, detailed, perceptive, decisive, emotionally intelligent, and personally relevant.",
-    "",
-    "Never become vague, generic, repetitive, encyclopedic, or detached.",
-    "",
-    "Shape the tone and delivery in the way that is most compatible with the user's natal chart and communication style.",
-    "",
-    "The astrology should support the prediction — not bury it.",
-    "Lead with the prediction.",
-    "Explain why it is happening now.",
-    "State when it matters.",
+    "Lead with what the chart says.",
+    "Explain why it is active.",
+    "State when it matters when valid timing exists.",
     "Then tell the user what to do with that information.",
     ""
   );
 
-  // ── READING STRUCTURE — 7 REQUIRED SECTIONS ──
+  // ═══════════════════════════════════════════
+  // 17. READING STRUCTURE — 7 REQUIRED SECTIONS
+  // ═══════════════════════════════════════════
   sections.push(
     "═══════════════════════════════════════════",
     "READING STRUCTURE — 7 REQUIRED SECTIONS",
@@ -1277,7 +1590,9 @@ export function buildReadingPrompt(
     ""
   );
 
-  // ── STRUCTURAL COMPLETENESS ──
+  // ═══════════════════════════════════════════
+  // 18. STRUCTURAL COMPLETENESS
+  // ═══════════════════════════════════════════
   sections.push(
     "═══════════════════════════════════════════",
     "STRUCTURAL COMPLETENESS — HARD RULE",
@@ -1301,7 +1616,9 @@ export function buildReadingPrompt(
     ""
   );
 
-  // ── DATED WINDOW ELIGIBILITY ──
+  // ═══════════════════════════════════════════
+  // 19. DATED WINDOW ELIGIBILITY
+  // ═══════════════════════════════════════════
   sections.push(
     "═══════════════════════════════════════════",
     "DATED WINDOW ELIGIBILITY — HARD RULE",
@@ -1320,6 +1637,20 @@ export function buildReadingPrompt(
     "",
     "Never estimate an event date from an orb.",
     "Never invent a date because the interpretation needs one.",
+    ""
+  );
+
+  // ═══════════════════════════════════════════
+  // 20. PART 5 / 6 / 7 INSTRUCTIONS
+  // ═══════════════════════════════════════════
+
+  // ── TOPIC-SPECIFIC WINDOW INSTRUCTION ──
+  sections.push(
+    "═══════════════════════════════════════════",
+    "TOPIC-SPECIFIC WINDOW SELECTION",
+    "═══════════════════════════════════════════",
+    "",
+    topic.windowInstruction,
     ""
   );
 
@@ -1437,24 +1768,47 @@ export function buildReadingPrompt(
     ""
   );
 
-   // ── HOW TO USE THE CALCULATIONS ──
+  // ═══════════════════════════════════════════
+  // 21. HOW ASTROPRO USES THE CALCULATIONS
+  // ═══════════════════════════════════════════
   const relevantPlanets = topic.relevantPlanets;
   const relevantHouses = topic.relevantHouses;
   const relevantAspects = topic.relevantAspects;
 
   sections.push(
     "═══════════════════════════════════════════",
-    "HOW TO USE THE CALCULATIONS",
+    "HOW ASTROPRO USES THE CALCULATIONS",
     "═══════════════════════════════════════════",
     "",
-    "The evidence above is already ranked. The SPINE is the lead; the EXACT/LIVE aspects and dated windows are the strongest support; everything else is texture that colors the reading but does not drive it.",
+    "The EVIDENCE MANIFEST is the authority map for the supplied astrology.",
     "",
-    "Your job is to translate that ranked evidence into the reading — not to re-weigh it.",
-    "Convergence beats any single technique. Exactness beats loose symbolism. A contact to an angle, luminary, personal planet, house ruler, or the Time Lord matters more than generic sky activity.",
+    "The SPINE is the ranked lead activation. It tells you where to begin the synthesis, but it is not permission to ignore the rest of the relevant evidence.",
     "",
-    "Two or more genuinely independent techniques (transit + progression, transit + solar arc, etc.) describing the same development is the strongest possible signal — lead with it. Do not count the same fact expressed twice as confirmation.",
+    "Before finalizing the reading, cross-reference the SPINE against every relevant supplied channel.",
     "",
-    "Confirming layers — Solar Return, Lunar Return, dignities, mutual reception, dispositors, midpoints, synodic cycles — modify or confirm the story. They do not create an event or a date on their own.",
+    "Use the source roles correctly:",
+    "  - FOUNDATION establishes the natal structure being activated.",
+    "  - PRIMARY evidence establishes the active development.",
+    "  - TIMING evidence places that development in time.",
+    "  - CONFIRMING evidence strengthens, refines, or modifies the interpretation.",
+    "  - CONTEXT evidence explains how or where the development expresses.",
+    "  - VOICE evidence shapes delivery only.",
+    "",
+    "Convergence beats any isolated technique.",
+    "Exactness beats loose symbolism.",
+    "A qualifying contact to an angle, luminary, personal planet, Time Lord, or strongly relevant house structure carries more authority than generic sky activity.",
+    "",
+    "Two or more genuinely independent techniques describing the same development materially strengthen the reading.",
+    "Do not count the same fact expressed twice as independent confirmation.",
+    "",
+    "A confirming layer does not need to be present for primary evidence to remain valid.",
+    "The absence of Solar Return, Lunar Return, dignity, reception, midpoint, dispositor, synodic, sidereal, or other confirming data does not automatically weaken a development already resolved by stronger evidence.",
+    "",
+    "Likewise, a lower-authority contextual layer should not overrule stronger primary evidence merely because its symbolism is different.",
+    "When sources appear to conflict, resolve the conflict by source authority, independence, relevance to the user's topic, and calculator precision rather than averaging the reading into vagueness.",
+    "",
+    "Confidence rises when independent relevant channels converge and the system resolves them precisely.",
+    "Confidence does not come from sounding confident.",
     "",
     `For this reading (${topic.id.toUpperCase()}):`,
     `  - Priority planets: ${Array.from(relevantPlanets).join(", ")}`,
@@ -1462,11 +1816,14 @@ export function buildReadingPrompt(
     `  - Priority aspects: ${Array.from(relevantAspects).join(", ")}`,
     `  - Priority angles: ${Array.from(topic.relevantAngles).join(", ")}`,
     "",
-    "These are weighting guides, not exclusion rules. If a stronger chart-supported activation outside these lists clearly answers the user's question, follow the stronger evidence.",
+    "These topic priorities are weighting guides, not blind exclusion rules.",
+    "If stronger chart-supported evidence outside a priority list clearly answers the user's question, follow the stronger evidence.",
     ""
   );
 
-  // ── PROSE PURITY RULES ──
+  // ═══════════════════════════════════════════
+  // 22. PROSE PURITY RULES
+  // ═══════════════════════════════════════════
   sections.push(
     "═══════════════════════════════════════════",
     "PROSE PURITY RULES",
@@ -1495,7 +1852,9 @@ export function buildReadingPrompt(
     ""
   );
 
-  // ── OUTPUT FORMAT ──
+  // ═══════════════════════════════════════════
+  // 23. OUTPUT FORMAT
+  // ═══════════════════════════════════════════
   sections.push(
     "OUTPUT FORMAT — RAW JSON ONLY",
     "",

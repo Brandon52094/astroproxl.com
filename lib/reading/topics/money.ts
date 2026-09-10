@@ -13,6 +13,11 @@ export const money: TopicConfig = {
   "trine",
   "sextile",
 ]),
+relevantAngles: new Set([
+  "Imum Coeli",
+  "Ascendant",
+  "Midheaven",
+]),
   focusLine: "MONEY & FINANCES — Focus on Venus, Jupiter, Saturn, 2nd/8th/11th houses",
   windowInstruction: [
     "MONEY READING — Focus on these transits:",
@@ -32,6 +37,6 @@ export const money: TopicConfig = {
     "  - Venus in 2nd → income increase, value recognition",
     "  - Vesta conjunct a money planet → income earned through sustained, focused effort",
     "",
-    "🔴 AVOID: Reading romance or career transits as money signals.",
+    "🔴 AVOID: Reading romance as money signals.",
   ].join("\n"),
 };

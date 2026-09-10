@@ -13,6 +13,11 @@ export const career: TopicConfig = {
   "trine",
   "sextile",
 ]),
+relevantAngles: new Set([
+  "Midheaven",
+  "Ascendant",
+  "Imum Coeli",
+]),
   focusLine: "CAREER & PROFESSION — Focus on Saturn, Sun, Mars, 10th/6th/2nd houses",
   windowInstruction: [
     "CAREER READING — Focus on these transits:",
