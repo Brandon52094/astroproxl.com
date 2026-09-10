@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronUp, Download, ChevronDown, CalendarDays } from "lucide-react";
+import { Download, ChevronDown, CalendarDays } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { loadReading, loadChart, clearIntake, type StoredReading } from "@/lib/chartStore";
@@ -25,9 +25,9 @@ interface UserCredits {
 }
 
 /**
- * AstroProXL results — production TSX conversion of reading-deck-prototype.jsx.
- * Keeps the prototype's page order and carries the original closing experience.
- * Uses the existing chartStore and API contracts. No engine changes are required.
+ * AstroProXL results — single scrolling page.
+ * Sections stack top-to-bottom and reveal as they scroll into view.
+ * Uses the existing chartStore and API contracts. No engine changes are required here.
  */
 
 type ParsedSection =
@@ -497,6 +497,52 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
+// Fires once, when the element first scrolls into view. Drives per-section reveals.
+function useInView<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setInView(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { threshold: 0.2, rootMargin: "0px 0px -8% 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, inView];
+}
+
+// True while the element sits in the vertical center band of the viewport.
+function useCenterFocus<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setFocused(entry.isIntersecting), {
+      rootMargin: "-42% 0px -42% 0px",
+      threshold: 0,
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, focused];
+}
+
 function useTyped(text: string, play: boolean, instant: boolean, speed: number): string {
   // Date tokens arrive together so unfinished [[DATE: ...]] markup never flashes.
   const units = useMemo(() => text.match(/\[\[DATE:\s*[^\]]+\]\]|[\s\S]/gi) ?? [], [text]);
@@ -602,13 +648,24 @@ function FadeIn({
   return <div className={`fade ${shown ? "on" : ""} ${className}`}>{children}</div>;
 }
 
-function ZoneReveal({ label, body, active }: { label: string; body: string; active: boolean }) {
-  return active ? (
-    <FadeIn active={active} className="zone on">
+function ZoneReveal({
+  label,
+  body,
+  active,
+  delay = 0,
+}: {
+  label: string;
+  body: string;
+  active: boolean;
+  delay?: number;
+}) {
+  if (!active) return null;
+  return (
+    <FadeIn active delay={delay} className="zone">
       <p className="zone-label">{label}</p>
       <p className="zone-body">{renderWithDates(body)}</p>
     </FadeIn>
-  ) : null;
+  );
 }
 
 function Calendar({
@@ -754,38 +811,54 @@ type PanelKind =
   | "prose"
   | "directive"
   | "closing";
-type DeckStep = { panelIndex: number; label: string; contextStage?: "where" | "why" | "how" };
+
+const PANEL_LABEL: Record<Exclude<PanelKind, "topic">, string> = {
+  prediction: "The Prediction",
+  context: "Context",
+  calendar: "Dated Windows",
+  timing: "Timing",
+  prose: "The Read",
+  directive: "Your Move",
+  closing: "Bottom Line",
+};
+
+// One scrolling section; reveals its contents when it enters the viewport.
+function FlowSection({
+  kind,
+  label,
+  children,
+}: {
+  kind: PanelKind;
+  label: string;
+  children: (active: boolean) => React.ReactNode;
+}) {
+  const [ref, inView] = useInView<HTMLElement>();
+  return (
+    <section ref={ref} data-panel={kind} className={`flow-section section-${kind}`} aria-label={label}>
+      {children(inView)}
+    </section>
+  );
+}
 
 function ReadingDeck({
   topic,
   content,
   sections,
-  credits,
-  isDownloading,
-  onDownload,
-  onDone,
   checkoutOpen,
   children,
 }: {
   topic: string;
   content: string;
   sections: ParsedSection[] | null;
-  credits: UserCredits | null;
-  isDownloading: boolean;
-  onDownload: () => Promise<void>;
-  onDone: () => void;
   checkoutOpen: boolean;
   children: React.ReactNode;
 }) {
   const reduceMotion = useReducedMotion();
-  const [step, setStep] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const [seenPrediction, setSeenPrediction] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const deckRef = useRef<HTMLDivElement | null>(null);
-  const stepRef = useRef(0);
-  const lock = useRef(false);
-  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markPredictionSeen = useCallback(() => setSeenPrediction(true), []);
 
   const groups = useMemo(() => {
     const join = (kind: ParsedSection["kind"]) =>
@@ -828,325 +901,129 @@ function ReadingDeck({
     return result;
   }, [groups]);
 
-  const steps = useMemo<DeckStep[]>(
-    () =>
-      panels.flatMap((kind, panelIndex): DeckStep[] => {
-        if (kind === "context") {
-          return (["where", "why", "how"] as const)
-            .filter((stage) => !!groups[stage])
-            .map((contextStage) => ({
-              panelIndex,
-              contextStage,
-              label: contextStage === "where" ? "Where" : contextStage === "why" ? "Why" : "How",
-            }));
-        }
-        const labels: Record<Exclude<PanelKind, "context">, string> = {
-          topic,
-          prediction: "The Prediction",
-          calendar: "Dated Windows",
-          timing: "Timing",
-          prose: "The Read",
-          directive: "Your Move",
-          closing: "Bottom Line",
-        };
-        return [{ panelIndex, label: labels[kind] }];
-      }),
-    [panels, groups, topic],
+  const labelFor = useCallback(
+    (kind: PanelKind) => (kind === "topic" ? topic : PANEL_LABEL[kind]),
+    [topic],
   );
-  const current = steps[Math.min(step, steps.length - 1)];
-  const pageIndex = current.panelIndex;
-  const bottomActive = panels[pageIndex] === "closing";
-  const markPredictionSeen = useCallback(() => setSeenPrediction(true), []);
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 80);
-    return () => {
-      clearTimeout(timer);
-      if (lockTimer.current) clearTimeout(lockTimer.current);
-    };
+    return () => clearTimeout(timer);
   }, []);
 
-  const navigate = useCallback(
-    (next: number) => {
-      if (checkoutOpen || lock.current) return;
-      const bounded = Math.min(steps.length - 1, Math.max(0, next));
-      if (bounded === stepRef.current) return;
-      stepRef.current = bounded;
-      setStep(bounded);
-      lock.current = true;
-      if (lockTimer.current) clearTimeout(lockTimer.current);
-      lockTimer.current = setTimeout(
-        () => {
-          lock.current = false;
-        },
-        reduceMotion ? 120 : 740,
-      );
-    },
-    [steps.length, reduceMotion, checkoutOpen],
-  );
-  const go = useCallback((direction: number) => navigate(stepRef.current + direction), [navigate]);
-
   useEffect(() => {
-    const panel = deckRef.current?.children[pageIndex] as HTMLElement | undefined;
-    if (panel) panel.scrollTop = 0;
-    // Only page changes reset scroll; Where/Why/How reveals keep their scroll position.
-  }, [pageIndex]);
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const onScroll = () => setScrolled(vp.scrollTop > 24);
+    vp.addEventListener("scroll", onScroll, { passive: true });
+    return () => vp.removeEventListener("scroll", onScroll);
+  }, []);
 
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || checkoutOpen) return;
-    const activePanel = () =>
-      deckRef.current?.children[steps[stepRef.current]?.panelIndex] as HTMLElement | undefined;
-    const edge = (direction: number) => {
-      const panel = activePanel();
-      if (!panel || panel.scrollHeight <= panel.clientHeight + 2) return true;
-      return direction > 0
-        ? panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 2
-        : panel.scrollTop <= 2;
-    };
-    const interactive = (target: EventTarget | null) =>
-      target instanceof Element &&
-      !!target.closest(
-        "input, textarea, select, button, a, [contenteditable]:not([contenteditable='false']), [role='dialog']",
-      );
-
-    let wheelTime = 0,
-      wheelTotal = 0,
-      wheelHandled = false,
-      wheelDirection = 0;
-    const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX))
-        return;
-      if (
-        event.target instanceof Element &&
-        event.target.closest("textarea, select, [contenteditable]")
-      )
-        return;
-      const now = performance.now();
-      const direction = event.deltaY > 0 ? 1 : -1;
-      if (now - wheelTime > 180 || direction !== wheelDirection) {
-        wheelTotal = 0;
-        // A gesture that starts inside a tall page belongs to its native scroll.
-        wheelHandled = !edge(direction);
-      }
-      wheelTime = now;
-      wheelDirection = direction;
-      if (!edge(direction)) return;
-      event.preventDefault();
-      if (wheelHandled || lock.current) return;
-      wheelTotal +=
-        Math.abs(event.deltaY) *
-        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1);
-      if (wheelTotal >= 40) {
-        wheelHandled = true;
-        go(direction);
-      }
-    };
-
-    let touch: { x: number; y: number; atTop: boolean; atBottom: boolean } | null = null;
-    const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || interactive(event.target)) {
-        touch = null;
-        return;
-      }
-      touch = {
-        x: event.touches[0].clientX,
-        y: event.touches[0].clientY,
-        atTop: edge(-1),
-        atBottom: edge(1),
-      };
-    };
-    const onTouchEnd = (event: TouchEvent) => {
-      const start = touch;
-      touch = null;
-      if (!start || !event.changedTouches[0]) return;
-      const dy = event.changedTouches[0].clientY - start.y;
-      const dx = event.changedTouches[0].clientX - start.x;
-      if (Math.abs(dy) <= 45 || Math.abs(dy) <= Math.abs(dx)) return;
-      const direction = dy < 0 ? 1 : -1;
-      if ((direction > 0 ? start.atBottom : start.atTop) && edge(direction)) go(direction);
-    };
-    const onTouchCancel = () => {
-      touch = null;
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        interactive(event.target)
-      )
-        return;
-      const forward =
-        ["ArrowDown", "PageDown"].includes(event.key) || (event.key === " " && !event.shiftKey);
-      const backward =
-        ["ArrowUp", "PageUp"].includes(event.key) || (event.key === " " && event.shiftKey);
-      if (!forward && !backward) return;
-      event.preventDefault();
-      const direction = forward ? 1 : -1;
-      if (edge(direction)) go(direction);
-      else {
-        const panel = activePanel();
-        panel?.scrollBy({
-          top: direction * (event.key.startsWith("Arrow") ? 60 : panel.clientHeight * 0.8),
-          behavior: "auto",
-        });
-      }
-    };
-    viewport.addEventListener("wheel", onWheel, { passive: false });
-    viewport.addEventListener("touchstart", onTouchStart, { passive: true });
-    viewport.addEventListener("touchend", onTouchEnd, { passive: true });
-    viewport.addEventListener("touchcancel", onTouchCancel, { passive: true });
-    window.addEventListener("keydown", onKey);
-    return () => {
-      viewport.removeEventListener("wheel", onWheel);
-      viewport.removeEventListener("touchstart", onTouchStart);
-      viewport.removeEventListener("touchend", onTouchEnd);
-      viewport.removeEventListener("touchcancel", onTouchCancel);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [go, steps, checkoutOpen]);
-
-  const contextVisible = (stage: "where" | "why" | "how") => {
-    const index = steps.findIndex((s) => s.contextStage === stage);
-    return index >= 0 && step >= index;
-  };
   return (
-    <div className="reading-results deck-viewport" ref={viewportRef} aria-label="Your reading">
+    <div
+      className={`reading-results scroll-root ${checkoutOpen ? "checkout-open" : ""}`}
+      ref={viewportRef}
+      aria-label="Your reading"
+    >
       <style>{css}</style>
-      <ResultsStarfield reduceMotion={reduceMotion} />
-      <div className="deck" ref={deckRef} style={{ transform: `translateY(${-pageIndex * 100}%)` }}>
-        {panels.map((kind, index) => {
-          const active = index === pageIndex;
-          const centered = kind === "topic" || kind === "prediction" || kind === "calendar";
-          return (
-            <section
-              key={kind}
-              data-panel={kind}
-              className={`panel ${centered ? "panel-center" : kind === "context" ? "panel-top" : "panel-scroll"}`}
-              aria-hidden={!active}
-              aria-label={steps.find((s) => s.panelIndex === index)?.label}
-              ref={(node) => {
-                node?.toggleAttribute("inert", !active || checkoutOpen);
-              }}
-            >
-              {kind === "topic" && (
-                <div className={`career ${mounted ? "in" : ""}`}>
-                  <span className="career-mark" aria-hidden="true">
-                    ✦
-                  </span>
-                  <h1 className="career-word">{topic}</h1>
-                </div>
-              )}
-              {kind === "prediction" && (
-                <HeroReveal
-                  label="The Prediction"
-                  body={groups.prediction}
-                  active={active}
-                  seen={seenPrediction || reduceMotion}
-                  onSeen={markPredictionSeen}
-                />
-              )}
-              {kind === "context" && (
-                <div className="card">
-                  <ZoneReveal label="Where" body={groups.where} active={contextVisible("where")} />
-                  <ZoneReveal label="Why" body={groups.why} active={contextVisible("why")} />
-                  <ZoneReveal label="How" body={groups.how} active={contextVisible("how")} />
-                </div>
-              )}
-              {kind === "calendar" && (
-                <div className="cal-page">
-                  <p className="cal-page-heading">Dated Windows</p>
-                  <Calendar windows={groups.windows} active={active} reduceMotion={reduceMotion} />
-                </div>
-              )}
-              {kind === "timing" && (
-                <div className="framed-page">
-                  <p className="page-eyebrow">Timing</p>
-                  <FadeIn active={active} delay={100}>
-                    <div className="zone-frame">
-                      {groups.timing.map((section, i) => (
-                        <WindowCard key={i} section={section} />
-                      ))}
-                    </div>
-                  </FadeIn>
-                </div>
-              )}
-              {kind === "prose" && (
-                <div className="framed-page prose-page">
-                  <p className="page-eyebrow">The Read</p>
-                  <FadeIn active={active} delay={100}>
-                    <div className="prose-body">
-                      {groups.prose.map((body, i) => (
-                        <p key={i}>{renderWithDates(body)}</p>
-                      ))}
-                    </div>
-                  </FadeIn>
-                </div>
-              )}
-              {kind === "directive" && (
-                <div className="framed-page">
-                  <p className="page-eyebrow">Your Move</p>
-                  <FadeIn active={active} delay={100}>
-                    <div className="zone-frame">
-                      {groups.directives.map((section, i) => (
-                        <DirectiveCard key={i} section={section} />
-                      ))}
-                    </div>
-                  </FadeIn>
-                </div>
-              )}
-              {kind === "closing" && (
-                <div className={`framed-page closing-page ${bottomActive ? "bottom-focus" : ""}`}>
-                  {children}
-                </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
-      <div className={`cue ${step === 0 ? "show" : ""}`} aria-hidden="true">
-        <ChevronUp className="cue-chev" />
-        <span>swipe up</span>
-      </div>
-      <nav className="dots" aria-label="Reading sections">
-        {steps.map((item, i) => (
-          <button
-            type="button"
-            key={i}
-            className={`dot ${i === step ? "on" : ""} ${i < step ? "past" : ""}`}
-            onClick={() => navigate(i)}
-            aria-label={item.label}
-            aria-current={i === step ? "step" : undefined}
-            disabled={checkoutOpen}
-          />
-        ))}
-      </nav>
       <div
-        className={`bottom-bar ${bottomActive ? "show" : ""}`}
-        aria-hidden={!bottomActive}
+        className="scroll-content"
         ref={(node) => {
-          node?.toggleAttribute("inert", !bottomActive || checkoutOpen);
+          node?.toggleAttribute("inert", checkoutOpen);
         }}
       >
-        <div className="bottom-row">
-          <button
-            type="button"
-            className="download-btn"
-            aria-label="Download reading"
-            onClick={onDownload}
-            disabled={isDownloading}
-          >
-            <Download />
-          </button>
-          <button type="button" className="done-btn" onClick={onDone}>
-            Done
-          </button>
-        </div>
-        {credits && !credits.isSubscribed && (
-          <p className="bottom-credits">{credits.credits} credits remaining</p>
-        )}
+        <ResultsStarfield reduceMotion={reduceMotion} />
+        {panels.map((kind) => (
+          <FlowSection key={kind} kind={kind} label={labelFor(kind)}>
+            {(active) => {
+              if (kind === "topic")
+                return (
+                  <div className={`career ${mounted ? "in" : ""}`}>
+                    <span className="career-mark" aria-hidden="true">
+                      ✦
+                    </span>
+                    <h1 className="career-word">{topic}</h1>
+                  </div>
+                );
+              if (kind === "prediction")
+                return (
+                  <HeroReveal
+                    label="The Prediction"
+                    body={groups.prediction}
+                    active={active}
+                    seen={seenPrediction || reduceMotion}
+                    onSeen={markPredictionSeen}
+                  />
+                );
+              if (kind === "context")
+                return (
+                  <div className="card">
+                    {groups.where && (
+                      <ZoneReveal label="Where" body={groups.where} active={active} delay={0} />
+                    )}
+                    {groups.why && (
+                      <ZoneReveal label="Why" body={groups.why} active={active} delay={200} />
+                    )}
+                    {groups.how && (
+                      <ZoneReveal label="How" body={groups.how} active={active} delay={400} />
+                    )}
+                  </div>
+                );
+              if (kind === "calendar")
+                return (
+                  <div className="cal-page">
+                    <p className="cal-page-heading">Dated Windows</p>
+                    <Calendar windows={groups.windows} active={active} reduceMotion={reduceMotion} />
+                  </div>
+                );
+              if (kind === "timing")
+                return (
+                  <div className="framed-page">
+                    <p className="page-eyebrow">Timing</p>
+                    <FadeIn active={active} delay={100}>
+                      <div className="zone-frame">
+                        {groups.timing.map((section, i) => (
+                          <WindowCard key={i} section={section} />
+                        ))}
+                      </div>
+                    </FadeIn>
+                  </div>
+                );
+              if (kind === "prose")
+                return (
+                  <div className="framed-page prose-page">
+                    <p className="page-eyebrow">The Read</p>
+                    <FadeIn active={active} delay={100}>
+                      <div className="prose-body">
+                        {groups.prose.map((body, i) => (
+                          <p key={i}>{renderWithDates(body)}</p>
+                        ))}
+                      </div>
+                    </FadeIn>
+                  </div>
+                );
+              if (kind === "directive")
+                return (
+                  <div className="framed-page">
+                    <p className="page-eyebrow">Your Move</p>
+                    <FadeIn active={active} delay={100}>
+                      <div className="zone-frame">
+                        {groups.directives.map((section, i) => (
+                          <DirectiveCard key={i} section={section} />
+                        ))}
+                      </div>
+                    </FadeIn>
+                  </div>
+                );
+              // closing
+              return <div className="closing-page">{children}</div>;
+            }}
+          </FlowSection>
+        ))}
+      </div>
+      <div className={`scroll-cue ${scrolled ? "" : "show"}`} aria-hidden="true">
+        <span>scroll</span>
+        <ChevronDown className="cue-chev" />
       </div>
     </div>
   );
@@ -1176,6 +1053,10 @@ export default function ReadingResultsPage() {
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
+
+  // When the Bottom Line sits in the center of the screen, everything after it
+  // blurs back so the closing line becomes the sole focus.
+  const [bottomLineRef, bottomFocused] = useCenterFocus<HTMLDivElement>();
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
@@ -1471,21 +1352,12 @@ export default function ReadingResultsPage() {
       }
       setFollowupQuestion("");
       setTimeout(() => {
-        const end = followupEndRef.current;
-        const panel = end?.closest<HTMLElement>(".panel");
-        if (end && panel) {
-          panel.scrollTo({
-            top:
-              panel.scrollTop +
-              end.getBoundingClientRect().bottom -
-              panel.getBoundingClientRect().top -
-              panel.clientHeight +
-              140,
-            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-              ? "auto"
-              : "smooth",
-          });
-        }
+        followupEndRef.current?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "auto"
+            : "smooth",
+          block: "end",
+        });
       }, 120);
     } catch {
       setFollowupError("Something went wrong. Please try again.");
@@ -1577,14 +1449,13 @@ export default function ReadingResultsPage() {
         topic={reading.topic}
         content={page.content}
         sections={parsedSections}
-        credits={credits}
-        isDownloading={isDownloading}
-        onDownload={handleDownload}
-        onDone={handleDone}
         checkoutOpen={!!clientSecret}
       >
         {closingSections.length > 0 && (
-          <div className="bottom-line-wrap">
+          <div
+            className={`bottom-line-wrap ${bottomFocused ? "is-focused" : ""}`}
+            ref={bottomLineRef}
+          >
             <p className="bottom-line-label">Bottom Line</p>
 
             {closingSections.map((section, i) => (
@@ -1594,170 +1465,196 @@ export default function ReadingResultsPage() {
             ))}
           </div>
         )}
-        {/* ── Astrological Sources ── */}
-        {page.sources && page.sources.length > 0 && (
-          <div className="sources-wrap">
-            <button
-              type="button"
-              className={`sources-toggle ${showSources ? "open" : ""}`}
-              onClick={() => setShowSources((s) => !s)}
-              aria-expanded={showSources}
-              aria-controls="reading-sources"
-            >
-              <span>Astrological Sources</span>
 
-              <ChevronDown className="sources-chevron h-3.5 w-3.5" />
-            </button>
-
-            <AnimatePresence>
-              {showSources && (
-                <motion.div
-                  id="reading-sources"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{
-                    height: "auto",
-                    opacity: 1,
-                  }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{
-                    duration: 0.22,
-                    ease: "easeOut",
-                  }}
-                  className="overflow-hidden text-left"
-                >
-                  <div className="mt-3 space-y-2.5">
-                    {page.sources.map((src, i) => {
-                      const hasDate = src.placements.includes("exact on");
-
-                      return (
-                        <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
-                            {src.section}
-
-                            {hasDate && (
-                              <span className="ml-2 text-[9px] text-yellow-400/60">⚡ dated</span>
-                            )}
-                          </p>
-
-                          <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                            {src.placements}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-        {/* ── GOING DEEPER — follow-ups ── */}
-        <section className="mt-10">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.07]" />
-            <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">
-              Going Deeper
-            </span>
-            <div className="h-px flex-1 bg-white/[0.07]" />
-          </div>
-
-          {followups.map((f) => (
-            <div key={f.id} className="mb-5">
-              <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">
-                "{f.question}"
-              </p>
-              <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
-              <div className="reading-body" style={{ fontSize: 15 }}>
-                {renderWithDates(f.content)}
-              </div>
-            </div>
-          ))}
-          <div ref={followupEndRef} />
-
-          {justPurchased && (
-            <div className="purchase-success">
-              ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
-            </div>
-          )}
-
-          {paywallVisible ? (
-            <div className="paywall-card">
-              <p className="paywall-title">
-                {isSubscribed ? "You've used your 4 free replies" : "You've used your free replies"}
-              </p>
-              <p className="paywall-sub">
-                {isSubscribed
-                  ? "As a subscriber, 4 more are half-price."
-                  : "Keep the conversation going and get even more clarity."}
-              </p>
+        {/* Everything below the Bottom Line recedes while the closing line is centered. */}
+        <div className={`post-closing ${bottomFocused ? "is-dimmed" : ""}`}>
+          {/* ── Astrological Sources ── */}
+          {page.sources && page.sources.length > 0 && (
+            <div className="sources-wrap">
               <button
                 type="button"
-                className="paywall-buy"
-                onClick={handleBuyReplyPack}
-                disabled={isPurchasing}
+                className={`sources-toggle ${showSources ? "open" : ""}`}
+                onClick={() => setShowSources((s) => !s)}
+                aria-expanded={showSources}
+                aria-controls="reading-sources"
               >
-                {isPurchasing
-                  ? "Opening checkout…"
-                  : isSubscribed
-                    ? "Get 4 more replies · $2"
-                    : "Get 2 more replies · $2"}
+                <span>Astrological Sources</span>
+
+                <ChevronDown className="sources-chevron h-3.5 w-3.5" />
               </button>
-              {!isSubscribed && (
+
+              <AnimatePresence>
+                {showSources && (
+                  <motion.div
+                    id="reading-sources"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{
+                      height: "auto",
+                      opacity: 1,
+                    }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{
+                      duration: 0.22,
+                      ease: "easeOut",
+                    }}
+                    className="overflow-hidden text-left"
+                  >
+                    <div className="mt-3 space-y-2.5">
+                      {page.sources.map((src, i) => {
+                        const hasDate = src.placements.includes("exact on");
+
+                        return (
+                          <div key={i} className="rounded-xl bg-black/25 px-3.5 py-2.5">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300/80">
+                              {src.section}
+
+                              {hasDate && (
+                                <span className="ml-2 text-[9px] text-yellow-400/60">⚡ dated</span>
+                              )}
+                            </p>
+
+                            <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                              {src.placements}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+          {/* ── GOING DEEPER — follow-ups ── */}
+          <section className="mt-10">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="h-px flex-1 bg-white/[0.07]" />
+              <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">
+                Going Deeper
+              </span>
+              <div className="h-px flex-1 bg-white/[0.07]" />
+            </div>
+
+            {followups.map((f) => (
+              <div key={f.id} className="mb-5">
+                <p className="mb-2 px-1 text-[13px] italic leading-6 text-slate-500">
+                  "{f.question}"
+                </p>
+                <h3 className="reading-title mb-2 text-[18px] text-white">{f.title}</h3>
+                <div className="reading-body" style={{ fontSize: 15 }}>
+                  {renderWithDates(f.content)}
+                </div>
+              </div>
+            ))}
+            <div ref={followupEndRef} />
+
+            {justPurchased && (
+              <div className="purchase-success">
+                ✓ {isSubscribed ? "4" : "2"} replies added — ask away.
+              </div>
+            )}
+
+            {paywallVisible ? (
+              <div className="paywall-card">
+                <p className="paywall-title">
+                  {isSubscribed
+                    ? "You've used your 4 free replies"
+                    : "You've used your free replies"}
+                </p>
+                <p className="paywall-sub">
+                  {isSubscribed
+                    ? "As a subscriber, 4 more are half-price."
+                    : "Keep the conversation going and get even more clarity."}
+                </p>
                 <button
                   type="button"
-                  className="paywall-sub-link"
-                  onClick={handleSubscribe}
+                  className="paywall-buy"
+                  onClick={handleBuyReplyPack}
                   disabled={isPurchasing}
                 >
-                  or subscribe for more each month
+                  {isPurchasing
+                    ? "Opening checkout…"
+                    : isSubscribed
+                      ? "Get 4 more replies · $2"
+                      : "Get 2 more replies · $2"}
                 </button>
-              )}
-              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-            </div>
-          ) : (
-            <>
-              <p className="mb-2 px-1 text-[12px] text-slate-500">
-                Don't overthink this. Just say what's on your mind.
-              </p>
-              <textarea
-                className="followup-input"
-                aria-label="Ask a follow-up question"
-                rows={3}
-                value={followupQuestion}
-                onChange={(e) => setFollowupQuestion(e.target.value)}
-                placeholder="Ask a follow up…"
-                disabled={isGeneratingFollowup}
-              />
-              {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
-              <button
-                type="button"
-                onClick={handleFollowup}
-                disabled={isGeneratingFollowup || !followupQuestion.trim()}
-                className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
-              >
-                {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
-              </button>
+                {!isSubscribed && (
+                  <button
+                    type="button"
+                    className="paywall-sub-link"
+                    onClick={handleSubscribe}
+                    disabled={isPurchasing}
+                  >
+                    or subscribe for more each month
+                  </button>
+                )}
+                {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+              </div>
+            ) : (
+              <>
+                <p className="mb-2 px-1 text-[12px] text-slate-500">
+                  Don't overthink this. Just say what's on your mind.
+                </p>
+                <textarea
+                  className="followup-input"
+                  aria-label="Ask a follow-up question"
+                  rows={3}
+                  value={followupQuestion}
+                  onChange={(e) => setFollowupQuestion(e.target.value)}
+                  placeholder="Ask a follow up…"
+                  disabled={isGeneratingFollowup}
+                />
+                {followupError && <p className="mt-2 text-[12px] text-red-300">{followupError}</p>}
+                <button
+                  type="button"
+                  onClick={handleFollowup}
+                  disabled={isGeneratingFollowup || !followupQuestion.trim()}
+                  className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+                >
+                  {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
+                </button>
 
-              {isSubscribed ? (
-                <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {freeRemainingClient > 0
-                    ? `${freeRemainingClient} free ${freeRemainingClient === 1 ? "reply" : "replies"} this reading`
-                    : "Half-price replies available"}
-                </p>
-              ) : freeRemainingClient > 0 ? (
-                <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"}{" "}
-                  remaining
-                </p>
-              ) : replyCreditsRemaining && replyCreditsRemaining > 0 ? (
-                <p className="mt-2 text-center text-[11px] text-slate-500">
-                  {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"}{" "}
-                  remaining
-                </p>
-              ) : null}
-            </>
+                {isSubscribed ? (
+                  <p className="mt-2 text-center text-[11px] text-slate-500">
+                    {freeRemainingClient > 0
+                      ? `${freeRemainingClient} free ${freeRemainingClient === 1 ? "reply" : "replies"} this reading`
+                      : "Half-price replies available"}
+                  </p>
+                ) : freeRemainingClient > 0 ? (
+                  <p className="mt-2 text-center text-[11px] text-slate-500">
+                    {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"}{" "}
+                    remaining
+                  </p>
+                ) : replyCreditsRemaining && replyCreditsRemaining > 0 ? (
+                  <p className="mt-2 text-center text-[11px] text-slate-500">
+                    {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"}{" "}
+                    remaining
+                  </p>
+                ) : null}
+              </>
+            )}
+          </section>
+        </div>
+
+        {/* ── Done + Download — same footprint as Ask, tucked right under the credits line ── */}
+        <div className="end-actions">
+          <button
+            type="button"
+            className="end-btn end-download"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            aria-label="Download reading"
+          >
+            <Download className="end-btn-icon" aria-hidden="true" />
+            {isDownloading ? "Preparing…" : "Download"}
+          </button>
+          <button type="button" className="end-btn end-done" onClick={handleDone}>
+            Done
+          </button>
+          {credits && !credits.isSubscribed && (
+            <p className="end-credits">{credits.credits} credits remaining</p>
           )}
-        </section>
+        </div>
       </ReadingDeck>
       {/* ── Embedded Stripe checkout modal ── */}
       {clientSecret && (
@@ -1843,61 +1740,87 @@ const css = `
 
   .reading-results, .reading-results * { box-sizing: border-box; }
 
-  .reading-results.deck-viewport {
+  /* ── Single scrolling page ── */
+  .reading-results.scroll-root {
     position: fixed;
     inset: 0;
     z-index: 40;
     height: 100dvh;
     width: 100%;
-    overflow: hidden;
-    background: linear-gradient(180deg,#0a0e27 0%,#0b1030 12%,#080c24 24%,#050718 36%,#02030c 48%,#000 62%,#000 100%);
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #000;
     color: #e2e8f0;
     font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
     -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
     user-select: text;
-    touch-action: pan-y;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
   }
+  .reading-results.scroll-root::-webkit-scrollbar { display: none; }
+  .reading-results.checkout-open { overflow: hidden; }
 
-  .reading-results .results-starfield { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
-
-  .reading-results .deck {
-    height: 100%;
+  /* The gradient lives on the tall content, so it fades through its color
+     bands as you scroll — five graded zones from astral blue down to black. */
+  .reading-results .scroll-content {
     position: relative;
     z-index: 1;
-    transition: transform 0.72s cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform;
+    min-height: 100%;
+    background: linear-gradient(
+      180deg,
+      #17204a 0%,      /* 1 — astral blue */
+      #141b45 9%,
+      #10163f 22%,     /* 2 — deep indigo */
+      #12123a 36%,     /* 3 — indigo violet */
+      #0e0d30 50%,
+      #0a0924 63%,     /* 4 — deep space */
+      #070718 75%,
+      #040512 86%,     /* 5 — into the void */
+      #010109 95%,
+      #000000 100%
+    );
   }
 
-  .reading-results .panel {
-    height: 100%;
+  .reading-results .results-starfield {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* Each section is a centered column with breathing room above and below. */
+  .reading-results .flow-section {
+    position: relative;
+    z-index: 2;
     width: 100%;
+    max-width: 36rem;
+    margin: 0 auto;
+    padding: 46px 26px;
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
-    overscroll-behavior-y: contain;
-    overflow-x: hidden;
-    padding: 0 26px;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
-    scrollbar-width: none;
-  }
-  .reading-results .panel::-webkit-scrollbar { display: none; }
-  .reading-results .panel-center { align-items: center; justify-content: center; }
-  .reading-results .panel-scroll {
     align-items: center;
     justify-content: flex-start;
-    padding-top: calc(env(safe-area-inset-top) + 28px);
-    padding-bottom: calc(env(safe-area-inset-bottom) + 132px);
   }
-  .reading-results .panel-top {
-    align-items: flex-start;
+  .reading-results .flow-section > * { width: 100%; max-width: 100%; }
+
+  /* Opening beats keep a full-stage feel before the scroll continues. */
+  .reading-results .section-topic {
+    min-height: 88vh;
     justify-content: center;
-    padding-top: calc(env(safe-area-inset-top) + 22px);
-    padding-bottom: calc(env(safe-area-inset-bottom) + 26px);
+    text-align: center;
+    padding-top: calc(env(safe-area-inset-top) + 40px);
+  }
+  .reading-results .section-prediction {
+    min-height: 72vh;
+    justify-content: center;
+  }
+  .reading-results .section-closing {
+    padding-top: 40px;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 72px);
   }
 
-  /* ── Page 1 — CAREER ── */
+  /* ── Page 1 — TOPIC ── */
   .reading-results .career {
     text-align: center;
     opacity: 0;
@@ -1921,9 +1844,10 @@ const css = `
     text-transform: uppercase;
     color: #fff;
     text-shadow: 0 0 44px rgba(94,234,212,0.22), 0 0 100px rgba(94,234,212,0.10);
+    overflow-wrap: anywhere;
   }
 
-  /* ── Hero (Page 2 prediction) ── */
+  /* ── Prediction hero ── */
   .reading-results .hero { max-width: 32rem; margin: 0 auto; }
   .reading-results .hero-head { position: relative; display: flex; justify-content: center; margin-bottom: 26px; }
   .reading-results .hero-glow {
@@ -1970,9 +1894,11 @@ const css = `
     color: #dbe4f0;
     text-align: left;
     min-height: 1.72em;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
-  /* ── Page 3 card + zones ── */
+  /* ── Context card + zones (Where / Why / How) ── */
   .reading-results .card {
     width: 100%;
     max-width: 30rem;
@@ -1986,14 +1912,7 @@ const css = `
     backdrop-filter: blur(4px);
     padding: 24px 22px 26px;
   }
-  .reading-results .zone {
-    display: flex;
-    flex-direction: column;
-    opacity: 0;
-    transform: translateY(7px);
-    transition: opacity 0.7s ease, transform 0.7s ease;
-  }
-  .reading-results .zone.on { opacity: 1; transform: none; }
+  .reading-results .zone { display: flex; flex-direction: column; }
   .reading-results .zone + .zone { margin-top: 18px; }
   .reading-results .zone-label {
     margin: 0 0 7px;
@@ -2009,9 +1928,11 @@ const css = `
     font-size: 15.5px;
     line-height: 1.6;
     color: #cdd7e6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
-  /* ── Page 4 / 5 — Calendar + Windows ── */
+  /* ── Reveal helper ── */
   .reading-results .fade {
     opacity: 0;
     transform: translateY(8px);
@@ -2020,7 +1941,7 @@ const css = `
   .reading-results .fade.on { opacity: 1; transform: none; }
   .reading-results .fade + .fade { margin-top: 12px; }
 
-  /* Calendar page — standalone, centered, no wrapping card */
+  /* ── Dated Windows calendar — frameless: just the grid + the ring ── */
   .reading-results .cal-page { width: 100%; max-width: 22rem; margin: 0 auto; text-align: center; }
   .reading-results .cal-page-heading {
     margin: 0 0 22px;
@@ -2028,14 +1949,14 @@ const css = `
     text-transform: uppercase; color: rgba(94,234,212,0.9);
   }
   .reading-results .cal-card {
-    border: 1px solid rgba(148,163,184,0.16);
-    border-radius: 24px;
-    background: rgba(9,13,33,0.5);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 30px 80px rgba(0,0,0,0.3);
-    backdrop-filter: blur(4px);
-    padding: 18px 16px 20px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    padding: 0;
     opacity: 0;
-    transform: translateY(10px) scale(0.965);
+    transform: translateY(10px) scale(0.985);
     transition: opacity 0.85s ease, transform 0.85s cubic-bezier(0.22,1,0.36,1);
   }
   .reading-results .cal-card.on { opacity: 1; transform: none; }
@@ -2101,7 +2022,7 @@ const css = `
     50% { box-shadow: 0 0 16px rgba(94,234,212,0.75), inset 0 0 8px rgba(94,234,212,0.3); }
   }
 
-  /* Framed card pages (Timing + Your Move) */
+  /* ── Framed card pages (Timing + Your Move) ── */
   .reading-results .framed-page { width: 100%; max-width: 30rem; margin: 0 auto; }
   .reading-results .page-eyebrow {
     margin: 0 0 16px;
@@ -2134,11 +2055,12 @@ const css = `
     font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
     text-transform: uppercase; color: #5eead4;
   }
-  .reading-results .act-label-block { display: block; margin: 0 0 8px; }
+  .reading-results .act-note { color: #94a3b8; font-size: 12px; }
   .reading-results .act-body {
     margin: 0;
     font-family: Georgia, serif;
     font-size: 15px; line-height: 1.8; color: #cbd5e1;
+    white-space: pre-wrap; overflow-wrap: anywhere;
   }
 
   .reading-results .date-badge {
@@ -2150,68 +2072,23 @@ const css = `
     color: #fbbf24;
     font-family: ui-sans-serif, system-ui;
     font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
-    text-transform: uppercase; white-space: nowrap;
+    text-transform: uppercase;
     box-shadow: 0 0 18px rgba(251,191,36,0.12);
     vertical-align: baseline;
+    max-width: 100%; white-space: normal; overflow-wrap: anywhere;
   }
 
-  /* The Read — prose page */
+  /* ── The Read — prose page ── */
   .reading-results .prose-body p {
     margin: 0 0 16px;
     font-family: Georgia, serif;
     font-size: 16px; line-height: 1.85; color: #dbe4f0;
+    white-space: pre-wrap; overflow-wrap: anywhere;
   }
   .reading-results .prose-body p:last-child { margin-bottom: 0; }
 
-  /* Fixed bottom bar (pinned to the screen) */
-  .reading-results .bottom-bar {
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    z-index: 30;
-    padding: 12px 16px calc(10px + env(safe-area-inset-bottom));
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    background: linear-gradient(180deg, rgba(2,3,12,0) 0%, rgba(2,3,12,0.85) 34%, rgba(2,3,12,0.96) 100%);
-    opacity: 0;
-    transform: translateY(8px);
-    transition: opacity 0.5s ease, transform 0.5s ease;
-    pointer-events: none;
-  }
-  .reading-results .bottom-bar.show { opacity: 1; transform: none; pointer-events: auto; }
-  .reading-results .bottom-row { display: flex; gap: 12px; align-items: center; }
-  .reading-results .download-btn {
-    width: 52px; height: 52px; flex-shrink: 0;
-    border-radius: 16px;
-    border: 1px solid rgba(251,191,36,0.5);
-    background: rgba(251,191,36,0.08);
-    color: #fbbf24;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    animation: reading-dlPulse 2.6s ease-in-out infinite;
-  }
-  .reading-results .download-btn svg { width: 20px; height: 20px; }
-  @keyframes reading-dlPulse {
-    0%, 100% { box-shadow: 0 0 0 1px rgba(251,191,36,0.35), 0 0 20px rgba(251,191,36,0.16); }
-    50% { box-shadow: 0 0 0 1px rgba(251,191,36,0.6), 0 0 30px rgba(251,191,36,0.3); }
-  }
-  .reading-results .done-btn {
-    flex: 1; height: 52px;
-    border-radius: 16px; border: none;
-    background: #5eead4; color: #042f2e;
-    font-family: ui-sans-serif, system-ui;
-    font-size: 16px; font-weight: 700;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    box-shadow: 0 0 34px rgba(94,234,212,0.3);
-  }
-  .reading-results .bottom-credits {
-    margin: 0;
-    text-align: center;
-    font-family: ui-sans-serif, system-ui;
-    font-size: 11px; color: #64748b;
-  }
+  /* ── Closing column ── */
+  .reading-results .closing-page { width: 100%; max-width: 34rem; margin: 0 auto; }
 
   /* ── Typing caret ── */
   .reading-results .caret {
@@ -2225,12 +2102,12 @@ const css = `
   }
   @keyframes reading-blink { 50% { opacity: 0; } }
 
-  /* ── Swipe cue ── */
-  .reading-results .cue {
-    position: absolute;
+  /* ── Scroll cue (first screen only) ── */
+  .reading-results .scroll-cue {
+    position: fixed;
     left: 0; right: 0;
-    bottom: calc(env(safe-area-inset-bottom) + 30px);
-    z-index: 2;
+    bottom: calc(env(safe-area-inset-bottom) + 26px);
+    z-index: 3;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2243,316 +2120,283 @@ const css = `
     transition: opacity 0.6s ease;
     pointer-events: none;
   }
-  .reading-results .cue.show { opacity: 1; }
+  .reading-results .scroll-cue.show { opacity: 1; }
   .reading-results .cue-chev { width: 20px; height: 20px; animation: reading-bob 1.9s ease-in-out infinite; }
-  @keyframes reading-bob { 0%,100% { transform: translateY(0); opacity: 0.6; } 50% { transform: translateY(-6px); opacity: 1; } }
+  @keyframes reading-bob { 0%,100% { transform: translateY(0); opacity: 0.6; } 50% { transform: translateY(6px); opacity: 1; } }
 
-  /* ── Step dots ── */
-  .reading-results .dots {
+  .reading-results .reading-title {
+    font-family: var(--font-display, Georgia, serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
+  .reading-results .reading-body {
+    width: 100%;
+    font-family: var(--font-display, Georgia, serif);
+    font-size: 16px;
+    line-height: 1.9;
+    color: #e2e8f0;
+    white-space: pre-wrap;
+  }
+
+  /* ── Bottom Line — the closing focal point ── */
+  .reading-results .bottom-line-wrap {
+    position: relative;
+    padding: 40px 10px 34px;
+    text-align: center;
+    transition: transform 0.7s ease, opacity 0.7s ease;
+  }
+  .reading-results .bottom-line-wrap.is-focused { transform: scale(1.03); }
+  .reading-results .bottom-line-wrap::before {
+    content: "";
     position: absolute;
-    right: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 2;
+    top: 0;
+    left: 16%;
+    right: 16%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.28), transparent);
+  }
+  .reading-results .bottom-line-label {
+    margin: 0;
+    font-family: var(--font-sans, ui-sans-serif);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(94, 234, 212, 0.9);
+  }
+  .reading-results .closing-line {
+    max-width: 540px;
+    margin: 15px auto 0;
+    font-family: var(--font-display, Georgia, serif);
+    font-size: 18px;
+    line-height: 1.8;
+    color: #f8fafc;
+    font-style: italic;
+    text-align: center;
+    white-space: pre-wrap;
+    text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
+  }
+
+  /* When the Bottom Line is centered, the rest recedes into soft focus. */
+  .reading-results .post-closing {
+    transition: filter 0.55s ease, opacity 0.55s ease;
+  }
+  .reading-results .post-closing.is-dimmed {
+    filter: blur(7px);
+    opacity: 0.28;
+    pointer-events: none;
+  }
+
+  .reading-results .sources-wrap {
+    margin-top: 34px;
+    padding-top: 22px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    text-align: center;
+  }
+  .reading-results .sources-toggle {
+    position: relative;
+    overflow: hidden;
+    margin: 0 auto;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-family: var(--font-sans, ui-sans-serif);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    transition: color 0.25s ease, text-shadow 0.25s ease;
+  }
+  .reading-results .sources-toggle::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    bottom: -50%;
+    width: 34%;
+    left: -45%;
+    transform: skewX(-18deg);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(191, 219, 254, 0.26),
+      rgba(94, 234, 212, 0.38),
+      transparent
+    );
+    filter: blur(4px);
+    animation: reading-sourceStarlight 5.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .reading-results .sources-toggle:hover {
+    color: #cbd5e1;
+    text-shadow: 0 0 18px rgba(94, 234, 212, 0.28);
+  }
+  .reading-results .sources-toggle.open {
+    color: #bae6fd;
+    text-shadow: 0 0 18px rgba(94, 234, 212, 0.24);
+  }
+  .reading-results .sources-chevron {
+    width: 14px; height: 14px;
+    transition: transform 0.3s ease, filter 0.3s ease;
+  }
+  .reading-results .sources-toggle.open .sources-chevron {
+    transform: rotate(180deg);
+    filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.5));
+  }
+  @keyframes reading-sourceStarlight {
+    0%, 68% { left: -45%; opacity: 0; }
+    74% { opacity: 1; }
+    92% { left: 115%; opacity: 0.85; }
+    100% { left: 115%; opacity: 0; }
+  }
+
+  /* ─── Follow-up styles ──────────────────────────────────────────── */
+  .reading-results .followup-input {
+    width: 100%;
+    background: rgba(10, 14, 39, 0.6);
+    border: 1px solid rgba(45, 212, 191, 0.25);
+    border-radius: 18px;
+    color: #e2e8f0;
+    font-size: 16px;
+    padding: 14px 16px;
+    outline: none;
+    resize: none;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .reading-results .followup-input:focus {
+    border-color: rgba(45, 212, 191, 0.6);
+    box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
+  }
+  .reading-results .purchase-success {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(45, 212, 191, 0.1);
+    border: 1px solid rgba(45, 212, 191, 0.3);
+    color: #5eead4;
+    font-family: var(--font-sans, ui-sans-serif);
+    font-size: 13px;
+    text-align: center;
+  }
+  .reading-results .paywall-card {
+    background: rgba(20, 25, 55, 0.5);
+    border: 1px solid rgba(251, 191, 36, 0.28);
+    border-radius: 20px;
+    padding: 22px 18px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+  }
+  .reading-results .paywall-title {
+    font-family: var(--font-display, Georgia, serif);
+    font-size: 19px;
+    color: #ffffff;
+    font-weight: 600;
+  }
+  .reading-results .paywall-sub {
+    font-family: var(--font-sans, ui-sans-serif);
+    font-size: 13px;
+    line-height: 1.6;
+    color: #94a3b8;
+    margin-top: 8px;
+  }
+  .reading-results .paywall-buy {
+    margin-top: 18px;
+    width: 100%;
+    height: 54px;
+    border-radius: 16px;
+    border: none;
+    background: linear-gradient(135deg, #fbbf24, #d97706);
+    color: #1a1206;
+    font-family: var(--font-sans, ui-sans-serif);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 0 34px rgba(251, 191, 36, 0.22);
+  }
+  .reading-results .paywall-buy:disabled { opacity: 0.6; cursor: default; }
+  .reading-results .paywall-sub-link {
+    margin-top: 12px;
+    background: none;
+    border: none;
+    color: #5eead4;
+    font-family: var(--font-sans, ui-sans-serif);
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .reading-results .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
+
+  /* ── Done + Download — matched to the Ask button, tucked under the credits ── */
+  .reading-results .end-actions {
+    margin-top: 8px;
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 8px;
   }
-  .reading-results .dot {
-    width: 6px; height: 6px;
-    border-radius: 9999px;
-    background: rgba(148,163,184,0.25);
-    transition: all 0.4s ease;
-  }
-  .reading-results .dot.past { background: rgba(94,234,212,0.4); }
-  .reading-results .dot.on {
-    background: rgba(94,234,212,0.95);
-    box-shadow: 0 0 10px rgba(94,234,212,0.6);
-    height: 16px;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .reading-results .deck { transition: none; }
-    .reading-results .career, .reading-results .hero-title, .reading-results .zone, .reading-results .fade, .reading-results .cal-card { transition: none; }
-    .reading-results .cue-chev, .reading-results .caret, .reading-results .cal-cell.ring::before { animation: none; }
-    .reading-results .hero-title-wrap.shine::after { animation: none; }
-  }
-
-        .reading-results .reading-title {
-          font-family: var(--font-display, Georgia, serif);
-          font-weight: 600;
-          letter-spacing: -0.01em;
-          line-height: 1.15;
-        }
-
-        .reading-results .reading-body {
-          width: 100%;
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 16px;
-          line-height: 1.9;
-          color: #e2e8f0;
-          white-space: pre-wrap;
-        }
-
-        .reading-results .bottom-line-wrap {
-          position: relative;
-          margin-top: 54px;
-          padding: 52px 10px 48px;
-          text-align: center;
-          transition:
-            transform 0.72s ease,
-            opacity 0.72s ease;
-        }
-
-        .reading-results .bottom-line-wrap::before {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: 16%;
-          right: 16%;
-          height: 1px;
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(94, 234, 212, 0.28),
-              transparent
-            );
-        }
-
-        .reading-results .bottom-line-label {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.22em;
-          text-transform: uppercase;
-          color: rgba(94, 234, 212, 0.9);
-        }
-
-        .reading-results .closing-line {
-          max-width: 540px;
-          margin: 15px auto 0;
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 18px;
-          line-height: 1.8;
-          color: #f8fafc;
-          font-style: italic;
-          text-align: center;
-          white-space: pre-wrap;
-          text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
-        }
-
-        .reading-results .sources-wrap {
-          margin-top: 34px;
-          padding-top: 22px;
-          border-top: 1px solid rgba(255, 255, 255, 0.07);
-          text-align: center;
-          transition:
-            filter 0.72s ease,
-            opacity 0.72s ease;
-        }
-
-        .reading-results .sources-toggle {
-          position: relative;
-          overflow: hidden;
-          margin: 0 auto;
-          padding: 8px 14px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-
-          color: #94a3b8;
-          transition:
-            color 0.25s ease,
-            text-shadow 0.25s ease;
-        }
-
-        .reading-results .sources-toggle::before {
-          content: "";
-          position: absolute;
-          top: -50%;
-          bottom: -50%;
-          width: 34%;
-          left: -45%;
-          transform: skewX(-18deg);
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(191, 219, 254, 0.26),
-              rgba(94, 234, 212, 0.38),
-              transparent
-            );
-          filter: blur(4px);
-          animation: reading-sourceStarlight 5.4s ease-in-out infinite;
-          pointer-events: none;
-        }
-
-        .reading-results .sources-toggle:hover {
-          color: #cbd5e1;
-          text-shadow: 0 0 18px rgba(94, 234, 212, 0.28);
-        }
-
-        .reading-results .sources-toggle.open {
-          color: #bae6fd;
-          text-shadow: 0 0 18px rgba(94, 234, 212, 0.24);
-        }
-
-        .reading-results .sources-chevron {
-          transition:
-            transform 0.3s ease,
-            filter 0.3s ease;
-        }
-
-        .reading-results .sources-toggle.open .sources-chevron {
-          transform: rotate(180deg);
-          filter: drop-shadow(0 0 5px rgba(94, 234, 212, 0.5));
-        }
-
-        @keyframes reading-sourceStarlight {
-          0%, 68% {
-            left: -45%;
-            opacity: 0;
-          }
-
-          74% {
-            opacity: 1;
-          }
-
-          92% {
-            left: 115%;
-            opacity: 0.85;
-          }
-
-          100% {
-            left: 115%;
-            opacity: 0;
-          }
-        }
-
-        /* ─── Follow-up styles ──────────────────────────────────────────── */
-
-        .reading-results .followup-input {
-          width: 100%;
-          background: rgba(10, 14, 39, 0.6);
-          border: 1px solid rgba(45, 212, 191, 0.25);
-          border-radius: 18px;
-          color: #e2e8f0;
-          font-size: 16px;
-          padding: 14px 16px;
-          outline: none;
-          resize: none;
-          transition: border-color 0.25s ease, box-shadow 0.25s ease;
-        }
-        .reading-results .followup-input:focus {
-          border-color: rgba(45, 212, 191, 0.6);
-          box-shadow: 0 0 30px rgba(45, 212, 191, 0.12);
-        }
-
-        .reading-results .purchase-success {
-          margin-bottom: 12px;
-          padding: 10px 14px;
-          border-radius: 12px;
-          background: rgba(45, 212, 191, 0.1);
-          border: 1px solid rgba(45, 212, 191, 0.3);
-          color: #5eead4;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 13px;
-          text-align: center;
-        }
-
-        .reading-results .paywall-card {
-          background: rgba(20, 25, 55, 0.5);
-          border: 1px solid rgba(251, 191, 36, 0.28);
-          border-radius: 20px;
-          padding: 22px 18px;
-          text-align: center;
-          backdrop-filter: blur(8px);
-        }
-        .reading-results .paywall-title {
-          font-family: var(--font-display, Georgia, serif);
-          font-size: 19px;
-          color: #ffffff;
-          font-weight: 600;
-        }
-        .reading-results .paywall-sub {
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 13px;
-          line-height: 1.6;
-          color: #94a3b8;
-          margin-top: 8px;
-        }
-        .reading-results .paywall-buy {
-          margin-top: 18px;
-          width: 100%;
-          height: 54px;
-          border-radius: 16px;
-          border: none;
-          background: linear-gradient(135deg, #fbbf24, #d97706);
-          color: #1a1206;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 15px;
-          font-weight: 700;
-          cursor: pointer;
-          box-shadow: 0 0 34px rgba(251, 191, 36, 0.22);
-        }
-        .reading-results .paywall-buy:disabled { opacity: 0.6; cursor: default; }
-        .reading-results .paywall-sub-link {
-          margin-top: 12px;
-          background: none;
-          border: none;
-          color: #5eead4;
-          font-family: var(--font-sans, ui-sans-serif);
-          font-size: 13px;
-          cursor: pointer;
-          text-decoration: underline;
-          text-underline-offset: 2px;
-        }
-        .reading-results .paywall-sub-link:disabled { opacity: 0.6; cursor: default; }
-
-
-  .reading-results .panel-center, .reading-results .panel-top, .reading-results .panel-scroll {
+  .reading-results .end-btn {
+    height: 48px;
+    width: 100%;
+    border-radius: 16px;
+    display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
-    padding-top: calc(env(safe-area-inset-top) + 28px);
-    padding-bottom: calc(env(safe-area-inset-bottom) + 132px);
+    justify-content: center;
+    gap: 8px;
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   }
-  .reading-results .panel > * { flex-shrink: 0; max-width: 100%; }
-  .reading-results .panel-center > *, .reading-results .panel-scroll > .framed-page { margin-top: auto; margin-bottom: auto; }
-  .reading-results .panel[data-panel="topic"] { padding-bottom: calc(env(safe-area-inset-bottom) + 28px); }
-  .reading-results .panel .card { max-width: 30rem; }
-  .reading-results .panel .hero { width: 100%; max-width: 32rem; }
-  .reading-results .panel .cal-page { max-width: 22rem; }
-  .reading-results .panel .framed-page { max-width: 30rem; }
-  .reading-results .panel .closing-page { max-width: 34rem; margin-top: 0; margin-bottom: 0; }
-  .reading-results .career-word { overflow-wrap: anywhere; }
-  .reading-results .hero-body, .reading-results .zone-body, .reading-results .act-body, .reading-results .prose-body p { white-space: pre-wrap; overflow-wrap: anywhere; }
-  .reading-results .date-badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
-  .reading-results .act-note { color: #94a3b8; font-size: 12px; }
-  .reading-results .bottom-line-wrap { margin-top: 0; padding: 40px 10px 34px; }
-  .reading-results .closing-page.bottom-focus .bottom-line-wrap { transform: scale(1.025); }
-  .reading-results .bottom-line-label { margin: 0; }
-  .reading-results .sources-chevron { width: 14px; height: 14px; }
-  .reading-results .dots { gap: 7px; }
-  .reading-results .dot { position: relative; padding: 0; border: 0; cursor: pointer; flex-shrink: 0; }
-  .reading-results .dot::after { content: ""; position: absolute; inset: -3px -7px; }
-  .reading-results .download-btn:disabled { opacity: 0.5; cursor: default; }
-  .reading-results button:focus-visible, .reading-results textarea:focus-visible { outline: 2px solid #5eead4; outline-offset: 4px; }
-  .reading-results .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .reading-results .end-btn-icon { width: 18px; height: 18px; }
+  .reading-results .end-download {
+    border: 1px solid rgba(251,191,36,0.5);
+    background: rgba(251,191,36,0.08);
+    color: #fbbf24;
+  }
+  .reading-results .end-download:hover {
+    border-color: rgba(251,191,36,0.8);
+    box-shadow: 0 0 24px rgba(251,191,36,0.18);
+  }
+  .reading-results .end-download:disabled { opacity: 0.5; cursor: default; }
+  .reading-results .end-done {
+    border: none;
+    background: #5eead4;
+    color: #042f2e;
+    box-shadow: 0 0 30px rgba(94,234,212,0.28);
+  }
+  .reading-results .end-credits {
+    margin: 4px 0 0;
+    text-align: center;
+    font-family: var(--font-sans, ui-sans-serif);
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  .reading-results button:focus-visible, .reading-results textarea:focus-visible {
+    outline: 2px solid #5eead4;
+    outline-offset: 4px;
+  }
+  .reading-results .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .reading-results, .reading-results *, .reading-results *::before, .reading-results *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-    .reading-results .closing-page.bottom-focus .bottom-line-wrap { transform: none; }
+    .reading-results.scroll-root { scroll-behavior: auto; }
+    .reading-results, .reading-results *, .reading-results *::before, .reading-results *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+    .reading-results .bottom-line-wrap.is-focused { transform: none; }
+    .reading-results .post-closing.is-dimmed { filter: none; }
   }
 
 `;

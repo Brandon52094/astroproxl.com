@@ -205,6 +205,60 @@ function spineBodyWeight(name: string): number {
 }
 
 // ============================================================
+// CONFIDENCE TIER
+// ============================================================
+// Governs how decisively the reading is written, from evidence the
+// engine has already resolved (spine.priority + dated windows). This
+// shapes voice, not astrology — no calculation upstream is touched.
+
+type ConfidenceTier = "HIGH" | "MODERATE" | "THEMATIC";
+
+function deriveConfidenceTier(
+  spinePriority: number,
+  hasDatedEvidence: boolean,
+  datedWindowCount: number
+): ConfidenceTier {
+  const spineIsAnchored = spinePriority <= 4;   // angle / critical mass / time lord / slow→personal
+  const spineIsExactMoment = spinePriority === 5; // fast exact — short-lived but datable
+  const hasExactTiming = hasDatedEvidence && datedWindowCount > 0;
+
+  // FIX: priority 5 now requires a date to be HIGH
+  if (
+    (spineIsAnchored && hasExactTiming) ||
+    (spineIsExactMoment && hasExactTiming)
+  ) {
+    return "HIGH";
+  }
+  if (spineIsAnchored || hasExactTiming) return "MODERATE";
+  return "THEMATIC";
+}
+
+const CONFIDENCE_DIRECTIVE: Record<ConfidenceTier, string> = {
+  HIGH: [
+    "READING CONFIDENCE: HIGH. The chart gives both a clear development and exact timing.",
+    "Write like an astrologer who is certain, because the evidence converges.",
+    "Commit to ONE manifestation and develop it fully. Do not offer alternatives.",
+    "Name the call plainly — act, wait, confront, decide, begin, or end — and stand behind it.",
+    "Someone came for a clear answer in a hard moment. The chart is giving one. Give it to them.",
+  ].join("\n"),
+
+  MODERATE: [
+    "READING CONFIDENCE: MODERATE. The theme is strong, but the exact form or timing is not fully locked.",
+    "Lead with the single strongest manifestation and commit to it.",
+    "You may name ONE genuine fork — only where the chart truly does not distinguish, never to hedge.",
+    "Still tell the reader what to do with this. A moderate signal is not permission to be vague.",
+  ].join("\n"),
+
+  THEMATIC: [
+    "READING CONFIDENCE: THEMATIC. This is a quiet, foundational stretch — a real season, not a datable event.",
+    "Say so plainly and with steadiness. Do NOT manufacture drama, an event, or a date the chart does not support.",
+    "Describe the actual pressure the reader is standing inside, and why this season matters even without a sharp turn.",
+    "Honesty is the value here: a grounded 'nothing is forcing your hand yet — here is what to tend to' is exactly the clarity a quiet stretch calls for.",
+    "Sections may run shorter. A true, calm reading beats a padded, dramatic one.",
+  ].join("\n"),
+};
+
+// ============================================================
 // HELPER FUNCTIONS
 // ============================================================
 
@@ -360,6 +414,19 @@ export function validateAndFilterAspects(aspects: TransitAspect[] | undefined): 
 }
 
 // ============================================================
+// TOPIC-RELEVANT ANGLE FILTER (canonical — used by SPINE + dates + writer evidence)
+// ============================================================
+
+function filterAnglesByTopic<T extends { angle: string }>(
+  angles: T[] | undefined,
+  topic: TopicConfig
+): T[] {
+  if (!angles?.length) return [];
+  if (topic.id === "general") return angles;
+  return angles.filter((a) => topic.relevantAngles.has(a.angle));
+}
+
+// ============================================================
 // SPINE DETECTION
 // ============================================================
 
@@ -384,6 +451,33 @@ function determineSpine(
   temporalClass: string;
   selectedAspect?: any;
 } {
+  // FIX: Check qualifying angles FIRST — outranks everything
+  if (transitsToAngles && transitsToAngles.length > 0) {
+    const exactAngles = transitsToAngles
+      .filter((a) => a.orb < 2 && spineBodyWeight(a.transitPlanet) >= SPINE_ANCHOR_MIN_WEIGHT)
+      .sort((a, b) => {
+        const wA = spineBodyWeight(a.transitPlanet);
+        const wB = spineBodyWeight(b.transitPlanet);
+        if (wA !== wB) return wB - wA;
+        if (a.isApplying !== b.isApplying) return a.isApplying ? -1 : 1;
+        return a.orb - b.orb;
+      });
+
+    if (exactAngles.length > 0) {
+      const a = exactAngles[0];
+      return {
+        primary: `ANGLE ACTIVATION: ${a.transitPlanet} ${a.aspectType} ${a.angle} — major life event`,
+        priority: 1,
+        sources: [
+          `Transit ${a.transitPlanet} ${a.aspectType} ${a.angle} — ${a.orb}° orb${a.exactDate ? ` — exact on ${a.exactDate}` : ""}`,
+        ],
+        temporalClass: a.isApplying ? "Immediate" : "Structural",
+        selectedAspect: a,
+      };
+    }
+  }
+
+  // Then check transit evidence
   if (!aspects?.length) {
     return {
       primary: `${profection.activatedHouse}th House ${profection.activatedSign} Year — Time Lord: ${profection.timeLord}`,
@@ -421,31 +515,6 @@ function determineSpine(
     if (wA !== wB) return wB - wA;
     return a.orbDegrees - b.orbDegrees;
   });
-
-  if (transitsToAngles && transitsToAngles.length > 0) {
-    const exactAngles = transitsToAngles
-      .filter((a) => a.orb < 2 && spineBodyWeight(a.transitPlanet) >= SPINE_ANCHOR_MIN_WEIGHT)
-      .sort((a, b) => {
-        const wA = spineBodyWeight(a.transitPlanet);
-        const wB = spineBodyWeight(b.transitPlanet);
-        if (wA !== wB) return wB - wA;
-        if (a.isApplying !== b.isApplying) return a.isApplying ? -1 : 1;
-        return a.orb - b.orb;
-      });
-
-    if (exactAngles.length > 0) {
-      const a = exactAngles[0];
-      return {
-        primary: `ANGLE ACTIVATION: ${a.transitPlanet} ${a.aspectType} ${a.angle} — major life event`,
-        priority: 1,
-        sources: [
-          `Transit ${a.transitPlanet} ${a.aspectType} ${a.angle} — ${a.orb}° orb${a.exactDate ? ` — exact on ${a.exactDate}` : ""}`,
-        ],
-        temporalClass: a.isApplying ? "Immediate" : "Structural",
-        selectedAspect: a,
-      };
-    }
-  }
 
   for (const a of personal) {
     const natalPlacement = natalPlanets.find((p) => p.name === a.natalPlanet);
@@ -640,20 +709,12 @@ export function buildReadingPrompt(
     })
     .map((s) => s.stationDate);
 
-  const ANGLE_HOUSE_MAP: Record<string, number> = {
-    Ascendant: 1,
-    "Imum Coeli": 4,
-    Descendant: 7,
-    Midheaven: 10,
-  };
+  const topicRelevantAngles = filterAnglesByTopic(transitsToAngles, topic);
 
-  const angleDates = (transitsToAngles || [])
-    .filter((t) => {
-      if (t.orb >= 2 || !t.exactDate) return false;
-      if (topic.id === "general") return true;
-      const angleHouse = ANGLE_HOUSE_MAP[t.angle];
-      return angleHouse != null && topic.relevantHouses.has(angleHouse);
-    })
+  console.log(`[DIAG] topicRelevantAngles=${topicRelevantAngles.map((a) => `${a.transitPlanet}→${a.angle}`).join(", ") || "None"}`);
+
+  const angleDates = topicRelevantAngles
+    .filter((t) => t.orb < 2 && !!t.exactDate)
     .map((t) => t.exactDate!)
     .filter(Boolean);
 
@@ -679,7 +740,7 @@ export function buildReadingPrompt(
   const spine = determineSpine(
     topicRelevantAspects.length > 0 ? topicRelevantAspects : validatedAspects,
     profection,
-    transitsToAngles,
+    topicRelevantAngles,
     tropical.planets,
     progressions,
     solarArcs
@@ -695,6 +756,9 @@ export function buildReadingPrompt(
   );
 
   const hasDatedEvidence = finalDates.length > 0;
+  const confidenceTier = deriveConfidenceTier(spine.priority, hasDatedEvidence, finalDates.length);
+
+  console.log(`[DIAG] confidenceTier=${confidenceTier} | spinePriority=${spine.priority} | datedWindows=${finalDates.length}`);
 
   const sections: string[] = [];
 
@@ -711,6 +775,16 @@ export function buildReadingPrompt(
 
   // ── TOPIC FOCUS ──
   sections.push("TOPIC FOCUS — " + topic.focusLine, "");
+
+  // ── READING CONFIDENCE ──
+  sections.push(
+    "═══════════════════════════════════════════",
+    "READING CONFIDENCE — GOVERNS THE VOICE",
+    "═══════════════════════════════════════════",
+    "",
+    CONFIDENCE_DIRECTIVE[confidenceTier],
+    ""
+  );
 
   // ── TOPIC-SPECIFIC WINDOW INSTRUCTION ──
   sections.push(
@@ -830,11 +904,11 @@ export function buildReadingPrompt(
     );
   }
 
-  // ── TRANSIT TO ANGLES ──
-  if (transitsToAngles && transitsToAngles.length > 0) {
+  // ── TRANSIT TO ANGLES writer evidence block ──
+  if (topicRelevantAngles.length > 0) {
     sections.push(
       "TRANSIT TO ANGLES (Major Life Events):",
-      ...transitsToAngles.map(
+      ...topicRelevantAngles.map(
         (t) =>
           `  ${t.transitPlanet} ${t.aspectType} ${t.angle} (${t.angleSign} ${t.angleDegree}°) — ${t.orb}° orb${t.isApplying ? ", APPLYING" : ", SEPARATING"}${t.exactDate ? ` — exact on ${t.exactDate}` : ""}`
       ),
@@ -1021,184 +1095,69 @@ export function buildReadingPrompt(
   sections.push("NATAL ASPECTS (major first, capped at 15):", aspectList || "None", "");
 
   // ── CORE READING PHILOSOPHY / PREDICTION STANDARD ──
-
-sections.push(
-
-  "═══════════════════════════════════════════",
-
-  "CORE READING PHILOSOPHY — HARD RULE",
-
-  "═══════════════════════════════════════════",
-
-  "",
-
-  "Get ready. You are the user's personal precision astrologer and prediction guide.",
-
-  "",
-
-  "Use the exact current planetary positions together with the user's complete birth chart — including their date, exact time, and place of birth — to deliver direct, highly specific predictions about their life by month, week, or even day.",
-
-  "",
-
-  "Analyze current planetary transits, planetary aspects, house activations, and their interaction with the natal chart.",
-
-  "Use that synthesis to give clear, actionable guidance in any area the user asks about, including love, career, health, finances, personal development, or spiritual growth.",
-
-  "",
-
-  "Always ground the reading in the current planetary movements and explain how they are interacting with the user's personal astrology.",
-
-  "Avoid vague, generic, interchangeable, or broadly applicable interpretations.",
-
-  "",
-
-  "Deliver detailed, direct, and specific predictions.",
-
-  "Use exact dates whenever the astrology and supplied calculations support them.",
-
-  "State meaningful predictions whether the development appears small or significant.",
-
-  "",
-
-  "The purpose of the reading is to tell the user what is happening, what is coming next, when it matters, and what they should understand or do with that information.",
-
-  "",
-
-  "Do not bury the prediction underneath astrological explanation.",
-
-  "Lead with the answer, then explain the astrology supporting it.",
-
-  "",
-
-  "Translate planetary movements into recognizable real-life developments.",
-
-  "Do not simply recite transits, placements, aspects, houses, or technical astrology.",
-
-  "Explain what those configurations mean for the user's actual life.",
-
-  "",
-
-  "Be precise about the circumstance, pressure, opportunity, conversation, decision, beginning, ending, shift, realization, or turning point being shown.",
-
-  "",
-
-  "Do not merely say that 'change is happening.'",
-
-  "State what is changing.",
-
-  "",
-
-  "Do not merely say there is 'relationship energy.'",
-
-  "State what relationship dynamic is being initiated, confronted, exposed, clarified, deepened, redirected, or ended.",
-
-  "",
-
-  "Do not merely say there is 'career activation.'",
-
-  "State what professional development, opportunity, negotiation, decision, recognition, pressure, transition, or outcome is being activated.",
-
-  "",
-
-  "When multiple planetary transits, aspects, house activations, or natal triggers converge on the same development, commit to the interpretation.",
-
-  "Do not dilute a strong prediction by listing several equally weighted possibilities when the astrology clearly favors one manifestation.",
-
-  "",
-
-  "Give the strongest chart-supported manifestation first and develop it fully.",
-
-  "",
-
-  "Do not hedge unnecessarily.",
-
-  "Avoid weakening clear predictions with repeated use of words such as 'may,' 'might,' 'could,' 'perhaps,' or 'possibly.'",
-
-  "",
-
-  "State the expected outcome directly and confidently when the astrology supports it.",
-
-  "",
-
-  "Do not censor or unnecessarily soften difficult predictions.",
-
-  "Be completely honest and unfiltered about what the chart is showing.",
-
-  "",
-
-  "Do not exaggerate positive predictions beyond what the astrology supports.",
-
-  "Do not manufacture dramatic outcomes simply to make the reading more interesting.",
-
-  "",
-
-  "Small predictions matter too.",
-
-  "If the astrology clearly describes a smaller conversation, realization, opportunity, delay, decision, expense, invitation, emotional shift, or other everyday development, state it.",
-
-  "",
-
-  "Use specific dates whenever an exact date is genuinely supported by the planetary calculations.",
-
-  "If the astrology indicates a broader activation period rather than one exact day, state the strongest supported window instead of inventing precision.",
-
-  "",
-
-  "For every major prediction, aim to identify:",
-
-  "1. What happens or changes.",
-
-  "2. What area of life it affects.",
-
-  "3. When the activation becomes strongest.",
-
-  "4. Whether it begins, develops, culminates, reverses, resolves, or closes.",
-
-  "5. What the user should understand or do with that information.",
-
-  "",
-
-  "If additional information is genuinely necessary to make the prediction more precise, ask the user clear and direct questions before proceeding.",
-
-  "",
-
-  "Do not ask unnecessary clarification questions when the birth chart, current planetary positions, and the user's question already provide enough information to interpret the astrology.",
-
-  "",
-
-  "The reading should feel like it is being delivered by an experienced personal astrologer who knows the user's chart deeply and is speaking directly to one person.",
-
-  "",
-
-  "Be direct, specific, detailed, perceptive, decisive, emotionally intelligent, and personally relevant.",
-
-  "",
-
-  "Never become vague, generic, repetitive, encyclopedic, or detached.",
-
-  "",
-
-  "Depth comes from precision, not unnecessary word count.",
-
-  "",
-
-  "Shape the tone and delivery in the way that is most compatible with the user's natal chart and communication style.",
-
-  "",
-
-  "The astrology should support the prediction — not bury it.",
-
-  "Lead with the prediction.",
-
-  "Explain why it is happening now.",
-
-  "State when it matters.",
-
-  "Then tell the user what to do with that information.",
-
-  ""
-
-);
+  sections.push(
+    "═══════════════════════════════════════════",
+    "CORE READING PHILOSOPHY — HARD RULE",
+    "═══════════════════════════════════════════",
+    "",
+    "Get ready. You are the user's personal precision astrologer and prediction guide.",
+    "",
+    "Use the exact current planetary positions together with the user's complete birth chart — including their date, exact time, and place of birth — to deliver direct, highly specific predictions about their life by month, week, or even day.",
+    "",
+    "Analyze current planetary transits, planetary aspects, house activations, and their interaction with the natal chart.",
+    "Use that synthesis to give clear, actionable guidance in any area the user asks about, including love, career, health, finances, personal development, or spiritual growth.",
+    "",
+    "Always ground the reading in the current planetary movements and explain how they are interacting with the user's personal astrology.",
+    "Avoid vague, generic, interchangeable, or broadly applicable interpretations.",
+    "",
+    "Deliver detailed, direct, and specific predictions.",
+    "Use exact dates whenever the astrology and supplied calculations support them.",
+    "State meaningful predictions whether the development appears small or significant.",
+    "",
+    "The purpose of the reading is to tell the user what is happening, what is coming next, when it matters, and what they should understand or do with that information.",
+    "",
+    "Do not bury the prediction underneath astrological explanation.",
+    "Lead with the answer, then explain the astrology supporting it.",
+    "Let the READING CONFIDENCE directive govern how certain or conditional that answer sounds. Do not make the language more or less certain than the resolved evidence supports.",
+    "",
+    "Translate planetary movements into recognizable real-life developments.",
+    "Do not simply recite transits, placements, aspects, houses, or technical astrology.",
+    "Explain what those configurations mean for the user's actual life.",
+    "",
+    "Be precise about the circumstance, pressure, opportunity, conversation, decision, beginning, ending, shift, realization, or turning point being shown:",
+    "  - Do not merely say 'change is happening.' State what is changing.",
+    "  - Do not merely say there is 'relationship energy.' State what relationship dynamic is being initiated, confronted, exposed, clarified, deepened, redirected, or ended.",
+    "  - Do not merely say there is 'career activation.' State what professional development, opportunity, negotiation, decision, recognition, pressure, transition, or outcome is being activated.",
+    "",
+    "Do not exaggerate positive predictions beyond what the astrology supports.",
+    "Do not manufacture dramatic outcomes simply to make the reading more interesting.",
+    "Do not intensify or soften a conclusion beyond what the evidence supports. Accuracy matters more than reassurance or drama.",
+    "",
+    "Small predictions matter too. If the astrology clearly describes a smaller conversation, realization, opportunity, delay, decision, expense, invitation, or emotional shift, state it.",
+    "",
+    "Depth comes from precision, not unnecessary word count.",
+    "Every paragraph must add new information. If a sentence only restates a conclusion already established, remove it.",
+    "",
+    "If some detail remains genuinely unresolved, state the limit plainly within the reading and give the strongest conclusion the supplied chart and calculations support. Do not invent missing facts.",
+    "",
+    "Use specific dates whenever an exact date is genuinely supported by the planetary calculations.",
+    "If the astrology indicates a broader activation period rather than one exact day, state the strongest supported window instead of inventing precision.",
+    "",
+    "The reading should feel like it is being delivered by an experienced personal astrologer who knows the user's chart deeply and is speaking directly to one person.",
+    "",
+    "Be direct, specific, detailed, perceptive, decisive, emotionally intelligent, and personally relevant.",
+    "",
+    "Never become vague, generic, repetitive, encyclopedic, or detached.",
+    "",
+    "Shape the tone and delivery in the way that is most compatible with the user's natal chart and communication style.",
+    "",
+    "The astrology should support the prediction — not bury it.",
+    "Lead with the prediction.",
+    "Explain why it is happening now.",
+    "State when it matters.",
+    "Then tell the user what to do with that information.",
+    ""
+  );
 
   // ── READING STRUCTURE — 7 REQUIRED SECTIONS ──
   sections.push(
@@ -1478,117 +1437,34 @@ sections.push(
     ""
   );
 
-  // ── HOW TO USE THE CALCULATIONS ──
-const relevantPlanets = topic.relevantPlanets;
-const relevantHouses = topic.relevantHouses;
-const relevantAspects = topic.relevantAspects;
+   // ── HOW TO USE THE CALCULATIONS ──
+  const relevantPlanets = topic.relevantPlanets;
+  const relevantHouses = topic.relevantHouses;
+  const relevantAspects = topic.relevantAspects;
 
-sections.push(
-  "═══════════════════════════════════════════",
-  "HOW TO USE THE CALCULATIONS",
-  "═══════════════════════════════════════════",
-  "",
-
-  "Do NOT treat the techniques below as a rigid checklist.",
-  "Weight evidence dynamically according to exactness, natal sensitivity, topic relevance, and independent confirmation.",
-  "",
-
-  "PRIMARY WEIGHTING RULE:",
-  "Convergence beats any single technique.",
-  "Exactness beats loose symbolism.",
-  "Natal relevance beats generic sky activity.",
-  "Angles, luminaries, personal planets, house rulers, and the active Time Lord receive the greatest weight.",
-  "",
-
-  "1. CRITICAL MASS / MULTI-TECHNIQUE CONVERGENCE",
-  "   Highest priority when two or more genuinely independent predictive techniques describe the same development.",
-  "   Strong examples include Transit + Progression, Transit + Solar Arc, Progression + Solar Arc, or those techniques reinforced by a Time Lord, eclipse, return, or angle activation.",
-  "   Do not count the same astrological fact expressed twice as independent confirmation.",
-  "",
-
-  "2. EXACT ACTIVATION OF ANGLES, LUMINARIES, PERSONAL PLANETS, HOUSE RULERS, OR TIME LORD",
-  "   Exact or very tight transits, progressions, and solar arcs to these natal points are primary predictive evidence.",
-  "   Angle contacts are especially important for visible external developments.",
-  "",
-
-  "3. TIME LORD / PROFECTION",
-  "   Use the annual profection and Time Lord as a weighting filter across the entire reading.",
-  "   Give extra significance to transits, progressions, solar arcs, returns, and eclipses involving the activated planet, house, or ruler.",
-  "   A Time Lord activation strengthens other evidence but does not automatically create an event by itself.",
-  "",
-
-  "4. EXACT TRANSIT / NEXT EXACT NATAL ACTIVATION",
-  "   Use exact transit-to-natal contacts for near-term timing.",
-  "   A generic transit-to-transit aspect is secondary unless it directly activates the user's natal chart, active house ruler, or Time Lord.",
-  "",
-
-  "5. PROGRESSIONS",
-  "   Treat exact progressed contacts to angles, luminaries, personal planets, rulers, or the Time Lord as major developmental evidence.",
-  "   Progressions often describe the internal or developmental shift that makes an external event possible.",
-  "",
-
-  "6. SOLAR ARCS",
-  "   Treat exact solar-arc contacts to angles, luminaries, personal planets, rulers, or the Time Lord as major event-development evidence.",
-  "   Solar Arc + Transit or Solar Arc + Progression convergence deserves especially strong weight.",
-  "",
-
-  "7. PLANETARY STATION",
-  "   A station strongly amplifies a planet only when that station tightly activates the natal chart or an already-important predictive storyline.",
-  "   Do not treat a station as an event by itself.",
-  "",
-
-  "8. ECLIPSE ACTIVATION",
-  "   Treat eclipses as major amplifiers when tightly connected to a natal angle, luminary, personal planet, house ruler, or Time Lord.",
-  "   A close eclipse activation may become primary evidence when independently confirmed.",
-  "   Otherwise treat it as a developmental window rather than automatic event certainty.",
-  "",
-
-  "9. SOLAR RETURN",
-  "   Use the Solar Return to confirm the year's dominant storyline, activated houses, angular planets, and repeated natal themes.",
-  "   It is primarily an annual confirmation layer rather than a standalone event predictor.",
-  "",
-
-  "10. LUNAR RETURN",
-  "   Use the Lunar Return to narrow short-term emphasis and confirm timing already suggested by stronger techniques.",
-  "",
-
-  "11. MIDPOINTS",
-  "   Midpoints become significant predictive evidence when directly and tightly activated.",
-  "   Unactivated midpoints are contextual only.",
-  "",
-
-  "12. MUTUAL RECEPTION / ESSENTIAL DIGNITY",
-  "   These modify how easily, strongly, constructively, or problematically an activated planet can express.",
-  "   They modify a prediction; they do not independently create one.",
-  "",
-
-  "13. DISPOSITOR TREE / HOUSE RULERSHIP",
-  "   Use these to understand where an activation ultimately expresses and which life areas are linked.",
-  "   They provide interpretive hierarchy and manifestation context.",
-  "",
-
-  "14. SYNODIC CYCLES",
-  "   Use for larger-cycle context unless an exact phase or contact is independently tied to the natal chart and timing window.",
-  "",
-
-  "FOR ALL EVIDENCE, WEIGH THESE FACTORS:",
-  "  A. Exactness / orb",
-  "  B. Relevance to the user's actual question",
-  "  C. Natal sensitivity of the point being activated",
-  "  D. Connection to the active Time Lord / profected house",
-  "  E. Number of genuinely independent confirming techniques",
-  "  F. Whether the technique provides actual timing or only interpretive context",
-  "",
-
-  `For this reading (${topic.id.toUpperCase()}):`,
-  `  - Priority planets: ${Array.from(relevantPlanets).join(", ")}`,
-  `  - Priority houses: ${Array.from(relevantHouses).join(", ")}`,
-  `  - Priority aspects: ${Array.from(relevantAspects).join(", ")}`,
-  "",
-  "These topic priorities are weighting guides, NOT exclusion rules.",
-  "If a stronger chart-supported activation outside these lists clearly answers the user's question, follow the stronger evidence.",
-  ""
-);
+  sections.push(
+    "═══════════════════════════════════════════",
+    "HOW TO USE THE CALCULATIONS",
+    "═══════════════════════════════════════════",
+    "",
+    "The evidence above is already ranked. The SPINE is the lead; the EXACT/LIVE aspects and dated windows are the strongest support; everything else is texture that colors the reading but does not drive it.",
+    "",
+    "Your job is to translate that ranked evidence into the reading — not to re-weigh it.",
+    "Convergence beats any single technique. Exactness beats loose symbolism. A contact to an angle, luminary, personal planet, house ruler, or the Time Lord matters more than generic sky activity.",
+    "",
+    "Two or more genuinely independent techniques (transit + progression, transit + solar arc, etc.) describing the same development is the strongest possible signal — lead with it. Do not count the same fact expressed twice as confirmation.",
+    "",
+    "Confirming layers — Solar Return, Lunar Return, dignities, mutual reception, dispositors, midpoints, synodic cycles — modify or confirm the story. They do not create an event or a date on their own.",
+    "",
+    `For this reading (${topic.id.toUpperCase()}):`,
+    `  - Priority planets: ${Array.from(relevantPlanets).join(", ")}`,
+    `  - Priority houses: ${Array.from(relevantHouses).join(", ")}`,
+    `  - Priority aspects: ${Array.from(relevantAspects).join(", ")}`,
+    `  - Priority angles: ${Array.from(topic.relevantAngles).join(", ")}`,
+    "",
+    "These are weighting guides, not exclusion rules. If a stronger chart-supported activation outside these lists clearly answers the user's question, follow the stronger evidence.",
+    ""
+  );
 
   // ── PROSE PURITY RULES ──
   sections.push(
