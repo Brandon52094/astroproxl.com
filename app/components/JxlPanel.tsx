@@ -799,9 +799,20 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
         return;
       }
 
-      setResult(data as unknown as JxlResult);
-      if (!data.isSafeResponse) {
-        setHistory((prev) => [...prev, { question, answer: data.answer }]);
+      if (typeof data.title !== "string" || typeof data.answer !== "string") {
+        console.error("[jxl/panel] /api/jxl/ask returned an incomplete success payload", data);
+        setError("JXL returned an incomplete reading. Check the server log for [jxl/ask].");
+        setDraft(question);
+        setPhase("composing");
+        setIsLoadingRingActive(false);
+        return;
+      }
+
+      const reading = data as unknown as JxlResult;
+
+      setResult(reading);
+      if (!reading.isSafeResponse) {
+        setHistory((prev) => [...prev, { question, answer: reading.answer }]);
       }
       setDraft("");
       setShowSources(false);
