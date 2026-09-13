@@ -1,8 +1,16 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useCallback } from "react";
-import { ChevronLeft, Minus, Plus } from "lucide-react";
-import StarfieldBackground from "./StarfieldBackground";
+import { motion, useReducedMotion } from "framer-motion";
+import {
+  ChevronLeft,
+  Crown,
+  Sparkles,
+  MessageCircleMore,
+  BookOpen,
+  Plus,
+  Minus,
+} from "lucide-react";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
 
 /* ─────────────────────────────────────────────
@@ -15,27 +23,31 @@ interface Product {
   id: ProductId;
   title: string;
   desc: string;
-  price: number; // in cents
+  price: number;
+  icon: React.ElementType;
 }
 
 const PRODUCTS: Product[] = [
   {
     id: "jxl",
     title: "JXL",
-    desc: "Includes 2 replies",
+    desc: `Premium ask-anything astrology · includes ${PRICING.jxl.includedReplies} replies`,
     price: PRICING.jxl.price,
+    icon: Sparkles,
   },
   {
     id: "reading",
-    title: "General Readings",
-    desc: "Includes 1 reply",
+    title: "General Reading",
+    desc: "One focused reading · includes 1 reply",
     price: PRICING.reading.price,
+    icon: BookOpen,
   },
   {
     id: "replies",
     title: "More Replies",
-    desc: "Works with any reading",
+    desc: "Add another reply to any eligible reading",
     price: PRICING.replies.priceEach,
+    icon: MessageCircleMore,
   },
 ];
 
@@ -45,58 +57,51 @@ interface Balance {
   replies: number;
 }
 
-/* ─────────────────────────────────────────────
-   Membership
-───────────────────────────────────────────── */
-
 const MEMBERSHIP_FEATURES = [
-  {
-    title: "Unlimited Readings + JXL",
-    copy: "Unlimited General Readings and JXL sessions, with up to 8 replies per conversation.",
-  },
-  {
-    title: "Members-Only Features",
-    copy: "Unlock experiences, tools, and content reserved for XL members.",
-  },
-  {
-    title: "Save Your Readings (beta)",
-    copy: "Save your reading synopsis so you don't forget.",
-  },
-  {
-    title: "Commission Eligible (request only)",
-    copy: "Earn 1–5% recurring commission with subscription referrals.",
-  },
-  {
-    title: "Member Feedback Box",
-    copy: "Send your ideas, requests, and feedback directly to us.",
-  },
+  "Unlimited General Readings + JXL sessions",
+  "Up to 8 replies per conversation",
+  "Members-only tools and content",
+  "Save reading synopses (beta)",
+  "Referral commission eligibility by request",
 ];
-
-/* ─────────────────────────────────────────────
-   Reply pricing - removed bundle logic
-   Now just $1 each, no bulk discount
-───────────────────────────────────────────── */
 
 function plural(n: number, one: string, many?: string): string {
   return n === 1 ? one : many ?? `${one}s`;
 }
 
-/* Respect the OS "reduce motion" setting for our own CSS animations. */
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const on = () => setReduced(mq.matches);
-    on();
-    mq.addEventListener?.("change", on);
-    return () => mq.removeEventListener?.("change", on);
-  }, []);
-  return reduced;
-}
-
 /* ─────────────────────────────────────────────
-   Component
+   Shared visual language
 ───────────────────────────────────────────── */
+
+function PanelCard({
+  icon: Icon,
+  label,
+  children,
+  className = "",
+}: {
+  icon: React.ElementType;
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={[
+        "standard-shadow rounded-[24px] border border-white/10",
+        "bg-white/[0.03] p-4 backdrop-blur-sm",
+        className,
+      ].join(" ")}
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <Icon className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
+        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+          {label}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export default function CreditsPanel({
   onClose,
@@ -105,7 +110,7 @@ export default function CreditsPanel({
   onClose?: () => void;
   embedded?: boolean;
 }) {
-  const reducedMotion = useReducedMotion();
+  const shouldReduceMotion = useReducedMotion();
 
   const [cart, setCart] = useState<Record<ProductId, number>>({
     jxl: 0,
@@ -128,35 +133,44 @@ export default function CreditsPanel({
           replies: Number(d.replyCredits ?? 0),
         });
       } catch {
-        // Balance line simply stays hidden.
+        // Balance stays hidden if this endpoint is unavailable.
       }
     })();
   }, []);
 
   const step = useCallback((id: ProductId, amount: number) => {
-    setCart((current) => ({ ...current, [id]: Math.max(0, current[id] + amount) }));
+    setCart((current) => ({
+      ...current,
+      [id]: Math.max(0, current[id] + amount),
+    }));
   }, []);
 
-  const total = useMemo(() => {
-    // Simple cart math: quantity × price (all in cents)
-    const totalCents =
+  const total = useMemo(
+    () =>
       cart.jxl * PRICING.jxl.price +
       cart.reading * PRICING.reading.price +
-      cart.replies * PRICING.replies.priceEach;
-    return totalCents;
-  }, [cart]);
+      cart.replies * PRICING.replies.priceEach,
+    [cart]
+  );
+
+  const selectedItems = useMemo(
+    () => Object.values(cart).reduce((sum, qty) => sum + qty, 0),
+    [cart]
+  );
 
   /* ── Credit checkout ── */
   const handleCheckout = async () => {
     if (total <= 0) return;
     setLoading(true);
     setError("");
+
     try {
       const items = [
         ...(cart.jxl > 0 ? [{ id: "jxl", quantity: cart.jxl }] : []),
         ...(cart.reading > 0 ? [{ id: "reading", quantity: cart.reading }] : []),
         ...(cart.replies > 0 ? [{ id: "replies", quantity: cart.replies }] : []),
       ];
+
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,7 +180,9 @@ export default function CreditsPanel({
           returnUrl: `${window.location.origin}/reading/intake`,
         }),
       });
+
       const data = await res.json();
+
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -208,381 +224,322 @@ export default function CreditsPanel({
     }
   };
 
-  const C = STYLES;
+  // Same star recipe as Today's Sky and Birth Chart so this page belongs to
+  // the same visual family instead of feeling like a separate storefront.
+  const stars = useMemo(
+    () =>
+      Array.from({ length: 68 }).map((_, i) => ({
+        id: i,
+        left: `${(i * 37) % 100}%`,
+        top: `${(i * 19 + 13) % 100}%`,
+        size: i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5,
+        opacity: i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34,
+        delay: (i * 0.37) % 4,
+      })),
+    []
+  );
+
+  const rootClass = embedded
+    ? "relative min-h-full w-full overflow-visible font-sans text-slate-100"
+    : "fixed inset-0 z-50 min-h-screen w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
 
   return (
-    <div style={{ ...C.root, ...(embedded ? C.rootEmbedded : {}) }}>
-      <StarfieldBackground />
+    <div
+      className={rootClass}
+      style={{
+        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
+      {/* Continuous AstroPro sky */}
+      <div
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        aria-hidden="true"
+      >
+        {stars.map((star) => (
+          <motion.span
+            key={star.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+            }}
+            animate={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    opacity: [
+                      star.opacity * 0.4,
+                      star.opacity * 1.6,
+                      star.opacity * 0.4,
+                    ],
+                    scale: [1, 1.6, 1],
+                  }
+            }
+            transition={
+              shouldReduceMotion
+                ? undefined
+                : {
+                    duration: 2.34 + (star.id % 5) * 0.54,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: star.delay,
+                  }
+            }
+          />
+        ))}
+      </div>
 
       {!embedded && (
-        <button type="button" onClick={onClose} style={C.back} aria-label="Back">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Back"
+          className="fixed left-4 top-[calc(14px+env(safe-area-inset-top))] z-[100] flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#050816]/60 text-slate-300 backdrop-blur-md transition hover:bg-white/[0.06]"
+        >
           <ChevronLeft size={17} />
         </button>
       )}
 
-      <div style={C.container}>
-        {/* ── MEMBERSHIP ── */}
-        <section style={C.membershipFrame}>
-          <div style={C.leftBracket}>
-            <span style={C.leftBracketTop} />
-            <span style={C.leftBracketBottom} />
-          </div>
-          <div style={C.rightBracket}>
-            <span style={C.rightBracketTop} />
-            <span style={C.rightBracketBottom} />
-          </div>
+      <div
+        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-16"
+        style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
+      >
+        {/* ── HERO ── */}
+        <motion.header
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="mb-6 text-center"
+        >
+          <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+            Credits & Access
+          </p>
+          <h1 className="mt-1 text-[22px] font-light tracking-tight text-white">
+            Choose what fits
+          </h1>
+          <p className="mx-auto mt-2 max-w-[300px] text-[12px] leading-5 text-slate-400">
+            Subscribe for full access, or add only the readings and replies you need.
+          </p>
+        </motion.header>
 
-          <div style={C.membershipPrice}>
-            {formatUsd(PRICING.membership.price)}
-            <span style={C.priceUnit}>/mo</span>
-          </div>
-
-          <div style={C.membershipTitle}>MEMBERSHIP</div>
-
-          {reducedMotion ? (
-            <div style={C.membershipContentStatic}>
-              {MEMBERSHIP_FEATURES.map((feature) => (
-                <div key={feature.title} style={C.featureRow}>
-                  <span style={C.featureName}>{feature.title}</span>
-                  <span style={C.featureCopy}>{feature.copy}</span>
+        <motion.div
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
+          className="space-y-3"
+        >
+          {/* ── BALANCE — data-first like the sibling panels ── */}
+          {balance && (
+            <PanelCard icon={Sparkles} label="Your Balance">
+              <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
+                <div className="px-2 text-center">
+                  <p className="text-[26px] font-extralight leading-none text-white tabular-nums">
+                    {balance.readings}
+                  </p>
+                  <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                    {plural(balance.readings, "Reading")}
+                  </p>
                 </div>
-              ))}
+                <div className="px-2 text-center">
+                  <p className="text-[26px] font-extralight leading-none text-white tabular-nums">
+                    {balance.jxl}
+                  </p>
+                  <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                    JXL
+                  </p>
+                </div>
+                <div className="px-2 text-center">
+                  <p className="text-[26px] font-extralight leading-none text-white tabular-nums">
+                    {balance.replies}
+                  </p>
+                  <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                    {plural(balance.replies, "Reply", "Replies")}
+                  </p>
+                </div>
+              </div>
+            </PanelCard>
+          )}
+
+          {/* ── MEMBERSHIP — premium, but still in the same family ── */}
+          <div
+            className="standard-shadow relative overflow-hidden rounded-[24px] border bg-black/20 p-5 backdrop-blur-sm"
+            style={{
+              borderColor: "rgba(251,191,36,0.42)",
+              boxShadow:
+                "0 0 24px rgba(245,158,11,0.10), inset 0 0 18px rgba(245,158,11,0.05)",
+            }}
+          >
+            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/50 to-transparent" />
+
+            <div className="flex items-start gap-4">
+              <div
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-black/20"
+                style={{
+                  borderColor: "rgba(251,191,36,0.48)",
+                  boxShadow:
+                    "0 0 22px rgba(245,158,11,0.14), inset 0 0 14px rgba(245,158,11,0.08)",
+                }}
+              >
+                <Crown className="h-6 w-6 text-amber-300/90" strokeWidth={1.8} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-amber-300/70">
+                  XL Membership
+                </p>
+                <div className="mt-1 flex items-end gap-1.5">
+                  <span className="text-[30px] font-light leading-none text-white tabular-nums">
+                    {formatUsd(PRICING.membership.price)}
+                  </span>
+                  <span className="pb-0.5 text-[11px] text-slate-500">/ month</span>
+                </div>
+                <p className="mt-2 text-[12px] leading-5 text-slate-400">
+                  The simplest way to use AstroPro without counting individual readings.
+                </p>
+              </div>
             </div>
-          ) : (
-            <div style={C.membershipWindow}>
-              <div style={C.membershipTrack}>
-                {[...MEMBERSHIP_FEATURES, ...MEMBERSHIP_FEATURES].map((feature, i) => (
-                  <div key={i} style={C.featureRowScroll}>
-                    <span style={C.featureName}>{feature.title}</span>
-                    <span style={C.featureCopy}>{feature.copy}</span>
+
+            <div className="mt-5 border-t border-white/[0.06] pt-4">
+              <div className="space-y-2.5">
+                {MEMBERSHIP_FEATURES.map((feature) => (
+                  <div key={feature} className="flex items-start gap-2.5">
+                    <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-amber-300/70" />
+                    <span className="text-[12px] leading-5 text-slate-300">
+                      {feature}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
-          )}
 
-          <button
-            type="button"
-            onClick={handleGetAccess}
-            style={C.getAccess}
-            disabled={loading}
-          >
-            {loading ? "Opening..." : "SUBSCRIBE"}
-            {!reducedMotion && !loading && <span style={C.shimmerSweep} />}
-          </button>
-        </section>
-
-        {/* ── PRODUCTS ── */}
-        <div style={C.products}>
-          {PRODUCTS.map((product) => {
-            const quantity = cart[product.id];
-            const isReplies = product.id === "replies";
-            const displayedPrice = product.price;
-
-            return (
-              <div key={product.id} style={C.selector}>
-                {quantity > 0 && (
-                  <div style={C.inventoryCircle}>{quantity}</div>
-                )}
-
-                <button
-                  type="button"
-                  aria-label={`Remove ${product.title}`}
-                  onClick={() => step(product.id, -1)}
-                  disabled={quantity <= 0}
-                  style={{ ...C.stepBtn, ...(quantity <= 0 ? C.stepBtnDisabled : {}) }}
-                >
-                  <Minus size={18} />
-                </button>
-
-                <div style={C.selectorCenter}>
-                  <div style={C.selectorTitle}>{product.title}</div>
-                  <div style={C.selectorMeta}>
-                    {isReplies && quantity > 0
-                      ? `${product.desc} · ${formatUsd(displayedPrice)} selected`
-                      : `${product.desc} · ${formatUsd(displayedPrice)}`}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  aria-label={`Add ${product.title}`}
-                  onClick={() => step(product.id, 1)}
-                  style={C.stepBtn}
-                >
-                  <Plus size={18} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* ── BALANCE (directly under the last product row) ── */}
-        {balance && (
-          <p style={C.balanceLine}>
-            You currently have <b style={C.balanceStrong}>{balance.readings}</b>{" "}
-            {plural(balance.readings, "reading")}, <b style={C.balanceStrong}>{balance.jxl}</b> JXL,
-            and <b style={C.balanceStrong}>{balance.replies}</b>{" "}
-            {plural(balance.replies, "reply", "replies")}.
-          </p>
-        )}
-
-        {/* ── CHECKOUT ── */}
-        <div style={C.checkoutWrap}>
-          <button
-            type="button"
-            onClick={handleCheckout}
-            disabled={total <= 0 || loading}
-            style={{
-              ...C.checkout,
-              ...(total <= 0 || loading ? C.checkoutDisabled : C.checkoutEnabled),
-              ...(!reducedMotion && total > 0 && !loading ? C.checkoutPulse : {}),
-            }}
-          >
-            {loading ? "One moment…" : "CHECKOUT"}
-          </button>
-
-          <div style={C.totalRow}>
-            <span style={C.totalLabel}>Total :</span>
-            <span style={C.totalPrice}>{formatUsd(total)}</span>
+            <button
+              type="button"
+              onClick={handleGetAccess}
+              disabled={loading}
+              className="mt-5 flex h-12 w-full items-center justify-center rounded-2xl border border-amber-300/40 bg-amber-300/[0.07] text-[11px] font-medium uppercase tracking-[0.18em] text-amber-100 transition hover:bg-amber-300/[0.11] disabled:cursor-default disabled:opacity-50"
+            >
+              {loading ? "Opening…" : "Subscribe"}
+            </button>
           </div>
 
-          {error && (
-            <div role="alert" style={C.errorLine}>
-              {error}
-            </div>
-          )}
-        </div>
+          {/* ── BUY AS YOU GO ── */}
+          <div className="pt-3">
+            <p className="mb-3 text-center text-[10px] uppercase tracking-[0.22em] text-slate-600">
+              Or buy as you go
+            </p>
 
-        <style>{`
-          @keyframes element-shine {
-            0%   { transform: translateX(-140%) skewX(-18deg); }
-            60%  { transform: translateX(240%) skewX(-18deg); }
-            100% { transform: translateX(240%) skewX(-18deg); }
-          }
-          @keyframes membership-marquee {
-            from { transform: translateY(0); }
-            to   { transform: translateY(-50%); }
-          }
-          @keyframes checkout-pulse {
-            0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.22), 0 0 14px rgba(45,212,191,0.28); }
-            50%      { box-shadow: 0 0 0 1px rgba(255,255,255,0.30), 0 0 22px rgba(45,212,191,0.42); }
-          }
-          @media (prefers-reduced-motion: reduce) {
-            * { animation: none !important; }
-          }
-        `}</style>
+            <div className="space-y-3">
+              {PRODUCTS.map((product) => {
+                const Icon = product.icon;
+                const quantity = cart[product.id];
+
+                return (
+                  <div
+                    key={product.id}
+                    className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-black/20">
+                        <Icon
+                          className="h-4 w-4 text-slate-400"
+                          strokeWidth={2}
+                        />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-medium text-white">
+                          {product.title}
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                          {product.desc}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-[14px] font-medium text-slate-200 tabular-nums">
+                          {formatUsd(product.price)}
+                        </p>
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">
+                          each
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-3">
+                      <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                        Quantity
+                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Remove ${product.title}`}
+                          onClick={() => step(product.id, -1)}
+                          disabled={quantity <= 0}
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-25"
+                        >
+                          <Minus size={15} />
+                        </button>
+
+                        <span className="w-7 text-center text-[14px] font-medium text-white tabular-nums">
+                          {quantity}
+                        </span>
+
+                        <button
+                          type="button"
+                          aria-label={`Add ${product.title}`}
+                          onClick={() => step(product.id, 1)}
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:bg-white/[0.06]"
+                        >
+                          <Plus size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── CHECKOUT ── */}
+          <PanelCard icon={Sparkles} label="Checkout">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                  {selectedItems === 0
+                    ? "Nothing selected"
+                    : `${selectedItems} ${plural(selectedItems, "item")} selected`}
+                </p>
+                <p className="mt-1 text-[28px] font-light leading-none text-white tabular-nums">
+                  {formatUsd(total)}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCheckout}
+                disabled={total <= 0 || loading}
+                className="h-11 rounded-2xl border border-teal-300/35 bg-teal-300/[0.07] px-5 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-100 transition hover:bg-teal-300/[0.11] disabled:cursor-default disabled:opacity-30"
+              >
+                {loading ? "One moment…" : "Checkout"}
+              </button>
+            </div>
+
+            {error && (
+              <p
+                role="alert"
+                className="mt-3 border-t border-white/[0.06] pt-3 text-center text-[11px] leading-4 text-red-300"
+              >
+                {error}
+              </p>
+            )}
+          </PanelCard>
+        </motion.div>
       </div>
     </div>
   );
 }
-
-/* ─────────────────────────────────────────────
-   Styles
-───────────────────────────────────────────── */
-
-const GOLD = "rgba(251,191,36,0.72)";
-const TEAL = "rgba(45,212,191,0.85)";
-const BORDER = "rgba(148,163,184,0.24)";
-const PANEL = "#050816";
-
-// Softened depth — the old shadows were near-opaque and muddied the dark bg.
-const SHADOW_DEEP = "0 10px 24px rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.4)";
-const SHADOW_TEXT = "0 2px 8px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.55)";
-const SHADOW_DROP_GOLD = "drop-shadow(0 8px 12px rgba(0,0,0,0.8)) drop-shadow(0 2px 4px rgba(0,0,0,0.6))";
-
-const STYLES: Record<string, React.CSSProperties> = {
-  root: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 50,
-    background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
-    color: "#f1f5f9",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    overflowY: "auto",
-    overflowX: "hidden",
-    WebkitOverflowScrolling: "touch",
-  },
-  rootEmbedded: {
-    position: "relative",
-    inset: "auto",
-    zIndex: "auto",
-    width: "100%",
-    minHeight: "100%",
-    height: "auto",
-    overflowY: "visible",
-  },
-  back: {
-    position: "fixed",
-    top: "calc(14px + env(safe-area-inset-top))",
-    left: 18,
-    zIndex: 100,
-    width: 40,
-    height: 40,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "rgba(5,8,22,0.55)",
-    border: `1px solid ${BORDER}`,
-    borderRadius: "50%",
-    color: "#cbd5e1",
-    cursor: "pointer",
-    backdropFilter: "blur(8px)",
-    boxShadow: SHADOW_DEEP,
-  },
-  container: {
-    position: "relative",
-    zIndex: 10,
-    width: "100%",
-    maxWidth: 420,
-    margin: "0 auto",
-    padding: `calc(8px + env(safe-area-inset-top)) 22px calc(64px + env(safe-area-inset-bottom))`,
-    minHeight: "100vh",
-    boxSizing: "border-box",
-  },
-
-  /* MEMBERSHIP FRAME — brackets kept as the panel's signature */
-  membershipFrame: {
-    position: "relative",
-    padding: "82px 36px 68px",
-    minHeight: 430,
-  },
-  leftBracket: {
-    position: "absolute", top: 22, bottom: 22, left: 0, width: 52,
-    borderLeft: `1.5px solid ${GOLD}`, pointerEvents: "none", filter: SHADOW_DROP_GOLD,
-  },
-  leftBracketTop: { position: "absolute", left: 0, top: 0, width: 52, height: 1.5, background: GOLD },
-  leftBracketBottom: { position: "absolute", left: 0, bottom: 0, width: 52, height: 1.5, background: GOLD },
-  rightBracket: {
-    position: "absolute", top: 22, bottom: 22, right: 0, width: 52,
-    borderRight: `1.5px solid ${GOLD}`, pointerEvents: "none", filter: SHADOW_DROP_GOLD,
-  },
-  rightBracketTop: { position: "absolute", right: 0, top: 0, width: 52, height: 1.5, background: GOLD },
-  rightBracketBottom: { position: "absolute", right: 0, bottom: 0, width: 52, height: 1.5, background: GOLD },
-
-  membershipPrice: {
-    position: "absolute",
-    left: "50%",
-    bottom: 58,
-    transform: "translateX(-50%)",
-    padding: "4px 8px",
-    color: "#fcd34d",
-    fontSize: 14,
-    fontWeight: 700,
-    letterSpacing: "0.02em",
-    fontVariantNumeric: "tabular-nums",
-    textShadow: "0 2px 8px rgba(0,0,0,0.85), 0 0 10px rgba(251,191,36,0.28)",
-    whiteSpace: "nowrap",
-  },
-
-  membershipTitle: {
-    position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 3,
-    padding: "0 18px", background: PANEL, color: "#fcd34d",
-    fontSize: 10, fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase", whiteSpace: "nowrap",
-  },
-  membershipContentStatic: { display: "flex", flexDirection: "column", gap: 18 },
-  membershipWindow: {
-    position: "relative",
-    height: 258,
-    overflow: "hidden",
-    WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%)",
-    maskImage: "linear-gradient(to bottom, transparent 0%, #000 16%, #000 84%, transparent 100%)",
-  },
-  membershipTrack: {
-    display: "flex",
-    flexDirection: "column",
-    willChange: "transform",
-    animation: "membership-marquee 24s linear infinite",
-  },
-  featureRow: { lineHeight: 1.3, textAlign: "center" },
-  featureRowScroll: { lineHeight: 1.3, textAlign: "center", marginBottom: 26 },
-  featureName: {
-    display: "block", fontSize: 13, fontWeight: 500, color: "#f8fafc",
-    letterSpacing: "0.01em",
-  },
-  featureCopy: {
-    display: "block", fontSize: 11, color: "#94a3b8", marginTop: 3,
-    lineHeight: 1.45,
-  },
-
-  getAccess: {
-    position: "absolute", left: "50%", bottom: -4, transform: "translateX(-50%)", zIndex: 3,
-    overflow: "hidden", minWidth: 172, height: 50, padding: "0 28px", borderRadius: 16,
-    border: `1px solid ${GOLD}`,
-    background: "rgba(255,255,255,0.03)",
-    backdropFilter: "blur(4px)",
-    color: "#fff",
-    fontSize: 12, fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase",
-    cursor: "pointer",
-    boxShadow: "0 0 22px rgba(251,191,36,0.26), inset 0 0 14px rgba(251,191,36,0.14)",
-    whiteSpace: "nowrap",
-  },
-  shimmerSweep: {
-    position: "absolute", top: 0, bottom: 0, left: 0, width: "45%",
-    background:
-      "linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%)",
-    transform: "translateX(-140%) skewX(-18deg)",
-    animation: "element-shine 4.6s ease-in-out infinite",
-    pointerEvents: "none",
-  },
-
-
-  products: { display: "flex", flexDirection: "column", gap: 14 },
-  selector: {
-    position: "relative", minHeight: 86, display: "flex", alignItems: "center",
-    justifyContent: "space-between", gap: 10, padding: "14px 16px",
-    border: `1px solid ${BORDER}`, borderRadius: 20,
-    background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
-    boxShadow: SHADOW_DEEP,
-  },
-  stepBtn: {
-    flexShrink: 0, width: 40, height: 40, borderRadius: "50%",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    border: `1px solid ${BORDER}`, background: "rgba(255,255,255,0.04)",
-    color: "#f8fafc", cursor: "pointer", transition: "background 0.15s ease, opacity 0.15s ease",
-  },
-  stepBtnDisabled: { opacity: 0.28, cursor: "default", border: `1px solid rgba(148,163,184,0.12)` },
-  selectorCenter: {
-    flex: 1, minWidth: 0, textAlign: "center", display: "flex", flexDirection: "column",
-    alignItems: "center", gap: 3,
-  },
-  selectorTitle: {
-    fontSize: 18, fontWeight: 800, letterSpacing: "0.03em", color: "#fff",
-    textTransform: "uppercase", textShadow: SHADOW_TEXT,
-  },
-  selectorMeta: { fontSize: 11.5, color: "#a4b0c4" },
-  inventoryCircle: {
-    position: "absolute", top: -10, right: -8, minWidth: 28, height: 28, padding: "0 4px",
-    borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center",
-    border: "1px solid rgba(251,191,36,0.6)", background: "#07101d", color: "#fde68a",
-    fontSize: 11, fontWeight: 700, zIndex: 4, boxShadow: SHADOW_DEEP,
-  },
-
-  checkoutWrap: { display: "flex", flexDirection: "column", alignItems: "center", marginTop: 10, gap: 10 },
-  totalRow: {
-    display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6,
-  },
-  totalLabel: { fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6b7691" },
-  totalPrice: { color: "#cbd5e1", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em" },
-  checkout: {
-    height: 50, padding: "0 26px", minWidth: 168, borderRadius: 11, border: `1px solid ${TEAL}`,
-    background: PANEL, color: "#fff", fontSize: 13, fontWeight: 700, letterSpacing: "0.1em",
-    cursor: "pointer", whiteSpace: "nowrap", marginTop: 2,
-    transition: "opacity 0.4s ease, box-shadow 0.4s ease",
-  },
-  checkoutEnabled: {
-    opacity: 1,
-    boxShadow: "0 0 0 1px rgba(255,255,255,0.22), 0 0 14px rgba(45,212,191,0.28)",
-  },
-  checkoutPulse: { animation: "checkout-pulse 3s ease-in-out 0.6s infinite" },
-  checkoutDisabled: { opacity: 0.34, cursor: "default", boxShadow: "none", animation: "none" },
-  errorLine: {
-    fontSize: 11.5, color: "#fca5a5", textAlign: "center", maxWidth: 280, lineHeight: 1.4,
-    marginTop: 2,
-  },
-
-  balanceLine: {
-    textAlign: "center", fontSize: 11.5, lineHeight: 1.5, color: "#93a0b8", margin: "10px 2px 0",
-  },
-  balanceStrong: { color: "#dbe3f0", fontWeight: 700 },
-};
