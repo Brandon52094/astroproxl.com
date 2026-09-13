@@ -910,7 +910,7 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     '  "title": "Two To Four Words",',
     '  "answer": "Three substantial predictive paragraphs separated by \\n\\n: the prediction, why the astrology supports it, and what happens next.",',
     '  "windows": [ { "date": "August 3", "body": "The one strongest supported opportunity and what peaks or opens." } ],',
-    '  "directives": [ { "type": "DROP", "date": null, "body": "The single most important action or pattern to stop." } ],
+    '  "directives": [ { "type": "DROP", "date": null, "body": "The single most important action or pattern to stop." } ],',
     '  "sources": [ { "factor": "The core transit", "placements": "Transit Saturn in your 7th house opposite natal Sun" } ],',
     '  "confirmation": "One or two warm sentences naming what they already know."',
     "}",
