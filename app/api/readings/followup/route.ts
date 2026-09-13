@@ -562,9 +562,17 @@ function buildFollowupPrompt(body: FollowupRequestBody): string {
     return NL + lines.join(NL);
   })();
 
-  const voiceCalibrationBlock = buildVoiceCalibrationBlock(
-    tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))
-  );
+  const voiceHouseSigns = Object.fromEntries(
+  (houseRulers ?? []).map(({ house, sign }) => [house, sign])
+) as Partial<Record<number, string>>;
+
+const voiceCalibrationBlock = buildVoiceCalibrationBlock(topic, {
+  planets: tropical.planets.map((p) => ({
+    name: p.name,
+    sign: p.sign,
+  })),
+  houseSigns: voiceHouseSigns,
+});
 
   const conversationBlock = conversationHistory
     ? `PREVIOUS CONVERSATION:\n${conversationHistory}\n`

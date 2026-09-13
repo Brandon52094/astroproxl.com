@@ -1433,20 +1433,32 @@ export function buildReadingPrompt(
   // (Steps 32–44. AstroPro switches from astrologer/researcher → communicator.)
   // ============================================================
   sections.push(
-    "═══════════════════════════════════════════",
-    "STAGE 4 — GENERATE READING IN DESIGNATED STRUCTURE",
-    "═══════════════════════════════════════════",
-    "",
-    "The interpretation above is already resolved. Nothing below may change the evidence or the conclusion — it only governs how that conclusion is communicated.",
-    ""
-  );
+   "═══════════════════════════════════════════",
+"STAGE 4 — GENERATE READING IN DESIGNATED STRUCTURE",
+"═══════════════════════════════════════════",
+"",
+"The interpretation above is already resolved. Nothing below may change the evidence or the conclusion — it only governs how that conclusion is communicated.",
+""
+);
 
-  // Step 32 — Load SignVoice (moved here — receives the already-resolved interpretation)
-  sections.push(
-    "VOICE CALIBRATION (shapes delivery only — cannot change the evidence or conclusion):",
-    buildVoiceCalibrationBlock(tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))),
-    ""
-  );
+// Step 32 — Load SignVoice
+// SignVoice only controls how the already-resolved interpretation is communicated.
+
+const voiceHouseSigns = Object.fromEntries(
+  (houseRulers ?? []).map(({ house, sign }) => [house, sign])
+) as Partial<Record<number, string>>;
+
+sections.push(
+  "VOICE CALIBRATION (shapes delivery only — cannot change the evidence or conclusion):",
+  buildVoiceCalibrationBlock(topic.id, {
+    planets: tropical.planets.map((p) => ({
+      name: p.name,
+      sign: p.sign,
+    })),
+    houseSigns: voiceHouseSigns,
+  }),
+  ""
+);
 
   // Step 33 — Apply User-Facing Writing Standard (delivery half of old ASTROPRO_READING_STANDARD)
   sections.push(
