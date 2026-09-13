@@ -8,25 +8,33 @@ import {
   JXL_CONVERSATION_CAP_MESSAGE,
 } from "@/lib/jxlConfig";
 import { buildValidDateIndex, checkDateSupported } from "@/lib/validateReadingDates";
-import {
-  validateAndFilterAspects,
-} from "@/lib/reading/engine";
+import { validateAndFilterAspects } from "@/lib/reading/engine";
+import { PRICING } from "@/lib/paywallConfig";
+import type {
+  HouseRuler,
+  MutualReception,
+  EssentialDignity,
+  SynodicCycle,
+  Midpoint,
+  LunarReturn,
+  EclipseActivation,
+  TransitToAngle,
+  DispositorResult,
+} from "@/lib/astrologicalCalculations";
 
 /**
- * JXL — "ask anything" route.
+ * JXL — open-context premium astrology route.
  *
- * Built on the same architecture as /api/readings: the LANGUAGE RULE, the
- * ASPECT LAW, and the shared voice calibration. The differences are scope and
- * shape, not tone:
+ * Unlike regular Readings, JXL does not require the user to choose a preset
+ * topic first. They can speak or type any situation, problem, decision,
+ * pattern, or question. JXL determines the relevant life domains internally
+ * and may combine them when the situation genuinely crosses areas of life.
  *
- *   - The person brings a SPECIFIC situation instead of choosing a topic lane.
- *   - The answer is condensed: three paragraphs, no directives, no windows.
- *   - ONE date, and only when the ephemeris actually contains one. Otherwise
- *     the answer carries no date at all. It is never invented to fill a slot.
- *   - Every reply is COMPLETE. Nothing is withheld for a later reply.
+ * Reader-facing contract:
+ * REALITY → ASTROLOGICAL WHY → DIRECTION → OPPORTUNITY → OUTCOME
  *
- * This replaces /api/jxl/chat (the paused 6-phase version), which can be
- * deleted along with /api/jxl/session and the session-tier config.
+ * JXL may use useful astrology terminology when it immediately translates that
+ * terminology into the user's lived reality. Dates remain calculator-controlled.
  */
 
 const REPLIES_PER_SESSION = JXL_MAX_REPLIES_PER_CONVERSATION;
@@ -152,9 +160,97 @@ interface JxlAskBody {
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
   extendedPoints?: ExtendedPoints;
+
+  // Current AstroPro calculation channels. Optional so older clients still work.
+  houseRulers?: HouseRuler[];
+  mutualReceptions?: MutualReception[];
+  essentialDignities?: EssentialDignity[];
+  synodicCycles?: SynodicCycle[];
+  midpoints?: Midpoint[];
+  lunarReturn?: LunarReturn;
+  eclipseActivations?: EclipseActivation[];
+  transitsToAngles?: TransitToAngle[];
+  dispositorTree?: DispositorResult[];
 }
 
 const NL = "\n";
+
+type VoiceTopic = "love" | "career" | "money" | "general";
+type JxlDomain =
+  | "relationships"
+  | "career"
+  | "money"
+  | "home-family"
+  | "self-purpose"
+  | "wellbeing"
+  | "legal-contracts"
+  | "general";
+
+const DOMAIN_TERMS: Record<Exclude<JxlDomain, "general">, string[]> = {
+  relationships: [
+    "love", "relationship", "partner", "dating", "date", "boyfriend", "girlfriend",
+    "husband", "wife", "marriage", "married", "romance", "romantic", "breakup",
+    "break up", "ex", "connection", "crush", "friendship", "friend",
+  ],
+  career: [
+    "career", "job", "work", "boss", "manager", "coworker", "co-worker", "interview",
+    "promotion", "professional", "business", "client", "employee", "company", "store",
+    "office", "position", "offer",
+  ],
+  money: [
+    "money", "salary", "pay", "income", "rent", "debt", "bill", "afford", "financial",
+    "finance", "credit", "bank", "loan", "purchase", "investment", "price", "budget",
+  ],
+  "home-family": [
+    "home", "house", "apartment", "move", "moving", "relocate", "family", "mother",
+    "father", "parent", "sibling", "roommate", "living situation",
+  ],
+  "self-purpose": [
+    "purpose", "identity", "direction", "path", "future", "myself", "confidence",
+    "decision", "choice", "stuck", "growth", "calling",
+  ],
+  wellbeing: [
+    "health", "wellbeing", "well-being", "stress", "burnout", "sleep", "energy",
+    "exhausted", "anxiety", "overwhelmed", "grief",
+  ],
+  "legal-contracts": [
+    "court", "lawsuit", "legal", "lawyer", "attorney", "judge", "trial", "case",
+    "settlement", "contract", "hearing", "mediation",
+  ],
+};
+
+function scoreTerms(text: string, terms: string[]): number {
+  const haystack = text.toLowerCase();
+  return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
+}
+
+function inferJxlDomains(text: string): JxlDomain[] {
+  const scored = (Object.entries(DOMAIN_TERMS) as Array<
+    [Exclude<JxlDomain, "general">, string[]]
+  >)
+    .map(([domain, terms]) => ({ domain, score: scoreTerms(text, terms) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return ["general"];
+  const top = scored[0].score;
+  return scored
+    .filter((item) => item.score >= Math.max(1, top - 1))
+    .slice(0, 3)
+    .map((item) => item.domain);
+}
+
+function inferVoiceTopic(text: string): VoiceTopic {
+  const scores: Record<Exclude<VoiceTopic, "general">, number> = {
+    love: scoreTerms(text, DOMAIN_TERMS.relationships),
+    career: scoreTerms(text, DOMAIN_TERMS.career),
+    money: scoreTerms(text, DOMAIN_TERMS.money),
+  };
+  const ranked = (Object.entries(scores) as Array<
+    [Exclude<VoiceTopic, "general">, number]
+  >).sort((a, b) => b[1] - a[1]);
+  return ranked[0][1] > 0 ? ranked[0][0] : "general";
+}
 
 function fmtPlanet(p: PlanetPlacement): string {
   return p.name + ": " + p.sign + " " + p.degree + (p.house ? " (House " + p.house + ")" : "");
@@ -229,6 +325,15 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     planetaryStations,
     solarReturn,
     moonPhase,
+    houseRulers,
+    mutualReceptions,
+    essentialDignities,
+    synodicCycles,
+    midpoints,
+    lunarReturn,
+    eclipseActivations,
+    transitsToAngles,
+    dispositorTree,
   } = body;
 
   const currentDateString = new Date().toLocaleDateString("en-US", {
@@ -375,6 +480,85 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     return NL + lines.join(NL);
   })();
 
+  const advancedCalculationsBlock = (() => {
+    const blocks: string[] = [];
+
+    if (houseRulers?.length) {
+      blocks.push(
+        "",
+        "HOUSE RULERS (natal structure):",
+        ...houseRulers.map((r) => `House ${r.house}: ${r.sign}, ruled by ${r.ruler}`),
+        "ROLE: Use rulership to connect the situation to natal structure. It can deepen WHY, but cannot create timing by itself."
+      );
+    }
+    if (mutualReceptions?.length) {
+      blocks.push(
+        "",
+        "MUTUAL RECEPTIONS (amplifier):",
+        ...mutualReceptions.map((r) => `${r.planetA} in ${r.signA} ↔ ${r.planetB} in ${r.signB}`),
+        "ROLE: Confirmation/amplifier only. Never create an event or date from reception alone."
+      );
+    }
+    if (essentialDignities?.length) {
+      blocks.push(
+        "",
+        "ESSENTIAL DIGNITIES (expression quality):",
+        ...essentialDignities.map((d) => `${d.planet} in ${d.sign}: ${d.dignity} (strength ${d.strength})`),
+        "ROLE: Modify how cleanly or awkwardly a planet expresses. This is not an event source."
+      );
+    }
+    if (midpoints?.length) {
+      blocks.push(
+        "",
+        "MIDPOINTS (sensitive context):",
+        ...midpoints.slice(0, 8).map((m) => `${m.pointA}/${m.pointB}: ${m.sign} ${m.degree}°, House ${m.house}`),
+        "ROLE: Context only unless directly activated by supplied calculated evidence."
+      );
+    }
+    if (lunarReturn) {
+      blocks.push(
+        "",
+        "LUNAR RETURN (short-term confirmation):",
+        JSON.stringify(lunarReturn),
+        "ROLE: Short-term texture/confirmation. It cannot manufacture an exact date."
+      );
+    }
+    if (eclipseActivations?.length) {
+      blocks.push(
+        "",
+        "ECLIPSE ACTIVATIONS (developmental amplifier):",
+        ...eclipseActivations.map((e) => `${e.eclipseType} eclipse ${e.eclipseDate} in ${e.sign}; activates ${e.activatedPlanet}, orb ${e.orb}°`),
+        "ROLE: Amplify an already-supported storyline. Do not convert an eclipse into a guaranteed event."
+      );
+    }
+    if (transitsToAngles?.length) {
+      blocks.push(
+        "",
+        "TRANSITS TO NATAL ANGLES:",
+        ...transitsToAngles.map((a) => `${a.transitPlanet} ${a.aspectType} ${a.angle} — ${a.orb}° orb, ${a.isApplying ? "applying" : "separating"}`),
+        "ROLE: Tight angle contacts can be major external activators when relevant to the user's question."
+      );
+    }
+    if (dispositorTree?.length) {
+      blocks.push(
+        "",
+        "DISPOSITOR STRUCTURE:",
+        ...dispositorTree.slice(0, 12).map((d) => `${d.planet} → ${d.dispositor}; final dispositor: ${d.finalDispositor}`),
+        "ROLE: Interpretive hierarchy/context only. Never a date source."
+      );
+    }
+    if (synodicCycles?.length) {
+      blocks.push(
+        "",
+        "SYNODIC CYCLES (context only):",
+        ...synodicCycles.map((c) => `${c.planet}: ${c.returnDate} (${c.daysUntilReturn} days)`),
+        "ROLE: Context only unless independently verified by current exact-timing rules."
+      );
+    }
+
+    return blocks.length ? NL + blocks.join(NL) + NL : "";
+  })();
+
   const MAJOR_BODIES = new Set([
     "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn",
     "Uranus","Neptune","Pluto","North Node","Ascendant","Midheaven",
@@ -394,9 +578,25 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
 
   const transitList = (transits || []).map(fmtTransit).join(NL);
 
-  const voiceCalibrationBlock = buildVoiceCalibrationBlock(
-    tropical.planets.map((p) => ({ name: p.name, sign: p.sign }))
-  );
+  // Keep the compatibility voice stable across the conversation. Follow-up wording
+  // can be too short to route tone reliably, so anchor it to the first question.
+  const rootQuestion = conversationHistory?.[0]?.question ?? question;
+  const voiceTopic = inferVoiceTopic(rootQuestion);
+
+  const houseSigns = Object.fromEntries(
+    (houseRulers ?? []).map(({ house, sign }) => [house, sign])
+  ) as Partial<Record<number, string>>;
+
+  const voiceCalibrationBlock = buildVoiceCalibrationBlock(voiceTopic, {
+    planets: tropical.planets.map((p) => ({ name: p.name, sign: p.sign })),
+    houseSigns,
+  });
+
+  const fullConversationText = [
+    ...(conversationHistory ?? []).map((turn) => turn.question),
+    question,
+  ].join(" ");
+  const domainHints = inferJxlDomains(fullConversationText);
 
   const conversationBlock =
     conversationHistory && conversationHistory.length > 0
@@ -416,29 +616,39 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "transcription errors. Read for INTENT. Never comment on how they said it, never quote their",
     "phrasing back at them awkwardly, never mention transcription.",
     "",
-   "THIS IS THE PREMIUM READING — the deepest, most complete answer they can get anywhere.",
-    "Mobile screen, so every sentence earns its place — no cosmic setup fluff, no padding — but this is",
-    "NOT shorter than a full reading. It is richer. Develop the answer fully: hit the nerve, then follow it",
-    "all the way down. Show them what's happening, the deeper pattern underneath it, and what to do about it.",
-    "Populate the windows and directives generously — these are where the depth lives. Your edge over a",
-    "standard reading is that you follow THIS person's actual situation wherever it leads. Use that to go",
-    "deeper, never shorter.",
+    "THIS IS THE PREMIUM OPEN-CONTEXT READING.",
+    "The user did not choose a preset topic. Their real situation defines the scope. You may combine",
+    "relationship, career, money, home/family, self/purpose, wellbeing, legal/contract, or other chart",
+    "domains when the question genuinely crosses them. Never force the question into one artificial lane.",
+    `DOMAIN HINTS (routing only — verify against the actual question): ${domainHints.join(", ")}.`,
+    "",
+    "Depth is the product, but depth does not mean length for its own sake. Hit the actual nerve, show the",
+    "astrological mechanism underneath it, tell them what to do with that information, surface a genuine",
+    "opportunity window when one exists, and state the strongest supported outcome/trajectory.",
+    "",
+    "CORE JXL CONTRACT:",
+    "  1. VALIDATE THE REALITY — accurately name what they are experiencing without generic reassurance.",
+    "  2. ASTROLOGICAL WHY — show the chart mechanism with useful astrological terminology.",
+    "  3. DIRECTION — tell them what helps, what hurts, what to do, or what to stop doing.",
+    "  4. OPPORTUNITY — when calculator-supported timing exists, identify the opening and what to do with it.",
+    "  5. OUTCOME — state the strongest supported trajectory. Do not dump multiple equally weighted possibilities.",
     "",
     "═══════════════════════════════════════════",
-    "THE LANGUAGE RULE — THIS GOVERNS EVERYTHING",
+    "JXL LANGUAGE — ASTROLOGY IS ALLOWED, JARGON DUMPS ARE NOT",
     "═══════════════════════════════════════════",
-    "The prose is for a human being. This is a conversation, not a technical readout.",
+    "This should sound like a skilled astrologer talking to a real person, not a technical report.",
     "",
-    "DO NOT WRITE: degrees, minutes, orb numbers, or the words 'orb', 'anaretic', 'applying',",
-    "'separating', 'ingress', 'cusp'. Never name sidereal, tropical, solar arc, or any system.",
+    "You MAY name useful astrology directly: planets, signs, houses, transits, conjunctions, oppositions,",
+    "squares, trines, sextiles, retrogrades, stations, profections, the Time Lord, progressions, Solar",
+    "Return themes, house rulers, and other supplied chart factors when they genuinely matter.",
     "",
-    "DO WRITE: the planet, the aspect, and the house TRANSLATED into what it governs.",
-    "  Not: 'Mercury at 24°35' Cancer trine natal North Node at 23°47' Scorpio, 1° orb.'",
-    "  But: 'Mercury is exactly trine your North Node right now, in the part of your chart that rules courts.'",
-    "Houses by MEANING, not number. Plain consequence. What they will actually feel, face, or decide.",
+    "Whenever you use a technical term, translate it into consequence in the same sentence or the next one.",
+    "Example: 'Saturn is squaring your Venus, so the relationship pressure is asking for definition rather",
+    "than more waiting.' The astrology should make the user's reality make MORE sense.",
     "",
-    "This loses NO precision. Every claim still rests on an exact calculated aspect. Precision lives in the",
-    "sharpness of the consequence — never in decimal places.",
+    "Do NOT recite degrees, minutes, orb numbers, raw coordinates, or calculator metadata in reader-facing",
+    "prose. Do not stack five technical factors into a sentence simply to sound advanced. Precision lives",
+    "in selecting the right factors and explaining exactly what they mean.",
     "",
     "═══════════════════════════════════════════",
     "ASPECT LAW — THE MATH IS DONE FOR YOU",
@@ -490,6 +700,7 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "ROLE: These never change. They are the pattern the transits are ACTIVATING.",
     "Aspects marked '[minor body — flavor only]' may color a description but may never anchor a claim.",
     extendedPointsBlock,
+    advancedCalculationsBlock,
     siderealBlock,
     "CURRENT TRANSIT POSITIONS:",
     transitList || "None provided.",
@@ -521,19 +732,24 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "═══════════════════════════════════════════",
     "SYNTHESIS PASS — DO THIS BEFORE YOU WRITE A SINGLE WORD",
     "═══════════════════════════════════════════",
-    "The layers above — the calculated transit aspects, the natal aspects, the profection and Time Lord,",
-    "progressions, solar arcs, stations, the solar return, the moon phase, the sidereal check, the extended",
-    "points — are NOT a menu to pick one from, and NOT a checklist to recite. They are independent instruments",
-    "pointed at the same sky. Your job is to find where they AGREE and build the answer on that agreement.",
+    "The layers above are NOT a menu and NOT a checklist. They are independent instruments pointed at the",
+    "same situation. Determine which life domains the user's words actually touch, then find where the",
+    "strongest calculated and natal evidence agrees inside those domains.",
+    "",
+    "Do not make the user choose a lane after the fact. A question can legitimately cross domains: a job",
+    "offer can be career + money; moving in with a partner can be relationship + home + money. Follow the",
+    "actual situation and let the chart show which thread is dominant.",
     "",
     "Work through this silently before writing:",
-    "1. SPINE. Choose the strongest VALIDATED signal that directly bears on what they asked.",
+    "1. SCOPE. Identify the dominant domain and any secondary domain genuinely present in the question.",
+    "   This is internal routing only. Do not tell them you classified their question.",
+    "2. SPINE. Choose the strongest VALIDATED signal that directly bears on what they asked.",
     "   Prefer an exact calculator-dated trigger or natal-hit station when it is genuinely relevant;",
     "   otherwise use the tightest EXACT or LIVE transit-to-natal aspect.",
     "   If no strong signal directly bears on the question, do not manufacture an event spine.",
-    "2. ROOT. Find the tightest MAJOR-body natal aspect the spine lands on — the fixed wiring being activated.",
+    "3. ROOT. Find the tightest MAJOR-body natal aspect, placement, angle, or rulership the spine lands on — the fixed wiring being activated.",
     "   This is why it lands on THEM, not on anyone having a hard week.",
-    "3. AMPLIFIERS. Check every other layer against the spine. Ask each ONE question: does it point at the same",
+    "4. AMPLIFIERS. Check every other layer against the spine. Ask each ONE question: does it point at the same",
     "   planet, house, or theme?",
     "   - Spine's planet is the Time Lord, or its house is the profected house? → this is the headline of the year.",
     "   - A progression (esp. progressed Moon/Sun/Ascendant) names the same chapter? → this is WHY it lands this way.",
@@ -541,18 +757,20 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "   - A natal-hit station reinforces the same point or house? → timing is strongly amplified; it does not guarantee an outcome.",
     "   - Sidereal agrees? → say it with more force. Disagrees? → soften that specific claim.",
     "   - Moon phase, lots, anaretic, or out-of-bounds reinforce it? → let them sharpen the consequence, not add a topic.",
-    "4. CLASSIFY. Decide what level the evidence actually supports:",
+    "5. CLASSIFY. Decide what level the evidence actually supports:",
     "   - EVENT: multiple independent techniques converge on one concrete development.",
     "   - ACTIVATION: a strong trigger is present, but its manifestation is not uniquely determined.",
     "   - BACKGROUND: theme or context only; no concrete event claim.",
     "   Match the language to that level. Be direct, but never stronger than the evidence.",
-    "5. DISCARD. Anything that does not connect to the spine is dropped. You were given the whole chart to FIND",
+    "6. OUTCOME. From the converging evidence, choose the strongest supported trajectory. If the evidence",
+    "   supports an activation but not one guaranteed external event, say what is most likely to develop and",
+    "   what would change that trajectory. Do not manufacture certainty.",
+    "7. DISCARD. Anything that does not connect to the spine is dropped. You were given the whole chart to FIND",
     "   the convergence, not to list it. An unused layer is not a failure; a reading that name-drops every layer is.",
     "",
-    "The finished answer is ONE throughline, not a stack of observations: paragraph one is what is happening,",
-    "paragraph two is the root of why it lands on them, paragraph three is why NOW and how hard, and the windows",
-    "and directives are what to do about it. Each part hands to the next. If they cannot feel a single thread",
-    "running through all of it, you have listed instead of synthesized — return to the spine and build outward.",
+    "The finished answer is ONE throughline, not a stack of observations: first validate and answer the lived",
+    "situation, then explain the astrology, then give direction, then land the outcome. Opportunity windows and",
+    "directives support that throughline; they are not separate mini-readings.",
     "",
     "═══════════════════════════════════════════",
     "STRUCTURE — WHAT YOU RETURN",
@@ -566,19 +784,23 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "TITLE — 2 to 4 words. Sharp, specific to what they actually asked. Not a headline, not clickbait,",
     "no colon-subtitle construction. It should read like the name of the thing they are living through.",
     "",
-    "ANSWER — exactly 3 compact paragraphs. No headers. No bullets. No date labels.",
-    "  Paragraph 1: Answer the thing they actually asked, directly, in the first sentence. Then ground it",
-    "    in the tightest EXACT or LIVE aspect that bears on it — planets named, house translated into what",
-    "    it governs, stated as what is happening to them right now.",
-    "  Paragraph 2: The root. What in their natal wiring this is landing on, and the loop it produces.",
-    "    Plain behavioral language — what they actually DO, not astrological concepts.",
-    "  Paragraph 3: The mechanism — why it is landing now specifically, and what changes it. Pull in the",
-    "    progression, the Time Lord, or the Solar Return filter if any of them genuinely bear on it.",
+    "ANSWER — 4 compact, substantial paragraphs. No headers. No bullets. No calendar dates inside the answer.",
+    "  Paragraph 1 — VALIDATION + VERDICT: Answer what they actually asked in the first sentence. Accurately",
+    "    name the lived pattern, pressure, decision, or feeling they are describing. Validation means recognition,",
+    "    not automatic agreement with every assumption.",
+    "  Paragraph 2 — ASTROLOGICAL WHY: Explain the two to four chart factors that actually drive the answer.",
+    "    Use real astrology terminology when useful, then immediately translate it into their life. This is the",
+    "    part that should make them understand WHY this is happening now.",
+    "  Paragraph 3 — DIRECTION: Tell them what to do with the astrology. Give the strongest practical move,",
+    "    boundary, behavior, question, or thing to stop feeding. Keep it specific to their situation.",
+    "  Paragraph 4 — OUTCOME: State the strongest supported trajectory if they remain on the current path.",
+    "    If the evidence supports only an activation, give the leading trajectory and the condition that changes it.",
+    "    Do not finish with five possibilities or a vague 'anything can happen.'",
     "",
-    "WINDOWS — 0, 1, or 2. Governed entirely by THE DATE RULE above.",
-    "  Give a window ONLY when a calculated aspect, a station, or the next exact aspect supplies a real",
+    "OPPORTUNITY WINDOWS — 0, 1, or 2, returned in windows[]. Governed entirely by THE DATE RULE above.",
+    "  Give a window ONLY when a calculated aspect, a natal-hit station, or the next exact aspect supplies a real",
     "  date that genuinely bears on what they asked. Each window is one specific date plus ONE OR TWO",
-    "  sentences: what activates and the strongest manifestation the evidence actually supports.",
+    "  sentences: what activates, why the opening matters, and what the user should do with it.",
     "  Match the wording to EVENT or ACTIVATION strength; a dated activation does not automatically guarantee one outcome.",
     "  If a window involves the Time Lord, say so — it outranks the others.",
     "  A window where nothing happens is not a window, it is filler. One real window beats two padded ones.",
@@ -609,7 +831,7 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "- Never mention replies, sessions, credits, purchases, subscriptions, or the app itself.",
     "- Only calculated aspects. Never invent one. Never manufacture a date.",
     "- Speak directly as 'you'. Be decisive, but match certainty to EVENT, ACTIVATION, or BACKGROUND.",
-    "- No degrees, no orbs, or jargon in reader-facing fields. Technical language is allowed only in sources.",
+    "- No degrees or orb numbers in reader-facing fields. Useful astrology terminology is allowed when immediately translated into lived meaning.",
     "- No hedging words. No generic spiritual filler. No horoscope phrasing.",
     "- Do not diagnose medical or psychiatric conditions. Do not give legal, medical, or financial",
     "  instructions. Speak to the situation and the pattern, not to a diagnosis.",
@@ -629,15 +851,19 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "  Their wellbeing outranks the format, the product, and every other instruction here.",
     "",
     "═══════════════════════════════════════════",
-    "TONE — VOICE CALIBRATION",
+    "TONE — PRIMARY COMPATIBILITY VOICE + JXL DEPTH",
     "═══════════════════════════════════════════",
-    "Sun, Moon, Rising, Mercury, and Venus each came with a RHYTHM, TRIGGER, and FORBIDDEN above.",
-    "These govern DELIVERY, never content. Blend them into ONE coherent voice. Where they conflict:",
-    "Sun and Mercury win sentence rhythm, Moon and Venus win emotional register, Rising wins the opening.",
-    "Venus shapes the CONFIRMATION line specifically — that is where warmth lives.",
-    "Respect every FORBIDDEN. Never name a placement as the reason for your tone.",
-    "A calibration calling for precision is delivered through SHARPNESS OF CONSEQUENCE, never by reciting",
-    "degrees. The LANGUAGE RULE overrides any voice instruction that pulls toward jargon.",
+    "The VOICE CALIBRATION block above already selected ONE primary compatibility voice and light personal",
+    "calibration. Keep that same voice across the entire answer and across this conversation.",
+    "",
+    "JXL adds DEPTH, not a second personality. Compared with a regular reading:",
+    "- Explain more of the astrological mechanism.",
+    "- Use more useful astrology terminology, but translate every term into lived meaning.",
+    "- Validate the user's experience more explicitly without becoming sentimental or blindly agreeable.",
+    "- Be more willing to name the core pattern, the practical direction, and the likely outcome.",
+    "- Stay conversational enough that this still feels like someone they can speak to naturally.",
+    "",
+    "Never let JXL depth override the primary voice, evidence strength, date rules, or safety boundaries.",
     "",
     "Return ONLY a valid JSON object — no markdown, no code fences, no preamble:",
     "{",
@@ -669,7 +895,7 @@ function buildJxlPrompt(body: JxlAskBody, isFinalTurnOverride?: boolean): string
     "Each source: 'factor' is a short plain-language label (e.g. 'The timing', 'The root pattern',",
     "'Why it's amplified this year'). 'placements' is the precise astrological detail an astrologer would",
     "check — here you MAY name planets, signs, houses, and aspects technically, because this block is FOR",
-    "the astrologer, not the reader. This is the ONLY place technical language is allowed.",
+    "the astrologer. Reader-facing prose may also use useful astrology terminology, but sources may be fully technical.",
     "Order them to follow the answer: the factor behind paragraph one first.",
   ].join(NL);
 }
@@ -730,60 +956,52 @@ export async function POST(request: NextRequest) {
     const turnCount = historyLen + 1;
     const isNewSession = historyLen === 0;
 
-    const INCLUDED_JXL_REPLIES = 3;
+    // Membership: unlimited JXL sessions, up to the global per-conversation cap.
+    // Non-member JXL: one JXL credit starts the session and includes the number
+    // of turns defined in PRICING.jxl.includedReplies. Extra turns use the
+    // universal reply-credit pool until the same safety cap.
+    const includedTurns = isSubscribed
+      ? JXL_MAX_REPLIES_PER_CONVERSATION
+      : PRICING.jxl.includedReplies;
 
-// Hard wall: 8 TOTAL replies in this JXL conversation.
-if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
-  return NextResponse.json(
-    {
-      error: JXL_CONVERSATION_CAP_MESSAGE,
-      code: "JXL_CONVERSATION_CAP",
-    },
-    { status: 402 }
-  );
-}
+    if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
+      return NextResponse.json(
+        { error: JXL_CONVERSATION_CAP_MESSAGE, code: "JXL_CONVERSATION_CAP" },
+        { status: 402 }
+      );
+    }
 
-let metaUpdate: Record<string, unknown> | null = null;
+    let metaUpdate: Record<string, unknown> | null = null;
 
-if (isNewSession) {
-  // Starting a fresh JXL conversation consumes 1 JXL credit.
-  if (jxlCredits > 0) {
-    metaUpdate = {
-      jxlCredits: jxlCredits - 1,
-    };
-  } else {
-    return NextResponse.json(
-      {
-        error: "You need a JXL credit to start a session.",
-        code: "NO_JXL_ACCESS",
-      },
-      { status: 402 }
-    );
-  }
-} else if (isSubscribed) {
-  // Subscribers feel unlimited inside the conversation.
-  // The 8-reply hard wall above still applies.
-  metaUpdate = null;
-} else if (turnCount <= INCLUDED_JXL_REPLIES) {
-  // Replies 1–3 are included with the JXL purchase.
-  metaUpdate = null;
-} else if (replyCredits > 0) {
-  // Replies 4–8 use the universal reply wallet.
-  metaUpdate = {
-    replyCredits: replyCredits - 1,
-  };
-} else {
-  return NextResponse.json(
-    {
-      error: "You've used the 3 replies included with this JXL.",
-      code: "NEEDS_REPLY_CREDITS",
-      isSubscribed: false,
-      includedRepliesRemaining: 0,
-      replyCreditsRemaining: 0,
-    },
-    { status: 402 }
-  );
-}
+    if (isNewSession) {
+      if (isSubscribed) {
+        // Members do not spend JXL credits to begin a new session.
+        metaUpdate = null;
+      } else if (jxlCredits > 0) {
+        metaUpdate = { jxlCredits: jxlCredits - 1 };
+      } else {
+        return NextResponse.json(
+          { error: "You need JXL access to start this session.", code: "NO_JXL_ACCESS" },
+          { status: 402 }
+        );
+      }
+    } else if (turnCount <= includedTurns) {
+      metaUpdate = null;
+    } else if (!isSubscribed && replyCredits > 0) {
+      metaUpdate = { replyCredits: replyCredits - 1 };
+    } else {
+      return NextResponse.json(
+        {
+          error: isSubscribed
+            ? JXL_CONVERSATION_CAP_MESSAGE
+            : "You've used the replies included with this session.",
+          code: isSubscribed ? "JXL_CONVERSATION_CAP" : "NEEDS_REPLY_PACK",
+          isSubscribed,
+          tailMode: isSubscribed ? undefined : "reply_pack",
+        },
+        { status: 402 }
+      );
+    }
 
     const isFinalTurn = turnCount >= JXL_MAX_REPLIES_PER_CONVERSATION;
 
@@ -821,29 +1039,24 @@ if (isNewSession) {
         max_tokens: 3600,
         temperature: 0.3,
         system:
-"You are a precision astrologer answering a real person who just spoke aloud about a specific " +
-"situation in their life. This is the PREMIUM reading — it should be the deepest, most insightful " +
-"answer they could get anywhere. They may know nothing about astrology — write so they understand " +
-"every sentence. " +
-"The transit aspects are calculated and given to you: never compute or invent one. A specific date " +
-"is allowed ONLY when it traces to a calculated transit, station, or aspect in the data you were " +
-"given; if no calculated date supports it, do not name one — a null date is correct and common. " +
-"CRITICAL: no degrees, no orbs, and no astrological jargon in reader-facing fields. The sources array " +
-"is the only exception and may use technical chart language for verification. This is a spoken " +
-"conversation, not a technical readout — but it must be as substantial and layered as a full reading. " +
-"Precision lives in the sharpness of the consequence, not in decimal places. " +
-"DEPTH IS THE PRODUCT. Do not keep it short. Develop your answer fully: (1) address their actual " +
-"question head-on and name what's really happening, (2) show them the deeper pattern underneath it — " +
-"connect the active transit to the fixed wiring of their chart and to the longer arc of where they " +
-"are right now, weaving multiple signals into one throughline rather than listing them, (3) tell them " +
-"concretely what to do with it and when. Follow each thread all the way through. Your edge over a " +
-"standard reading is that you are NOT locked into a fixed template — you can follow this person's " +
-"specific situation wherever it genuinely leads. Use that freedom to go deeper, not shorter. " +
-"Answer completely. Never withhold the useful part, never end on a hook, never reference sessions, " +
-"replies, or purchases. If the person is in real distress, care for them first and set the format aside. " +
-"Speak directly to them as 'you'. Be decisive, but match certainty to EVENT, ACTIVATION, or BACKGROUND. " +
-"Rich, warm, direct, and complete — the kind of answer someone feels was worth paying more for. " +
-"Output ONLY raw valid JSON — no markdown, no code fences, no preamble.",
+"You are AstroPro in JXL mode: a premium, open-context astrology reading for a real person who may " +
+"have spoken their question aloud. They can ask about anything; do not force the situation into a preset " +
+"topic. Determine the relevant life domains from their words and use only the supplied chart evidence. " +
+"Your response must do five things as one coherent throughline: validate what they are actually going " +
+"through, explain the astrological reason, give direction, surface a calculator-supported opportunity " +
+"window when one exists, and state the strongest supported outcome or trajectory. " +
+"Useful astrological terminology is ENCOURAGED when it increases understanding: name the transit, aspect, " +
+"house, profection, Time Lord, progression, return, ruler, or other supplied factor, then immediately " +
+"translate what it means in their life. Do not dump jargon. Do not expose degrees, minutes, orb numbers, " +
+"raw coordinates, or calculator metadata in reader-facing prose. " +
+"Never compute or invent an aspect. A specific date is allowed only when it traces to the supplied " +
+"calculator evidence; if no valid date supports the question, no date is correct. " +
+"Depth is the product, but every sentence must earn its place. Follow the person's exact situation rather " +
+"than a fixed template, synthesize multiple agreeing signals into one answer, and make the outcome as " +
+"specific as the evidence permits. Never manufacture certainty. " +
+"Answer completely. Never withhold the useful part, end on a hook, or reference sessions, replies, " +
+"credits, purchases, or subscriptions. Speak directly as 'you'. Preserve the primary compatibility " +
+"voice supplied in the prompt. Output ONLY raw valid JSON — no markdown, no code fences, no preamble.",
         messages: [{ role: "user", content: prompt }],
       }),
     });
