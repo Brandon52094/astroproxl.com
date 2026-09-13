@@ -68,6 +68,7 @@ interface JxlResult {
   careNote?: string | null;
   isSafeResponse?: boolean;
   replyNumber: number | null;
+  repliesPerSession?: number;
 }
 
 interface JxlPanelProps {
@@ -75,7 +76,7 @@ interface JxlPanelProps {
   onBack?: () => void;
 }
 
-const REPLIES_PER_SESSION = 3;
+const REPLIES_PER_SESSION = 8;
 const MIN_HOLD_MS = 450;
 const MIC_GRANTED_KEY = "jxl_mic_permission_granted";
 
@@ -694,7 +695,8 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
   const shooters = useShootingStars(animate);
   const isHolding = phase === "holding";
   const repliesUsed = history.length;
-  const repliesLeft = Math.max(0, REPLIES_PER_SESSION - repliesUsed);
+  const sessionLimit = result?.repliesPerSession ?? REPLIES_PER_SESSION;
+  const repliesLeft = Math.max(0, sessionLimit - repliesUsed);
   const sessionOver = repliesLeft <= 0;
 
   useEffect(() => {
@@ -744,28 +746,69 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           solarReturn: chart.chartData.solarReturn,
           moonPhase: chart.chartData.moonPhase,
           extendedPoints: chart.chartData.extendedPoints,
+
+          // Current AstroPro evidence channels used by the upgraded JXL route.
+          houseRulers: chart.chartData.houseRulers,
+          mutualReceptions: chart.chartData.mutualReceptions,
+          essentialDignities: chart.chartData.essentialDignities,
+          synodicCycles: chart.chartData.synodicCycles,
+          midpoints: chart.chartData.midpoints,
+          lunarReturn: chart.chartData.lunarReturn,
+          eclipseActivations: chart.chartData.eclipseActivations,
+          transitsToAngles: chart.chartData.transitsToAngles,
+          dispositorTree: chart.chartData.dispositorTree,
         }),
       });
 
-      const data = await res.json();
+      const raw = await res.text();
+      let data: Record<string, unknown> = {};
+
+      if (raw.trim()) {
+        try {
+          data = JSON.parse(raw) as Record<string, unknown>;
+        } catch (parseError) {
+          console.error("[jxl/panel] /api/jxl/ask returned non-JSON", {
+            status: res.status,
+            contentType: res.headers.get("content-type"),
+            responseStart: raw.slice(0, 1000),
+            parseError,
+          });
+
+          setError(`JXL route error (HTTP ${res.status}). Check the server log for [jxl/ask].`);
+          setDraft(question);
+          setPhase("composing");
+          setIsLoadingRingActive(false);
+          return;
+        }
+      }
 
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong. Try again.");
+        console.error("[jxl/panel] /api/jxl/ask failed", {
+          status: res.status,
+          data,
+        });
+
+        setError(
+          typeof data.error === "string"
+            ? data.error
+            : `JXL couldn't complete that request (HTTP ${res.status}).`
+        );
         setDraft(question);
         setPhase("composing");
         setIsLoadingRingActive(false);
         return;
       }
 
-      setResult(data as JxlResult);
+      setResult(data as unknown as JxlResult);
       if (!data.isSafeResponse) {
         setHistory((prev) => [...prev, { question, answer: data.answer }]);
       }
       setDraft("");
       setShowSources(false);
       setApiReady(true); // answer is ready: let the edge sweep to full and complete
-    } catch {
-      setError("Something went wrong. Try again.");
+    } catch (requestError) {
+      console.error("[jxl/panel] Ask request threw before a usable response", requestError);
+      setError("JXL couldn't reach the reading route. Check the browser console and server log.");
       setDraft(question);
       setPhase("composing");
       setIsLoadingRingActive(false);
