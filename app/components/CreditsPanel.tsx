@@ -58,11 +58,12 @@ interface Balance {
 }
 
 const MEMBERSHIP_FEATURES = [
-  "Unlimited General Readings + JXL sessions",
-  "Up to 8 replies per conversation",
-  "Members-only tools and content",
-  "Save reading synopses (beta)",
-  "Referral commission eligibility by request",
+  "Unlimited Readings",
+  "Unlimited JXL",
+  "8 Replies Per Conversation",
+  "Members-Only Access",
+  "Readings Saved to Photos",
+  "Commission Eligibility · Coming Soon",
 ];
 
 function plural(n: number, one: string, many?: string): string {
