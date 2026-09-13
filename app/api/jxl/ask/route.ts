@@ -1017,63 +1017,136 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
+      console.error("[jxl/ask] OPENAI_API_KEY is not set.");
       return NextResponse.json({ error: "API configuration error." }, { status: 500 });
     }
 
     // ── BUILD DATE INDEX ──
     const dateIndex = buildValidDateIndex(normalizedBody, validatedAspects);
-
     const prompt = buildJxlPrompt(normalizedBody, isFinalTurn);
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    console.log("[jxl/ask] Prompt built; sending to OpenAI Responses API.");
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 3600,
-        temperature: 0.3,
-        system:
+        model: "gpt-5.6-sol",
+        reasoning: { effort: "medium" },
+        max_output_tokens: 5000,
+        store: false,
+        instructions:
 "You are AstroPro in JXL mode: a premium, open-context astrology reading for a real person who may " +
 "have spoken their question aloud. They can ask about anything; do not force the situation into a preset " +
 "topic. Determine the relevant life domains from their words and use only the supplied chart evidence. " +
 "Your response must do five things as one coherent throughline: validate what they are actually going " +
 "through, explain the astrological reason, give direction, surface a calculator-supported opportunity " +
 "window when one exists, and state the strongest supported outcome or trajectory. " +
-"Useful astrological terminology is ENCOURAGED when it increases understanding: name the transit, aspect, " +
+"Useful astrological terminology is encouraged when it increases understanding: name the transit, aspect, " +
 "house, profection, Time Lord, progression, return, ruler, or other supplied factor, then immediately " +
 "translate what it means in their life. Do not dump jargon. Do not expose degrees, minutes, orb numbers, " +
 "raw coordinates, or calculator metadata in reader-facing prose. " +
-"Never compute or invent an aspect. A specific date is allowed only when it traces to the supplied " +
-"calculator evidence; if no valid date supports the question, no date is correct. " +
+"Never compute or invent an aspect. A specific date is allowed only when it traces to supplied calculator " +
+"evidence; if no valid date supports the question, no date is correct. " +
 "Depth is the product, but every sentence must earn its place. Follow the person's exact situation rather " +
 "than a fixed template, synthesize multiple agreeing signals into one answer, and make the outcome as " +
 "specific as the evidence permits. Never manufacture certainty. " +
 "Answer completely. Never withhold the useful part, end on a hook, or reference sessions, replies, " +
 "credits, purchases, or subscriptions. Speak directly as 'you'. Preserve the primary compatibility " +
-"voice supplied in the prompt. Output ONLY raw valid JSON — no markdown, no code fences, no preamble.",
-        messages: [{ role: "user", content: prompt }],
+"voice supplied in the prompt.",
+        input: prompt,
+        text: {
+          verbosity: "medium",
+          format: {
+            type: "json_schema",
+            name: "jxl_reading",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                title: { type: "string" },
+                answer: { type: "string" },
+                windows: {
+                  type: "array",
+                  maxItems: 2,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      date: { type: ["string", "null"] },
+                      body: { type: "string" },
+                    },
+                    required: ["date", "body"],
+                  },
+                },
+                directives: {
+                  type: "array",
+                  maxItems: 2,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      type: { type: "string", enum: ["DROP", "EXECUTE", "LOCK"] },
+                      date: { type: ["string", "null"] },
+                      body: { type: "string" },
+                    },
+                    required: ["type", "date", "body"],
+                  },
+                },
+                sources: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      factor: { type: "string" },
+                      placements: { type: "string" },
+                    },
+                    required: ["factor", "placements"],
+                  },
+                },
+                confirmation: { type: "string" },
+              },
+              required: ["title", "answer", "windows", "directives", "sources", "confirmation"],
+            },
+          },
+        },
       }),
     });
 
     if (!response.ok) {
       const err = await response.text();
-      console.error("[jxl/ask] Claude error:", err);
+      console.error("[jxl/ask] OpenAI error:", response.status, err.slice(0, 1200));
       return NextResponse.json(
         { error: "Failed to generate response. Please try again." },
         { status: 502 }
       );
     }
 
-    const claudeData = await response.json();
-    const rawText = claudeData.content?.[0]?.text;
+    const openAiData = await response.json();
+    console.log("[jxl/ask] OpenAI responded with status:", openAiData?.status ?? "unknown");
+
+    const rawText =
+      typeof openAiData?.output_text === "string"
+        ? openAiData.output_text
+        : Array.isArray(openAiData?.output)
+          ? openAiData.output
+              .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
+              .find((part: any) => part?.type === "output_text" && typeof part?.text === "string")
+              ?.text
+          : undefined;
 
     if (!rawText) {
+      console.error(
+        "[jxl/ask] OpenAI returned no output_text:",
+        JSON.stringify(openAiData).slice(0, 1200)
+      );
       return NextResponse.json({ error: "No response from reading engine." }, { status: 502 });
     }
 
