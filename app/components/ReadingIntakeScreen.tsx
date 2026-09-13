@@ -143,36 +143,36 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     nextStepGlow: "rgba(255,255,255,0.24)",
     areaColors: {
       love: {
-        bg: "rgba(127, 29, 29, 0.30)",
+        bg: "rgba(127, 29, 29, 0.12)",
         border: "#F97316",
-        glow: "rgba(239, 68, 68, 0.30)",
+        glow: "rgba(239, 68, 68, 0.15)",
         text: "#FCA5A5",
         iconBg: "rgba(127, 29, 29, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(127,29,29,0.85) 0%, rgba(153,27,27,0.70) 32%, rgba(239,68,68,0.20) 100%)",
+        gradient: "linear-gradient(135deg, rgba(127,29,29,0.20) 0%, rgba(153,27,27,0.12) 42%, rgba(239,68,68,0.05) 100%)",
       },
       money: {
-        bg: "rgba(20, 83, 45, 0.30)",
+        bg: "rgba(20, 83, 45, 0.12)",
         border: "#D4A574",
-        glow: "rgba(34, 197, 94, 0.30)",
+        glow: "rgba(34, 197, 94, 0.14)",
         text: "#86EFAC",
         iconBg: "rgba(20, 83, 45, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
+        gradient: "linear-gradient(135deg, rgba(20,83,45,0.20) 0%, rgba(22,101,52,0.12) 42%, rgba(34,197,94,0.05) 100%)",
       },
       career: {
-        bg: "rgba(30, 58, 138, 0.30)",
+        bg: "rgba(30, 58, 138, 0.12)",
         border: "#FFFFFF",
-        glow: "rgba(59, 130, 246, 0.30)",
+        glow: "rgba(59, 130, 246, 0.14)",
         text: "#93C5FD",
         iconBg: "rgba(30, 58, 138, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
+        gradient: "linear-gradient(135deg, rgba(30,58,138,0.20) 0%, rgba(37,99,235,0.12) 42%, rgba(59,130,246,0.05) 100%)",
       },
       other: {
-        bg: "rgba(49, 46, 129, 0.30)",
+        bg: "rgba(49, 46, 129, 0.12)",
         border: "#4F46E5",
-        glow: "rgba(139, 92, 246, 0.30)",
+        glow: "rgba(139, 92, 246, 0.15)",
         text: "#C4B5FD",
         iconBg: "rgba(49, 46, 129, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
+        gradient: "linear-gradient(135deg, rgba(49,46,129,0.20) 0%, rgba(91,33,182,0.12) 42%, rgba(139,92,246,0.05) 100%)",
       },
       cta: {
         bg: "rgba(255,255,255,0.08)",
@@ -487,7 +487,7 @@ setChartStatus("ready");
 
   const getIconTileShadow = useCallback((areaId: string) => {
     const c = getAreaColors(areaId);
-    return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
+    return `0 8px 22px rgba(0,0,0,0.36), 0 0 20px ${c.glow}`;
   }, [getAreaColors]);
 
   return (
@@ -508,12 +508,12 @@ setChartStatus("ready");
           50% { box-shadow: 0 0 0 1px rgba(251,191,36,0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251,191,36,0.18); }
         }
         @keyframes whiteGlowPulse {
-          0%, 100% { box-shadow: 0 0 30px rgba(255,255,255,0.08), 0 18px 34px rgba(0,0,0,0.55); }
-          50% { box-shadow: 0 0 50px rgba(255,255,255,0.20), 0 22px 40px rgba(0,0,0,0.65); }
+          0%, 100% { box-shadow: 0 0 18px rgba(255,255,255,0.05), 0 10px 24px rgba(0,0,0,0.36); }
+          50% { box-shadow: 0 0 26px rgba(255,255,255,0.10), 0 12px 28px rgba(0,0,0,0.42); }
         }
         @keyframes selectedWhiteGlow {
-          0%, 100% { box-shadow: 0 0 40px rgba(255,255,255,0.15), 0 0 80px rgba(255,255,255,0.08), 0 18px 36px rgba(0,0,0,0.65); }
-          50% { box-shadow: 0 0 60px rgba(255,255,255,0.30), 0 0 100px rgba(255,255,255,0.12), 0 22px 40px rgba(0,0,0,0.70); }
+          0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 10px 28px rgba(0,0,0,0.38), 0 0 20px rgba(255,255,255,0.04); }
+          50% { box-shadow: 0 0 0 1px rgba(255,255,255,0.07), 0 12px 30px rgba(0,0,0,0.42), 0 0 28px rgba(255,255,255,0.07); }
         }
         @keyframes jxlShimmer {
           0% { transform: translateX(-60%); }
@@ -547,7 +547,7 @@ setChartStatus("ready");
           position: absolute;
           top: 0; bottom: 0; left: 0;
           width: 45%;
-          background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%);
+          background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.04) 45%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 55%, transparent 100%);
           transform: translateX(-140%) skewX(-18deg);
           animation: heroShine 4.6s ease-in-out infinite;
           pointer-events: none;
@@ -555,8 +555,8 @@ setChartStatus("ready");
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
-        .selected-card-glow { animation: selectedWhiteGlow 2.8s ease-in-out infinite; }
+        .standard-shadow { box-shadow: 0 10px 28px rgba(0,0,0,0.38), 0 1px 0 rgba(255,255,255,0.025); }
+        .selected-card-glow { animation: selectedWhiteGlow 3.4s ease-in-out infinite; }
 
         .gold-shimmer { position: relative; overflow: hidden; border-radius: 18px; border: 2px solid rgba(251,191,36,0.6); background: linear-gradient(180deg, rgba(120,84,18,0.45), rgba(50,34,10,0.25)); box-shadow: 0 0 60px rgba(251,191,36,0.25), 0 18px 36px rgba(0,0,0,0.65); cursor: pointer; }
         .gold-shimmer::before { content: ""; position: absolute; inset: -40%; background-image: linear-gradient(120deg, rgba(253,230,138,0) 0%, rgba(253,230,138,0.3) 35%, rgba(250,204,21,0.7) 50%, rgba(253,230,138,0.3) 65%, rgba(253,230,138,0) 100%); mix-blend-mode: screen; pointer-events: none; opacity: 1; transform: translateX(-60%); animation: jxlShimmer 3s linear infinite; z-index: 0; }
@@ -702,22 +702,22 @@ setChartStatus("ready");
           {/* ── HERO ── */}
           <section className="mb-5 pt-1">
             <div
-              className="hero-shine standard-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
+              className="hero-shine standard-shadow relative overflow-hidden rounded-[24px] border bg-white/[0.03] px-5 py-6 text-center backdrop-blur-sm"
               style={{
-                borderColor: "rgba(255, 255, 255, 0.60)",
-                boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
+                borderColor: "rgba(255, 255, 255, 0.10)",
+                boxShadow: "0 10px 28px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.025), 0 0 24px rgba(99,102,241,0.06)",
               }}
             >
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
+                <div className="mb-2 inline-flex items-center px-1 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
                     AstroProXL
                   </span>
                 </div>
-                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                <h1 className="text-[30px] font-light leading-tight tracking-tight text-white sm:text-[34px]">
                   You Can Ask Anything
                 </h1>
-                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
+                <p className="mx-auto mt-2 max-w-[34ch] text-[13px] leading-5 text-slate-400 sm:text-[14px]">
                   Your Personal Astrological Predictions.
                 </p>
               </div>
@@ -772,13 +772,13 @@ setChartStatus("ready");
                   className={cn(
                     "tap-fix selected-card-shell standard-shadow w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
                     isSelected && "selected-card-glow",
-                    !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
+                    !isSelected && "hover:border-white/15 hover:bg-white/[0.045]"
                   )}
                   style={{
                     willChange: "transform, opacity",
                     ["--selected-wash" as string]: areaColors.gradient,
-                    ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 40px ${areaColors.glow}`,
-                    backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
+                    ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 10px 28px rgba(0,0,0,0.40), 0 0 24px ${areaColors.glow}`,
+                    backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.03)",
                     borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
                   } as React.CSSProperties}
                 >
@@ -796,14 +796,14 @@ setChartStatus("ready");
                         borderColor: isSelected ? areaColors.border : undefined,
                         background: isSelected ? areaColors.gradient : undefined,
                         color: isSelected ? areaColors.text : undefined,
-                        boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
+                        boxShadow: isSelected ? getIconTileShadow(area.id) : "0 8px 20px rgba(0,0,0,0.34)",
                       }}
                     >
                       <Icon className="h-4 w-4" />
                     </motion.div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
+                        <h2 className="text-[15px] font-medium text-white">{area.title}</h2>
                         <AnimatePresence>
                           {isSelected && (
                             <motion.span
@@ -811,10 +811,10 @@ setChartStatus("ready");
                               animate={{ opacity: 1, scale: 1, y: 0 }}
                               exit={{ opacity: 0, scale: 0.92, y: 4 }}
                               transition={{ duration: 0.18, ease: "easeOut" }}
-                              className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
-                              style={{ borderColor: "rgba(255,255,255,0.3)", backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderStyle: "solid", boxShadow: "0 0 20px rgba(255,255,255,0.08)" }}
+                              className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-slate-200"
+                              style={{ borderColor: "rgba(255,255,255,0.12)", backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderStyle: "solid" }}
                             >
-                              <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)", transform: "translateX(-155%)" }} />
+                              <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(115deg, transparent 0%, transparent 38%, rgba(255,255,255,0.10) 50%, transparent 62%, transparent 100%)", transform: "translateX(-155%)" }} />
                               <span className="relative z-[1]">Selected</span>
                             </motion.span>
                           )}
@@ -845,12 +845,12 @@ setChartStatus("ready");
                 className="mt-6 space-y-2"
               >
                 <div
-                  className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px] standard-shadow"
+                  className="rounded-[24px] border border-white/10 bg-white/[0.03] p-[1px] standard-shadow backdrop-blur-sm"
                   style={{ transition: "box-shadow 0.3s ease, border-color 0.3s ease" }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)"; e.currentTarget.style.boxShadow = "0 0 50px rgba(255,255,255,0.15), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.24)"; e.currentTarget.style.boxShadow = "0 0 24px rgba(255,255,255,0.06), 0 10px 28px rgba(0,0,0,0.38)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(0,0,0,0.38), 0 1px 0 rgba(255,255,255,0.025)"; }}
                 >
-                  <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
+                  <div className="rounded-[23px] bg-white/[0.015] px-4 py-3">
                     <Textarea
                       id="question"
                       ref={textareaRef}
@@ -858,7 +858,7 @@ setChartStatus("ready");
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       placeholder={AREAS.find(a => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
-                      className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
+                      className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] font-light leading-6 text-white placeholder:text-slate-500 focus:outline-none focus:ring-0"
                       style={{ backgroundColor: "transparent" }}
                     />
                   </div>
@@ -875,14 +875,14 @@ setChartStatus("ready");
                 type="button"
                 onClick={handleStartReading}
                 disabled={!canSubmit || isCreatingReading}
-                className="standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="standard-shadow h-14 w-full rounded-2xl text-[13px] font-medium uppercase tracking-[0.10em] transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 style={{
-                  background: "transparent",
-                  border: "2px solid rgba(94,234,212,0.65)",
-                  color: "rgba(94,234,212,0.95)",
+                  background: canSubmit && !isCreatingReading ? "rgba(45,212,191,0.06)" : "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(94,234,212,0.42)",
+                  color: "rgba(153,246,228,0.94)",
                   boxShadow: canSubmit && !isCreatingReading
-                    ? "0 0 18px rgba(45,212,191,0.22), 0 18px 44px rgba(0,0,0,0.72)"
-                    : "0 18px 44px rgba(0,0,0,0.72)",
+                    ? "0 0 18px rgba(45,212,191,0.10), 0 10px 28px rgba(0,0,0,0.38)"
+                    : "0 10px 28px rgba(0,0,0,0.32)",
                 }}
               >
                 {buttonCopy}
@@ -905,11 +905,11 @@ setChartStatus("ready");
             <button
               type="button"
               onClick={() => setShowCredits(true)}
-              className="tap-fix inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[13px] font-semibold tracking-[0.02em] transition"
+              className="tap-fix inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[11px] font-medium uppercase tracking-[0.12em] transition"
               style={{
-                border: "1px solid rgba(251,191,36,0.4)",
-                background: "rgba(251,191,36,0.08)",
-                color: "#fcd34d",
+                border: "1px solid rgba(251,191,36,0.28)",
+                background: "rgba(251,191,36,0.05)",
+                color: "rgba(253,230,138,0.90)",
               }}
             >
               <Sparkles className="h-[15px] w-[15px]" />
