@@ -12,6 +12,7 @@ import type {
   DispositorResult,
 } from "@/lib/astrologicalCalculations";
 import type { TopicConfig } from "./topics/types";
+export const FORWARD_WINDOW_DAYS = 60;
 
 // ============================================================
 // TYPES — kept compatible with the existing AstroPro route
