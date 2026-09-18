@@ -12,7 +12,6 @@ import type {
   DispositorResult,
 } from "@/lib/astrologicalCalculations";
 import type { TopicConfig } from "./topics/types";
-export const FORWARD_WINDOW_DAYS = 60;
 
 // ============================================================
 // TYPES — kept compatible with the existing AstroPro route
@@ -128,6 +127,8 @@ export interface ReadingPage {
 // band so the model can see relative closeness while retaining the full set.
 // The band is DATA, not a command about what the model must prioritize.
 // ============================================================
+
+export const FORWARD_WINDOW_DAYS = 60;
 
 const ASPECT_ORBS: Record<string, { exact: number; live: number }> = {
   conjunction: { exact: 0.5, live: 3.0 },
@@ -320,6 +321,8 @@ function buildFullEvidenceBlock(
 // - anti-drama / anti-invented-biography protections
 // - SignVoice delivery calibration
 // - the existing seven-part results contract
+// - calendar marker compatibility ([[DATE: ...]])
+// - FORWARD_WINDOW_DAYS export required by validateReadingDates.ts
 // ============================================================
 
 export function buildReadingPrompt(
@@ -415,35 +418,40 @@ export function buildReadingPrompt(
     "",
     "Part 1: The Prediction",
     "Lead immediately with the strongest prediction. Give the user the actual answer first, in plain human language.",
-    "Be direct and specific. The first 2-4 sentences should contain the nerve of the reading.",
+    "Be direct and specific. Aim for 3-5 sentences total: prediction first, then only the context that materially sharpens it.",
     "Do not open with chart mechanics or scene-setting.",
     "",
     "Part 2: Where You Are Now",
-    "ONE strong paragraph only. Maximum 3-4 sentences.",
+    "ONE strong paragraph only. Usually 3-4 sentences; allow one additional sentence only when it adds a genuinely useful present-context detail.",
     "State the present condition, pressure, momentum, transition, or turning point that directly matters to the prediction.",
     "Do not summarize the whole chart and do not repeat Part 1.",
     "",
     "Part 3: Why This Is Active Now",
-    "ONE strong paragraph only. Maximum 4 sentences.",
+    "ONE strong paragraph only. Usually 4 sentences; a fifth is allowed only when it adds a distinct astrological connection rather than repeating the same point.",
     "Explain only the strongest astrological reasons the prediction is active now.",
     "Synthesize the evidence instead of giving each technique its own mini-essay.",
     "Use enough astrology to make the prediction intelligible, then stop.",
     "",
     "Part 4: How This Is Most Likely To Show Up",
-    "ONE strong paragraph only. Maximum 4 sentences.",
+    "ONE strong paragraph only. Usually 4 sentences; a fifth is allowed only when it adds a concrete manifestation or consequence.",
     `Translate the astrology concretely into the ${topic.label.toLowerCase()} area.`,
     "State the strongest real-life manifestation: what is most likely to happen, change, develop, surface, begin, end, or become clear.",
     "Do not turn this section into a list of generic scenarios.",
     "",
     "Part 5: Dated Windows",
     "Keep this concise and prediction-first.",
+    "Give 2-4 useful timing windows when the astrology supports them; if fewer genuinely stand out, give fewer.",
+    "Every calendar-ready window MUST begin with an inline marker in this exact form: [[DATE: Month D, YYYY]] or [[DATE: Month D-D, YYYY]].",
+    "Always include the 4-digit year inside the marker so the Reading Results calendar can place it correctly.",
+    "Example: [[DATE: September 22, 2026]] — A conversation or decision reaches the point where it has to become explicit.",
     "Use the strongest dates or tight windows you derive from the supplied astrology and, when available, reliable astronomical research.",
-    "For each window: date/window first, then 1-2 sentences stating what is likely to happen and why that period matters.",
+    "For each window: marker first, then 1-2 sentences stating what is likely to happen and why that period matters.",
     "Do not repeat the full astrological explanation from Part 3.",
-    "If the strongest reading is broader than a single day, a broader period is acceptable.",
+    "If the strongest reading is broader than a single day, use a calendar range marker when you can identify one; otherwise state the broader period plainly without inventing a marker.",
     "",
     "Part 6: The Directive",
     "Give 1-3 concise, concrete actions, decisions, behaviors, or things to watch for that follow naturally from the prediction.",
+    "If an action is specifically tied to one of the dated windows, you may repeat that same approved [[DATE: ...]] marker here; otherwise leave the action undated.",
     "No generic self-help filler.",
     "",
     "Part 7: Bottom Line",

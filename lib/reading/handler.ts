@@ -16,25 +16,18 @@ const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000;
 const CREDITS_PER_READING = 1;
 
 const DEFAULT_SYSTEM =
-  "You are a precision personal astrologer. Follow the supplied calculation hierarchy and evidence exactly. " +
-  "Never invent aspects, dates, placements, or unsupported outcomes. " +
-  "Select timing windows deterministically from the strongest topic-relevant calculator-supported evidence. " +
-  "Never approximate, diversify, shift, or substitute dates for variety; if the evidence does not support a dated window, do not create one. " +
-  "When the supplied evidence strongly converges, write with conviction and commit to the strongest supported interpretation. " +
-  "Speak directly to the person as 'you' with warmth, specificity, and emotional intelligence. " +
-  "Translate astrology into recognizable real-life developments rather than sounding like a technical report. " +
-  "Match certainty to the evidence: EVENT, ACTIVATION, or BACKGROUND. " +
-  "Bold delivery never upgrades weak evidence.";
+  "You are AstroPro, a precision predictive astrologer. " +
+  "Use the complete supplied astrology data holistically to answer the user's actual question. " +
+  "Be direct, specific, predictive, concise, and personally relevant. " +
+  "Translate the astrology into recognizable real-life developments rather than a technical report. " +
+  "Follow the reading structure and output format supplied in the prompt.";
 
 const RETRY_SYSTEM =
-  "You are a precision personal astrologer correcting date provenance in an existing reading. " +
+  "You are correcting date formatting/provenance in an existing AstroPro reading. " +
   "Use the PREVIOUS READING supplied in the correction prompt as the text to repair. " +
-  "Remove or replace every unsupported date using ONLY calculator-supported dates explicitly provided in the correction instruction. " +
-  "Do not invent, approximate, shift, diversify, or substitute dates; if no valid date supports a window, remove that window. " +
-  "Preserve all supported interpretation, structure, specificity, warmth, and decisive voice. " +
-  "Change only what is necessary to repair date provenance. " +
-  "Do NOT make the corrected reading more tentative, generic, flat, or clinical than the original. " +
-  "Bold delivery does not upgrade evidence: preserve EVENT, ACTIVATION, and BACKGROUND distinctions exactly as supported. " +
+  "Preserve the reading's interpretation, predictions, structure, wording, specificity, and voice. " +
+  "Change only dated windows whose [[DATE: ...]] marker is unsupported by the approved-date list. " +
+  "Do not rewrite or reinterpret the astrology. " +
   "Output raw JSON only.";
 
 function buildSystemPrompt(topicSystem?: string) {
@@ -274,12 +267,11 @@ export async function handleReading(request: NextRequest) {
           "\n" +
           approvedDates +
           "\n\nCorrect the PREVIOUS READING above." +
-          "\nPreserve its supported interpretation, structure, specificity, and voice." +
-          "\nChange only what is necessary to repair unsupported date provenance." +
-          "\nRemove every unsupported dated window." +
-          "\nDo not move an event to the nearest approved date." +
-          "\nDo not add a date merely because one is available." +
-          "\nA date may be used only when the corresponding astrological evidence actually supports that claim." +
+          "\nPreserve the interpretation, predictions, structure, wording, specificity, and voice." +
+          "\nChange only unsupported [[DATE: ...]] markers and the minimum surrounding timing text needed to keep the sentence natural." +
+          "\nUse only dates from the approved-date list when a marker remains." +
+          "\nDo not move, rewrite, or reinterpret the underlying prediction just to fit an approved date." +
+          "\nIf no approved date cleanly fits a dated window, remove that marker rather than changing the prediction." +
           "\nIf there are no approved dates, the corrected reading must contain no [[DATE: ...]] markers.";
 
         try {
