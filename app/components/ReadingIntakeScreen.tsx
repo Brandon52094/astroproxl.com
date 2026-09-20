@@ -28,7 +28,6 @@ import {
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
-import CreditsPanel from "./CreditsPanel";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -212,7 +211,6 @@ export default function ReadingIntakeScreen({
 }, [propUserStatus]);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [showJxl, setShowJxl] = useState(false);
-  const [showCredits, setShowCredits] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
@@ -734,20 +732,6 @@ setChartStatus("ready");
             </div>
           </section>
 
-          {/* ── Install teaser ── */}
-          {showInstallTeaser && (
-            <div className="install-teaser-wrapper">
-              <button
-                type="button"
-                className="install-teaser tap-fix"
-                data-no-swipe
-                onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
-              >
-                🎁 Tap for a FREE reading!
-              </button>
-            </div>
-          )}
-
           {/* ── Swipe cue ── */}
           <button
             type="button"
@@ -910,23 +894,6 @@ setChartStatus("ready");
             <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
 
-          {/* ── Get Credits (smaller, secondary) ── */}
-          <div className="mt-3.5 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setShowCredits(true)}
-              className="tap-fix inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[13px] font-semibold tracking-[0.02em] transition"
-              style={{
-                border: "1px solid rgba(251,191,36,0.4)",
-                background: "rgba(251,191,36,0.08)",
-                color: "#fcd34d",
-              }}
-            >
-              <Sparkles className="h-[15px] w-[15px]" />
-              Get Credits
-            </button>
-          </div>
-
         </motion.div>
       </div>
 
@@ -1012,14 +979,7 @@ setChartStatus("ready");
           document.body
         )}
 
-      {/* ── Credits overlay (portaled to body) ── */}
-      {showCredits && typeof document !== "undefined" &&
-        createPortal(
-          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
-            <CreditsPanel onClose={() => setShowCredits(false)} />
-          </div>,
-          document.body
-        )}
+
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
