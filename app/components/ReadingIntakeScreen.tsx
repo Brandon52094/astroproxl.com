@@ -26,7 +26,6 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
-import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
 import CreditsPanel from "./CreditsPanel";
 
@@ -196,6 +195,99 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 
+type IntakeElement = "Fire" | "Earth" | "Air" | "Water";
+
+interface IntakeNatalPlacement {
+  name: string;
+  sign: string;
+  degree?: string;
+  house?: number;
+}
+
+interface IntakeProfection {
+  activatedSign?: string;
+  activatedHouse?: number;
+  profectionYear?: number;
+}
+
+interface IntakeChartSnapshot {
+  bigThree: Array<{
+    label: "Sun" | "Moon" | "Rising";
+    placement?: IntakeNatalPlacement;
+  }>;
+  counts: Record<IntakeElement, number>;
+  total: number;
+  profection: IntakeProfection | null;
+}
+
+const INTAKE_SIGN_ELEMENTS: Record<string, IntakeElement> = {
+  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
+  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
+  Gemini: "Air", Libra: "Air", Aquarius: "Air",
+  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
+};
+
+const INTAKE_ELEMENT_META: Record<
+  IntakeElement,
+  { border: string; glow: string; text: string; bar: string }
+> = {
+  Fire:  { border: "rgba(249,115,22,0.70)", glow: "rgba(239,68,68,0.24)",  text: "#FDBA74", bar: "#F97316" },
+  Earth: { border: "rgba(52,211,153,0.66)", glow: "rgba(16,185,129,0.22)", text: "#6EE7B7", bar: "#34D399" },
+  Air:   { border: "rgba(125,211,252,0.62)", glow: "rgba(56,189,248,0.20)", text: "#BAE6FD", bar: "#7DD3FC" },
+  Water: { border: "rgba(96,165,250,0.70)", glow: "rgba(59,130,246,0.24)", text: "#93C5FD", bar: "#60A5FA" },
+};
+
+const INTAKE_ELEMENT_ORDER: IntakeElement[] = ["Fire", "Earth", "Air", "Water"];
+
+function intakeElementOf(sign?: string): IntakeElement | null {
+  if (!sign) return null;
+  return INTAKE_SIGN_ELEMENTS[sign] ?? null;
+}
+
+function intakeOrdinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+function readIntakeChartSnapshot(): IntakeChartSnapshot | null {
+  const stored = loadChart();
+  if (!stored?.chartData) return null;
+
+  const data = stored.chartData as unknown as {
+    tropical?: { planets?: IntakeNatalPlacement[] };
+    profection?: IntakeProfection;
+  };
+
+  const planets = data.tropical?.planets ?? [];
+  if (!planets.length) return null;
+
+  const find = (name: string) => planets.find((p) => p.name === name);
+
+  const counts: Record<IntakeElement, number> = {
+    Fire: 0,
+    Earth: 0,
+    Air: 0,
+    Water: 0,
+  };
+
+  planets.forEach((placement) => {
+    const element = intakeElementOf(placement.sign);
+    if (element) counts[element] += 1;
+  });
+
+  return {
+    bigThree: [
+      { label: "Sun", placement: find("Sun") },
+      { label: "Moon", placement: find("Moon") },
+      { label: "Rising", placement: find("Ascendant") },
+    ],
+    counts,
+    total: Object.values(counts).reduce((sum, count) => sum + count, 0),
+    profection: data.profection ?? null,
+  };
+}
+
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -206,6 +298,7 @@ export default function ReadingIntakeScreen({
   const [isCreatingReading, setIsCreatingReading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
+  const [chartSnapshot, setChartSnapshot] = useState<IntakeChartSnapshot | null>(null);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   useEffect(() => {
   if (propUserStatus) setUserStatus(propUserStatus);
@@ -337,6 +430,13 @@ setChartStatus("ready");
   }, []);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  useEffect(() => {
+    if (chartStatus === "ready" || chartStatus === "recalculating") {
+      setChartSnapshot(readIntakeChartSnapshot());
+    }
+  }, [chartStatus]);
+
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -676,12 +776,75 @@ setChartStatus("ready");
           margin: 8px 0 4px;
         }
 
+        /* ── Compact birth-chart snapshot used on Reading Intake ── */
+        .intake-element-box {
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+        }
+
+        .intake-element-box::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 42%;
+          background: linear-gradient(
+            105deg,
+            transparent 0%,
+            rgba(255,255,255,0.06) 44%,
+            rgba(255,255,255,0.12) 50%,
+            rgba(255,255,255,0.06) 56%,
+            transparent 100%
+          );
+          transform: translateX(-145%) skewX(-18deg);
+          animation: heroShine 5s ease-in-out infinite;
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        .intake-element-box > * {
+          position: relative;
+          z-index: 2;
+        }
+
+        .intake-reading-tile {
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+        }
+
+        .intake-reading-tile[data-selected="true"] {
+          animation: selectedWhiteGlow 2.8s ease-in-out infinite;
+        }
+
+        .intake-reading-tile[data-selected="true"] .intake-reading-icon {
+          animation: whiteGlowPulse 2.2s ease-in-out infinite;
+        }
+
+        .intake-jxl-card {
+          position: relative;
+          overflow: hidden;
+          border-radius: 24px;
+          border: 1px solid rgba(45,212,191,0.28);
+          background:
+            radial-gradient(circle at 50% 0%, rgba(45,212,191,0.08), transparent 45%),
+            linear-gradient(180deg, rgba(8,47,73,0.54), rgba(5,13,30,0.72));
+          box-shadow:
+            0 0 30px rgba(45,212,191,0.10),
+            0 18px 44px rgba(0,0,0,0.62);
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .hero-shine::after,
+          .intake-element-box::after,
+          .intake-reading-tile[data-selected="true"],
+          .intake-reading-tile[data-selected="true"] .intake-reading-icon,
           .install-teaser { animation: none !important; opacity: 0.8; box-shadow: none; }
         }
       `}</style>
@@ -699,7 +862,7 @@ setChartStatus("ready");
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── HERO ── */}
+          {/* ── HERO — exact OG footprint, updated hierarchy only ── */}
           <section className="mb-5 pt-1">
             <div
               className="hero-shine standard-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
@@ -711,45 +874,158 @@ setChartStatus("ready");
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    AstroProXL
+                    The Astrology Engine
                   </span>
                 </div>
-                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  You Can Ask Anything
+
+                <h1
+                  className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]"
+                  style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+                >
+                  ASTROPRO
+                  <span
+                    style={{
+                      fontSize: "0.34em",
+                      verticalAlign: "super",
+                      marginLeft: "0.04em",
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    XL
+                  </span>
                 </h1>
+
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  Your Personal Astrological Predictions.
+                  What&apos;s Coming. What&apos;s Changing. What You Need to Know.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* ── Install teaser ── */}
-          {showInstallTeaser && (
-            <div className="install-teaser-wrapper">
-              <button
-                type="button"
-                className="install-teaser tap-fix"
-                data-no-swipe
-                onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
-              >
-                🎁 Tap for a FREE reading!
-              </button>
-            </div>
-          )}
-
-          {/* ── Swipe cue ── */}
+          {/* ── Three pager circles from the sketch ── */}
           <button
             type="button"
             onClick={() => onSwipeLeft?.()}
-            className="swipe-cue tap-fix mx-auto mt-1 mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
+            className="tap-fix mx-auto -mt-1 mb-4 flex items-center justify-center gap-3 border-0 bg-transparent p-0"
+            aria-label="Explore AstroProXL panels"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Swipe Left to Explore
+            <span className="h-3 w-3 rounded-full border border-white/45 bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.40)]" />
+            <span className="h-3 w-3 rounded-full border border-white/45 bg-transparent" />
+            <span className="h-3 w-3 rounded-full border border-white/45 bg-transparent" />
           </button>
 
-          {/* ── AREA BUTTONS ── */}
-          <section className="space-y-3">
+          {/* ── Three sign squares moved from Birth Chart panel ── */}
+          {chartSnapshot && (
+            <>
+              <section className="mb-3 grid grid-cols-3 gap-3">
+                {chartSnapshot.bigThree.map(({ label, placement }) => {
+                  const element = intakeElementOf(placement?.sign);
+                  const meta = element ? INTAKE_ELEMENT_META[element] : null;
+
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => onSwipeLeft?.()}
+                      className="intake-element-box tap-fix rounded-[20px] border bg-black/20 px-2 py-3.5 text-center"
+                      style={{
+                        borderColor: meta?.border ?? "rgba(255,255,255,0.10)",
+                        boxShadow: meta
+                          ? `0 0 18px ${meta.glow}, inset 0 0 12px ${meta.glow}`
+                          : "0 12px 28px rgba(0,0,0,0.34)",
+                      }}
+                    >
+                      <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500">
+                        {label}
+                      </p>
+                      <p className="mt-1.5 truncate text-[16px] font-medium leading-tight text-white">
+                        {placement?.sign ?? "—"}
+                      </p>
+                      <p className="text-[10px] tabular-nums text-slate-400">
+                        {placement?.degree ?? ""}
+                      </p>
+                      {element && meta && (
+                        <p
+                          className="mt-1 text-[8px] font-medium uppercase tracking-[0.16em]"
+                          style={{ color: meta.text }}
+                        >
+                          {element}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
+              </section>
+
+              {/* ── Condensed Element Balance block ── */}
+              {chartSnapshot.total > 0 && (
+                <section className="standard-shadow mb-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3 backdrop-blur-sm">
+                  <div className="space-y-[7px]">
+                    {INTAKE_ELEMENT_ORDER.map((element) => {
+                      const count = chartSnapshot.counts[element];
+                      const pct = Math.round((count / chartSnapshot.total) * 100);
+                      const meta = INTAKE_ELEMENT_META[element];
+
+                      return (
+                        <div key={element} className="flex items-center gap-3">
+                          <span
+                            className="w-11 text-[9px] font-medium uppercase tracking-[0.10em]"
+                            style={{ color: meta.text }}
+                          >
+                            {element}
+                          </span>
+
+                          <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pct}%` }}
+                              transition={{
+                                duration: shouldReduceMotion ? 0 : 0.7,
+                                ease: "easeOut",
+                              }}
+                              className="h-full rounded-full"
+                              style={{
+                                backgroundColor: meta.bar,
+                                opacity: 0.88,
+                              }}
+                            />
+                          </div>
+
+                          <span className="w-5 text-right text-[10px] tabular-nums text-slate-500">
+                            {count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* ── Scorpio/Profection year pill ── */}
+              {chartSnapshot.profection?.activatedSign && (
+                <div className="mb-4 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => onSwipeLeft?.()}
+                    className="tap-fix inline-flex h-8 items-center gap-2 rounded-full border border-violet-400/40 bg-violet-400/[0.08] px-4 text-[10px] font-medium uppercase tracking-[0.15em] text-violet-100 shadow-[0_0_20px_rgba(139,92,246,0.12)]"
+                  >
+                    <span>
+                      {chartSnapshot.profection.activatedSign} Year
+                    </span>
+                    {typeof chartSnapshot.profection.activatedHouse === "number" && (
+                      <span className="text-violet-300/75">
+                        · {intakeOrdinal(chartSnapshot.profection.activatedHouse)} House
+                      </span>
+                    )}
+                    <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Reading buttons: four squares from the sketch ── */}
+          <section className="mb-4 grid grid-cols-4 gap-2.5">
             {AREAS.map((area) => {
               const Icon = area.icon;
               const isSelected = selectedArea === area.id;
@@ -759,80 +1035,66 @@ setChartStatus("ready");
                 <motion.button
                   key={area.id}
                   ref={isSelected ? clusterTopRef : undefined}
+                  whileTap={{ scale: 0.96 }}
                   transition={{ duration: 0.12 }}
                   type="button"
                   onClick={() => {
                     const isFirstSelection = selectedArea !== area.id;
                     setSelectedArea(area.id);
                     setQuestion("");
-                    trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
-                    if (isFirstSelection && area.id !== "other") scrollClusterIntoViewThenFocus();
+                    trackTtq("ViewContent", {
+                      content_id: area.id,
+                      content_name: area.title,
+                    });
+                    if (isFirstSelection && area.id !== "other") {
+                      scrollClusterIntoViewThenFocus();
+                    }
                   }}
                   data-selected={isSelected ? "true" : "false"}
-                  className={cn(
-                    "tap-fix selected-card-shell standard-shadow w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
-                    isSelected && "selected-card-glow",
-                    !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
-                  )}
+                  aria-label={area.title}
+                  className="intake-reading-tile tap-fix flex aspect-square items-center justify-center rounded-[20px] border bg-white/[0.035]"
                   style={{
-                    willChange: "transform, opacity",
-                    ["--selected-wash" as string]: areaColors.gradient,
-                    ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 40px ${areaColors.glow}`,
-                    backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
-                    borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
-                  } as React.CSSProperties}
+                    borderColor: isSelected
+                      ? areaColors.border
+                      : "rgba(255,255,255,0.10)",
+                    background: isSelected
+                      ? areaColors.gradient
+                      : "rgba(255,255,255,0.035)",
+                    boxShadow: isSelected
+                      ? `0 0 28px ${areaColors.glow}, 0 12px 28px rgba(0,0,0,0.48)`
+                      : "0 12px 26px rgba(0,0,0,0.44)",
+                  }}
                 >
-                  {isSelected && (
-                    <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
-                  )}
-                  <div className="relative z-[1] flex items-start gap-3">
-                    <motion.div
-                      animate={getIconPulseAnimation(isSelected)}
-                      className={cn(
-                        "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
-                        isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
-                      )}
-                      style={{
-                        borderColor: isSelected ? areaColors.border : undefined,
-                        background: isSelected ? areaColors.gradient : undefined,
-                        color: isSelected ? areaColors.text : undefined,
-                        boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
-                      }}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </motion.div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
-                        <AnimatePresence>
-                          {isSelected && (
-                            <motion.span
-                              initial={{ opacity: 0, scale: 0.92, y: 4 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.92, y: 4 }}
-                              transition={{ duration: 0.18, ease: "easeOut" }}
-                              className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
-                              style={{ borderColor: "rgba(255,255,255,0.3)", backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderStyle: "solid", boxShadow: "0 0 20px rgba(255,255,255,0.08)" }}
-                            >
-                              <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)", transform: "translateX(-155%)" }} />
-                              <span className="relative z-[1]">Selected</span>
-                            </motion.span>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      <motion.p
-                        className="mt-1 text-sm leading-5"
-                        animate={{ color: isSelected ? "rgba(241, 245, 249, 0.92)" : "rgba(148, 163, 184, 1)" }}
-                        transition={{ duration: 0.24, ease: "easeOut" }}
-                      >
-                        {area.description}
-                      </motion.p>
-                    </div>
-                  </div>
+                  <motion.span
+                    animate={getIconPulseAnimation(isSelected)}
+                    className="intake-reading-icon flex h-9 w-9 items-center justify-center rounded-xl"
+                    style={{
+                      color: isSelected ? areaColors.text : "#CBD5E1",
+                    }}
+                  >
+                    <Icon className="h-5 w-5" strokeWidth={2} />
+                  </motion.span>
                 </motion.button>
               );
             })}
           </section>
+
+          {/* ── Install teaser kept, but visually secondary ── */}
+          {showInstallTeaser && (
+            <div className="install-teaser-wrapper !mt-0">
+              <button
+                type="button"
+                className="install-teaser tap-fix"
+                data-no-swipe
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowInstallModal(true);
+                }}
+              >
+                🎁 Tap for a FREE reading!
+              </button>
+            </div>
+          )}
 
           {/* ── TEXTAREA ── */}
           <AnimatePresence>
@@ -890,15 +1152,31 @@ setChartStatus("ready");
             )}
           </div>
 
-          {/* ── Ask JXL ── */}
-          <div className="mt-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
-            <div className="h-px flex-1 bg-white/[0.06]" />
-          </div>
-          <div className="mt-4">
-            <AskJxlButton onClick={() => setShowJxl(true)} />
-          </div>
+          {/* ── Ask JXL: bottom block from the sketch ── */}
+          <button
+            type="button"
+            onClick={() => setShowJxl(true)}
+            className="intake-jxl-card tap-fix mt-5 w-full px-5 py-5 text-center"
+          >
+            <p
+              className="text-[28px] font-semibold tracking-[0.14em] text-[#D8FFF6]"
+              style={{
+                fontFamily: "Georgia, 'Times New Roman', serif",
+                textShadow: "0 0 22px rgba(45,212,191,0.30)",
+              }}
+            >
+              ASK JXL
+            </p>
+            <p className="mt-1 text-[12px] text-slate-300">
+              Real-time astrological guidance on your current situation
+            </p>
+            <p
+              className="mt-1.5 text-[12px] font-semibold text-[#6EE7B7]"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              Just press-and-hold, speak what&apos;s on your mind
+            </p>
+          </button>
 
           {/* ── Get Credits (smaller, secondary) ── */}
           <div className="mt-3.5 flex justify-center">
