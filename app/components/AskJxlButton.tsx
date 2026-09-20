@@ -12,8 +12,9 @@ export interface AskJxlButtonProps {
 }
 
 /**
- * "Ask JXL" button — no waveform. Just the button with an animated
- * aurora glow bleeding out behind its edges (CSS only, no canvas).
+ * "Ask JXL" button — no waveform. The aurora glow that used to bleed out
+ * behind this button now lives on the main hero (see ReadingIntakeScreen's
+ * .hero-glow), so this is just the clean button.
  */
 export default function AskJxlButton({
   label = "Ask JXL",
@@ -23,9 +24,6 @@ export default function AskJxlButton({
 }: AskJxlButtonProps) {
   return (
     <div className={`ask-jxl-wrap${className ? ` ${className}` : ""}`}>
-      {/* Aurora glow bleeding out behind the container edges */}
-      <div className="ask-jxl-glow" aria-hidden="true" />
-
       <button type="button" onClick={onClick} className="ask-jxl-btn" style={{ height }}>
         <span className="ask-jxl-label">{label}</span>
         <span className="ask-jxl-sub">
@@ -36,23 +34,6 @@ export default function AskJxlButton({
 
       <style jsx>{`
         .ask-jxl-wrap { position: relative; width: 100%; }
-
-        .ask-jxl-glow {
-          position: absolute;
-          inset: -10px;
-          border-radius: 34px;
-          z-index: 0;
-          pointer-events: none;
-          background: linear-gradient(120deg, #34d399, #22d3ee, #38bdf8, #a855f7, #34d399);
-          background-size: 220% 220%;
-          filter: blur(22px);
-          opacity: 0.5;
-          animation: auroraGlow 9s ease-in-out infinite;
-        }
-        @keyframes auroraGlow {
-          0%, 100% { background-position: 0% 50%; opacity: 0.42; }
-          50% { background-position: 100% 50%; opacity: 0.62; }
-        }
 
         .ask-jxl-btn {
           position: relative;
@@ -102,10 +83,6 @@ export default function AskJxlButton({
           display: block;
           color: rgba(167,243,208,0.85);
           font-weight: 600;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .ask-jxl-glow { animation: none !important; }
         }
       `}</style>
     </div>
