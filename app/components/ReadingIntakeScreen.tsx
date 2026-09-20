@@ -28,6 +28,7 @@ import {
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
+import CreditsPanel from "./CreditsPanel";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -211,6 +212,7 @@ export default function ReadingIntakeScreen({
 }, [propUserStatus]);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [showJxl, setShowJxl] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
@@ -709,21 +711,11 @@ setChartStatus("ready");
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    The Astro Engine
+                    AstroProXL
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  ASTROPRO
-                  <span
-                    style={{
-                      fontSize: "0.34em",
-                      verticalAlign: "super",
-                      marginLeft: "0.04em",
-                      letterSpacing: "0.03em",
-                    }}
-                  >
-                    XL
-                  </span>
+                  You Can Ask Anything
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
                   Your Personal Astrological Predictions.
@@ -731,6 +723,20 @@ setChartStatus("ready");
               </div>
             </div>
           </section>
+
+          {/* ── Install teaser ── */}
+          {showInstallTeaser && (
+            <div className="install-teaser-wrapper">
+              <button
+                type="button"
+                className="install-teaser tap-fix"
+                data-no-swipe
+                onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
+              >
+                🎁 Tap for a FREE reading!
+              </button>
+            </div>
+          )}
 
           {/* ── Swipe cue ── */}
           <button
@@ -894,6 +900,23 @@ setChartStatus("ready");
             <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
 
+          {/* ── Get Credits (smaller, secondary) ── */}
+          <div className="mt-3.5 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowCredits(true)}
+              className="tap-fix inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[13px] font-semibold tracking-[0.02em] transition"
+              style={{
+                border: "1px solid rgba(251,191,36,0.4)",
+                background: "rgba(251,191,36,0.08)",
+                color: "#fcd34d",
+              }}
+            >
+              <Sparkles className="h-[15px] w-[15px]" />
+              Get Credits
+            </button>
+          </div>
+
         </motion.div>
       </div>
 
@@ -979,7 +1002,14 @@ setChartStatus("ready");
           document.body
         )}
 
-
+      {/* ── Credits overlay (portaled to body) ── */}
+      {showCredits && typeof document !== "undefined" &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
+            <CreditsPanel onClose={() => setShowCredits(false)} />
+          </div>,
+          document.body
+        )}
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
@@ -1011,6 +1041,7 @@ setChartStatus("ready");
                           const d = await res.json();
                           if (Number(d.credits ?? 0) >= 1 || d.isSubscribed === true) break;
                         } catch { /* keep polling */ }
+                        await new Promise((r) => setTimeout(r, 800));
                       }
                       setClientSecret(null);
                       router.push("/reading/preparing");
