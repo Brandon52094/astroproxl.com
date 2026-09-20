@@ -196,49 +196,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 
 const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 
-type Element = "Fire" | "Earth" | "Air" | "Water";
-
-interface IntakeNatalPlacement {
-  name: string;
-  sign: string;
-  degree?: string;
-  house?: number;
-}
-
-interface IntakeProfectionData {
-  profectionYear?: number;
-  age?: number;
-  activatedSign?: string;
-  activatedHouse?: number;
-  timeLord?: string;
-}
-
-const SIGN_ELEMENTS: Record<string, Element> = {
-  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
-  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
-  Gemini: "Air", Libra: "Air", Aquarius: "Air",
-  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
-};
-
-const ELEMENT_ORDER: Element[] = ["Fire", "Earth", "Air", "Water"];
-const ELEMENT_UI: Record<Element, { text: string; bar: string; glow: string }> = {
-  Fire: { text: "#FDBA74", bar: "#F97316", glow: "rgba(249,115,22,0.22)" },
-  Earth: { text: "#6EE7B7", bar: "#34D399", glow: "rgba(52,211,153,0.20)" },
-  Air: { text: "#BAE6FD", bar: "#7DD3FC", glow: "rgba(125,211,252,0.20)" },
-  Water: { text: "#93C5FD", bar: "#60A5FA", glow: "rgba(96,165,250,0.22)" },
-};
-
-function elementOf(sign?: string): Element | null {
-  return sign ? SIGN_ELEMENTS[sign] ?? null : null;
-}
-
-function ordinal(n?: number): string {
-  if (typeof n !== "number") return "";
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
-}
-
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -259,34 +216,6 @@ export default function ReadingIntakeScreen({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
-
-  // Compact chart snapshot for the intake screen. This reuses the already-calculated
-  // chart data; it does not recalculate astrology here.
-  const chartSnapshot = useMemo(() => {
-    if (chartStatus !== "ready") return null;
-    const stored = loadChart();
-    const data = stored?.chartData as unknown as {
-      tropical?: { planets?: IntakeNatalPlacement[] };
-      profection?: IntakeProfectionData;
-    } | undefined;
-
-    const planets = data?.tropical?.planets ?? [];
-    const find = (name: string) => planets.find((p) => p.name === name);
-    const bigThree = [
-      { label: "Sun", placement: find("Sun") },
-      { label: "Moon", placement: find("Moon") },
-      { label: "Rising", placement: find("Ascendant") },
-    ];
-
-    const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
-    planets.forEach((p) => {
-      const element = elementOf(p.sign);
-      if (element) counts[element] += 1;
-    });
-    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-
-    return { bigThree, counts, total, profection: data?.profection ?? null };
-  }, [chartStatus]);
   const clusterTopRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
@@ -747,46 +676,6 @@ setChartStatus("ready");
           margin: 8px 0 4px;
         }
 
-        .intake-big-three {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 8px;
-        }
-        .intake-sign-card {
-          min-width: 0;
-          border-radius: 18px;
-          border: 1px solid rgba(255,255,255,0.10);
-          background: rgba(255,255,255,0.035);
-          padding: 9px 6px 8px;
-          text-align: center;
-          box-shadow: 0 10px 24px rgba(0,0,0,0.34);
-        }
-        .intake-element-card {
-          border-radius: 20px;
-          border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(255,255,255,0.025);
-          padding: 9px 11px;
-        }
-        .reading-grid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
-        }
-        .reading-tile {
-          min-height: 82px;
-          border-radius: 19px;
-          padding: 11px 5px 9px;
-          text-align: center;
-        }
-        @media (max-height: 760px) {
-          .compact-intake-shell { padding-top: 32px !important; }
-          .compact-intake-hero { padding-top: 18px !important; padding-bottom: 18px !important; }
-          .compact-intake-hero h1 { font-size: 34px !important; }
-          .compact-intake-stack { gap: 10px !important; }
-          .intake-sign-card { padding-top: 7px; padding-bottom: 6px; }
-          .reading-tile { min-height: 74px; padding-top: 9px; padding-bottom: 7px; }
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
@@ -801,128 +690,43 @@ setChartStatus("ready");
       <StarfieldBackground />
 
       <div
-        className="compact-intake-shell relative z-10 mx-auto flex min-h-screen w-full max-w-[430px] flex-col px-4 pt-10"
-        style={{ paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
+        style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="compact-intake-stack flex flex-col gap-3"
+          className="flex flex-col top-section"
         >
-          {/* ── HERO — same visual language, reorganized copy ── */}
-          <section>
+          {/* ── HERO ── */}
+          <section className="mb-5 pt-1">
             <div
-              className="compact-intake-hero hero-shine standard-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-6 text-center"
+              className="hero-shine standard-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
               style={{
                 borderColor: "rgba(255, 255, 255, 0.60)",
                 boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
               }}
             >
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-4 py-1.5">
+                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    The Astrology Engine
+                    AstroProXL
                   </span>
                 </div>
-                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[0.03em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  ASTROPROXL
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                  You Can Ask Anything
                 </h1>
-                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-5 text-slate-300/86 sm:text-[15px]">
-                  What’s Coming. What’s Changing. What You Need to Know.
+                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
+                  Your Personal Astrological Predictions.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* ── Swipe dots / cue kept compact ── */}
-          <div className="flex items-center justify-center gap-5">
-            <div className="flex items-center gap-2" aria-hidden="true">
-              <span className="h-2 w-2 rounded-full bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.45)]" />
-              <span className="h-2 w-2 rounded-full border border-white/30" />
-              <span className="h-2 w-2 rounded-full border border-white/30" />
-            </div>
-            <button
-              type="button"
-              onClick={() => onSwipeLeft?.()}
-              className="swipe-cue tap-fix flex items-center justify-center gap-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/60"
-            >
-              <ChevronLeft className="h-3 w-3" />
-              Explore
-            </button>
-          </div>
-
-          {/* ── Compact birth-chart snapshot moved from Birth Chart panel ── */}
-          {chartSnapshot && (
-            <>
-              <section className="intake-big-three">
-                {chartSnapshot.bigThree.map(({ label, placement }) => {
-                  const element = elementOf(placement?.sign);
-                  const ui = element ? ELEMENT_UI[element] : null;
-                  return (
-                    <div
-                      key={label}
-                      className="intake-sign-card"
-                      style={ui ? { borderColor: ui.text + "66", boxShadow: `0 0 18px ${ui.glow}, 0 10px 24px rgba(0,0,0,0.34)` } : undefined}
-                    >
-                      <p className="text-[8px] font-medium uppercase tracking-[0.17em] text-slate-500">{label}</p>
-                      <p className="mt-0.5 truncate text-[15px] font-semibold leading-tight text-white">{placement?.sign ?? "—"}</p>
-                      <p className="mt-0.5 truncate text-[9px] uppercase tracking-[0.12em]" style={{ color: ui?.text ?? "#64748b" }}>
-                        {element ?? ""}
-                      </p>
-                    </div>
-                  );
-                })}
-              </section>
-
-              {chartSnapshot.total > 0 && (
-                <section className="intake-element-card">
-                  <div className="grid grid-cols-4 gap-2">
-                    {ELEMENT_ORDER.map((element) => {
-                      const count = chartSnapshot.counts[element];
-                      const pct = Math.round((count / chartSnapshot.total) * 100);
-                      const ui = ELEMENT_UI[element];
-                      return (
-                        <div key={element} className="min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="truncate text-[8px] font-medium uppercase tracking-[0.12em]" style={{ color: ui.text }}>{element}</span>
-                            <span className="text-[8px] tabular-nums text-slate-500">{pct}%</span>
-                          </div>
-                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${pct}%` }}
-                              transition={{ duration: shouldReduceMotion ? 0 : 0.65, ease: "easeOut" }}
-                              className="h-full rounded-full"
-                              style={{ backgroundColor: ui.bar }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {chartSnapshot.profection?.activatedSign && (
-                <button
-                  type="button"
-                  onClick={() => onSwipeLeft?.()}
-                  className="tap-fix mx-auto inline-flex min-h-8 items-center justify-center rounded-full border border-indigo-400/35 bg-indigo-400/[0.08] px-4 text-[9px] font-medium uppercase tracking-[0.16em] text-indigo-100 shadow-[0_0_20px_rgba(99,102,241,0.10)]"
-                >
-                  {chartSnapshot.profection.activatedSign} Year
-                  {typeof chartSnapshot.profection.activatedHouse === "number"
-                    ? ` · ${ordinal(chartSnapshot.profection.activatedHouse)} House`
-                    : ""}
-                  <span className="ml-2 text-indigo-300">→</span>
-                </button>
-              )}
-            </>
-          )}
-
-          {/* ── Install teaser stays available without dominating the first screen ── */}
+          {/* ── Install teaser ── */}
           {showInstallTeaser && (
-            <div className="flex justify-center">
+            <div className="install-teaser-wrapper">
               <button
                 type="button"
                 className="install-teaser tap-fix"
@@ -934,56 +738,100 @@ setChartStatus("ready");
             </div>
           )}
 
-          {/* ── Four compact reading buttons ── */}
-          <section>
-            <p className="mb-2 text-center text-[9px] font-medium uppercase tracking-[0.20em] text-slate-500">
-              Choose Your Reading
-            </p>
-            <div className="reading-grid">
-              {AREAS.map((area) => {
-                const Icon = area.icon;
-                const isSelected = selectedArea === area.id;
-                const areaColors = getAreaColors(area.id);
+          {/* ── Swipe cue ── */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="swipe-cue tap-fix mx-auto mt-1 mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Swipe Left to Explore
+          </button>
 
-                return (
-                  <motion.button
-                    key={area.id}
-                    ref={isSelected ? clusterTopRef : undefined}
-                    type="button"
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => {
-                      const isFirstSelection = selectedArea !== area.id;
-                      setSelectedArea(area.id);
-                      setQuestion("");
-                      trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
-                      if (isFirstSelection && area.id !== "other") scrollClusterIntoViewThenFocus();
-                    }}
-                    data-selected={isSelected ? "true" : "false"}
-                    className={cn(
-                      "reading-tile tap-fix selected-card-shell border bg-white/[0.035] backdrop-blur-sm transition-all duration-300",
-                      isSelected && "selected-card-glow"
-                    )}
-                    style={{
-                      ["--selected-wash" as string]: areaColors.gradient,
-                      ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 12px 28px rgba(0,0,0,0.52), 0 0 30px ${areaColors.glow}`,
-                      borderColor: isSelected ? areaColors.border : "rgba(255,255,255,0.08)",
-                      backgroundColor: isSelected ? areaColors.bg : "rgba(255,255,255,0.035)",
-                    } as React.CSSProperties}
-                  >
+          {/* ── AREA BUTTONS ── */}
+          <section className="space-y-3">
+            {AREAS.map((area) => {
+              const Icon = area.icon;
+              const isSelected = selectedArea === area.id;
+              const areaColors = getAreaColors(area.id);
+
+              return (
+                <motion.button
+                  key={area.id}
+                  ref={isSelected ? clusterTopRef : undefined}
+                  transition={{ duration: 0.12 }}
+                  type="button"
+                  onClick={() => {
+                    const isFirstSelection = selectedArea !== area.id;
+                    setSelectedArea(area.id);
+                    setQuestion("");
+                    trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
+                    if (isFirstSelection && area.id !== "other") scrollClusterIntoViewThenFocus();
+                  }}
+                  data-selected={isSelected ? "true" : "false"}
+                  className={cn(
+                    "tap-fix selected-card-shell standard-shadow w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
+                    isSelected && "selected-card-glow",
+                    !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
+                  )}
+                  style={{
+                    willChange: "transform, opacity",
+                    ["--selected-wash" as string]: areaColors.gradient,
+                    ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 40px ${areaColors.glow}`,
+                    backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
+                    borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
+                  } as React.CSSProperties}
+                >
+                  {isSelected && (
+                    <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
+                  )}
+                  <div className="relative z-[1] flex items-start gap-3">
                     <motion.div
                       animate={getIconPulseAnimation(isSelected)}
-                      className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-black/20"
-                      style={{ color: isSelected ? areaColors.text : "#cbd5e1" }}
+                      className={cn(
+                        "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
+                        isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
+                      )}
+                      style={{
+                        borderColor: isSelected ? areaColors.border : undefined,
+                        background: isSelected ? areaColors.gradient : undefined,
+                        color: isSelected ? areaColors.text : undefined,
+                        boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
+                      }}
                     >
                       <Icon className="h-4 w-4" />
                     </motion.div>
-                    <span className="mt-2 block text-[11px] font-semibold leading-tight text-white">
-                      {area.id === "other" ? "What’s Coming" : area.title}
-                    </span>
-                  </motion.button>
-                );
-              })}
-            </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
+                        <AnimatePresence>
+                          {isSelected && (
+                            <motion.span
+                              initial={{ opacity: 0, scale: 0.92, y: 4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.92, y: 4 }}
+                              transition={{ duration: 0.18, ease: "easeOut" }}
+                              className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
+                              style={{ borderColor: "rgba(255,255,255,0.3)", backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderStyle: "solid", boxShadow: "0 0 20px rgba(255,255,255,0.08)" }}
+                            >
+                              <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)", transform: "translateX(-155%)" }} />
+                              <span className="relative z-[1]">Selected</span>
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                      <motion.p
+                        className="mt-1 text-sm leading-5"
+                        animate={{ color: isSelected ? "rgba(241, 245, 249, 0.92)" : "rgba(148, 163, 184, 1)" }}
+                        transition={{ duration: 0.24, ease: "easeOut" }}
+                      >
+                        {area.description}
+                      </motion.p>
+                    </div>
+                  </div>
+                </motion.button>
+              );
+            })}
           </section>
 
           {/* ── TEXTAREA ── */}
@@ -994,7 +842,7 @@ setChartStatus("ready");
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-3 space-y-2"
+                className="mt-6 space-y-2"
               >
                 <div
                   className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px] standard-shadow"
@@ -1006,11 +854,11 @@ setChartStatus("ready");
                     <Textarea
                       id="question"
                       ref={textareaRef}
-                      rows={4}
+                      rows={5}
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       placeholder={AREAS.find(a => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
-                      className="min-h-[104px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
+                      className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
                       style={{ backgroundColor: "transparent" }}
                     />
                   </div>
@@ -1043,12 +891,12 @@ setChartStatus("ready");
           </div>
 
           {/* ── Ask JXL ── */}
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-6 flex items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.06]" />
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
-          <div className="mt-2">
+          <div className="mt-4">
             <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
 
