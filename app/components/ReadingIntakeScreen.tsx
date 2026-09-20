@@ -711,11 +711,21 @@ setChartStatus("ready");
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    AstroProXL
+                    The Astro Engine
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  You Can Ask Anything
+                  ASTROPRO
+                  <span
+                    style={{
+                      fontSize: "0.34em",
+                      verticalAlign: "super",
+                      marginLeft: "0.04em",
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    XL
+                  </span>
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
                   Your Personal Astrological Predictions.
@@ -1041,7 +1051,6 @@ setChartStatus("ready");
                           const d = await res.json();
                           if (Number(d.credits ?? 0) >= 1 || d.isSubscribed === true) break;
                         } catch { /* keep polling */ }
-                        await new Promise((r) => setTimeout(r, 800));
                       }
                       setClientSecret(null);
                       router.push("/reading/preparing");
