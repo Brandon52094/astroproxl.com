@@ -489,22 +489,34 @@ export default function ReadingIntakeScreen({
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── Aurora glow (moved here from AskJxlButton) — bleeds out behind the hero ── */
-        .hero-glow {
-          position: absolute;
-          inset: -10px;
-          border-radius: 34px;
-          z-index: 0;
-          pointer-events: none;
-          background: linear-gradient(120deg, #34d399, #22d3ee, #38bdf8, #a855f7, #34d399);
-          background-size: 220% 220%;
-          filter: blur(22px);
-          opacity: 0.5;
-          animation: auroraGlow 9s ease-in-out infinite;
+        /* ── Aurora OUTLINE glow (moved from AskJxlButton) — the container's
+              border glows and cycles color; outer glow only, nothing inside ── */
+        .hero-outline {
+          border: 1px solid rgba(56,189,248,0.85);
+          box-shadow:
+            0 0 18px rgba(56,189,248,0.55),
+            0 0 36px rgba(56,189,248,0.28),
+            0 18px 44px rgba(0,0,0,0.72),
+            0 36px 80px rgba(0,0,0,0.56);
+          animation: heroBorderGlow 9s ease-in-out infinite;
         }
-        @keyframes auroraGlow {
-          0%, 100% { background-position: 0% 50%; opacity: 0.42; }
-          50% { background-position: 100% 50%; opacity: 0.62; }
+        @keyframes heroBorderGlow {
+          0%, 100% {
+            border-color: rgba(52,211,153,0.85);
+            box-shadow: 0 0 18px rgba(52,211,153,0.55), 0 0 36px rgba(52,211,153,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
+          25% {
+            border-color: rgba(34,211,238,0.85);
+            box-shadow: 0 0 18px rgba(34,211,238,0.55), 0 0 36px rgba(34,211,238,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
+          50% {
+            border-color: rgba(56,189,248,0.85);
+            box-shadow: 0 0 18px rgba(56,189,248,0.55), 0 0 36px rgba(56,189,248,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
+          75% {
+            border-color: rgba(168,85,247,0.85);
+            box-shadow: 0 0 18px rgba(168,85,247,0.55), 0 0 36px rgba(168,85,247,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
         }
 
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
@@ -537,7 +549,7 @@ export default function ReadingIntakeScreen({
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .hero-shine::after,
-          .hero-glow { animation: none !important; }
+          .hero-outline { animation: none !important; }
         }
       `}</style>
 
@@ -554,30 +566,21 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── HERO (with aurora glow behind) ── */}
+          {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-5 pt-1">
-            <div className="relative">
-              <div className="hero-glow" aria-hidden="true" />
-              <div
-                className="hero-shine standard-shadow relative z-[1] overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
-                style={{
-                  borderColor: "rgba(255, 255, 255, 0.60)",
-                  boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
-                }}
-              >
-                <div className="relative z-10 mx-auto max-w-[560px]">
-                  <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                      AstroProXL
-                    </span>
-                  </div>
-                  <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                    You Can Ask Anything
-                  </h1>
-                  <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                    Your Personal Astrological Predictions.
-                  </p>
+            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-7 text-center">
+              <div className="relative z-10 mx-auto max-w-[560px]">
+                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
+                    AstroProXL
+                  </span>
                 </div>
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                  You Can Ask Anything
+                </h1>
+                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
+                  Your Personal Astrological Predictions.
+                </p>
               </div>
             </div>
           </section>
