@@ -26,7 +26,9 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
+import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
+import CreditsPanel from "./CreditsPanel";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -210,6 +212,7 @@ export default function ReadingIntakeScreen({
 }, [propUserStatus]);
   const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
   const [showJxl, setShowJxl] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
   const shouldReduceMotion = useReducedMotion();
@@ -673,117 +676,6 @@ setChartStatus("ready");
           margin: 8px 0 4px;
         }
 
-        .jxl-preview-card {
-          position: relative;
-          overflow: hidden;
-          border-radius: 28px;
-          border: 1px solid rgba(96, 165, 250, 0.62);
-          background:
-            radial-gradient(circle at 50% 0%, rgba(59,130,246,0.12), transparent 42%),
-            linear-gradient(180deg, rgba(6,20,48,0.72), rgba(3,10,26,0.88));
-          box-shadow:
-            0 0 42px rgba(59,130,246,0.16),
-            0 0 90px rgba(14,165,233,0.08),
-            0 18px 44px rgba(0,0,0,0.72);
-        }
-        .jxl-preview-card::before {
-          content: "";
-          position: absolute;
-          inset: -1px;
-          border-radius: inherit;
-          pointer-events: none;
-          background:
-            linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.02) 30%, rgba(96,165,250,0.16) 60%, rgba(255,255,255,0.04) 100%);
-          opacity: 0.75;
-          mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          padding: 1px;
-          -webkit-mask-composite: xor;
-                  mask-composite: exclude;
-        }
-        .jxl-preview-card::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          background: radial-gradient(circle at 50% 120%, rgba(14,165,233,0.12), transparent 40%);
-          opacity: 0.75;
-        }
-        .jxl-orb {
-          position: relative;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 58px;
-          height: 58px;
-          border-radius: 999px;
-          border: 1px solid rgba(125, 211, 252, 0.48);
-          background: radial-gradient(circle at 50% 30%, rgba(96,165,250,0.20), rgba(7,20,48,0.82));
-          box-shadow: inset 0 0 18px rgba(255,255,255,0.06), 0 0 28px rgba(59,130,246,0.18);
-          flex-shrink: 0;
-        }
-        .jxl-wave {
-          display: flex;
-          align-items: center;
-          gap: 3px;
-          height: 24px;
-        }
-        .jxl-wave span {
-          width: 3px;
-          border-radius: 999px;
-          background: linear-gradient(180deg, rgba(186,230,253,1), rgba(56,189,248,0.7));
-          box-shadow: 0 0 10px rgba(56,189,248,0.35);
-        }
-        .jxl-wave span:nth-child(1) { height: 8px; }
-        .jxl-wave span:nth-child(2) { height: 15px; }
-        .jxl-wave span:nth-child(3) { height: 22px; }
-        .jxl-wave span:nth-child(4) { height: 12px; }
-        .jxl-wave span:nth-child(5) { height: 18px; }
-        .jxl-wave span:nth-child(6) { height: 9px; }
-
-        .jxl-mic-icon {
-          width: 22px;
-          height: 22px;
-          position: relative;
-          display: inline-block;
-        }
-        .jxl-mic-icon::before {
-          content: "";
-          position: absolute;
-          left: 6px;
-          top: 1px;
-          width: 10px;
-          height: 13px;
-          border: 2px solid rgba(226,232,240,0.95);
-          border-bottom-left-radius: 8px;
-          border-bottom-right-radius: 8px;
-          border-top-left-radius: 8px;
-          border-top-right-radius: 8px;
-        }
-        .jxl-mic-icon::after {
-          content: "";
-          position: absolute;
-          left: 10px;
-          top: 15px;
-          width: 2px;
-          height: 6px;
-          background: rgba(226,232,240,0.95);
-          box-shadow: 0 8px 0 rgba(226,232,240,0.95);
-        }
-        .jxl-mic-arc {
-          position: absolute;
-          left: 4px;
-          top: 9px;
-          width: 14px;
-          height: 10px;
-          border-left: 2px solid rgba(226,232,240,0.95);
-          border-right: 2px solid rgba(226,232,240,0.95);
-          border-bottom: 2px solid rgba(226,232,240,0.95);
-          border-bottom-left-radius: 12px;
-          border-bottom-right-radius: 12px;
-          border-top: 0;
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
@@ -819,27 +711,14 @@ setChartStatus("ready");
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    The Astrology Engine
+                    AstroProXL
                   </span>
                 </div>
-                <h1
-                  className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]"
-                  style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-                >
-                  ASTROPRO
-                  <span
-                    style={{
-                      fontSize: "0.34em",
-                      verticalAlign: "super",
-                      marginLeft: "0.04em",
-                      letterSpacing: "0.03em",
-                    }}
-                  >
-                    XL
-                  </span>
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                  You Can Ask Anything
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  What&apos;s Coming. What&apos;s Changing. What You Need to Know.
+                  Your Personal Astrological Predictions.
                 </p>
               </div>
             </div>
@@ -1012,48 +891,29 @@ setChartStatus("ready");
           </div>
 
           {/* ── Ask JXL ── */}
-          <div className="mt-6">
+          <div className="mt-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.06]" />
+            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
+            <div className="h-px flex-1 bg-white/[0.06]" />
+          </div>
+          <div className="mt-4">
+            <AskJxlButton onClick={() => setShowJxl(true)} />
+          </div>
+
+          {/* ── Get Credits (smaller, secondary) ── */}
+          <div className="mt-3.5 flex justify-center">
             <button
               type="button"
-              onClick={() => setShowJxl(true)}
-              className="jxl-preview-card tap-fix relative w-full px-5 py-5 text-left"
+              onClick={() => setShowCredits(true)}
+              className="tap-fix inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[13px] font-semibold tracking-[0.02em] transition"
+              style={{
+                border: "1px solid rgba(251,191,36,0.4)",
+                background: "rgba(251,191,36,0.08)",
+                color: "#fcd34d",
+              }}
             >
-              <div className="relative z-[1] flex items-center gap-4">
-                <div className="jxl-orb">
-                  <div className="jxl-wave" aria-hidden="true">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
-
-                <div className="min-w-0 flex-1 text-center">
-                  <p
-                    className="text-[15px] font-semibold uppercase tracking-[0.24em] text-white"
-                    style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-                  >
-                    ASK JXL
-                  </p>
-                  <p className="mt-1 text-[12px] leading-5 text-slate-300">
-                    Real-time astrological guidance on your current situation.
-                  </p>
-                  <p
-                    className="mt-1.5 text-[12px] leading-5 text-cyan-300"
-                    style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-                  >
-                    Just press and hold, speak what&apos;s on your mind.
-                  </p>
-                </div>
-
-                <div className="jxl-orb">
-                  <span className="jxl-mic-icon" aria-hidden="true">
-                    <span className="jxl-mic-arc"></span>
-                  </span>
-                </div>
-              </div>
+              <Sparkles className="h-[15px] w-[15px]" />
+              Get Credits
             </button>
           </div>
 
@@ -1142,7 +1002,14 @@ setChartStatus("ready");
           document.body
         )}
 
-
+      {/* ── Credits overlay (portaled to body) ── */}
+      {showCredits && typeof document !== "undefined" &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
+            <CreditsPanel onClose={() => setShowCredits(false)} />
+          </div>,
+          document.body
+        )}
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
