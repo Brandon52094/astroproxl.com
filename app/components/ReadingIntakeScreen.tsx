@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart,
   Briefcase,
@@ -28,7 +28,6 @@ import {
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
 import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
-import CreditsPanel from "./CreditsPanel";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -208,70 +207,15 @@ export default function ReadingIntakeScreen({
   const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   useEffect(() => {
-  if (propUserStatus) setUserStatus(propUserStatus);
-}, [propUserStatus]);
-  const [isSubscribeLoading, setIsSubscribeLoading] = useState(false);
+    if (propUserStatus) setUserStatus(propUserStatus);
+  }, [propUserStatus]);
   const [showJxl, setShowJxl] = useState(false);
-  const [showCredits, setShowCredits] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
-  const shouldReduceMotion = useReducedMotion();
   const clusterTopRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const clusterBottomRef = useRef<HTMLDivElement | null>(null);
   const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ── Install modal state ──────────────────────────────────────────────────
-  const [showInstallModal, setShowInstallModal] = useState(false);
-  const [installDismissed, setInstallDismissed] = useState(false); // session-only
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null); // Android one-tap
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
-
-  // ── Platform/install detection ─────────────────────────────────────────
-  useEffect(() => {
-    // Detect platform + install state
-    const standalone =
-      window.matchMedia?.("(display-mode: standalone)").matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-    setIsStandalone(standalone);
-
-    const ios = /iphone|ipad|ipod/i.test(window.navigator.userAgent) &&
-      !(window.navigator as unknown as { standalone?: boolean }).standalone;
-    setIsIOS(ios);
-
-    // Android/Chrome: capture the install event for one-tap
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  // Should the teaser show at all?
-  const showInstallTeaser =
-    !isStandalone &&
-    !installDismissed &&
-    userStatus?.pwaFreeReadingUsed !== true;
-
-  // Android one-tap trigger
-  const triggerAndroidInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-    setShowInstallModal(false);
-  };
-
-  const getIconPulseAnimation = useCallback((isSelected = false) => {
-    if (shouldReduceMotion) return {};
-    if (!isSelected) return { scale: 1, transition: { duration: 0.2 } };
-    return {
-      scale: [1, 1.12, 1],
-      transition: { duration: 2.1, repeat: Infinity, ease: "easeInOut" as const },
-    };
-  }, [shouldReduceMotion]);
 
   useEffect(() => {
     async function ensureChart() {
@@ -296,20 +240,19 @@ export default function ReadingIntakeScreen({
         const calcData = await calcResponse.json();
         if (!calcResponse.ok || !calcData.success) { setChartStatus("error"); return; }
         saveChart({
-  birthDate: data.chart.birthDate,
-  birthTime: data.chart.birthTime,
-  birthPlace: data.chart.birthPlace,
-  lat: data.chart.lat,
-  lng: data.chart.lng,
-  timezone: data.chart.timezone,
-  // Current location fields — required by StoredChart
-  currentLat: data.chart.currentLat ?? undefined,
-  currentLng: data.chart.currentLng ?? undefined,
-  currentPlace: data.chart.currentPlace ?? "",
-  currentTimezone: data.chart.currentTimezone ?? "",
-  chartData: calcData,
-});
-setChartStatus("ready");
+          birthDate: data.chart.birthDate,
+          birthTime: data.chart.birthTime,
+          birthPlace: data.chart.birthPlace,
+          lat: data.chart.lat,
+          lng: data.chart.lng,
+          timezone: data.chart.timezone,
+          // Current location fields — required by StoredChart
+          currentLat: data.chart.currentLat ?? undefined,
+          currentLng: data.chart.currentLng ?? undefined,
+          currentPlace: data.chart.currentPlace ?? "",
+          currentTimezone: data.chart.currentTimezone ?? "",
+          chartData: calcData,
+        });
         setChartStatus("ready");
       } catch { setChartStatus("error"); }
     }
@@ -503,10 +446,6 @@ setChartStatus("ready");
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
-        @keyframes jxlAmberPulse {
-          0%, 100% { box-shadow: 0 0 0 1px rgba(245,158,11,0.26), 0 14px 28px rgba(0,0,0,0.64), 0 0 22px rgba(245,158,11,0.10); }
-          50% { box-shadow: 0 0 0 1px rgba(251,191,36,0.46), 0 16px 32px rgba(0,0,0,0.72), 0 0 32px rgba(251,191,36,0.18); }
-        }
         @keyframes whiteGlowPulse {
           0%, 100% { box-shadow: 0 0 30px rgba(255,255,255,0.08), 0 18px 34px rgba(0,0,0,0.55); }
           50% { box-shadow: 0 0 50px rgba(255,255,255,0.20), 0 22px 40px rgba(0,0,0,0.65); }
@@ -514,11 +453,6 @@ setChartStatus("ready");
         @keyframes selectedWhiteGlow {
           0%, 100% { box-shadow: 0 0 40px rgba(255,255,255,0.15), 0 0 80px rgba(255,255,255,0.08), 0 18px 36px rgba(0,0,0,0.65); }
           50% { box-shadow: 0 0 60px rgba(255,255,255,0.30), 0 0 100px rgba(255,255,255,0.12), 0 22px 40px rgba(0,0,0,0.70); }
-        }
-        @keyframes jxlShimmer {
-          0% { transform: translateX(-60%); }
-          50% { transform: translateX(40%); }
-          100% { transform: translateX(120%); }
         }
         .nebula {
           position: absolute;
@@ -555,12 +489,26 @@ setChartStatus("ready");
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
+        /* ── Aurora glow (moved here from AskJxlButton) — bleeds out behind the hero ── */
+        .hero-glow {
+          position: absolute;
+          inset: -10px;
+          border-radius: 34px;
+          z-index: 0;
+          pointer-events: none;
+          background: linear-gradient(120deg, #34d399, #22d3ee, #38bdf8, #a855f7, #34d399);
+          background-size: 220% 220%;
+          filter: blur(22px);
+          opacity: 0.5;
+          animation: auroraGlow 9s ease-in-out infinite;
+        }
+        @keyframes auroraGlow {
+          0%, 100% { background-position: 0% 50%; opacity: 0.42; }
+          50% { background-position: 100% 50%; opacity: 0.62; }
+        }
+
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
         .selected-card-glow { animation: selectedWhiteGlow 2.8s ease-in-out infinite; }
-
-        .gold-shimmer { position: relative; overflow: hidden; border-radius: 18px; border: 2px solid rgba(251,191,36,0.6); background: linear-gradient(180deg, rgba(120,84,18,0.45), rgba(50,34,10,0.25)); box-shadow: 0 0 60px rgba(251,191,36,0.25), 0 18px 36px rgba(0,0,0,0.65); cursor: pointer; }
-        .gold-shimmer::before { content: ""; position: absolute; inset: -40%; background-image: linear-gradient(120deg, rgba(253,230,138,0) 0%, rgba(253,230,138,0.3) 35%, rgba(250,204,21,0.7) 50%, rgba(253,230,138,0.3) 65%, rgba(253,230,138,0) 100%); mix-blend-mode: screen; pointer-events: none; opacity: 1; transform: translateX(-60%); animation: jxlShimmer 3s linear infinite; z-index: 0; }
-        .gold-shimmer > * { position: relative; z-index: 1; }
 
         .selected-card-shell { position: relative; overflow: hidden; isolation: isolate; will-change: transform, opacity; }
         .selected-card-shell::before { content: ""; position: absolute; inset: -1px; border-radius: 24px; background: var(--selected-wash); opacity: 0; z-index: 0; pointer-events: none; transition: opacity 260ms ease; }
@@ -571,25 +519,6 @@ setChartStatus("ready");
         .selected-card-shell[data-selected="true"] .selected-pill::before { animation: selectedSweep 1.6s ease-in-out infinite; }
         .selected-card-shell[data-selected="true"] .selected-icon-wrap { animation: whiteGlowPulse 2.2s ease-in-out infinite; }
         @keyframes selectedSweep { 0% { transform: translateX(-155%); } 100% { transform: translateX(155%); } }
-
-        /* ── Membership placeholder (replaces carousel) ── */
-        .membership-placeholder {
-          margin-top: 16px;
-          padding: 24px 20px;
-          border-radius: 24px;
-          border: 1px solid rgba(251,191,36,0.15);
-          background: rgba(251,191,36,0.03);
-          text-align: center;
-          min-height: 80px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .membership-placeholder p {
-          font-size: 13px;
-          color: #94a3b8;
-          letter-spacing: 0.05em;
-        }
 
         @keyframes swipeCuePulse {
           0%, 100% { opacity: 0.5; }
@@ -602,87 +531,13 @@ setChartStatus("ready");
         .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
         .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
 
-        /* ── Install teaser — pill button ── */
-        .install-teaser {
-          display: inline-block;
-          margin: 0 auto 8px;
-          padding: 6px 18px;
-          border-radius: 9999px;
-          border: 1.5px solid rgba(96,165,250,0.5);
-          background: rgba(96,165,250,0.10);
-          backdrop-filter: blur(8px);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.15em;
-          text-transform: uppercase;
-          color: #93c5fd;
-          text-shadow: 0 0 12px rgba(96,165,250,0.5), 0 0 4px rgba(96,165,250,0.7);
-          box-shadow: 0 0 20px rgba(96,165,250,0.15), inset 0 0 20px rgba(96,165,250,0.05);
-          cursor: pointer;
-          animation: install-pulse 2.4s ease-in-out infinite;
-          transition: background 0.2s ease, border-color 0.2s ease;
-          touch-action: manipulation;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .install-teaser:hover {
-          background: rgba(96,165,250,0.18);
-          border-color: rgba(96,165,250,0.7);
-        }
-        @keyframes install-pulse {
-          0%, 100% { opacity: 0.8; box-shadow: 0 0 16px rgba(96,165,250,0.10), inset 0 0 16px rgba(96,165,250,0.02); }
-          50% { opacity: 1; box-shadow: 0 0 28px rgba(96,165,250,0.25), inset 0 0 28px rgba(96,165,250,0.06); }
-        }
-
-        .install-modal-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 9999;
-          background: rgba(3,7,18,0.72);
-          backdrop-filter: blur(8px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-        }
-        .install-modal {
-          width: 100%;
-          max-width: 340px;
-          border-radius: 24px;
-          border: 1px solid rgba(96,165,250,0.3);
-          background: #0b1020;
-          padding: 24px;
-          box-shadow: 0 0 40px rgba(96,165,250,0.15);
-        }
-        .install-modal-title { font-size: 18px; font-weight: 700; color: #93c5fd; text-align: center; }
-        .install-modal-sub { margin-top: 6px; font-size: 13px; color: #94a3b8; text-align: center; line-height: 1.4; }
-        .install-steps { margin: 18px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
-        .install-steps li { font-size: 13px; color: #cbd5e1; line-height: 1.4; }
-        .ios-share { display: inline-block; padding: 0 4px; color: #60a5fa; }
-        .install-oneclick {
-          width: 100%; margin-top: 18px; height: 48px;
-          border-radius: 14px; border: none;
-          background: #60a5fa; color: #050816; font-weight: 700; font-size: 14px;
-          cursor: pointer;
-        }
-        .install-dismiss {
-          width: 100%; margin-top: 12px;
-          background: none; border: none;
-          font-size: 12px; color: #64748b; cursor: pointer;
-        }
-
-        .install-teaser-wrapper {
-          display: flex;
-          justify-content: center;
-          margin: 8px 0 4px;
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
           .selected-card-shell[data-selected="true"],
           .selected-card-shell[data-selected="true"] .selected-icon-wrap,
           .selected-card-shell[data-selected="true"] .selected-pill::before,
           .hero-shine::after,
-          .install-teaser { animation: none !important; opacity: 0.8; box-shadow: none; }
+          .hero-glow { animation: none !important; }
         }
       `}</style>
 
@@ -699,44 +554,33 @@ setChartStatus("ready");
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── HERO ── */}
+          {/* ── HERO (with aurora glow behind) ── */}
           <section className="mb-5 pt-1">
-            <div
-              className="hero-shine standard-shadow relative overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
-              style={{
-                borderColor: "rgba(255, 255, 255, 0.60)",
-                boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
-              }}
-            >
-              <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    AstroProXL
-                  </span>
+            <div className="relative">
+              <div className="hero-glow" aria-hidden="true" />
+              <div
+                className="hero-shine standard-shadow relative z-[1] overflow-hidden rounded-[28px] border bg-white/[0.03] px-5 py-7 text-center"
+                style={{
+                  borderColor: "rgba(255, 255, 255, 0.60)",
+                  boxShadow: "0 0 32px rgba(99, 102, 241, 0.20), inset 0 0 20px rgba(99, 102, 241, 0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
+                }}
+              >
+                <div className="relative z-10 mx-auto max-w-[560px]">
+                  <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
+                      AstroProXL
+                    </span>
+                  </div>
+                  <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                    You Can Ask Anything
+                  </h1>
+                  <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
+                    Your Personal Astrological Predictions.
+                  </p>
                 </div>
-                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  You Can Ask Anything
-                </h1>
-                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  Your Personal Astrological Predictions.
-                </p>
               </div>
             </div>
           </section>
-
-          {/* ── Install teaser ── */}
-          {showInstallTeaser && (
-            <div className="install-teaser-wrapper">
-              <button
-                type="button"
-                className="install-teaser tap-fix"
-                data-no-swipe
-                onClick={(e) => { e.stopPropagation(); setShowInstallModal(true); }}
-              >
-                🎁 Tap for a FREE reading!
-              </button>
-            </div>
-          )}
 
           {/* ── Swipe cue ── */}
           <button
@@ -786,8 +630,7 @@ setChartStatus("ready");
                     <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
                   )}
                   <div className="relative z-[1] flex items-start gap-3">
-                    <motion.div
-                      animate={getIconPulseAnimation(isSelected)}
+                    <div
                       className={cn(
                         "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
                         isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
@@ -800,7 +643,7 @@ setChartStatus("ready");
                       }}
                     >
                       <Icon className="h-4 w-4" />
-                    </motion.div>
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
                         <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
@@ -900,74 +743,8 @@ setChartStatus("ready");
             <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
 
-          {/* ── Get Credits (smaller, secondary) ── */}
-          <div className="mt-3.5 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setShowCredits(true)}
-              className="tap-fix inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[13px] font-semibold tracking-[0.02em] transition"
-              style={{
-                border: "1px solid rgba(251,191,36,0.4)",
-                background: "rgba(251,191,36,0.08)",
-                color: "#fcd34d",
-              }}
-            >
-              <Sparkles className="h-[15px] w-[15px]" />
-              Get Credits
-            </button>
-          </div>
-
         </motion.div>
       </div>
-
-      {/* ── Install modal (portaled to body) ── */}
-      {showInstallModal && typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="install-modal-backdrop"
-            onClick={() => setShowInstallModal(false)}
-          >
-            <div className="install-modal" onClick={(e) => e.stopPropagation()}>
-              <p className="install-modal-title">Get a FREE reading</p>
-              <p className="install-modal-sub">
-                Add this app to your home screen and your first reading is on us.
-              </p>
-
-              {isIOS ? (
-                <ol className="install-steps">
-                  <li>Make sure you're in <strong>Safari</strong> (this only works in Safari on iPhone)</li>
-                  <li>Tap the <strong>Share</strong> icon <span className="ios-share">⎋</span> — the square with an arrow, at the bottom of the screen</li>
-                  <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
-                  <li>Tap <strong>Add</strong> in the top corner</li>
-                  <li>Open AstroProXL from your home screen — your free reading will be waiting</li>
-                </ol>
-              ) : deferredPrompt ? (
-                <>
-                  <button type="button" className="install-oneclick" onClick={triggerAndroidInstall}>
-                    Add to Home Screen
-                  </button>
-                  <p className="install-hint">Tap the button, then confirm <strong>Install</strong></p>
-                </>
-              ) : (
-                <ol className="install-steps">
-                  <li>Tap the <strong>⋮</strong> menu (top-right in Chrome)</li>
-                  <li>Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>)</li>
-                  <li>Tap <strong>Add</strong> / <strong>Install</strong> to confirm</li>
-                  <li>Open AstroProXL from your home screen — your free reading will be waiting</li>
-                </ol>
-              )}
-
-              <button
-                type="button"
-                className="install-dismiss"
-                onClick={() => { setShowInstallModal(false); setInstallDismissed(true); }}
-              >
-                Maybe later
-              </button>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {/* ── JXL overlay (portaled to body) ── */}
       {showJxl && typeof document !== "undefined" &&
@@ -998,15 +775,6 @@ setChartStatus("ready");
               Back
             </button>
             <JxlPanel isActive={showJxl} />
-          </div>,
-          document.body
-        )}
-
-      {/* ── Credits overlay (portaled to body) ── */}
-      {showCredits && typeof document !== "undefined" &&
-        createPortal(
-          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
-            <CreditsPanel onClose={() => setShowCredits(false)} />
           </div>,
           document.body
         )}
