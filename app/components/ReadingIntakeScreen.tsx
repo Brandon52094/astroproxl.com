@@ -489,33 +489,34 @@ export default function ReadingIntakeScreen({
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── Aurora OUTLINE glow (moved from AskJxlButton) — the container's
-              border glows and cycles color; outer glow only, nothing inside ── */
+        /* ── Aurora OUTLINE glow (moved from AskJxlButton) — big, far-reaching
+              bloom that hugs the border and cycles color; outer glow only ── */
         .hero-outline {
-          border: 1px solid rgba(56,189,248,0.85);
+          border: 1px solid rgba(56,189,248,0.9);
           box-shadow:
-            0 0 18px rgba(56,189,248,0.55),
-            0 0 36px rgba(56,189,248,0.28),
+            0 0 26px 2px rgba(56,189,248,0.70),
+            0 0 70px 10px rgba(56,189,248,0.42),
+            0 0 130px 26px rgba(56,189,248,0.26),
             0 18px 44px rgba(0,0,0,0.72),
             0 36px 80px rgba(0,0,0,0.56);
           animation: heroBorderGlow 9s ease-in-out infinite;
         }
         @keyframes heroBorderGlow {
           0%, 100% {
-            border-color: rgba(52,211,153,0.85);
-            box-shadow: 0 0 18px rgba(52,211,153,0.55), 0 0 36px rgba(52,211,153,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(52,211,153,0.9);
+            box-shadow: 0 0 26px 2px rgba(52,211,153,0.70), 0 0 70px 10px rgba(52,211,153,0.42), 0 0 130px 26px rgba(52,211,153,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           25% {
-            border-color: rgba(34,211,238,0.85);
-            box-shadow: 0 0 18px rgba(34,211,238,0.55), 0 0 36px rgba(34,211,238,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(34,211,238,0.9);
+            box-shadow: 0 0 26px 2px rgba(34,211,238,0.70), 0 0 70px 10px rgba(34,211,238,0.42), 0 0 130px 26px rgba(34,211,238,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           50% {
-            border-color: rgba(56,189,248,0.85);
-            box-shadow: 0 0 18px rgba(56,189,248,0.55), 0 0 36px rgba(56,189,248,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(56,189,248,0.9);
+            box-shadow: 0 0 26px 2px rgba(56,189,248,0.70), 0 0 70px 10px rgba(56,189,248,0.42), 0 0 130px 26px rgba(56,189,248,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           75% {
-            border-color: rgba(168,85,247,0.85);
-            box-shadow: 0 0 18px rgba(168,85,247,0.55), 0 0 36px rgba(168,85,247,0.28), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(168,85,247,0.9);
+            box-shadow: 0 0 26px 2px rgba(168,85,247,0.70), 0 0 70px 10px rgba(168,85,247,0.42), 0 0 130px 26px rgba(168,85,247,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
         }
 
