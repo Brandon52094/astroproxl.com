@@ -558,12 +558,9 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4"
-  style={{
-    paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-    paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
-  }}
->
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-16"
+        style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
+      >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -580,10 +577,10 @@ export default function ReadingIntakeScreen({
                   </span>
                 </div>
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  Now You'll Know
+                  You Can Ask Anything
                 </h1>
                 <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  The Astrology Engine.
+                  Now You'll Know. 
                 </p>
               </div>
             </div>
