@@ -8,6 +8,7 @@ import {
   Briefcase,
   Wallet,
   Sparkles,
+  Mic,
   ChevronLeft,
 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
@@ -26,7 +27,6 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
-import AskJxlButton from "./AskJxlButton";
 import JxlPanel from "./JxlPanel";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
@@ -49,6 +49,12 @@ function trackTtq(event: string, params?: Record<string, unknown>) {
   }
 }
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
 const AREAS = [
   {
     id: "love",
@@ -56,7 +62,7 @@ const AREAS = [
     description: "Relationships, romance, or emotional patterns",
     icon: Heart,
     placeholder: "Ask something specific about love, timing, or where this connection is headed.",
-    cta: "Begin My Love Reading",
+    defaultQuestion: "What is coming for me in love over the next 30–45 days?",
   },
   {
     id: "money",
@@ -64,7 +70,7 @@ const AREAS = [
     description: "Income, stability, opportunities, and financial timing",
     icon: Wallet,
     placeholder: "Ask something specific about money, stability, or the opportunities opening next.",
-    cta: "Begin My Money Reading",
+    defaultQuestion: "What is coming for me with money over the next 30–45 days?",
   },
   {
     id: "career",
@@ -72,7 +78,7 @@ const AREAS = [
     description: "Work, recognition, direction, and next steps",
     icon: Briefcase,
     placeholder: "Ask something specific about work, momentum, or the direction your career is moving.",
-    cta: "Begin My Career Reading",
+    defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
   {
     id: "other",
@@ -80,7 +86,7 @@ const AREAS = [
     description: "What to expect in the next 30–45 days.",
     icon: Sparkles,
     placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
-    cta: "Begin My Reading",
+    defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
 ];
 
@@ -99,47 +105,36 @@ interface ReadingIntakeScreenProps {
   onSwipeLeft?: () => void;
 }
 
+/* ── Chart shapes we read for the fade line ────────────────────────── */
+interface Placement {
+  name: string;
+  sign: string;
+  degree?: string;
+  house?: number;
+  isRetrograde?: boolean;
+}
+interface Profection {
+  profectionYear: number;
+  age: number;
+  activatedSign: string;
+  activatedHouse?: number;
+}
+
 type ThemeName = "cosmic";
 
 interface ThemeColors {
   name: ThemeName;
-  tagBg: string;
-  tagText: string;
-  gradientEnd: string;
-  progressBar: string;
-  unselectedBorder: string;
-  selectedBorder: string;
-  selectedGlow: string;
-  selectedIcon: string;
-  selectedTag: string;
-  accentLine: string;
-  nextStepBorder: string;
-  nextStepGlow: string;
   areaColors: {
     love: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
     money: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
     career: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
     other: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    cta: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    hero: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
   };
 }
 
 const THEMES: Record<ThemeName, ThemeColors> = {
   cosmic: {
     name: "cosmic",
-    tagBg: "rgba(255,255,255,0.06)",
-    tagText: "#F8FAFC",
-    gradientEnd: "#FFFFFF",
-    progressBar: "#F8FAFC",
-    unselectedBorder: "rgba(255,255,255,0.10)",
-    selectedBorder: "rgba(255,255,255,0.22)",
-    selectedGlow: "rgba(255,255,255,0.16)",
-    selectedIcon: "#FFFFFF",
-    selectedTag: "#FFFFFF",
-    accentLine: "rgba(255,255,255,0.72)",
-    nextStepBorder: "rgba(255,255,255,0.65)",
-    nextStepGlow: "rgba(255,255,255,0.24)",
     areaColors: {
       love: {
         bg: "rgba(127, 29, 29, 0.30)",
@@ -151,7 +146,7 @@ const THEMES: Record<ThemeName, ThemeColors> = {
       },
       money: {
         bg: "rgba(20, 83, 45, 0.30)",
-        border: "#D4A574",
+        border: "#34D399",
         glow: "rgba(34, 197, 94, 0.30)",
         text: "#86EFAC",
         iconBg: "rgba(20, 83, 45, 0.55)",
@@ -159,7 +154,7 @@ const THEMES: Record<ThemeName, ThemeColors> = {
       },
       career: {
         bg: "rgba(30, 58, 138, 0.30)",
-        border: "#FFFFFF",
+        border: "#93C5FD",
         glow: "rgba(59, 130, 246, 0.30)",
         text: "#93C5FD",
         iconBg: "rgba(30, 58, 138, 0.55)",
@@ -167,33 +162,15 @@ const THEMES: Record<ThemeName, ThemeColors> = {
       },
       other: {
         bg: "rgba(49, 46, 129, 0.30)",
-        border: "#4F46E5",
+        border: "#8B5CF6",
         glow: "rgba(139, 92, 246, 0.30)",
         text: "#C4B5FD",
         iconBg: "rgba(49, 46, 129, 0.55)",
         gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
       },
-      cta: {
-        bg: "rgba(255,255,255,0.08)",
-        border: "rgba(255,255,255,0.22)",
-        glow: "rgba(0,0,0,0.4)",
-        text: "#F8FAFC",
-        iconBg: "rgba(255,255,255,0.06)",
-        gradient: "linear-gradient(180deg, #161A26 0%, #0A0D16 100%)",
-      },
-      hero: {
-        bg: "rgba(255,255,255,0.04)",
-        border: "rgba(255,255,255,0.14)",
-        glow: "rgba(255,255,255,0.08)",
-        text: "#FFFFFF",
-        iconBg: "rgba(255,255,255,0.05)",
-        gradient: "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
-      },
     },
   },
 };
-
-const PLANET_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
@@ -212,10 +189,15 @@ export default function ReadingIntakeScreen({
   const [showJxl, setShowJxl] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
-  const clusterTopRef = useRef<HTMLButtonElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const clusterBottomRef = useRef<HTMLDivElement | null>(null);
-  const scrollFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Chart-derived data for the hero fade line.
+  const [natal, setNatal] = useState<Placement[]>([]);
+  const [transits, setTransits] = useState<Placement[]>([]);
+  const [profection, setProfection] = useState<Profection | null>(null);
+
+  // Fade line state.
+  const [factIndex, setFactIndex] = useState(0);
+  const [factPaused, setFactPaused] = useState(false);
 
   useEffect(() => {
     async function ensureChart() {
@@ -259,6 +241,21 @@ export default function ReadingIntakeScreen({
     ensureChart();
   }, [router]);
 
+  // Once the chart is ready, read placements + profection + transits for the fade line.
+  useEffect(() => {
+    if (chartStatus !== "ready") return;
+    const chart = loadChart();
+    const data = chart?.chartData as unknown as {
+      profection?: Profection;
+      tropical?: { planets?: Placement[] };
+      transits?: Placement[];
+    } | undefined;
+    if (!data) return;
+    if (data.profection) setProfection(data.profection);
+    setNatal(data.tropical?.planets ?? []);
+    setTransits(data.transits ?? []);
+  }, [chartStatus]);
+
   const fetchInFlight = useRef(false);
   const fetchStatus = useCallback(async () => {
     if (fetchInFlight.current) return;
@@ -296,38 +293,75 @@ export default function ReadingIntakeScreen({
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
 
+  /* ── Hero fade line — rotating chart facts ───────────────────────── */
+  const facts = useMemo(() => {
+    const out: string[] = [];
+    const find = (arr: Placement[], n: string) => arr.find((p) => p.name === n);
+
+    const sun = find(natal, "Sun");
+    const moon = find(natal, "Moon");
+    const rising = find(natal, "Ascendant");
+    if (sun?.sign && moon?.sign && rising?.sign) {
+      out.push(`${sun.sign} Sun · ${moon.sign} Moon · ${rising.sign} Rising`);
+    }
+
+    if (profection?.activatedSign) {
+      const house =
+        typeof profection.activatedHouse === "number"
+          ? profection.activatedHouse
+          : profection.profectionYear;
+      out.push(`${profection.activatedSign} Year · ${ordinal(house)} House`);
+    }
+
+    const tSun = find(transits, "Sun");
+    if (tSun?.sign) out.push(`Sun in ${tSun.sign}${tSun.degree ? ` · ${tSun.degree}` : ""}`);
+
+    const tMoon = find(transits, "Moon");
+    if (tMoon?.sign) out.push(`Moon in ${tMoon.sign}${tMoon.degree ? ` · ${tMoon.degree}` : ""}`);
+
+    const merc = find(transits, "Mercury");
+    if (merc) out.push(merc.isRetrograde ? "Mercury Retrograde" : "Mercury Direct");
+
+    return out.length ? out : ["Now You'll Know."];
+  }, [natal, profection, transits]);
+
+  // Keep the index in range whenever the fact set changes.
+  useEffect(() => { setFactIndex(0); }, [facts.length]);
+
+  // Auto-advance every 3s; press-and-hold pauses it.
+  useEffect(() => {
+    if (factPaused || facts.length <= 1) return;
+    const id = setInterval(() => {
+      setFactIndex((i) => (i + 1) % facts.length);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [factPaused, facts.length]);
+
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
-    if (!selectedAreaConfig) return "Choose a reading type";
+    if (!selectedAreaConfig) return "Select a Reading";
     const hasCredits = Number(userStatus?.credits ?? 0) > 0;
     const isSubscribed = userStatus?.isSubscribed === true;
     if (!hasCredits && !isSubscribed) {
-      return `${selectedAreaConfig.cta} — ${formatUsd(PRICING.reading.price)}`;
+      return `Begin Reading — ${formatUsd(PRICING.reading.price)}`;
     }
-    return selectedAreaConfig.cta;
+    return "Begin Reading";
   }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
 
+  // Context is optional now — only a selection + a ready chart are required.
   const canSubmit = useMemo(() => {
     if (!selectedArea) return false;
     if (chartStatus !== "ready") return false;
-    if (selectedArea === "other") return true;
-    return question.trim().length > 0;
-  }, [question, selectedArea, chartStatus]);
+    return true;
+  }, [selectedArea, chartStatus]);
 
-  const scrollClusterIntoViewThenFocus = useCallback(() => {
-    if (scrollFocusTimeoutRef.current) clearTimeout(scrollFocusTimeoutRef.current);
-    requestAnimationFrame(() => {
-      const topEl = clusterTopRef.current;
-      if (!topEl) return;
-      const topRect = topEl.getBoundingClientRect();
-      const currentScrollY = window.scrollY || document.documentElement.scrollTop;
-      window.scrollTo({ top: Math.max(0, currentScrollY + topRect.top - 12), behavior: "smooth" });
-      scrollFocusTimeoutRef.current = setTimeout(() => { textareaRef.current?.focus(); }, 420);
-    });
+  const selectArea = useCallback((id: string) => {
+    setSelectedArea(id);
+    setQuestion("");
+    const area = AREAS.find((a) => a.id === id);
+    trackTtq("ViewContent", { content_id: id, content_name: area?.title });
   }, []);
-
-  useEffect(() => () => { if (scrollFocusTimeoutRef.current) clearTimeout(scrollFocusTimeoutRef.current); }, []);
 
   const handleStartReading = async () => {
     if (!canSubmit || !selectedArea) return;
@@ -340,13 +374,13 @@ export default function ReadingIntakeScreen({
       localStorage.removeItem("dfp_followup_return");
       localStorage.removeItem("dfp_followup_question");
       const topic = selectedArea === "love" ? "love" : selectedArea === "career" ? "career" : selectedArea === "money" ? "money" : "general";
+      const areaCfg = AREAS.find((a) => a.id === selectedArea);
+      const trimmed = question.trim();
+      const finalQuestion = trimmed || areaCfg?.defaultQuestion || "What is coming for me in the next 30–45 days?";
       saveIntake({
         topic: topic as "love" | "career" | "money" | "general",
         area: selectedArea,
-        question:
-          selectedArea === "other"
-            ? "What is coming for me in the next 30–45 days?"
-            : question.trim(),
+        question: finalQuestion,
         timeframeType: "month",
         timeframeValue: "next-45-days",
       });
@@ -423,16 +457,6 @@ export default function ReadingIntakeScreen({
     return theme.areaColors[key];
   }, [theme]);
 
-  const getGlowOverlay = useCallback((areaId: string) => {
-    const c = getAreaColors(areaId);
-    return `radial-gradient(circle at 50% 50%, ${c.glow}, rgba(255,255,255,0.018) 38%, transparent 72%)`;
-  }, [getAreaColors]);
-
-  const getIconTileShadow = useCallback((areaId: string) => {
-    const c = getAreaColors(areaId);
-    return `0 14px 28px rgba(0,0,0,0.58), 0 0 30px ${c.glow}`;
-  }, [getAreaColors]);
-
   return (
     <div
       className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
@@ -446,14 +470,6 @@ export default function ReadingIntakeScreen({
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
-        @keyframes whiteGlowPulse {
-          0%, 100% { box-shadow: 0 0 30px rgba(255,255,255,0.08), 0 18px 34px rgba(0,0,0,0.55); }
-          50% { box-shadow: 0 0 50px rgba(255,255,255,0.20), 0 22px 40px rgba(0,0,0,0.65); }
-        }
-        @keyframes selectedWhiteGlow {
-          0%, 100% { box-shadow: 0 0 40px rgba(255,255,255,0.15), 0 0 80px rgba(255,255,255,0.08), 0 18px 36px rgba(0,0,0,0.65); }
-          50% { box-shadow: 0 0 60px rgba(255,255,255,0.30), 0 0 100px rgba(255,255,255,0.12), 0 22px 40px rgba(0,0,0,0.70); }
-        }
         .nebula {
           position: absolute;
           inset: 0;
@@ -489,8 +505,7 @@ export default function ReadingIntakeScreen({
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── Aurora OUTLINE glow (moved from AskJxlButton) — big, far-reaching
-              bloom that hugs the border and cycles color; outer glow only ── */
+        /* ── Aurora OUTLINE glow — cycles color, outer glow only ── */
         .hero-outline {
           border: 1px solid rgba(56,189,248,0.9);
           box-shadow:
@@ -521,17 +536,6 @@ export default function ReadingIntakeScreen({
         }
 
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
-        .selected-card-glow { animation: selectedWhiteGlow 2.8s ease-in-out infinite; }
-
-        .selected-card-shell { position: relative; overflow: hidden; isolation: isolate; will-change: transform, opacity; }
-        .selected-card-shell::before { content: ""; position: absolute; inset: -1px; border-radius: 24px; background: var(--selected-wash); opacity: 0; z-index: 0; pointer-events: none; transition: opacity 260ms ease; }
-        .selected-card-shell::after { content: ""; position: absolute; inset: 0; border-radius: 24px; opacity: 0; z-index: 0; pointer-events: none; box-shadow: var(--selected-shadow); transition: opacity 260ms ease; }
-        .selected-card-shell[data-selected="true"]::before,
-        .selected-card-shell[data-selected="true"]::after { opacity: 1; }
-        .selected-card-shell[data-selected="true"] { animation: selectedWhiteGlow 2.8s ease-in-out infinite; }
-        .selected-card-shell[data-selected="true"] .selected-pill::before { animation: selectedSweep 1.6s ease-in-out infinite; }
-        .selected-card-shell[data-selected="true"] .selected-icon-wrap { animation: whiteGlowPulse 2.2s ease-in-out infinite; }
-        @keyframes selectedSweep { 0% { transform: translateX(-155%); } 100% { transform: translateX(155%); } }
 
         @keyframes swipeCuePulse {
           0%, 100% { opacity: 0.5; }
@@ -546,9 +550,6 @@ export default function ReadingIntakeScreen({
 
         @media (prefers-reduced-motion: reduce) {
           .swipe-cue, .swipe-cue svg,
-          .selected-card-shell[data-selected="true"],
-          .selected-card-shell[data-selected="true"] .selected-icon-wrap,
-          .selected-card-shell[data-selected="true"] .selected-pill::before,
           .hero-shine::after,
           .hero-outline { animation: none !important; }
         }
@@ -558,12 +559,12 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4"
-  style={{
-    paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-    paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
-  }}
->
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top) + 8px)",
+          paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+        }}
+      >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
@@ -582,9 +583,29 @@ export default function ReadingIntakeScreen({
                 <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
                   You Can Ask Anything
                 </h1>
-                <p className="mx-auto mt-3 max-w-[34ch] text-[14px] leading-6 text-slate-300/86 sm:text-[15px]">
-                  Now You'll Know. 
-                </p>
+
+                {/* Fade-swap detail line — press & hold to pause */}
+                <div
+                  data-no-swipe
+                  onPointerDown={() => setFactPaused(true)}
+                  onPointerUp={() => setFactPaused(false)}
+                  onPointerLeave={() => setFactPaused(false)}
+                  onPointerCancel={() => setFactPaused(false)}
+                  className="relative mx-auto mt-3 h-6 max-w-[34ch] select-none"
+                >
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={factIndex}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5, ease: "easeInOut" }}
+                      className="absolute inset-0 text-[14px] leading-6 text-slate-300/86 sm:text-[15px]"
+                    >
+                      {facts[factIndex] ?? facts[0]}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           </section>
@@ -599,156 +620,140 @@ export default function ReadingIntakeScreen({
             Swipe Left to Explore
           </button>
 
-          {/* ── AREA BUTTONS ── */}
-          <section className="space-y-3">
+          {/* ── Prompt ── */}
+          <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+            Please Select a Reading
+          </p>
+
+          {/* ── READING GRID (2×2) ── */}
+          <section className="grid grid-cols-2 gap-3">
             {AREAS.map((area) => {
               const Icon = area.icon;
               const isSelected = selectedArea === area.id;
-              const areaColors = getAreaColors(area.id);
-
+              const c = getAreaColors(area.id);
               return (
-                <motion.button
+                <button
                   key={area.id}
-                  ref={isSelected ? clusterTopRef : undefined}
-                  transition={{ duration: 0.12 }}
                   type="button"
-                  onClick={() => {
-                    const isFirstSelection = selectedArea !== area.id;
-                    setSelectedArea(area.id);
-                    setQuestion("");
-                    trackTtq("ViewContent", { content_id: area.id, content_name: area.title });
-                    if (isFirstSelection && area.id !== "other") scrollClusterIntoViewThenFocus();
-                  }}
-                  data-selected={isSelected ? "true" : "false"}
-                  className={cn(
-                    "tap-fix selected-card-shell standard-shadow w-full rounded-[24px] border px-4 py-4 text-left backdrop-blur-sm transition-all duration-300",
-                    isSelected && "selected-card-glow",
-                    !isSelected && "hover:border-white/20 hover:bg-white/[0.06]"
-                  )}
+                  onClick={() => selectArea(area.id)}
+                  aria-pressed={isSelected}
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-all duration-300"
                   style={{
-                    willChange: "transform, opacity",
-                    ["--selected-wash" as string]: areaColors.gradient,
-                    ["--selected-shadow" as string]: `0 0 0 1px ${areaColors.border}, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56), 0 0 40px ${areaColors.glow}`,
-                    backgroundColor: isSelected ? areaColors.bg : "rgba(255, 255, 255, 0.04)",
-                    borderColor: isSelected ? areaColors.border : "rgba(255, 255, 255, 0.08)",
-                  } as React.CSSProperties}
+                    borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
+                    background: isSelected ? c.bg : "rgba(255,255,255,0.03)",
+                    boxShadow: isSelected
+                      ? `0 0 24px ${c.glow}, 0 14px 28px rgba(0,0,0,0.5)`
+                      : "0 10px 22px rgba(0,0,0,0.4)",
+                  }}
                 >
-                  {isSelected && (
-                    <div className="pointer-events-none absolute inset-0 rounded-[24px]" style={{ background: getGlowOverlay(area.id), zIndex: 0 }} />
-                  )}
-                  <div className="relative z-[1] flex items-start gap-3">
-                    <div
-                      className={cn(
-                        "selected-icon-wrap mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors duration-300",
-                        isSelected ? "" : "border-white/10 bg-black/28 text-slate-300"
-                      )}
-                      style={{
-                        borderColor: isSelected ? areaColors.border : undefined,
-                        background: isSelected ? areaColors.gradient : undefined,
-                        color: isSelected ? areaColors.text : undefined,
-                        boxShadow: isSelected ? getIconTileShadow(area.id) : "0 14px 28px rgba(0,0,0,0.58)",
-                      }}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-[15px] font-semibold text-white">{area.title}</h2>
-                        <AnimatePresence>
-                          {isSelected && (
-                            <motion.span
-                              initial={{ opacity: 0, scale: 0.92, y: 4 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.92, y: 4 }}
-                              transition={{ duration: 0.18, ease: "easeOut" }}
-                              className="selected-pill relative overflow-hidden rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white"
-                              style={{ borderColor: "rgba(255,255,255,0.3)", backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderStyle: "solid", boxShadow: "0 0 20px rgba(255,255,255,0.08)" }}
-                            >
-                              <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(115deg, transparent 0%, transparent 35%, rgba(255,255,255,0.34) 50%, transparent 65%, transparent 100%)", transform: "translateX(-155%)" }} />
-                              <span className="relative z-[1]">Selected</span>
-                            </motion.span>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      <motion.p
-                        className="mt-1 text-sm leading-5"
-                        animate={{ color: isSelected ? "rgba(241, 245, 249, 0.92)" : "rgba(148, 163, 184, 1)" }}
-                        transition={{ duration: 0.24, ease: "easeOut" }}
-                      >
-                        {area.description}
-                      </motion.p>
-                    </div>
-                  </div>
-                </motion.button>
+                  <Icon className="h-6 w-6" style={{ color: c.text }} />
+                  <span
+                    className="text-[13px] font-semibold"
+                    style={{ color: isSelected ? "#ffffff" : "rgba(226,232,240,0.9)" }}
+                  >
+                    {area.title}
+                  </span>
+                </button>
               );
             })}
           </section>
 
-          {/* ── TEXTAREA ── */}
-          <AnimatePresence>
-            {selectedArea && selectedArea !== "other" && (
-              <motion.section
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-6 space-y-2"
-              >
-                <div
-                  className="rounded-[26px] border border-white/18 bg-white/[0.035] p-[1px] standard-shadow"
-                  style={{ transition: "box-shadow 0.3s ease, border-color 0.3s ease" }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)"; e.currentTarget.style.boxShadow = "0 0 50px rgba(255,255,255,0.15), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+          {/* ── READING INFO (updates on selection) ── */}
+          <div className="mt-5 min-h-[60px]">
+            <AnimatePresence mode="wait">
+              {selectedAreaConfig ? (
+                <motion.div
+                  key={selectedAreaConfig.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
                 >
-                  <div className="rounded-[25px] bg-white/[0.03] px-4 py-3">
-                    <Textarea
-                      id="question"
-                      ref={textareaRef}
-                      rows={5}
-                      value={question}
-                      onChange={(e) => setQuestion(e.target.value)}
-                      placeholder={AREAS.find(a => a.id === selectedArea)?.placeholder ?? "Ask something specific so your reading can go deeper."}
-                      className="min-h-[132px] w-full rounded-[20px] border-0 bg-transparent px-3 py-3 text-[16px] leading-6 text-white placeholder:text-slate-400/80 focus:outline-none focus:ring-0"
-                      style={{ backgroundColor: "transparent" }}
-                    />
-                  </div>
-                </div>
-              </motion.section>
-            )}
-          </AnimatePresence>
+                  <h3
+                    className="text-[18px] font-bold leading-tight"
+                    style={{ color: getAreaColors(selectedAreaConfig.id).text }}
+                  >
+                    {selectedAreaConfig.title}
+                  </h3>
+                  <p className="mt-1 text-[13px] leading-5 text-slate-400">
+                    {selectedAreaConfig.description}
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.p
+                  key="placeholder"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-[13px] leading-5 text-slate-500"
+                >
+                  Tap a reading above to see what it covers.
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </div>
 
-          {/* ── SUBMIT ── */}
-          <div className="mt-0.5 space-y-3 pb-2" ref={clusterBottomRef}>
+          {/* ── OPTIONAL CONTEXT ── */}
+          <div
+            className="mt-4 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
+            style={{ transition: "border-color 0.3s ease, box-shadow 0.3s ease" }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(255,255,255,0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+          >
+            <div className="rounded-[22px] bg-white/[0.02] px-4 py-3">
+              <Textarea
+                id="question"
+                rows={3}
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder={
+                  selectedArea
+                    ? "Tap to add context (optional)"
+                    : "Select a reading, then add context (optional)"
+                }
+                className="min-h-[84px] w-full resize-none rounded-[16px] border-0 bg-transparent px-1 py-1 text-[16px] leading-6 text-white placeholder:text-slate-500 focus:outline-none focus:ring-0"
+                style={{ backgroundColor: "transparent" }}
+              />
+            </div>
+          </div>
+
+          {/* ── BEGIN READING (always present) ── */}
+          <div className="mt-4">
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
-            {selectedArea && (
-              <Button
-                type="button"
-                onClick={handleStartReading}
-                disabled={!canSubmit || isCreatingReading}
-                className="standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                style={{
-                  background: "transparent",
-                  border: "2px solid rgba(94,234,212,0.65)",
-                  color: "rgba(94,234,212,0.95)",
-                  boxShadow: canSubmit && !isCreatingReading
-                    ? "0 0 18px rgba(45,212,191,0.22), 0 18px 44px rgba(0,0,0,0.72)"
-                    : "0 18px 44px rgba(0,0,0,0.72)",
-                }}
-              >
-                {buttonCopy}
-              </Button>
-            )}
+            <Button
+              type="button"
+              onClick={handleStartReading}
+              disabled={!canSubmit || isCreatingReading}
+              className="standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                background: "transparent",
+                border: "2px solid rgba(94,234,212,0.65)",
+                color: "rgba(94,234,212,0.95)",
+                boxShadow: canSubmit && !isCreatingReading
+                  ? "0 0 18px rgba(45,212,191,0.22), 0 18px 44px rgba(0,0,0,0.72)"
+                  : "0 18px 44px rgba(0,0,0,0.72)",
+              }}
+            >
+              {buttonCopy}
+            </Button>
           </div>
 
-          {/* ── Ask JXL ── */}
-          <div className="mt-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
-            <div className="h-px flex-1 bg-white/[0.06]" />
-          </div>
-          <div className="mt-8">
-            <AskJxlButton onClick={() => setShowJxl(true)} />
-          </div>
+          {/* ── ASK ANYTHING (mic) ── */}
+          <div className="mt-6 h-px w-full bg-white/[0.06]" />
+          <button
+            type="button"
+            onClick={() => setShowJxl(true)}
+            className="tap-fix standard-shadow mt-6 flex h-[60px] w-full items-center justify-center gap-2.5 rounded-full border"
+            style={{
+              borderColor: "rgba(129,140,248,0.35)",
+              background: "rgba(7,10,22,0.72)",
+              color: "#e2e8f0",
+            }}
+          >
+            <Mic className="h-5 w-5" style={{ color: "rgba(167,243,208,0.95)" }} />
+            <span className="text-[16px] font-semibold tracking-[0.04em]">Ask Anything</span>
+          </button>
 
         </motion.div>
       </div>
