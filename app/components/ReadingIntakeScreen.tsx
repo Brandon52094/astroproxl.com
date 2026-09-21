@@ -788,16 +788,50 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Prompt ── */}
-          <p
-            className="mb-[14px] text-center text-[12.5px] font-semibold uppercase tracking-[0.22em] text-slate-100"
-            style={{
-              textShadow:
-                "0 3px 12px rgba(0,0,0,0.98), 0 0 14px rgba(148,163,184,0.16)",
-            }}
-          >
-            Select A Reading
-          </p>
+          {/* ── Dynamic reading header ──
+              Before selection: "Select A Reading".
+              After selection: reuse this exact space for the reading context. */}
+          <div className="mb-[14px] min-h-[18px] text-center">
+            <AnimatePresence mode="wait" initial={false}>
+              {selectedAreaConfig ? (
+                <motion.p
+                  key={selectedAreaConfig.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeInOut" }}
+                  className="whitespace-nowrap text-[10.5px] leading-[18px] text-slate-400 sm:text-[11px]"
+                  style={{
+                    textShadow: "0 3px 12px rgba(0,0,0,0.9)",
+                  }}
+                >
+                  <span
+                    className="font-semibold"
+                    style={{ color: getAreaColors(selectedAreaConfig.id).text }}
+                  >
+                    {selectedAreaConfig.title}
+                  </span>
+                  <span className="mx-1.5 text-slate-600">·</span>
+                  <span>{selectedAreaConfig.description}</span>
+                </motion.p>
+              ) : (
+                <motion.p
+                  key="select-reading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.14, ease: "easeInOut" }}
+                  className="text-[12.5px] font-semibold uppercase leading-[18px] tracking-[0.22em] text-slate-100"
+                  style={{
+                    textShadow:
+                      "0 3px 12px rgba(0,0,0,0.98), 0 0 14px rgba(148,163,184,0.16)",
+                  }}
+                >
+                  Select A Reading
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* ── READING GRID (2×2) ── */}
           <section className="grid grid-cols-2 gap-x-3 gap-y-4">
@@ -837,42 +871,6 @@ export default function ReadingIntakeScreen({
               );
             })}
           </section>
-
-          {/* ── READING INFO (compact, centered, one line) ── */}
-          <div className="mt-3 min-h-[22px] text-center">
-            <AnimatePresence mode="wait">
-              {selectedAreaConfig ? (
-                <motion.p
-                  key={selectedAreaConfig.id}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="whitespace-nowrap text-[10.5px] leading-[22px] text-slate-400"
-                >
-                  <span
-                    className="text-[11.5px] font-semibold"
-                    style={{ color: getAreaColors(selectedAreaConfig.id).text }}
-                  >
-                    {selectedAreaConfig.title}
-                  </span>
-                  <span className="mx-1.5 text-slate-600">·</span>
-                  <span>{selectedAreaConfig.description}</span>
-                </motion.p>
-              ) : (
-                <motion.p
-                  key="placeholder"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="text-[11px] leading-[22px] text-slate-500"
-                >
-                  Tap a reading above to see what it covers.
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </div>
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
