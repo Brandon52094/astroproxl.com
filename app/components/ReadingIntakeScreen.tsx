@@ -157,31 +157,6 @@ interface Profection {
   activatedHouse?: number;
 }
 
-type ZodiacElement = "fire" | "earth" | "air" | "water";
-
-const SIGN_ELEMENTS: Record<string, ZodiacElement> = {
-  Aries: "fire", Taurus: "earth", Gemini: "air", Cancer: "water",
-  Leo: "fire", Virgo: "earth", Libra: "air", Scorpio: "water",
-  Sagittarius: "fire", Capricorn: "earth", Aquarius: "air", Pisces: "water",
-};
-
-const ELEMENT_ACCENTS: Record<ZodiacElement, { text: string; glow: string }> = {
-  fire: { text: "#FDBA74", glow: "rgba(253,186,116,0.18)" },
-  earth: { text: "#6EE7B7", glow: "rgba(110,231,183,0.18)" },
-  air: { text: "#BAE6FD", glow: "rgba(186,230,253,0.18)" },
-  water: { text: "#93C5FD", glow: "rgba(147,197,253,0.18)" },
-};
-
-function placementAccent(sign?: string) {
-  return ELEMENT_ACCENTS[SIGN_ELEMENTS[sign ?? ""] ?? "air"];
-}
-
-function formatDegree(value?: string) {
-  if (!value) return "";
-  const trimmed = String(value).trim();
-  return trimmed.includes("°") ? trimmed : `${trimmed}°`;
-}
-
 type ThemeName = "cosmic";
 
 interface ThemeColors {
@@ -252,13 +227,12 @@ export default function ReadingIntakeScreen({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
 
-  // Chart-derived data for the hero dashboard.
+  // Chart-derived data for the hero fade line.
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
   const [profection, setProfection] = useState<Profection | null>(null);
-  const [userName, setUserName] = useState("");
 
-  // Slow TODAY line state.
+  // Fade line state.
   const [factIndex, setFactIndex] = useState(0);
   const [factPaused, setFactPaused] = useState(false);
 
@@ -270,30 +244,6 @@ export default function ReadingIntakeScreen({
       clearTimeout(selectionTimeoutRef.current);
       selectionTimeoutRef.current = null;
     }
-  }, []);
-
-  // Pull a first name from the existing chart endpoint when it is available.
-  // The hero still renders cleanly as “Hello” if the endpoint does not expose one yet.
-  useEffect(() => {
-    let cancelled = false;
-    async function loadDisplayName() {
-      try {
-        const response = await fetch("/api/user/get-chart", { cache: "no-store" });
-        if (!response.ok) return;
-        const data = await response.json();
-        const rawName =
-          data?.firstName ??
-          data?.user?.firstName ??
-          data?.profile?.firstName ??
-          data?.chart?.firstName ??
-          data?.chart?.name ??
-          "";
-        const firstName = String(rawName).trim().split(/\s+/)[0] ?? "";
-        if (!cancelled && firstName) setUserName(firstName);
-      } catch { }
-    }
-    loadDisplayName();
-    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -391,28 +341,17 @@ export default function ReadingIntakeScreen({
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
   const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
 
-  /* ── Hero dashboard: fixed Big Three + slow TODAY line ───────────── */
-  const bigThree = useMemo(() => {
-    const find = (name: string) => natal.find((p) => p.name === name);
-    return [
-      { label: "Sun", placement: find("Sun") },
-      { label: "Moon", placement: find("Moon") },
-      { label: "Rising", placement: find("Ascendant") },
-    ];
-  }, [natal]);
-
+  /* ── Hero fade line — rotating chart facts ───────────────────────── */
   const facts = useMemo(() => {
     const out: string[] = [];
-    const find = (name: string) => transits.find((p) => p.name === name);
+    const find = (arr: Placement[], n: string) => arr.find((p) => p.name === n);
 
-    const tSun = find("Sun");
-    if (tSun?.sign) out.push(`Sun in ${tSun.sign}${tSun.degree ? ` · ${formatDegree(tSun.degree)}` : ""}`);
-
-    const tMoon = find("Moon");
-    if (tMoon?.sign) out.push(`Moon in ${tMoon.sign}${tMoon.degree ? ` · ${formatDegree(tMoon.degree)}` : ""}`);
-
-    const merc = find("Mercury");
-    if (merc) out.push(merc.isRetrograde ? "Mercury Retrograde" : "Mercury Direct");
+    const sun = find(natal, "Sun");
+    const moon = find(natal, "Moon");
+    const rising = find(natal, "Ascendant");
+    if (sun?.sign && moon?.sign && rising?.sign) {
+      out.push(`${sun.sign} Sun · ${moon.sign} Moon · ${rising.sign} Rising`);
+    }
 
     if (profection?.activatedSign) {
       const house =
@@ -422,17 +361,27 @@ export default function ReadingIntakeScreen({
       out.push(`${profection.activatedSign} Year · ${ordinal(house)} House`);
     }
 
-    return out.length ? out : ["Your sky is ready"];
-  }, [profection, transits]);
+    const tSun = find(transits, "Sun");
+    if (tSun?.sign) out.push(`Sun in ${tSun.sign}${tSun.degree ? ` · ${tSun.degree}` : ""}`);
 
+    const tMoon = find(transits, "Moon");
+    if (tMoon?.sign) out.push(`Moon in ${tMoon.sign}${tMoon.degree ? ` · ${tMoon.degree}` : ""}`);
+
+    const merc = find(transits, "Mercury");
+    if (merc) out.push(merc.isRetrograde ? "Mercury Retrograde" : "Mercury Direct");
+
+    return out.length ? out : ["Now You'll Know."];
+  }, [natal, profection, transits]);
+
+  // Keep the index in range whenever the fact set changes.
   useEffect(() => { setFactIndex(0); }, [facts.length]);
 
-  // Keep this intentionally slow so the hero feels alive, not busy.
+  // Auto-advance every 3s; press-and-hold pauses it.
   useEffect(() => {
     if (factPaused || facts.length <= 1) return;
     const id = setInterval(() => {
       setFactIndex((i) => (i + 1) % facts.length);
-    }, 6500);
+    }, 3000);
     return () => clearInterval(id);
   }, [factPaused, facts.length]);
 
@@ -792,10 +741,10 @@ export default function ReadingIntakeScreen({
             Swipe Left To Explore
           </button>
 
-          {/* ── HERO — personal chart dashboard ── */}
+          {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-[18px] pt-0">
             <div
-              className="hero-shine hero-outline relative h-[190px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-4"
+              className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[40px] text-center"
               style={{
                 "--hero-c1": heroPalette[0],
                 "--hero-c2": heroPalette[1],
@@ -803,74 +752,35 @@ export default function ReadingIntakeScreen({
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
-              <div className="relative z-10 flex h-full flex-col">
-                <div className="flex justify-center">
-                  <div className="inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                      AstroProXL
-                    </span>
-                  </div>
+              <div className="relative z-10 mx-auto max-w-[560px]">
+                <div className="mb-3 -translate-y-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
+                    AstroProXL
+                  </span>
                 </div>
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                  You Can Ask Anything
+                </h1>
 
-                <p className="mt-2 text-center text-[14px] font-medium tracking-[-0.01em] text-slate-200/82">
-                  Hello{userName ? `, ${userName}` : ""}
-                </p>
-
-                <div className="mt-3 grid grid-cols-3">
-                  {bigThree.map(({ label, placement }, index) => {
-                    const accent = placementAccent(placement?.sign);
-                    return (
-                      <div
-                        key={label}
-                        className={cn(
-                          "min-w-0 px-2 text-center",
-                          index > 0 && "border-l border-white/[0.055]"
-                        )}
-                      >
-                        <div className="text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-400/72">
-                          {label}
-                        </div>
-                        <div
-                          className="mt-1 truncate text-[13px] font-semibold tracking-[-0.01em]"
-                          style={{
-                            color: placement?.sign ? accent.text : "rgba(226,232,240,0.52)",
-                            textShadow: placement?.sign ? `0 0 14px ${accent.glow}` : "none",
-                          }}
-                        >
-                          {placement?.sign
-                            ? `${placement.sign}${placement.degree ? ` ${formatDegree(placement.degree)}` : ""}`
-                            : "—"}
-                        </div>
-                        <div className="mt-0.5 text-[9.5px] text-slate-500/82">
-                          {typeof placement?.house === "number" ? `${ordinal(placement.house)} House` : "Chart placement"}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* One quiet live line: only the secondary information rotates. */}
+                {/* Fade-swap detail line — press & hold to pause */}
                 <div
                   data-no-swipe
                   onPointerDown={() => setFactPaused(true)}
                   onPointerUp={() => setFactPaused(false)}
                   onPointerLeave={() => setFactPaused(false)}
                   onPointerCancel={() => setFactPaused(false)}
-                  className="relative mt-auto h-6 select-none border-t border-white/[0.055] pt-2 text-center"
+                  className="relative mx-auto mt-3 h-6 max-w-[34ch] translate-y-3 select-none"
                 >
-                  <AnimatePresence mode="sync" initial={false}>
+                  <AnimatePresence mode="wait">
                     <motion.p
                       key={factIndex}
-                      initial={{ opacity: 0, y: 2 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -2 }}
-                      transition={{ duration: 0.7, ease: "easeInOut" }}
-                      className="absolute inset-x-0 top-2 text-[10.5px] leading-4 text-slate-300/78"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5, ease: "easeInOut" }}
+                      className="absolute inset-0 text-[14px] leading-6 text-slate-300/86 sm:text-[15px]"
                     >
-                      <span className="mr-2 text-[8.5px] font-semibold uppercase tracking-[0.22em] text-slate-500/90">
-                        Today
-                      </span>
-                      <span>{facts[factIndex] ?? facts[0]}</span>
+                      {facts[factIndex] ?? facts[0]}
                     </motion.p>
                   </AnimatePresence>
                 </div>
