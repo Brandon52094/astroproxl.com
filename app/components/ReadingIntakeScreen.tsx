@@ -90,6 +90,42 @@ const AREAS = [
   },
 ];
 
+// Hero glow palettes respond to the selected reading topic.
+// Gold is intentionally excluded so it remains reserved for subscriber-only UI.
+const HERO_PALETTES: Record<string, [string, string, string, string]> = {
+  default: [
+    "52, 211, 153",  // emerald
+    "34, 211, 238",  // cyan
+    "56, 189, 248",  // sky
+    "168, 85, 247",  // violet
+  ],
+  love: [
+    "244, 114, 182", // blush pink
+    "251, 113, 133", // rose
+    "225, 29, 72",   // raspberry
+    "192, 132, 252", // soft violet
+  ],
+  money: [
+    "52, 211, 153",  // emerald
+    "16, 185, 129",  // jade
+    "110, 231, 183", // mint
+    "45, 212, 191",  // teal
+  ],
+  career: [
+    "125, 211, 252", // ice blue
+    "56, 189, 248",  // electric blue
+    "37, 99, 235",   // cobalt
+    "99, 102, 241",  // indigo
+  ],
+  other: [
+    "216, 180, 254", // lavender
+    "192, 132, 252", // violet
+    "139, 92, 246",  // deep purple
+    "96, 165, 250",  // cool blue
+  ],
+};
+
+
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
@@ -291,6 +327,7 @@ export default function ReadingIntakeScreen({
   }, [fetchStatus]);
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
+  const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
 
   /* ── Hero fade line — rotating chart facts ───────────────────────── */
   const facts = useMemo(() => {
@@ -503,33 +540,33 @@ export default function ReadingIntakeScreen({
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── Aurora OUTLINE glow — cycles color, outer glow only ── */
+        /* ── Aurora OUTLINE glow — palette responds to selected reading ── */
         .hero-outline {
-          border: 1px solid rgba(56,189,248,0.9);
+          border: 1px solid rgba(var(--hero-c1), 0.9);
           box-shadow:
-            0 0 26px 2px rgba(56,189,248,0.70),
-            0 0 70px 10px rgba(56,189,248,0.42),
-            0 0 130px 26px rgba(56,189,248,0.26),
+            0 0 26px 2px rgba(var(--hero-c1), 0.70),
+            0 0 70px 10px rgba(var(--hero-c1), 0.42),
+            0 0 130px 26px rgba(var(--hero-c1), 0.26),
             0 18px 44px rgba(0,0,0,0.72),
             0 36px 80px rgba(0,0,0,0.56);
           animation: heroBorderGlow 9s ease-in-out infinite;
         }
         @keyframes heroBorderGlow {
           0%, 100% {
-            border-color: rgba(52,211,153,0.9);
-            box-shadow: 0 0 26px 2px rgba(52,211,153,0.70), 0 0 70px 10px rgba(52,211,153,0.42), 0 0 130px 26px rgba(52,211,153,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c1), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c1), 0.70), 0 0 70px 10px rgba(var(--hero-c1), 0.42), 0 0 130px 26px rgba(var(--hero-c1), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           25% {
-            border-color: rgba(34,211,238,0.9);
-            box-shadow: 0 0 26px 2px rgba(34,211,238,0.70), 0 0 70px 10px rgba(34,211,238,0.42), 0 0 130px 26px rgba(34,211,238,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c2), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c2), 0.70), 0 0 70px 10px rgba(var(--hero-c2), 0.42), 0 0 130px 26px rgba(var(--hero-c2), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           50% {
-            border-color: rgba(56,189,248,0.9);
-            box-shadow: 0 0 26px 2px rgba(56,189,248,0.70), 0 0 70px 10px rgba(56,189,248,0.42), 0 0 130px 26px rgba(56,189,248,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c3), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c3), 0.70), 0 0 70px 10px rgba(var(--hero-c3), 0.42), 0 0 130px 26px rgba(var(--hero-c3), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           75% {
-            border-color: rgba(168,85,247,0.9);
-            box-shadow: 0 0 26px 2px rgba(168,85,247,0.70), 0 0 70px 10px rgba(168,85,247,0.42), 0 0 130px 26px rgba(168,85,247,0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c4), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c4), 0.70), 0 0 70px 10px rgba(var(--hero-c4), 0.42), 0 0 130px 26px rgba(var(--hero-c4), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
         }
 
@@ -632,7 +669,15 @@ export default function ReadingIntakeScreen({
         >
           {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-5 pt-1">
-            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[38px] text-center">
+            <div
+              className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[38px] text-center"
+              style={{
+                "--hero-c1": heroPalette[0],
+                "--hero-c2": heroPalette[1],
+                "--hero-c3": heroPalette[2],
+                "--hero-c4": heroPalette[3],
+              } as React.CSSProperties}
+            >
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
