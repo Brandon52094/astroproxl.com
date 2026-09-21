@@ -791,27 +791,29 @@ export default function ReadingIntakeScreen({
           {/* ── Dynamic reading header ──
               Before selection: "Select A Reading".
               After selection: reuse this exact space for the reading context. */}
-          <div className="mb-[14px] min-h-[18px] text-center">
-            <AnimatePresence mode="wait" initial={false}>
+          <div className="relative mb-[14px] h-[26px] text-center">
+            {/* Keep both states in the same fixed-height layer so the swap never nudges layout.
+                mode=sync lets the old copy fade out while the new copy fades in. */}
+            <AnimatePresence mode="sync" initial={false}>
               {selectedAreaConfig ? (
                 <motion.p
-                  key={selectedAreaConfig.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.18, ease: "easeInOut" }}
-                  className="whitespace-nowrap text-[10.5px] leading-[18px] text-slate-400 sm:text-[11px]"
+                  key={`reading-context-${selectedAreaConfig.id}`}
+                  initial={{ opacity: 0, y: 3, filter: "blur(2px)" }}
+                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, y: -2, filter: "blur(1.5px)" }}
+                  transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center whitespace-nowrap text-[12px] leading-[20px] text-slate-300/80 sm:text-[12.5px]"
                   style={{
-                    textShadow: "0 3px 12px rgba(0,0,0,0.9)",
+                    textShadow: "0 3px 14px rgba(0,0,0,0.92)",
                   }}
                 >
                   <span
-                    className="font-semibold"
+                    className="text-[12.5px] font-semibold sm:text-[13px]"
                     style={{ color: getAreaColors(selectedAreaConfig.id).text }}
                   >
                     {selectedAreaConfig.title}
                   </span>
-                  <span className="mx-1.5 text-slate-600">·</span>
+                  <span className="mx-2 text-slate-600">·</span>
                   <span>{selectedAreaConfig.description}</span>
                 </motion.p>
               ) : (
@@ -819,12 +821,12 @@ export default function ReadingIntakeScreen({
                   key="select-reading"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.14, ease: "easeInOut" }}
-                  className="text-[12.5px] font-semibold uppercase leading-[18px] tracking-[0.22em] text-slate-100"
+                  exit={{ opacity: 0, y: -2 }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
                   style={{
                     textShadow:
-                      "0 3px 12px rgba(0,0,0,0.98), 0 0 14px rgba(148,163,184,0.16)",
+                      "0 3px 14px rgba(0,0,0,0.98), 0 0 18px rgba(148,163,184,0.24)",
                   }}
                 >
                   Select A Reading
@@ -845,20 +847,22 @@ export default function ReadingIntakeScreen({
                   type="button"
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-all duration-300"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
-                    background: isSelected ? c.bg : "rgba(255,255,255,0.03)",
+                    backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
                     boxShadow: isSelected
-                      ? `0 0 26px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
+                      ? `0 0 22px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                    transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
                   }}
                 >
                   <Icon
-                    className="h-6 w-6"
+                    className="h-6 w-6 transition-[color,filter,transform] duration-500 ease-out"
                     style={{
                       color: isSelected ? c.text : "rgba(203,213,225,0.68)",
-                      filter: isSelected ? `drop-shadow(0 0 8px ${c.glow})` : "none",
+                      filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
+                      transform: isSelected ? "scale(1.035)" : "scale(1)",
                     }}
                   />
                   <span
