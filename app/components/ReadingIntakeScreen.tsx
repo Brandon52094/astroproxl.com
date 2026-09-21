@@ -523,7 +523,7 @@ export default function ReadingIntakeScreen({
 
         @keyframes heroShine {
           0% { transform: translateX(-140%) skewX(-18deg); }
-          60% { transform: translateX(240%) skewX(-18deg); }
+          32% { transform: translateX(240%) skewX(-18deg); }
           100% { transform: translateX(240%) skewX(-18deg); }
         }
         .hero-shine { position: relative; overflow: hidden; isolation: isolate; }
@@ -534,7 +534,7 @@ export default function ReadingIntakeScreen({
           width: 45%;
           background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%);
           transform: translateX(-140%) skewX(-18deg);
-          animation: heroShine 4.6s ease-in-out infinite;
+          animation: heroShine 8.6s ease-in-out infinite;
           pointer-events: none;
           z-index: 1;
         }
@@ -570,7 +570,12 @@ export default function ReadingIntakeScreen({
           }
         }
 
-        .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
+        .standard-shadow {
+          box-shadow:
+            0 18px 38px rgba(0,0,0,0.78),
+            0 34px 72px rgba(0,0,0,0.58),
+            0 48px 96px rgba(0,0,0,0.34);
+        }
 
         /* ── ASK ANYTHING — flagship treatment (gold stays reserved for subscriber-only UI) ── */
         @keyframes askPremiumPulse {
@@ -578,13 +583,15 @@ export default function ReadingIntakeScreen({
             box-shadow:
               0 0 0 1px rgba(129,140,248,0.12),
               0 0 22px rgba(99,102,241,0.16),
-              0 14px 28px rgba(0,0,0,0.52);
+              0 18px 34px rgba(0,0,0,0.78),
+              0 34px 68px rgba(0,0,0,0.46);
           }
           50% {
             box-shadow:
               0 0 0 1px rgba(94,234,212,0.22),
               0 0 34px rgba(94,234,212,0.18),
-              0 14px 28px rgba(0,0,0,0.52);
+              0 18px 34px rgba(0,0,0,0.78),
+              0 34px 68px rgba(0,0,0,0.46);
           }
         }
 
@@ -715,7 +722,13 @@ export default function ReadingIntakeScreen({
           </section>
 
           {/* ── Prompt ── */}
-          <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+          <p
+            className="mb-4 text-center text-[12.5px] font-semibold uppercase tracking-[0.22em] text-slate-100"
+            style={{
+              textShadow:
+                "0 3px 12px rgba(0,0,0,0.98), 0 0 14px rgba(148,163,184,0.16)",
+            }}
+          >
             Please Select a Reading
           </p>
 
@@ -736,8 +749,8 @@ export default function ReadingIntakeScreen({
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     background: isSelected ? c.bg : "rgba(255,255,255,0.03)",
                     boxShadow: isSelected
-                      ? `0 0 24px ${c.glow}, 0 14px 28px rgba(0,0,0,0.5)`
-                      : "0 10px 22px rgba(0,0,0,0.4)",
+                      ? `0 0 26px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
+                      : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                   }}
                 >
                   <Icon className="h-6 w-6" style={{ color: c.text }} />
@@ -751,6 +764,25 @@ export default function ReadingIntakeScreen({
               );
             })}
           </section>
+
+          {/* ── ASK ANYTHING (flagship feature; centered beneath the reading grid) ── */}
+          <button
+            type="button"
+            onClick={() => setShowJxl(true)}
+            className="ask-premium tap-fix mt-4 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] px-3"
+          >
+            <span className="ask-mic-halo shrink-0">
+              <Mic className="h-[17px] w-[17px]" style={{ color: "rgba(167,243,208,0.98)" }} />
+            </span>
+            <span className="min-w-0 text-left">
+              <span className="block text-[13px] font-semibold leading-4 tracking-[0.025em] text-slate-100">
+                Ask Anything
+              </span>
+              <span className="mt-1 block whitespace-nowrap text-[8.5px] font-medium uppercase leading-3 tracking-[0.08em] text-slate-400">
+                Tap · Press &amp; Hold · Speak
+              </span>
+            </span>
+          </button>
 
           {/* ── READING INFO (compact, centered, one line) ── */}
           <div className="mt-3 min-h-[22px] text-center">
@@ -825,25 +857,14 @@ export default function ReadingIntakeScreen({
                 border: "2px solid rgba(94,234,212,0.65)",
                 color: "rgba(94,234,212,0.95)",
                 boxShadow: canSubmit && !isCreatingReading
-                  ? "0 0 18px rgba(45,212,191,0.22), 0 18px 44px rgba(0,0,0,0.72)"
-                  : "0 18px 44px rgba(0,0,0,0.72)",
+                  ? "0 0 20px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
+                  : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
               }}
             >
               {buttonCopy}
             </Button>
           </div>
 
-          {/* ── ASK ANYTHING (flagship feature; same footprint as a reading card) ── */}
-          <button
-            type="button"
-            onClick={() => setShowJxl(true)}
-            className="ask-premium tap-fix mt-3 flex h-[84px] w-[calc(50%_-_6px)] self-center flex-col items-center justify-center gap-1.5 rounded-[20px]"
-          >
-            <span className="ask-mic-halo">
-              <Mic className="h-[18px] w-[18px]" style={{ color: "rgba(167,243,208,0.98)" }} />
-            </span>
-            <span className="text-[13px] font-semibold tracking-[0.025em] text-slate-100">Ask Anything</span>
-          </button>
 
         </motion.div>
       </div>
