@@ -678,7 +678,7 @@ export default function ReadingIntakeScreen({
           {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-5 pt-1">
             <div
-              className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[38px] text-center"
+              className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[40px] text-center"
               style={{
                 "--hero-c1": heroPalette[0],
                 "--hero-c2": heroPalette[1],
@@ -864,7 +864,7 @@ export default function ReadingIntakeScreen({
                     ? "Tap to add context (optional)"
                     : "Select a reading, then add context (optional)"
                 }
-                className="min-h-[84px] w-full resize-none rounded-[16px] border-0 bg-transparent px-1 py-1 text-[16px] leading-6 text-white placeholder:text-slate-500 focus:outline-none focus:ring-0"
+                className="min-h-[84px] w-full resize-none rounded-[16px] !border-0 !bg-transparent px-1 py-1 text-[16px] leading-6 text-white !shadow-none placeholder:text-slate-500 focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
                 style={{ backgroundColor: "transparent" }}
               />
             </div>
@@ -880,11 +880,18 @@ export default function ReadingIntakeScreen({
               className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
                 background: "transparent",
-                border: "2px solid rgba(94,234,212,0.65)",
-                color: "rgba(94,234,212,0.95)",
-                boxShadow: canSubmit && !isCreatingReading
-                  ? "0 0 20px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
-                  : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                border: selectedAreaConfig
+                  ? `2px solid ${getAreaColors(selectedAreaConfig.id).border}`
+                  : "2px solid rgba(94,234,212,0.65)",
+                color: selectedAreaConfig
+                  ? getAreaColors(selectedAreaConfig.id).text
+                  : "rgba(94,234,212,0.95)",
+                boxShadow:
+                  canSubmit && !isCreatingReading && selectedAreaConfig
+                    ? `0 0 20px ${getAreaColors(selectedAreaConfig.id).glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
+                    : canSubmit && !isCreatingReading
+                      ? "0 0 20px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
+                      : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
               }}
             >
               {buttonCopy}
