@@ -558,7 +558,7 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-14"
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4 pt-16"
         style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
       >
         <motion.div
@@ -743,7 +743,7 @@ export default function ReadingIntakeScreen({
             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-600">Ask JXL</span>
             <div className="h-px flex-1 bg-white/[0.06]" />
           </div>
-          <div className="mt-4">
+          <div className="mt-8">
             <AskJxlButton onClick={() => setShowJxl(true)} />
           </div>
 
