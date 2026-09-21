@@ -174,12 +174,12 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     name: "cosmic",
     areaColors: {
       love: {
-        bg: "rgba(127, 29, 29, 0.30)",
-        border: "#F97316",
-        glow: "rgba(239, 68, 68, 0.30)",
-        text: "#FCA5A5",
-        iconBg: "rgba(127, 29, 29, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(127,29,29,0.85) 0%, rgba(153,27,27,0.70) 32%, rgba(239,68,68,0.20) 100%)",
+        bg: "rgba(131, 24, 67, 0.24)",
+        border: "#FB7185",
+        glow: "rgba(244, 114, 182, 0.28)",
+        text: "#FDA4AF",
+        iconBg: "rgba(131, 24, 67, 0.46)",
+        gradient: "linear-gradient(135deg, rgba(131,24,67,0.78) 0%, rgba(190,24,93,0.56) 38%, rgba(244,114,182,0.16) 100%)",
       },
       money: {
         bg: "rgba(20, 83, 45, 0.30)",
@@ -235,6 +235,16 @@ export default function ReadingIntakeScreen({
   // Fade line state.
   const [factIndex, setFactIndex] = useState(0);
   const [factPaused, setFactPaused] = useState(false);
+
+  // If a reading is selected but the user does not continue into context or Begin Reading,
+  // gently return the interface to its neutral state.
+  const selectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearSelectionTimeout = useCallback(() => {
+    if (selectionTimeoutRef.current) {
+      clearTimeout(selectionTimeoutRef.current);
+      selectionTimeoutRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     async function ensureChart() {
@@ -395,14 +405,26 @@ export default function ReadingIntakeScreen({
   }, [selectedArea, chartStatus]);
 
   const selectArea = useCallback((id: string) => {
+    clearSelectionTimeout();
     setSelectedArea(id);
     setQuestion("");
     const area = AREAS.find((a) => a.id === id);
     trackTtq("ViewContent", { content_id: id, content_name: area?.title });
-  }, []);
+
+    selectionTimeoutRef.current = setTimeout(() => {
+      setSelectedArea(null);
+      setQuestion("");
+      selectionTimeoutRef.current = null;
+    }, 10000);
+  }, [clearSelectionTimeout]);
+
+  useEffect(() => {
+    return () => clearSelectionTimeout();
+  }, [clearSelectionTimeout]);
 
   const handleStartReading = async () => {
     if (!canSubmit || !selectedArea) return;
+    clearSelectionTimeout();
     setIsCreatingReading(true);
     setSubmitError(null);
     trackTtq("AddToCart", { content_id: selectedArea });
@@ -583,50 +605,38 @@ export default function ReadingIntakeScreen({
         @keyframes askPremiumPulse {
           0%, 100% {
             box-shadow:
-              0 0 0 1px rgba(34,211,238,0.16),
-              0 0 24px rgba(34,211,238,0.16),
-              0 0 46px rgba(99,102,241,0.10),
-              0 18px 34px rgba(0,0,0,0.82),
-              0 36px 72px rgba(0,0,0,0.50);
+              0 0 0 1px rgba(34,211,238,0.14),
+              0 0 26px rgba(34,211,238,0.13),
+              0 0 54px rgba(99,102,241,0.08),
+              0 20px 42px rgba(0,0,0,0.82),
+              0 38px 78px rgba(0,0,0,0.46);
           }
-          45% {
+          50% {
             box-shadow:
-              0 0 0 1px rgba(168,85,247,0.18),
-              0 0 30px rgba(139,92,246,0.18),
-              0 0 54px rgba(34,211,238,0.10),
-              0 18px 34px rgba(0,0,0,0.82),
-              0 36px 72px rgba(0,0,0,0.50);
-          }
-          72% {
-            box-shadow:
-              0 0 0 1px rgba(234,190,63,0.18),
-              0 0 26px rgba(202,162,38,0.12),
-              0 0 48px rgba(94,234,212,0.09),
-              0 18px 34px rgba(0,0,0,0.82),
-              0 36px 72px rgba(0,0,0,0.50);
+              0 0 0 1px rgba(168,85,247,0.16),
+              0 0 30px rgba(139,92,246,0.14),
+              0 0 58px rgba(34,211,238,0.08),
+              0 20px 42px rgba(0,0,0,0.82),
+              0 38px 78px rgba(0,0,0,0.46);
           }
         }
 
         @keyframes askPremiumSweep {
           0% { transform: translateX(-175%) skewX(-18deg); opacity: 0; }
-          10% { opacity: 0; }
-          18% { opacity: 0.74; }
-          34% { transform: translateX(285%) skewX(-18deg); opacity: 0; }
-          100% { transform: translateX(285%) skewX(-18deg); opacity: 0; }
+          12% { opacity: 0; }
+          20% { opacity: 0.56; }
+          34% { transform: translateX(330%) skewX(-18deg); opacity: 0; }
+          100% { transform: translateX(330%) skewX(-18deg); opacity: 0; }
         }
 
         @keyframes askMicBreathe {
           0%, 100% {
             transform: scale(1);
-            box-shadow:
-              0 0 12px rgba(34,211,238,0.16),
-              0 0 22px rgba(139,92,246,0.08);
+            box-shadow: 0 0 14px rgba(34,211,238,0.14), 0 0 24px rgba(139,92,246,0.07);
           }
           50% {
-            transform: scale(1.055);
-            box-shadow:
-              0 0 18px rgba(34,211,238,0.24),
-              0 0 30px rgba(202,162,38,0.10);
+            transform: scale(1.045);
+            box-shadow: 0 0 20px rgba(34,211,238,0.22), 0 0 32px rgba(139,92,246,0.10);
           }
         }
 
@@ -636,26 +646,24 @@ export default function ReadingIntakeScreen({
           isolation: isolate;
           border: 1px solid transparent;
           background:
-            radial-gradient(circle at 18% 26%, rgba(34,211,238,0.08), transparent 34%) padding-box,
-            radial-gradient(circle at 82% 78%, rgba(139,92,246,0.10), transparent 42%) padding-box,
-            linear-gradient(145deg, rgba(10,14,32,0.98), rgba(5,8,20,0.98)) padding-box,
+            radial-gradient(circle at 16% 18%, rgba(34,211,238,0.085), transparent 34%) padding-box,
+            radial-gradient(circle at 84% 84%, rgba(139,92,246,0.11), transparent 42%) padding-box,
+            linear-gradient(145deg, rgba(10,14,32,0.985), rgba(5,8,20,0.985)) padding-box,
             linear-gradient(118deg,
-              rgba(34,211,238,0.90) 0%,
-              rgba(99,102,241,0.86) 32%,
-              rgba(168,85,247,0.90) 58%,
-              rgba(234,190,63,0.88) 78%,
-              rgba(94,234,212,0.86) 100%) border-box;
-          animation: askPremiumPulse 4.8s ease-in-out infinite;
+              rgba(34,211,238,0.74) 0%,
+              rgba(99,102,241,0.74) 46%,
+              rgba(168,85,247,0.78) 100%) border-box;
+          animation: askPremiumPulse 5.2s ease-in-out infinite;
         }
 
         .ask-premium::before {
           content: "";
           position: absolute;
-          inset: -32% auto -32% -34%;
-          width: 30%;
-          background: linear-gradient(105deg, transparent, rgba(255,255,255,0.19), rgba(255,255,255,0.08), transparent);
+          inset: -34% auto -34% -34%;
+          width: 24%;
+          background: linear-gradient(105deg, transparent, rgba(255,255,255,0.15), rgba(255,255,255,0.055), transparent);
           transform: translateX(-175%) skewX(-18deg);
-          animation: askPremiumSweep 8.4s ease-in-out infinite;
+          animation: askPremiumSweep 9.2s ease-in-out infinite;
           pointer-events: none;
           z-index: 1;
         }
@@ -664,11 +672,9 @@ export default function ReadingIntakeScreen({
           content: "";
           position: absolute;
           inset: 1px;
-          border-radius: 19px;
+          border-radius: 23px;
           pointer-events: none;
-          background:
-            linear-gradient(180deg, rgba(255,255,255,0.035), transparent 36%),
-            radial-gradient(circle at 78% 18%, rgba(234,190,63,0.055), transparent 30%);
+          background: linear-gradient(180deg, rgba(255,255,255,0.032), transparent 42%);
           z-index: 1;
         }
 
@@ -676,23 +682,21 @@ export default function ReadingIntakeScreen({
 
         .ask-mic-halo {
           display: flex;
-          height: 32px;
-          width: 32px;
+          height: 42px;
+          width: 42px;
           align-items: center;
           justify-content: center;
           border-radius: 9999px;
           border: 1px solid transparent;
           background:
-            radial-gradient(circle, rgba(8,15,32,0.96), rgba(7,10,24,0.98)) padding-box,
-            linear-gradient(135deg, rgba(34,211,238,0.72), rgba(139,92,246,0.76), rgba(234,190,63,0.78)) border-box;
-          animation: askMicBreathe 3.2s ease-in-out infinite;
+            radial-gradient(circle, rgba(8,15,32,0.98), rgba(7,10,24,0.99)) padding-box,
+            linear-gradient(135deg, rgba(34,211,238,0.74), rgba(139,92,246,0.76)) border-box;
+          animation: askMicBreathe 3.4s ease-in-out infinite;
         }
 
         .ask-title {
           color: #f8fafc;
-          text-shadow:
-            0 1px 12px rgba(34,211,238,0.12),
-            0 0 18px rgba(168,85,247,0.08);
+          text-shadow: 0 1px 14px rgba(34,211,238,0.10), 0 0 20px rgba(168,85,247,0.07);
         }
 
         .ask-subtitle {
@@ -834,25 +838,6 @@ export default function ReadingIntakeScreen({
             })}
           </section>
 
-          {/* ── ASK ANYTHING (flagship feature; same footprint, richer premium treatment) ── */}
-          <button
-            type="button"
-            onClick={() => setShowJxl(true)}
-            className="ask-premium tap-fix mt-4 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] px-3 transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
-          >
-            <span className="ask-mic-halo shrink-0">
-              <Mic className="h-[17px] w-[17px]" style={{ color: "rgba(207,250,254,0.98)" }} />
-            </span>
-            <span className="min-w-0 text-left">
-              <span className="ask-title block text-[14px] font-semibold leading-4 tracking-[0.015em]">
-                Ask Anything
-              </span>
-              <span className="ask-subtitle mt-1 block whitespace-nowrap text-[8.5px] font-medium uppercase leading-3 tracking-[0.09em]">
-                Tap · Press &amp; Hold · Speak
-              </span>
-            </span>
-          </button>
-
           {/* ── READING INFO (compact, centered, one line) ── */}
           <div className="mt-3 min-h-[22px] text-center">
             <AnimatePresence mode="wait">
@@ -891,23 +876,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className="relative mt-3 rounded-[22px] border bg-white/[0.035] standard-shadow"
-            style={{
-              borderColor: "rgba(202, 162, 38, 0.72)",
-              boxShadow:
-                "0 0 22px rgba(202,162,38,0.08), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
-              transition: "border-color 0.3s ease, box-shadow 0.3s ease",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = "rgba(234, 190, 63, 0.95)";
-              e.currentTarget.style.boxShadow =
-                "0 0 30px rgba(202,162,38,0.16), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = "rgba(202, 162, 38, 0.72)";
-              e.currentTarget.style.boxShadow =
-                "0 0 22px rgba(202,162,38,0.08), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)";
-            }}
+            className="relative mt-3 rounded-[22px] border border-white/[0.10] bg-white/[0.035] standard-shadow transition-[border-color,box-shadow] duration-300 focus-within:border-white/[0.16]"
           >
             <div
               className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
@@ -926,7 +895,11 @@ export default function ReadingIntakeScreen({
                 id="question"
                 rows={3}
                 value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+                onFocus={clearSelectionTimeout}
+                onChange={(e) => {
+                  clearSelectionTimeout();
+                  setQuestion(e.target.value);
+                }}
                 placeholder={
                   selectedArea
                     ? "Tap to add context (optional)"
@@ -960,6 +933,43 @@ export default function ReadingIntakeScreen({
               {buttonCopy}
             </Button>
           </div>
+
+          {/* ── ASK ANYTHING — flagship premium feature, intentionally separate from readings ── */}
+          <section className="mt-5 border-t border-white/[0.06] pt-4">
+            <button
+              type="button"
+              onClick={() => setShowJxl(true)}
+              className="ask-premium tap-fix relative flex h-[108px] w-full items-center rounded-[24px] px-5 text-left transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
+            >
+              <span
+                className="pointer-events-none absolute right-3.5 top-3.5 flex h-6 w-6 items-center justify-center rounded-full"
+                style={{
+                  border: "1px solid rgba(202,162,38,0.42)",
+                  background: "rgba(202,162,38,0.06)",
+                  boxShadow: "0 0 12px rgba(202,162,38,0.08)",
+                }}
+                aria-hidden="true"
+              >
+                <Crown className="h-3.5 w-3.5" style={{ color: "rgba(234,190,63,0.90)" }} />
+              </span>
+
+              <span className="ask-mic-halo mr-4 shrink-0">
+                <Mic className="h-[20px] w-[20px]" style={{ color: "rgba(207,250,254,0.98)" }} />
+              </span>
+
+              <span className="min-w-0 pr-7">
+                <span className="ask-title block text-[20px] font-semibold leading-6 tracking-[-0.01em]">
+                  Ask Anything
+                </span>
+                <span className="ask-subtitle mt-1 block text-[11px] leading-4">
+                  Real-time astrological guidance on your current situation
+                </span>
+                <span className="mt-1.5 block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-teal-200/85">
+                  Press &amp; hold · Speak what’s on your mind
+                </span>
+              </span>
+            </button>
+          </section>
 
 
         </motion.div>
