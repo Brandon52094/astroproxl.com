@@ -3,7 +3,6 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUser } from "@clerk/nextjs";
 import {
   Heart,
   Briefcase,
@@ -18,6 +17,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import StarfieldBackground from "./StarfieldBackground";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
+import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import {
   saveIntake,
@@ -50,6 +50,11 @@ function trackTtq(event: string, params?: Record<string, unknown>) {
   }
 }
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
 
 const AREAS = [
   {
@@ -145,6 +150,12 @@ interface Placement {
   house?: number;
   isRetrograde?: boolean;
 }
+interface Profection {
+  profectionYear: number;
+  age: number;
+  activatedSign: string;
+  activatedHouse?: number;
+}
 
 type ThemeName = "cosmic";
 
@@ -200,10 +211,8 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
-  onSwipeLeft,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
-  const { user } = useUser();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [isCreatingReading, setIsCreatingReading] = useState(false);
@@ -217,49 +226,14 @@ export default function ReadingIntakeScreen({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
 
-  // Dashboard identity. The display name is synced to Clerk unsafe metadata so
-  // it follows the signed-in user instead of living only on this device.
-  const [displayName, setDisplayName] = useState("Your Name");
-  const [nameDraft, setNameDraft] = useState("Your Name");
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [isSavingName, setIsSavingName] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    const metadataName = user.unsafeMetadata?.astroProDisplayName;
-    const nextName =
-      typeof metadataName === "string" && metadataName.trim()
-        ? metadataName.trim()
-        : user.firstName?.trim() || "Your Name";
-    setDisplayName(nextName);
-    setNameDraft(nextName);
-  }, [user]);
-
-  const saveDisplayName = useCallback(async () => {
-    const nextName = nameDraft.trim() || displayName || "Your Name";
-    setDisplayName(nextName);
-    setNameDraft(nextName);
-    setIsEditingName(false);
-
-    if (!user) return;
-    setIsSavingName(true);
-    try {
-      await user.update({
-        unsafeMetadata: {
-          ...user.unsafeMetadata,
-          astroProDisplayName: nextName,
-        },
-      });
-    } catch {
-      // Keep the optimistic display name in-session if profile sync fails.
-    } finally {
-      setIsSavingName(false);
-    }
-  }, [displayName, nameDraft, user]);
-
-  // Chart-derived data for the dashboard.
+  // Chart-derived data for the hero fade line.
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
+  const [profection, setProfection] = useState<Profection | null>(null);
+
+  // Fade line state.
+  const [factIndex, setFactIndex] = useState(0);
+  const [factPaused, setFactPaused] = useState(false);
 
   useEffect(() => {
     async function ensureChart() {
@@ -303,15 +277,17 @@ export default function ReadingIntakeScreen({
     ensureChart();
   }, [router]);
 
-  // Once the chart is ready, read natal placements + current transits for the dashboard.
+  // Once the chart is ready, read placements + profection + transits for the fade line.
   useEffect(() => {
     if (chartStatus !== "ready") return;
     const chart = loadChart();
     const data = chart?.chartData as unknown as {
+      profection?: Profection;
       tropical?: { planets?: Placement[] };
       transits?: Placement[];
     } | undefined;
     if (!data) return;
+    if (data.profection) setProfection(data.profection);
     setNatal(data.tropical?.planets ?? []);
     setTransits(data.transits ?? []);
   }, [chartStatus]);
@@ -354,39 +330,49 @@ export default function ReadingIntakeScreen({
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
   const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
 
-  /* ── Dashboard identity + today's transit snapshot ───────────────── */
-  const dashboard = useMemo(() => {
-    const find = (arr: Placement[], name: string) => arr.find((p) => p.name === name);
+  /* ── Hero fade line — rotating chart facts ───────────────────────── */
+  const facts = useMemo(() => {
+    const out: string[] = [];
+    const find = (arr: Placement[], n: string) => arr.find((p) => p.name === n);
 
-    const natalSun = find(natal, "Sun");
-    const natalMoon = find(natal, "Moon");
-    const natalRising = find(natal, "Ascendant");
+    const sun = find(natal, "Sun");
+    const moon = find(natal, "Moon");
+    const rising = find(natal, "Ascendant");
+    if (sun?.sign && moon?.sign && rising?.sign) {
+      out.push(`${sun.sign} Sun · ${moon.sign} Moon · ${rising.sign} Rising`);
+    }
 
-    const transitSun = find(transits, "Sun");
-    const transitMoon = find(transits, "Moon");
-    const mercury = find(transits, "Mercury");
-    const venus = find(transits, "Venus");
+    if (profection?.activatedSign) {
+      const house =
+        typeof profection.activatedHouse === "number"
+          ? profection.activatedHouse
+          : profection.profectionYear;
+      out.push(`${profection.activatedSign} Year · ${ordinal(house)} House`);
+    }
 
-    const lineOneParts = [
-      transitSun?.sign ? `Sun in ${transitSun.sign}` : null,
-      transitMoon?.sign ? `Moon in ${transitMoon.sign}` : null,
-    ].filter(Boolean) as string[];
+    const tSun = find(transits, "Sun");
+    if (tSun?.sign) out.push(`Sun in ${tSun.sign}${tSun.degree ? ` · ${tSun.degree}` : ""}`);
 
-    const lineTwoParts = [
-      mercury?.sign
-        ? `Mercury ${mercury.isRetrograde ? "Retrograde" : `in ${mercury.sign}`}`
-        : null,
-      venus?.sign ? `Venus in ${venus.sign}` : null,
-    ].filter(Boolean) as string[];
+    const tMoon = find(transits, "Moon");
+    if (tMoon?.sign) out.push(`Moon in ${tMoon.sign}${tMoon.degree ? ` · ${tMoon.degree}` : ""}`);
 
-    return {
-      sunSign: natalSun?.sign || "Sun",
-      moonSign: natalMoon?.sign || "Moon",
-      risingSign: natalRising?.sign || "Rising",
-      transitLineOne: lineOneParts.length ? lineOneParts.join(" · ") : "Today's transits are loading",
-      transitLineTwo: lineTwoParts.length ? lineTwoParts.join(" · ") : "Your daily sky is being prepared",
-    };
-  }, [natal, transits]);
+    const merc = find(transits, "Mercury");
+    if (merc) out.push(merc.isRetrograde ? "Mercury Retrograde" : "Mercury Direct");
+
+    return out.length ? out : ["Now You'll Know."];
+  }, [natal, profection, transits]);
+
+  // Keep the index in range whenever the fact set changes.
+  useEffect(() => { setFactIndex(0); }, [facts.length]);
+
+  // Auto-advance every 3s; press-and-hold pauses it.
+  useEffect(() => {
+    if (factPaused || facts.length <= 1) return;
+    const id = setInterval(() => {
+      setFactIndex((i) => (i + 1) % facts.length);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [factPaused, facts.length]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -585,47 +571,6 @@ export default function ReadingIntakeScreen({
           }
         }
 
-        /* ── HERO DASHBOARD ── */
-        .dashboard-symbol {
-          display: flex;
-          min-width: 70px;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .dashboard-glyph {
-          display: flex;
-          height: 28px;
-          align-items: center;
-          justify-content: center;
-          font-family: Georgia, "Times New Roman", serif;
-          font-size: 25px;
-          line-height: 1;
-          color: rgba(241,245,249,0.96);
-          text-shadow:
-            0 0 12px rgba(var(--hero-c2), 0.34),
-            0 5px 16px rgba(0,0,0,0.78);
-        }
-
-        .dashboard-glyph-asc {
-          font-family: inherit;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-        }
-
-        .dashboard-name-input {
-          width: min(240px, 82%);
-          border: 0;
-          border-bottom: 1px solid rgba(226,232,240,0.34);
-          background: transparent;
-          color: #ffffff;
-          text-align: center;
-          outline: none;
-          box-shadow: none;
-        }
-
         .standard-shadow {
           box-shadow:
             0 18px 38px rgba(0,0,0,0.78),
@@ -730,19 +675,10 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── HERO DASHBOARD ── */}
+          {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-5 pt-1">
-            <button
-              type="button"
-              onClick={() => onSwipeLeft?.()}
-              className="tap-fix mx-auto mb-1.5 block text-[10px] font-medium uppercase tracking-[0.22em] text-slate-300/80"
-              style={{ textShadow: "0 2px 10px rgba(0,0,0,0.88)" }}
-            >
-              Swipe Left To Explore
-            </button>
-
             <div
-              className="hero-shine hero-outline relative h-[220px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center"
+              className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[40px] text-center"
               style={{
                 "--hero-c1": heroPalette[0],
                 "--hero-c2": heroPalette[1],
@@ -750,92 +686,37 @@ export default function ReadingIntakeScreen({
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
-              <div className="relative z-10 flex h-full flex-col items-center px-1 pb-3 pt-2.5">
-                <div className="inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
-                  <span className="text-[9.5px] font-medium uppercase tracking-[0.22em] text-indigo-200">
+              <div className="relative z-10 mx-auto max-w-[560px]">
+                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     AstroProXL
                   </span>
                 </div>
+                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
+                  You Can Ask Anything
+                </h1>
 
-                <div className="mt-2.5 text-center">
-                  <div className="text-[13px] font-medium leading-4 text-slate-300/90">Hello,</div>
-
-                  {isEditingName ? (
-                    <input
-                      autoFocus
-                      value={nameDraft}
-                      maxLength={32}
-                      onChange={(e) => setNameDraft(e.target.value)}
-                      onBlur={saveDisplayName}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          void saveDisplayName();
-                        }
-                        if (e.key === "Escape") {
-                          setNameDraft(displayName);
-                          setIsEditingName(false);
-                        }
-                      }}
-                      className="dashboard-name-input mt-0.5 text-[30px] font-semibold leading-[34px] tracking-[-0.02em]"
-                      aria-label="Your AstroProXL display name"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNameDraft(displayName);
-                        setIsEditingName(true);
-                      }}
-                      className="tap-fix mt-0.5 block text-[30px] font-semibold leading-[34px] tracking-[-0.02em] text-white drop-shadow-[0_8px_24px_rgba(0,0,0,0.72)]"
+                {/* Fade-swap detail line — press & hold to pause */}
+                <div
+                  data-no-swipe
+                  onPointerDown={() => setFactPaused(true)}
+                  onPointerUp={() => setFactPaused(false)}
+                  onPointerLeave={() => setFactPaused(false)}
+                  onPointerCancel={() => setFactPaused(false)}
+                  className="relative mx-auto mt-3 h-6 max-w-[34ch] select-none"
+                >
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={factIndex}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5, ease: "easeInOut" }}
+                      className="absolute inset-0 text-[14px] leading-6 text-slate-300/86 sm:text-[15px]"
                     >
-                      {displayName}
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={isSavingName}
-                    onClick={() => {
-                      setNameDraft(displayName);
-                      setIsEditingName(true);
-                    }}
-                    className="tap-fix mt-0.5 text-[9px] font-medium uppercase tracking-[0.18em] text-slate-400/80 disabled:opacity-50"
-                  >
-                    {isSavingName ? "Saving…" : "Tap to edit"}
-                  </button>
-                </div>
-
-                <div className="mt-2.5 flex w-full max-w-[290px] items-start justify-between px-1">
-                  <div className="dashboard-symbol">
-                    <span className="dashboard-glyph" aria-hidden="true">☉</span>
-                    <span className="mt-1 text-[9.5px] font-medium tracking-[0.04em] text-slate-300/90">
-                      {dashboard.sunSign} Sun
-                    </span>
-                  </div>
-
-                  <div className="dashboard-symbol">
-                    <span className="dashboard-glyph" aria-hidden="true">☽</span>
-                    <span className="mt-1 text-[9.5px] font-medium tracking-[0.04em] text-slate-300/90">
-                      {dashboard.moonSign} Moon
-                    </span>
-                  </div>
-
-                  <div className="dashboard-symbol">
-                    <span className="dashboard-glyph dashboard-glyph-asc" aria-hidden="true">ASC</span>
-                    <span className="mt-1 text-[9.5px] font-medium tracking-[0.04em] text-slate-300/90">
-                      {dashboard.risingSign} Rising
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-auto w-full max-w-[34ch] border-t border-white/[0.08] pt-2 text-center">
-                  <p className="text-[11px] leading-4 text-slate-300/86">
-                    {dashboard.transitLineOne}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-4 text-slate-400/80">
-                    {dashboard.transitLineTwo}
-                  </p>
+                      {facts[factIndex] ?? facts[0]}
+                    </motion.p>
+                  </AnimatePresence>
                 </div>
               </div>
             </div>
@@ -996,15 +877,21 @@ export default function ReadingIntakeScreen({
               type="button"
               onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
-              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-semibold tracking-[0.015em] transition-all duration-300 hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
-                background:
-                  "linear-gradient(180deg, rgba(20,184,166,0.08) 0%, rgba(6,78,79,0.035) 100%)",
-                border: "2px solid rgba(94,234,212,0.72)",
-                color: "rgba(153,246,228,0.98)",
-                boxShadow: canSubmit && !isCreatingReading
-                  ? "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 22px rgba(45,212,191,0.22), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
-                  : "inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                background: "transparent",
+                border: selectedAreaConfig
+                  ? `2px solid ${getAreaColors(selectedAreaConfig.id).border}`
+                  : "2px solid rgba(94,234,212,0.65)",
+                color: selectedAreaConfig
+                  ? getAreaColors(selectedAreaConfig.id).text
+                  : "rgba(94,234,212,0.95)",
+                boxShadow:
+                  canSubmit && !isCreatingReading && selectedAreaConfig
+                    ? `0 0 20px ${getAreaColors(selectedAreaConfig.id).glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
+                    : canSubmit && !isCreatingReading
+                      ? "0 0 20px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
+                      : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
               }}
             >
               {buttonCopy}
