@@ -744,7 +744,7 @@ export default function ReadingIntakeScreen({
           {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-[18px] pt-0">
             <div
-              className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[40px] text-center"
+              className="hero-shine hero-outline relative h-[223px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center"
               style={{
                 "--hero-c1": heroPalette[0],
                 "--hero-c2": heroPalette[1],
@@ -752,45 +752,50 @@ export default function ReadingIntakeScreen({
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
-              <div className="relative z-10 mx-auto flex h-[143px] max-w-[560px] flex-col items-center sm:h-[162px]">
-                {/* Brand stamp — same AstroProXL treatment, now anchored at the top. */}
-                <div className="inline-flex shrink-0 items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+              {/*
+                Keep the hero's existing footprint locked. The top brand and bottom
+                context are anchored independently so the center can breathe.
+              */}
+              <div className="relative z-10 mx-auto h-full max-w-[560px]">
+                {/* Brand stamp — intentionally hugs the top of the hero. */}
+                <div className="absolute left-1/2 top-[16px] inline-flex -translate-x-1/2 items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     AstroProXL
                   </span>
                 </div>
 
-                {/* Quiet product identity: present, but intentionally subordinate. */}
-                <p
-                  className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.28em] text-slate-300/55 sm:mt-2 sm:text-[9.5px]"
-                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.82)" }}
-                >
-                  The Astrology Engine
-                </p>
+                {/* Center composition — given its own breathing room. */}
+                <div className="absolute inset-x-0 top-[58px] flex flex-col items-center">
+                  <p
+                    className="text-[9px] font-medium uppercase tracking-[0.28em] text-slate-300/55 sm:text-[9.5px]"
+                    style={{ textShadow: "0 2px 10px rgba(0,0,0,0.82)" }}
+                  >
+                    The Astrology Engine
+                  </p>
 
-                {/* Primary hero statement. */}
-                <h1 className="mt-1 whitespace-nowrap text-[28px] font-semibold leading-none tracking-[-0.025em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:mt-1.5 sm:text-[31px]">
-                  Astrological Predictions
-                </h1>
+                  <h1 className="mt-2 whitespace-nowrap text-[28px] font-semibold leading-none tracking-[-0.025em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[31px]">
+                    Astrological Predictions
+                  </h1>
 
-                {/* Big Three placeholders — intentionally empty for this first composition pass. */}
-                <div className="mt-2 flex items-center justify-center gap-5 sm:mt-3" aria-hidden="true">
-                  {[0, 1, 2].map((index) => (
-                    <span
-                      key={index}
-                      className="block h-[38px] w-[38px] rounded-full border border-slate-200/28 bg-white/[0.018] shadow-[inset_0_0_14px_rgba(255,255,255,0.025),0_0_16px_rgba(148,163,184,0.045)] sm:h-[44px] sm:w-[44px]"
-                    />
-                  ))}
+                  {/* Big Three placeholders — intentionally empty for now. */}
+                  <div className="mt-3.5 flex items-center justify-center gap-5" aria-hidden="true">
+                    {[0, 1, 2].map((index) => (
+                      <span
+                        key={index}
+                        className="block h-[38px] w-[38px] rounded-full border border-slate-200/28 bg-white/[0.018] shadow-[inset_0_0_14px_rgba(255,255,255,0.025),0_0_16px_rgba(148,163,184,0.045)] sm:h-[44px] sm:w-[44px]"
+                      />
+                    ))}
+                  </div>
                 </div>
 
-                {/* One rotating context line — press & hold to pause. */}
+                {/* Rotating context — anchored close to the bottom edge. */}
                 <div
                   data-no-swipe
                   onPointerDown={() => setFactPaused(true)}
                   onPointerUp={() => setFactPaused(false)}
                   onPointerLeave={() => setFactPaused(false)}
                   onPointerCancel={() => setFactPaused(false)}
-                  className="relative mx-auto mt-1.5 h-5 w-full max-w-[34ch] select-none sm:mt-2"
+                  className="absolute inset-x-0 bottom-[15px] mx-auto h-5 max-w-[34ch] select-none"
                 >
                   <AnimatePresence mode="wait">
                     <motion.p
