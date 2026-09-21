@@ -9,6 +9,7 @@ import {
   Wallet,
   Eye,
   Mic,
+  Crown,
   ChevronLeft,
 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
@@ -820,14 +821,39 @@ export default function ReadingIntakeScreen({
             </AnimatePresence>
           </div>
 
-          {/* ── OPTIONAL CONTEXT ── */}
+          {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className="mt-3 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
-            style={{ transition: "border-color 0.3s ease, box-shadow 0.3s ease" }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(255,255,255,0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
+            className="relative mt-3 rounded-[22px] border bg-white/[0.035] standard-shadow"
+            style={{
+              borderColor: "rgba(202, 162, 38, 0.72)",
+              boxShadow:
+                "0 0 22px rgba(202,162,38,0.08), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
+              transition: "border-color 0.3s ease, box-shadow 0.3s ease",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "rgba(234, 190, 63, 0.95)";
+              e.currentTarget.style.boxShadow =
+                "0 0 30px rgba(202,162,38,0.16), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "rgba(202, 162, 38, 0.72)";
+              e.currentTarget.style.boxShadow =
+                "0 0 22px rgba(202,162,38,0.08), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)";
+            }}
           >
-            <div className="rounded-[22px] bg-white/[0.02] px-4 py-3">
+            <div
+              className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+              style={{
+                border: "1px solid rgba(202,162,38,0.46)",
+                background: "rgba(202,162,38,0.07)",
+                boxShadow: "0 0 12px rgba(202,162,38,0.10)",
+              }}
+              aria-hidden="true"
+            >
+              <Crown className="h-3.5 w-3.5" style={{ color: "rgba(234,190,63,0.92)" }} />
+            </div>
+
+            <div className="rounded-[22px] bg-white/[0.02] px-4 py-3 pr-12">
               <Textarea
                 id="question"
                 rows={3}
