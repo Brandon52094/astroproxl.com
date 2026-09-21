@@ -749,7 +749,7 @@ export default function ReadingIntakeScreen({
               } as React.CSSProperties}
             >
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                <div className="mb-3 -translate-y-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     AstroProXL
                   </span>
@@ -765,7 +765,7 @@ export default function ReadingIntakeScreen({
                   onPointerUp={() => setFactPaused(false)}
                   onPointerLeave={() => setFactPaused(false)}
                   onPointerCancel={() => setFactPaused(false)}
-                  className="relative mx-auto mt-3 h-6 max-w-[34ch] select-none"
+                  className="relative mx-auto mt-3 h-6 max-w-[34ch] translate-y-3 select-none"
                 >
                   <AnimatePresence mode="wait">
                     <motion.p
@@ -792,7 +792,7 @@ export default function ReadingIntakeScreen({
                 "0 3px 12px rgba(0,0,0,0.98), 0 0 14px rgba(148,163,184,0.16)",
             }}
           >
-            Please Select a Reading
+            Select A Reading
           </p>
 
           {/* ── READING GRID (2×2) ── */}
@@ -816,7 +816,13 @@ export default function ReadingIntakeScreen({
                       : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                   }}
                 >
-                  <Icon className="h-6 w-6" style={{ color: c.text }} />
+                  <Icon
+                    className="h-6 w-6"
+                    style={{
+                      color: isSelected ? c.text : "rgba(203,213,225,0.68)",
+                      filter: isSelected ? `drop-shadow(0 0 8px ${c.glow})` : "none",
+                    }}
+                  />
                   <span
                     className="text-[13px] font-semibold"
                     style={{ color: isSelected ? "#ffffff" : "rgba(226,232,240,0.9)" }}
