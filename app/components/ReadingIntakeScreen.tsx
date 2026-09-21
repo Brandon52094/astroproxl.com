@@ -174,12 +174,12 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     name: "cosmic",
     areaColors: {
       love: {
-        bg: "rgba(136, 19, 55, 0.26)",
-        border: "#FB7185",
-        glow: "rgba(244, 63, 94, 0.30)",
-        text: "#FDA4AF",
-        iconBg: "rgba(136, 19, 55, 0.50)",
-        gradient: "linear-gradient(135deg, rgba(136,19,55,0.82) 0%, rgba(190,24,93,0.62) 40%, rgba(244,63,94,0.18) 100%)",
+        bg: "rgba(127, 29, 29, 0.30)",
+        border: "#F97316",
+        glow: "rgba(239, 68, 68, 0.30)",
+        text: "#FCA5A5",
+        iconBg: "rgba(127, 29, 29, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(127,29,29,0.85) 0%, rgba(153,27,27,0.70) 32%, rgba(239,68,68,0.20) 100%)",
       },
       money: {
         bg: "rgba(20, 83, 45, 0.30)",
@@ -209,8 +209,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
   },
 };
 
-const SELECTION_IDLE_MS = 8000;
-
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -228,25 +226,6 @@ export default function ReadingIntakeScreen({
   const [showJxl, setShowJxl] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
-  const selectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cancelSelectionTimeout = useCallback(() => {
-    if (selectionTimeoutRef.current) {
-      clearTimeout(selectionTimeoutRef.current);
-      selectionTimeoutRef.current = null;
-    }
-  }, []);
-
-  const scheduleSelectionTimeout = useCallback(() => {
-    cancelSelectionTimeout();
-    selectionTimeoutRef.current = setTimeout(() => {
-      setSelectedArea(null);
-      setQuestion("");
-      selectionTimeoutRef.current = null;
-    }, SELECTION_IDLE_MS);
-  }, [cancelSelectionTimeout]);
-
-  useEffect(() => () => cancelSelectionTimeout(), [cancelSelectionTimeout]);
 
   // Chart-derived data for the hero fade line.
   const [natal, setNatal] = useState<Placement[]>([]);
@@ -418,14 +397,12 @@ export default function ReadingIntakeScreen({
   const selectArea = useCallback((id: string) => {
     setSelectedArea(id);
     setQuestion("");
-    scheduleSelectionTimeout();
     const area = AREAS.find((a) => a.id === id);
     trackTtq("ViewContent", { content_id: id, content_name: area?.title });
-  }, [scheduleSelectionTimeout]);
+  }, []);
 
   const handleStartReading = async () => {
     if (!canSubmit || !selectedArea) return;
-    cancelSelectionTimeout();
     setIsCreatingReading(true);
     setSubmitError(null);
     trackTtq("AddToCart", { content_id: selectedArea });
@@ -772,7 +749,7 @@ export default function ReadingIntakeScreen({
               } as React.CSSProperties}
             >
               <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 -translate-y-5 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                <div className="mb-3 -translate-y-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     AstroProXL
                   </span>
@@ -788,7 +765,7 @@ export default function ReadingIntakeScreen({
                   onPointerUp={() => setFactPaused(false)}
                   onPointerLeave={() => setFactPaused(false)}
                   onPointerCancel={() => setFactPaused(false)}
-                  className="relative mx-auto mt-3 h-6 max-w-[34ch] translate-y-5 select-none"
+                  className="relative mx-auto mt-3 h-6 max-w-[34ch] translate-y-3 select-none"
                 >
                   <AnimatePresence mode="wait">
                     <motion.p
@@ -830,7 +807,7 @@ export default function ReadingIntakeScreen({
                   type="button"
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-all duration-500 ease-out"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-all duration-300"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     background: isSelected ? c.bg : "rgba(255,255,255,0.03)",
@@ -921,9 +898,7 @@ export default function ReadingIntakeScreen({
                 "0 0 22px rgba(202,162,38,0.08), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)",
               transition: "border-color 0.3s ease, box-shadow 0.3s ease",
             }}
-            onPointerDown={() => cancelSelectionTimeout()}
             onFocus={(e) => {
-              cancelSelectionTimeout();
               e.currentTarget.style.borderColor = "rgba(234, 190, 63, 0.95)";
               e.currentTarget.style.boxShadow =
                 "0 0 30px rgba(202,162,38,0.16), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)";
