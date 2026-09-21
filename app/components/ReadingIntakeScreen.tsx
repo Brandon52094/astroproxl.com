@@ -376,12 +376,12 @@ export default function ReadingIntakeScreen({
   // Keep the index in range whenever the fact set changes.
   useEffect(() => { setFactIndex(0); }, [facts.length]);
 
-  // Auto-advance every 3s; press-and-hold pauses it.
+  // Auto-advance slowly enough to be read at a glance; press-and-hold pauses it.
   useEffect(() => {
     if (factPaused || facts.length <= 1) return;
     const id = setInterval(() => {
       setFactIndex((i) => (i + 1) % facts.length);
-    }, 3000);
+    }, 6000);
     return () => clearInterval(id);
   }, [factPaused, facts.length]);
 
@@ -752,24 +752,45 @@ export default function ReadingIntakeScreen({
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
-              <div className="relative z-10 mx-auto max-w-[560px]">
-                <div className="mb-3 -translate-y-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+              <div className="relative z-10 mx-auto flex h-[143px] max-w-[560px] flex-col items-center sm:h-[162px]">
+                {/* Brand stamp — same AstroProXL treatment, now anchored at the top. */}
+                <div className="inline-flex shrink-0 items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
                     AstroProXL
                   </span>
                 </div>
-                <h1 className="text-[38px] font-semibold leading-[0.95] tracking-[-0.02em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[48px]">
-                  You Can Ask Anything
+
+                {/* Quiet product identity: present, but intentionally subordinate. */}
+                <p
+                  className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.28em] text-slate-300/55 sm:mt-2 sm:text-[9.5px]"
+                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.82)" }}
+                >
+                  The Astrology Engine
+                </p>
+
+                {/* Primary hero statement. */}
+                <h1 className="mt-1 whitespace-nowrap text-[28px] font-semibold leading-none tracking-[-0.025em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:mt-1.5 sm:text-[31px]">
+                  Astrological Predictions
                 </h1>
 
-                {/* Fade-swap detail line — press & hold to pause */}
+                {/* Big Three placeholders — intentionally empty for this first composition pass. */}
+                <div className="mt-2 flex items-center justify-center gap-5 sm:mt-3" aria-hidden="true">
+                  {[0, 1, 2].map((index) => (
+                    <span
+                      key={index}
+                      className="block h-[38px] w-[38px] rounded-full border border-slate-200/28 bg-white/[0.018] shadow-[inset_0_0_14px_rgba(255,255,255,0.025),0_0_16px_rgba(148,163,184,0.045)] sm:h-[44px] sm:w-[44px]"
+                    />
+                  ))}
+                </div>
+
+                {/* One rotating context line — press & hold to pause. */}
                 <div
                   data-no-swipe
                   onPointerDown={() => setFactPaused(true)}
                   onPointerUp={() => setFactPaused(false)}
                   onPointerLeave={() => setFactPaused(false)}
                   onPointerCancel={() => setFactPaused(false)}
-                  className="relative mx-auto mt-3 h-6 max-w-[34ch] translate-y-3 select-none"
+                  className="relative mx-auto mt-1.5 h-5 w-full max-w-[34ch] select-none sm:mt-2"
                 >
                   <AnimatePresence mode="wait">
                     <motion.p
@@ -778,7 +799,7 @@ export default function ReadingIntakeScreen({
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.5, ease: "easeInOut" }}
-                      className="absolute inset-0 text-[14px] leading-6 text-slate-300/86 sm:text-[15px]"
+                      className="absolute inset-0 text-[12.5px] leading-5 text-slate-300/78 sm:text-[13px]"
                     >
                       {facts[factIndex] ?? facts[0]}
                     </motion.p>
