@@ -579,38 +579,54 @@ export default function ReadingIntakeScreen({
             0 48px 96px rgba(0,0,0,0.34);
         }
 
-        /* ── ASK ANYTHING — flagship treatment (gold stays reserved for subscriber-only UI) ── */
+        /* ── ASK ANYTHING — flagship showpiece ── */
         @keyframes askPremiumPulse {
           0%, 100% {
             box-shadow:
-              0 0 0 1px rgba(129,140,248,0.12),
-              0 0 22px rgba(99,102,241,0.16),
-              0 18px 34px rgba(0,0,0,0.78),
-              0 34px 68px rgba(0,0,0,0.46);
+              0 0 0 1px rgba(34,211,238,0.16),
+              0 0 24px rgba(34,211,238,0.16),
+              0 0 46px rgba(99,102,241,0.10),
+              0 18px 34px rgba(0,0,0,0.82),
+              0 36px 72px rgba(0,0,0,0.50);
           }
-          50% {
+          45% {
             box-shadow:
-              0 0 0 1px rgba(94,234,212,0.22),
-              0 0 34px rgba(94,234,212,0.18),
-              0 18px 34px rgba(0,0,0,0.78),
-              0 34px 68px rgba(0,0,0,0.46);
+              0 0 0 1px rgba(168,85,247,0.18),
+              0 0 30px rgba(139,92,246,0.18),
+              0 0 54px rgba(34,211,238,0.10),
+              0 18px 34px rgba(0,0,0,0.82),
+              0 36px 72px rgba(0,0,0,0.50);
+          }
+          72% {
+            box-shadow:
+              0 0 0 1px rgba(234,190,63,0.18),
+              0 0 26px rgba(202,162,38,0.12),
+              0 0 48px rgba(94,234,212,0.09),
+              0 18px 34px rgba(0,0,0,0.82),
+              0 36px 72px rgba(0,0,0,0.50);
           }
         }
 
         @keyframes askPremiumSweep {
-          0% { transform: translateX(-160%) skewX(-18deg); opacity: 0; }
-          18% { opacity: 0.7; }
-          48%, 100% { transform: translateX(260%) skewX(-18deg); opacity: 0; }
+          0% { transform: translateX(-175%) skewX(-18deg); opacity: 0; }
+          10% { opacity: 0; }
+          18% { opacity: 0.74; }
+          34% { transform: translateX(285%) skewX(-18deg); opacity: 0; }
+          100% { transform: translateX(285%) skewX(-18deg); opacity: 0; }
         }
 
         @keyframes askMicBreathe {
           0%, 100% {
             transform: scale(1);
-            box-shadow: 0 0 14px rgba(94,234,212,0.14);
+            box-shadow:
+              0 0 12px rgba(34,211,238,0.16),
+              0 0 22px rgba(139,92,246,0.08);
           }
           50% {
-            transform: scale(1.06);
-            box-shadow: 0 0 22px rgba(94,234,212,0.28);
+            transform: scale(1.055);
+            box-shadow:
+              0 0 18px rgba(34,211,238,0.24),
+              0 0 30px rgba(202,162,38,0.10);
           }
         }
 
@@ -620,20 +636,39 @@ export default function ReadingIntakeScreen({
           isolation: isolate;
           border: 1px solid transparent;
           background:
-            linear-gradient(145deg, rgba(11,15,34,0.96), rgba(6,8,22,0.96)) padding-box,
-            linear-gradient(120deg, rgba(129,140,248,0.82), rgba(94,234,212,0.72), rgba(196,181,253,0.86)) border-box;
-          animation: askPremiumPulse 3.6s ease-in-out infinite;
+            radial-gradient(circle at 18% 26%, rgba(34,211,238,0.08), transparent 34%) padding-box,
+            radial-gradient(circle at 82% 78%, rgba(139,92,246,0.10), transparent 42%) padding-box,
+            linear-gradient(145deg, rgba(10,14,32,0.98), rgba(5,8,20,0.98)) padding-box,
+            linear-gradient(118deg,
+              rgba(34,211,238,0.90) 0%,
+              rgba(99,102,241,0.86) 32%,
+              rgba(168,85,247,0.90) 58%,
+              rgba(234,190,63,0.88) 78%,
+              rgba(94,234,212,0.86) 100%) border-box;
+          animation: askPremiumPulse 4.8s ease-in-out infinite;
         }
 
         .ask-premium::before {
           content: "";
           position: absolute;
-          inset: -30% auto -30% -32%;
-          width: 28%;
-          background: linear-gradient(105deg, transparent, rgba(255,255,255,0.16), transparent);
-          transform: translateX(-160%) skewX(-18deg);
-          animation: askPremiumSweep 4.8s ease-in-out infinite;
+          inset: -32% auto -32% -34%;
+          width: 30%;
+          background: linear-gradient(105deg, transparent, rgba(255,255,255,0.19), rgba(255,255,255,0.08), transparent);
+          transform: translateX(-175%) skewX(-18deg);
+          animation: askPremiumSweep 8.4s ease-in-out infinite;
           pointer-events: none;
+          z-index: 1;
+        }
+
+        .ask-premium::after {
+          content: "";
+          position: absolute;
+          inset: 1px;
+          border-radius: 19px;
+          pointer-events: none;
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.035), transparent 36%),
+            radial-gradient(circle at 78% 18%, rgba(234,190,63,0.055), transparent 30%);
           z-index: 1;
         }
 
@@ -641,14 +676,28 @@ export default function ReadingIntakeScreen({
 
         .ask-mic-halo {
           display: flex;
-          height: 30px;
-          width: 30px;
+          height: 32px;
+          width: 32px;
           align-items: center;
           justify-content: center;
           border-radius: 9999px;
-          border: 1px solid rgba(94,234,212,0.28);
-          background: radial-gradient(circle, rgba(94,234,212,0.12), rgba(99,102,241,0.06) 70%, transparent);
-          animation: askMicBreathe 2.8s ease-in-out infinite;
+          border: 1px solid transparent;
+          background:
+            radial-gradient(circle, rgba(8,15,32,0.96), rgba(7,10,24,0.98)) padding-box,
+            linear-gradient(135deg, rgba(34,211,238,0.72), rgba(139,92,246,0.76), rgba(234,190,63,0.78)) border-box;
+          animation: askMicBreathe 3.2s ease-in-out infinite;
+        }
+
+        .ask-title {
+          color: #f8fafc;
+          text-shadow:
+            0 1px 12px rgba(34,211,238,0.12),
+            0 0 18px rgba(168,85,247,0.08);
+        }
+
+        .ask-subtitle {
+          color: rgba(203,213,225,0.72);
+          text-shadow: 0 2px 8px rgba(0,0,0,0.82);
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -779,20 +828,20 @@ export default function ReadingIntakeScreen({
             })}
           </section>
 
-          {/* ── ASK ANYTHING (flagship feature; centered beneath the reading grid) ── */}
+          {/* ── ASK ANYTHING (flagship feature; same footprint, richer premium treatment) ── */}
           <button
             type="button"
             onClick={() => setShowJxl(true)}
-            className="ask-premium tap-fix mt-4 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] px-3"
+            className="ask-premium tap-fix mt-4 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] px-3 transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
           >
             <span className="ask-mic-halo shrink-0">
-              <Mic className="h-[17px] w-[17px]" style={{ color: "rgba(167,243,208,0.98)" }} />
+              <Mic className="h-[17px] w-[17px]" style={{ color: "rgba(207,250,254,0.98)" }} />
             </span>
             <span className="min-w-0 text-left">
-              <span className="block text-[13px] font-semibold leading-4 tracking-[0.025em] text-slate-100">
+              <span className="ask-title block text-[14px] font-semibold leading-4 tracking-[0.015em]">
                 Ask Anything
               </span>
-              <span className="mt-1 block whitespace-nowrap text-[8.5px] font-medium uppercase leading-3 tracking-[0.08em] text-slate-400">
+              <span className="ask-subtitle mt-1 block whitespace-nowrap text-[8.5px] font-medium uppercase leading-3 tracking-[0.09em]">
                 Tap · Press &amp; Hold · Speak
               </span>
             </span>
