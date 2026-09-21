@@ -211,6 +211,7 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
+  onSwipeLeft,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
@@ -675,8 +676,20 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
+          {/* ── Swipe cue — integrated above hero ── */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85"
+            style={{
+              textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
+            }}
+          >
+            Swipe Left To Explore
+          </button>
+
           {/* ── HERO (animated color-cycling outline glow) ── */}
-          <section className="mb-5 pt-1">
+          <section className="mb-5 pt-0">
             <div
               className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[40px] text-center"
               style={{
@@ -879,19 +892,14 @@ export default function ReadingIntakeScreen({
               disabled={!canSubmit || isCreatingReading}
               className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
-                background: "transparent",
-                border: selectedAreaConfig
-                  ? `2px solid ${getAreaColors(selectedAreaConfig.id).border}`
-                  : "2px solid rgba(94,234,212,0.65)",
-                color: selectedAreaConfig
-                  ? getAreaColors(selectedAreaConfig.id).text
-                  : "rgba(94,234,212,0.95)",
-                boxShadow:
-                  canSubmit && !isCreatingReading && selectedAreaConfig
-                    ? `0 0 20px ${getAreaColors(selectedAreaConfig.id).glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
-                    : canSubmit && !isCreatingReading
-                      ? "0 0 20px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
-                      : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                background: canSubmit && !isCreatingReading
+                  ? "linear-gradient(180deg, rgba(45,212,191,0.055), rgba(45,212,191,0.015))"
+                  : "transparent",
+                border: "2px solid rgba(94,234,212,0.72)",
+                color: "rgba(94,234,212,0.98)",
+                boxShadow: canSubmit && !isCreatingReading
+                  ? "0 0 0 1px rgba(94,234,212,0.08), 0 0 22px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
+                  : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
               }}
             >
               {buttonCopy}
