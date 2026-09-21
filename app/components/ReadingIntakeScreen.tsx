@@ -174,33 +174,33 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     name: "cosmic",
     areaColors: {
       love: {
-        bg: "rgba(131, 24, 67, 0.24)",
-        border: "#FB7185",
-        glow: "rgba(244, 114, 182, 0.28)",
+        bg: "rgba(131, 24, 67, 0.18)",
+        border: "rgba(251, 113, 133, 0.78)",
+        glow: "rgba(244, 114, 182, 0.20)",
         text: "#FDA4AF",
         iconBg: "rgba(131, 24, 67, 0.46)",
         gradient: "linear-gradient(135deg, rgba(131,24,67,0.78) 0%, rgba(190,24,93,0.56) 38%, rgba(244,114,182,0.16) 100%)",
       },
       money: {
-        bg: "rgba(20, 83, 45, 0.30)",
-        border: "#34D399",
-        glow: "rgba(34, 197, 94, 0.30)",
+        bg: "rgba(20, 83, 45, 0.22)",
+        border: "rgba(52, 211, 153, 0.74)",
+        glow: "rgba(34, 197, 94, 0.22)",
         text: "#86EFAC",
         iconBg: "rgba(20, 83, 45, 0.55)",
         gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
       },
       career: {
-        bg: "rgba(30, 58, 138, 0.30)",
-        border: "#93C5FD",
-        glow: "rgba(59, 130, 246, 0.30)",
+        bg: "rgba(30, 58, 138, 0.22)",
+        border: "rgba(147, 197, 253, 0.76)",
+        glow: "rgba(59, 130, 246, 0.22)",
         text: "#93C5FD",
         iconBg: "rgba(30, 58, 138, 0.55)",
         gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
       },
       other: {
-        bg: "rgba(49, 46, 129, 0.30)",
-        border: "#8B5CF6",
-        glow: "rgba(139, 92, 246, 0.30)",
+        bg: "rgba(49, 46, 129, 0.22)",
+        border: "rgba(139, 92, 246, 0.76)",
+        glow: "rgba(139, 92, 246, 0.22)",
         text: "#C4B5FD",
         iconBg: "rgba(49, 46, 129, 0.55)",
         gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
@@ -388,7 +388,7 @@ export default function ReadingIntakeScreen({
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
     if (isCreatingReading) return "Preparing reading...";
-    if (!selectedAreaConfig) return "Select a Reading";
+    if (!selectedAreaConfig) return "Begin Reading";
     const hasCredits = Number(userStatus?.credits ?? 0) > 0;
     const isSubscribed = userStatus?.isSubscribed === true;
     if (!hasCredits && !isSubscribed) {
@@ -742,7 +742,7 @@ export default function ReadingIntakeScreen({
           </button>
 
           {/* ── HERO (animated color-cycling outline glow) ── */}
-          <section className="mb-5 pt-0">
+          <section className="mb-[18px] pt-0">
             <div
               className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[40px] text-center"
               style={{
@@ -790,7 +790,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── Prompt ── */}
           <p
-            className="mb-4 text-center text-[12.5px] font-semibold uppercase tracking-[0.22em] text-slate-100"
+            className="mb-[14px] text-center text-[12.5px] font-semibold uppercase tracking-[0.22em] text-slate-100"
             style={{
               textShadow:
                 "0 3px 12px rgba(0,0,0,0.98), 0 0 14px rgba(148,163,184,0.16)",
@@ -876,7 +876,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className="relative mt-3 rounded-[22px] border border-white/[0.10] bg-white/[0.035] standard-shadow transition-[border-color,box-shadow] duration-300 focus-within:border-white/[0.16]"
+            className="relative mt-3 h-[84px] rounded-[20px] border border-white/[0.10] bg-white/[0.035] standard-shadow transition-[border-color,box-shadow] duration-300 focus-within:border-white/[0.16]"
           >
             <div
               className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
@@ -890,10 +890,10 @@ export default function ReadingIntakeScreen({
               <Crown className="h-3.5 w-3.5" style={{ color: "rgba(234,190,63,0.92)" }} />
             </div>
 
-            <div className="rounded-[22px] bg-white/[0.02] px-4 py-3 pr-12">
+            <div className="h-full rounded-[20px] bg-white/[0.02] px-4 py-2 pr-12">
               <Textarea
                 id="question"
-                rows={3}
+                rows={2}
                 value={question}
                 onFocus={clearSelectionTimeout}
                 onChange={(e) => {
@@ -905,7 +905,7 @@ export default function ReadingIntakeScreen({
                     ? "Tap to add context (optional)"
                     : "Select a reading, then add context (optional)"
                 }
-                className="min-h-[84px] w-full resize-none rounded-[16px] !border-0 !bg-transparent px-1 py-1 text-[16px] leading-6 text-white !shadow-none placeholder:text-slate-500 focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
+                className="h-full min-h-0 w-full resize-none rounded-[14px] !border-0 !bg-transparent px-1 py-1 text-[16px] leading-6 text-white !shadow-none placeholder:text-slate-500 focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
                 style={{ backgroundColor: "transparent" }}
               />
             </div>
@@ -918,16 +918,22 @@ export default function ReadingIntakeScreen({
               type="button"
               onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
-              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-500 ease-out hover:opacity-90 disabled:cursor-not-allowed"
               style={{
                 background: canSubmit && !isCreatingReading
                   ? "linear-gradient(180deg, rgba(45,212,191,0.055), rgba(45,212,191,0.015))"
-                  : "transparent",
-                border: "2px solid rgba(94,234,212,0.72)",
-                color: "rgba(94,234,212,0.98)",
+                  : "rgba(255,255,255,0.012)",
+                border: canSubmit && !isCreatingReading
+                  ? "2px solid rgba(94,234,212,0.72)"
+                  : "1px solid rgba(203,213,225,0.16)",
+                color: canSubmit && !isCreatingReading
+                  ? "rgba(94,234,212,0.98)"
+                  : "rgba(203,213,225,0.34)",
+                opacity: canSubmit && !isCreatingReading ? 1 : 0.58,
+                transform: canSubmit && !isCreatingReading ? "scale(1)" : "scale(0.975)",
                 boxShadow: canSubmit && !isCreatingReading
                   ? "0 0 0 1px rgba(94,234,212,0.08), 0 0 22px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
-                  : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                  : "0 14px 28px rgba(0,0,0,0.56)",
               }}
             >
               {buttonCopy}
@@ -935,29 +941,17 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING — flagship premium feature, intentionally separate from readings ── */}
-          <section className="mt-5 border-t border-white/[0.06] pt-4">
+          <section className="mt-3 border-t border-white/[0.06] pt-4">
             <button
               type="button"
               onClick={() => setShowJxl(true)}
               className="ask-premium tap-fix relative flex h-[108px] w-full items-center rounded-[24px] px-5 text-left transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
             >
-              <span
-                className="pointer-events-none absolute right-3.5 top-3.5 flex h-6 w-6 items-center justify-center rounded-full"
-                style={{
-                  border: "1px solid rgba(202,162,38,0.42)",
-                  background: "rgba(202,162,38,0.06)",
-                  boxShadow: "0 0 12px rgba(202,162,38,0.08)",
-                }}
-                aria-hidden="true"
-              >
-                <Crown className="h-3.5 w-3.5" style={{ color: "rgba(234,190,63,0.90)" }} />
-              </span>
-
               <span className="ask-mic-halo mr-4 shrink-0">
                 <Mic className="h-[20px] w-[20px]" style={{ color: "rgba(207,250,254,0.98)" }} />
               </span>
 
-              <span className="min-w-0 pr-7">
+              <span className="min-w-0">
                 <span className="ask-title block text-[20px] font-semibold leading-6 tracking-[-0.01em]">
                   Ask Anything
                 </span>
