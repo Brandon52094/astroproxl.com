@@ -277,9 +277,12 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       </div>
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] px-4 pt-16"
-        style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
-      >
+  className="relative z-10 mx-auto w-full max-w-[430px] px-4"
+  style={{
+    paddingTop: "calc(env(safe-area-inset-top) + 8px)",
+    paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+  }}
+>
         {/* ── HERO — Sun + Moon, borderless, data-first ── */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
