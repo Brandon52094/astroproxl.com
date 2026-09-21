@@ -809,7 +809,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── Prompt ── */}
           <p
-            className="mb-4 text-center text-[12.5px] font-semibold uppercase tracking-[0.22em] text-slate-100"
+            className="mb-2.5 text-center text-[12.5px] font-semibold uppercase tracking-[0.22em] text-slate-100"
             style={{
               textShadow:
                 "0 3px 12px rgba(0,0,0,0.98), 0 0 14px rgba(148,163,184,0.16)",
@@ -857,27 +857,8 @@ export default function ReadingIntakeScreen({
             })}
           </section>
 
-          {/* ── ASK ANYTHING (flagship feature; same footprint, richer premium treatment) ── */}
-          <button
-            type="button"
-            onClick={() => setShowJxl(true)}
-            className="ask-premium tap-fix mt-4 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] px-3 transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
-          >
-            <span className="ask-mic-halo shrink-0">
-              <Mic className="h-[17px] w-[17px]" style={{ color: "rgba(207,250,254,0.98)" }} />
-            </span>
-            <span className="min-w-0 text-left">
-              <span className="ask-title block text-[14px] font-semibold leading-4 tracking-[0.015em]">
-                Ask Anything
-              </span>
-              <span className="ask-subtitle mt-1 block whitespace-nowrap text-[8.5px] font-medium uppercase leading-3 tracking-[0.09em]">
-                Tap · Press &amp; Hold · Speak
-              </span>
-            </span>
-          </button>
-
           {/* ── READING INFO (compact, centered, one line) ── */}
-          <div className="mt-3 min-h-[22px] text-center">
+          <div className="mt-2 min-h-[22px] text-center">
             <AnimatePresence mode="wait">
               {selectedAreaConfig ? (
                 <motion.p
@@ -914,7 +895,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className="relative mt-3 rounded-[22px] border bg-white/[0.035] standard-shadow"
+            className="relative mt-2 rounded-[22px] border bg-white/[0.035] standard-shadow"
             style={{
               borderColor: "rgba(202, 162, 38, 0.72)",
               boxShadow:
@@ -964,7 +945,7 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── BEGIN READING (always present) ── */}
-          <div className="mt-3 flex flex-col items-center">
+          <div className="mt-2.5 flex flex-col items-center">
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             <Button
               type="button"
@@ -985,6 +966,28 @@ export default function ReadingIntakeScreen({
               {buttonCopy}
             </Button>
           </div>
+
+          {/* ── FLAGSHIP FEATURE ── */}
+          <div className="mt-5 h-px w-full bg-white/[0.07]" aria-hidden="true" />
+
+          {/* ── ASK ANYTHING (flagship feature; separate from the reading flow) ── */}
+          <button
+            type="button"
+            onClick={() => setShowJxl(true)}
+            className="ask-premium tap-fix mt-5 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] px-3 transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
+          >
+            <span className="ask-mic-halo shrink-0">
+              <Mic className="h-[17px] w-[17px]" style={{ color: "rgba(207,250,254,0.98)" }} />
+            </span>
+            <span className="min-w-0 text-left">
+              <span className="ask-title block text-[14px] font-semibold leading-4 tracking-[0.015em]">
+                Ask Anything
+              </span>
+              <span className="ask-subtitle mt-1 block whitespace-nowrap text-[8.5px] font-medium uppercase leading-3 tracking-[0.09em]">
+                Tap · Press &amp; Hold · Speak
+              </span>
+            </span>
+          </button>
 
 
         </motion.div>
