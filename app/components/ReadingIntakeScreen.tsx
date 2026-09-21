@@ -535,9 +535,82 @@ export default function ReadingIntakeScreen({
 
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
 
+        /* ── ASK ANYTHING — flagship treatment (gold stays reserved for subscriber-only UI) ── */
+        @keyframes askPremiumPulse {
+          0%, 100% {
+            box-shadow:
+              0 0 0 1px rgba(129,140,248,0.12),
+              0 0 22px rgba(99,102,241,0.16),
+              0 14px 28px rgba(0,0,0,0.52);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(94,234,212,0.22),
+              0 0 34px rgba(94,234,212,0.18),
+              0 14px 28px rgba(0,0,0,0.52);
+          }
+        }
+
+        @keyframes askPremiumSweep {
+          0% { transform: translateX(-160%) skewX(-18deg); opacity: 0; }
+          18% { opacity: 0.7; }
+          48%, 100% { transform: translateX(260%) skewX(-18deg); opacity: 0; }
+        }
+
+        @keyframes askMicBreathe {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 14px rgba(94,234,212,0.14);
+          }
+          50% {
+            transform: scale(1.06);
+            box-shadow: 0 0 22px rgba(94,234,212,0.28);
+          }
+        }
+
+        .ask-premium {
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+          border: 1px solid transparent;
+          background:
+            linear-gradient(145deg, rgba(11,15,34,0.96), rgba(6,8,22,0.96)) padding-box,
+            linear-gradient(120deg, rgba(129,140,248,0.82), rgba(94,234,212,0.72), rgba(196,181,253,0.86)) border-box;
+          animation: askPremiumPulse 3.6s ease-in-out infinite;
+        }
+
+        .ask-premium::before {
+          content: "";
+          position: absolute;
+          inset: -30% auto -30% -32%;
+          width: 28%;
+          background: linear-gradient(105deg, transparent, rgba(255,255,255,0.16), transparent);
+          transform: translateX(-160%) skewX(-18deg);
+          animation: askPremiumSweep 4.8s ease-in-out infinite;
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        .ask-premium > * { position: relative; z-index: 2; }
+
+        .ask-mic-halo {
+          display: flex;
+          height: 30px;
+          width: 30px;
+          align-items: center;
+          justify-content: center;
+          border-radius: 9999px;
+          border: 1px solid rgba(94,234,212,0.28);
+          background: radial-gradient(circle, rgba(94,234,212,0.12), rgba(99,102,241,0.06) 70%, transparent);
+          animation: askMicBreathe 2.8s ease-in-out infinite;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
-          .hero-outline { animation: none !important; }
+          .hero-outline,
+          .ask-premium,
+          .ask-premium::before,
+          .ask-mic-halo { animation: none !important; }
         }
       `}</style>
 
@@ -558,8 +631,8 @@ export default function ReadingIntakeScreen({
           className="flex flex-col top-section"
         >
           {/* ── HERO (animated color-cycling outline glow) ── */}
-          <section className="mb-6 pt-1">
-            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[42px] text-center">
+          <section className="mb-5 pt-1">
+            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[38px] text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
@@ -597,7 +670,7 @@ export default function ReadingIntakeScreen({
           </section>
 
           {/* ── Prompt ── */}
-          <p className="mb-4 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+          <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
             Please Select a Reading
           </p>
 
@@ -635,7 +708,7 @@ export default function ReadingIntakeScreen({
           </section>
 
           {/* ── READING INFO (compact, centered, one line) ── */}
-          <div className="mt-4 min-h-[22px] text-center">
+          <div className="mt-3 min-h-[22px] text-center">
             <AnimatePresence mode="wait">
               {selectedAreaConfig ? (
                 <motion.p
@@ -672,7 +745,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT ── */}
           <div
-            className="mt-4 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
+            className="mt-3 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
             style={{ transition: "border-color 0.3s ease, box-shadow 0.3s ease" }}
             onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(255,255,255,0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
             onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
@@ -695,7 +768,7 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── BEGIN READING (always present) ── */}
-          <div className="mt-4 flex flex-col items-center">
+          <div className="mt-3 flex flex-col items-center">
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             <Button
               type="button"
@@ -715,19 +788,16 @@ export default function ReadingIntakeScreen({
             </Button>
           </div>
 
-          {/* ── ASK ANYTHING (mic) ── */}
+          {/* ── ASK ANYTHING (flagship feature; same footprint as a reading card) ── */}
           <button
             type="button"
             onClick={() => setShowJxl(true)}
-            className="tap-fix standard-shadow mt-4 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] border"
-            style={{
-              borderColor: "rgba(129,140,248,0.35)",
-              background: "rgba(7,10,22,0.72)",
-              color: "#e2e8f0",
-            }}
+            className="ask-premium tap-fix mt-3 flex h-[84px] w-[calc(50%_-_6px)] self-center flex-col items-center justify-center gap-1.5 rounded-[20px]"
           >
-            <Mic className="h-5 w-5" style={{ color: "rgba(167,243,208,0.95)" }} />
-            <span className="text-[16px] font-semibold tracking-[0.04em]">Ask Anything</span>
+            <span className="ask-mic-halo">
+              <Mic className="h-[18px] w-[18px]" style={{ color: "rgba(167,243,208,0.98)" }} />
+            </span>
+            <span className="text-[13px] font-semibold tracking-[0.025em] text-slate-100">Ask Anything</span>
           </button>
 
         </motion.div>
