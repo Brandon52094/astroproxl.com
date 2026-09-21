@@ -7,7 +7,7 @@ import {
   Heart,
   Briefcase,
   Wallet,
-  Sparkles,
+  Eye,
   Mic,
   ChevronLeft,
 } from "lucide-react";
@@ -84,7 +84,7 @@ const AREAS = [
     id: "other",
     title: "What's Coming",
     description: "What to expect in the next 30–45 days.",
-    icon: Sparkles,
+    icon: Eye,
     placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
@@ -174,7 +174,6 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
-  onSwipeLeft,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
@@ -459,7 +458,7 @@ export default function ReadingIntakeScreen({
 
   return (
     <div
-      className="no-scrollbar relative h-screen overflow-y-auto overscroll-none text-slate-100"
+      className="no-scrollbar relative h-[100dvh] overflow-y-auto overscroll-none text-slate-100"
       style={{
         WebkitOverflowScrolling: "touch",
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
@@ -537,19 +536,7 @@ export default function ReadingIntakeScreen({
 
         .standard-shadow { box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56); }
 
-        @keyframes swipeCuePulse {
-          0%, 100% { opacity: 0.5; }
-          50% { opacity: 1; text-shadow: 0 0 14px rgba(255,255,255,0.55); }
-        }
-        @keyframes swipeCueNudge {
-          0%, 100% { transform: translateX(0); }
-          50% { transform: translateX(-4px); }
-        }
-        .swipe-cue { animation: swipeCuePulse 2.1s ease-in-out infinite; background: transparent; border: none; cursor: pointer; }
-        .swipe-cue svg { animation: swipeCueNudge 2.1s ease-in-out infinite; }
-
         @media (prefers-reduced-motion: reduce) {
-          .swipe-cue, .swipe-cue svg,
           .hero-shine::after,
           .hero-outline { animation: none !important; }
         }
@@ -562,7 +549,7 @@ export default function ReadingIntakeScreen({
         className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4"
         style={{
           paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-          paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+          paddingBottom: "calc(2rem + env(safe-area-inset-bottom))",
         }}
       >
         <motion.div
@@ -572,8 +559,8 @@ export default function ReadingIntakeScreen({
           className="flex flex-col top-section"
         >
           {/* ── HERO (animated color-cycling outline glow) ── */}
-          <section className="mb-5 pt-1">
-            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-7 text-center">
+          <section className="mb-4 pt-1">
+            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[30px] text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
@@ -609,16 +596,6 @@ export default function ReadingIntakeScreen({
               </div>
             </div>
           </section>
-
-          {/* ── Swipe cue ── */}
-          <button
-            type="button"
-            onClick={() => onSwipeLeft?.()}
-            className="swipe-cue tap-fix mx-auto mt-1 mb-5 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/85"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Swipe Left to Explore
-          </button>
 
           {/* ── Prompt ── */}
           <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
@@ -658,27 +635,27 @@ export default function ReadingIntakeScreen({
             })}
           </section>
 
-          {/* ── READING INFO (updates on selection) ── */}
-          <div className="mt-5 min-h-[60px]">
+          {/* ── READING INFO (compact, centered, one line) ── */}
+          <div className="mt-3 min-h-[22px] text-center">
             <AnimatePresence mode="wait">
               {selectedAreaConfig ? (
-                <motion.div
+                <motion.p
                   key={selectedAreaConfig.id}
-                  initial={{ opacity: 0, y: 6 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
+                  exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="whitespace-nowrap text-[10.5px] leading-[22px] text-slate-400"
                 >
-                  <h3
-                    className="text-[18px] font-bold leading-tight"
+                  <span
+                    className="text-[11.5px] font-semibold"
                     style={{ color: getAreaColors(selectedAreaConfig.id).text }}
                   >
                     {selectedAreaConfig.title}
-                  </h3>
-                  <p className="mt-1 text-[13px] leading-5 text-slate-400">
-                    {selectedAreaConfig.description}
-                  </p>
-                </motion.div>
+                  </span>
+                  <span className="mx-1.5 text-slate-600">·</span>
+                  <span>{selectedAreaConfig.description}</span>
+                </motion.p>
               ) : (
                 <motion.p
                   key="placeholder"
@@ -686,7 +663,7 @@ export default function ReadingIntakeScreen({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="text-[13px] leading-5 text-slate-500"
+                  className="text-[11px] leading-[22px] text-slate-500"
                 >
                   Tap a reading above to see what it covers.
                 </motion.p>
@@ -696,7 +673,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT ── */}
           <div
-            className="mt-4 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
+            className="mt-3 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
             style={{ transition: "border-color 0.3s ease, box-shadow 0.3s ease" }}
             onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(255,255,255,0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
             onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
@@ -719,13 +696,13 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── BEGIN READING (always present) ── */}
-          <div className="mt-4">
+          <div className="mt-3 flex flex-col items-center">
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             <Button
               type="button"
               onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
-              className="standard-shadow h-14 w-full rounded-2xl text-[15px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-300 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
                 background: "transparent",
                 border: "2px solid rgba(94,234,212,0.65)",
@@ -740,11 +717,10 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING (mic) ── */}
-          <div className="mt-6 h-px w-full bg-white/[0.06]" />
           <button
             type="button"
             onClick={() => setShowJxl(true)}
-            className="tap-fix standard-shadow mt-6 flex h-[60px] w-full items-center justify-center gap-2.5 rounded-full border"
+            className="tap-fix standard-shadow mt-3 flex h-[56px] w-[72%] self-center items-center justify-center gap-2.5 rounded-full border"
             style={{
               borderColor: "rgba(129,140,248,0.35)",
               background: "rgba(7,10,22,0.72)",

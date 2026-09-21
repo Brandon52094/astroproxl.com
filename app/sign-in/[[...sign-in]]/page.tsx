@@ -148,22 +148,28 @@ function BirthChartRing({
 export default function SignInPage() {
   const shouldReduceMotion = useReducedMotion();
   const [hasMounted, setHasMounted] = useState(false);
-  const now = new Date();
-  const sunPosition = getSunPosition(now);
-  const moon = getMoonPhase(now);
 
   useEffect(() => {
     setHasMounted(true);
   }, []);
 
-  const stars = Array.from({ length: 28 }).map((_, i) => {
-    const left = `${((i * 37) % 100)}%`;
-    const top = `${((i * 19 + 13) % 100)}%`;
-    const size = i % 7 === 0 ? 2 : 1;
-    const opacity = i % 5 === 0 ? 0.72 : 0.34;
-    const delay = (i * 0.37) % 4;
-    return { left, top, size, opacity, delay, id: i };
-  });
+  // Anything derived from `new Date()` / Math (sun, moon, stars, ring) is
+  // computed only after mount so the server and first client render match —
+  // otherwise tiny float/date drift triggers a hydration mismatch.
+  const now = hasMounted ? new Date() : null;
+  const sunPosition = now ? getSunPosition(now) : null;
+  const moon = now ? getMoonPhase(now) : null;
+
+  const stars = hasMounted
+    ? Array.from({ length: 28 }).map((_, i) => {
+        const left = `${(i * 37) % 100}%`;
+        const top = `${(i * 19 + 13) % 100}%`;
+        const size = i % 7 === 0 ? 2 : 1;
+        const opacity = i % 5 === 0 ? 0.72 : 0.34;
+        const delay = (i * 0.37) % 4;
+        return { left, top, size, opacity, delay, id: i };
+      })
+    : [];
 
   return (
     <main className="relative min-h-[100dvh] overflow-hidden bg-[#040611] text-white">
@@ -200,51 +206,57 @@ export default function SignInPage() {
           }}
         />
 
-        <div className="absolute inset-0">
-          {stars.map((star) => (
-            <motion.span
-              key={star.id}
-              className="absolute rounded-full bg-white"
-              style={{
-                left: star.left,
-                top: star.top,
-                width: star.size,
-                height: star.size,
-                opacity: star.opacity,
-              }}
-              animate={
-                shouldReduceMotion
-                  ? undefined
-                  : {
-                      opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
-                      scale: [1, 1.6, 1],
-                    }
-              }
-              transition={
-                shouldReduceMotion
-                  ? undefined
-                  : {
-                      duration: 2.6 + (star.id % 5) * 0.6,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                      delay: star.delay,
-                    }
-              }
-            />
-          ))}
-        </div>
+        {/* Stars — client-only (positions are computed, avoid hydration drift) */}
+        {hasMounted && (
+          <div className="absolute inset-0">
+            {stars.map((star) => (
+              <motion.span
+                key={star.id}
+                className="absolute rounded-full bg-white"
+                style={{
+                  left: star.left,
+                  top: star.top,
+                  width: star.size,
+                  height: star.size,
+                  opacity: star.opacity,
+                }}
+                animate={
+                  shouldReduceMotion
+                    ? undefined
+                    : {
+                        opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
+                        scale: [1, 1.6, 1],
+                      }
+                }
+                transition={
+                  shouldReduceMotion
+                    ? undefined
+                    : {
+                        duration: 2.6 + (star.id % 5) * 0.6,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: star.delay,
+                      }
+                }
+              />
+            ))}
+          </div>
+        )}
 
-        <motion.div
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-          animate={shouldReduceMotion ? undefined : { rotate: 360 }}
-          transition={
-            shouldReduceMotion
-              ? undefined
-              : { duration: 220, repeat: Infinity, ease: "linear" }
-          }
-        >
-          <BirthChartRing className="blur-[0.2px]" shouldReduceMotion={!!shouldReduceMotion} />
-        </motion.div>
+        {/* Birth-chart ring — client-only (trig positions cause float drift) */}
+        {hasMounted && (
+          <motion.div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            animate={shouldReduceMotion ? undefined : { rotate: 360 }}
+            transition={
+              shouldReduceMotion
+                ? undefined
+                : { duration: 220, repeat: Infinity, ease: "linear" }
+            }
+          >
+            <BirthChartRing className="blur-[0.2px]" shouldReduceMotion={!!shouldReduceMotion} />
+          </motion.div>
+        )}
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-5 pb-8 pt-4">
@@ -284,11 +296,17 @@ export default function SignInPage() {
               <span className="relative text-xl text-amber-200">✦</span>
             </motion.div>
 
-            <div className="mb-3 flex items-center gap-2 text-xs text-slate-400">
-              <span className="text-amber-200/80">{moon.glyph}</span>
-              <span>
-                {moon.label} · Sun {sunPosition.degree}° {sunPosition.sign}
-              </span>
+            {/* Moon + Sun line — client-only (date-derived). Reserve height so
+                the header doesn't jump when it appears. */}
+            <div className="mb-3 flex h-4 items-center gap-2 text-xs text-slate-400">
+              {hasMounted && moon && sunPosition && (
+                <>
+                  <span className="text-amber-200/80">{moon.glyph}</span>
+                  <span>
+                    {moon.label} · Sun {sunPosition.degree}° {sunPosition.sign}
+                  </span>
+                </>
+              )}
             </div>
 
             <h1 className="text-[2rem] font-semibold leading-[1.02] tracking-tight text-white">
@@ -403,16 +421,16 @@ export default function SignInPage() {
                 fallbackRedirectUrl="/reading/intake"
                 appearance={{
                   variables: {
-  colorPrimary: "#fbbf24",
-  colorBackground: "transparent",
-  colorForeground: "#f8fafc",
-  colorMutedForeground: "#cbd5e1",
-  colorInput: "rgba(255,255,255,0.04)",
-  colorInputForeground: "#ffffff",
-  colorDanger: "#fb7185",
-  borderRadius: "24px",
-  fontFamily: "Inter, sans-serif",
-},
+                    colorPrimary: "#fbbf24",
+                    colorBackground: "transparent",
+                    colorForeground: "#f8fafc",
+                    colorMutedForeground: "#cbd5e1",
+                    colorInput: "rgba(255,255,255,0.04)",
+                    colorInputForeground: "#ffffff",
+                    colorDanger: "#fb7185",
+                    borderRadius: "24px",
+                    fontFamily: "Inter, sans-serif",
+                  },
                   elements: {
                     rootBox: "w-full",
                     card: "bg-transparent shadow-none border-0 rounded-none",
@@ -445,10 +463,10 @@ export default function SignInPage() {
                     formContainer: "pt-6 px-6",
                   },
                   options: {
-  socialButtonsPlacement: "top",
-  socialButtonsVariant: "blockButton",
-  shimmer: false,
-},
+                    socialButtonsPlacement: "top",
+                    socialButtonsVariant: "blockButton",
+                    shimmer: false,
+                  },
                 }}
               />
             </div>
