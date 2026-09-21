@@ -458,9 +458,8 @@ export default function ReadingIntakeScreen({
 
   return (
     <div
-      className="no-scrollbar relative h-[100dvh] overflow-y-auto overscroll-none text-slate-100"
+      className="no-scrollbar relative min-h-[100dvh] overflow-x-hidden text-slate-100"
       style={{
-        WebkitOverflowScrolling: "touch",
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
@@ -559,8 +558,8 @@ export default function ReadingIntakeScreen({
           className="flex flex-col top-section"
         >
           {/* ── HERO (animated color-cycling outline glow) ── */}
-          <section className="mb-4 pt-1">
-            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[30px] text-center">
+          <section className="mb-6 pt-1">
+            <div className="hero-shine hero-outline relative overflow-hidden rounded-[28px] bg-white/[0.03] px-5 py-[42px] text-center">
               <div className="relative z-10 mx-auto max-w-[560px]">
                 <div className="mb-3 inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
@@ -598,12 +597,12 @@ export default function ReadingIntakeScreen({
           </section>
 
           {/* ── Prompt ── */}
-          <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+          <p className="mb-4 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
             Please Select a Reading
           </p>
 
           {/* ── READING GRID (2×2) ── */}
-          <section className="grid grid-cols-2 gap-3">
+          <section className="grid grid-cols-2 gap-x-3 gap-y-4">
             {AREAS.map((area) => {
               const Icon = area.icon;
               const isSelected = selectedArea === area.id;
@@ -636,7 +635,7 @@ export default function ReadingIntakeScreen({
           </section>
 
           {/* ── READING INFO (compact, centered, one line) ── */}
-          <div className="mt-3 min-h-[22px] text-center">
+          <div className="mt-4 min-h-[22px] text-center">
             <AnimatePresence mode="wait">
               {selectedAreaConfig ? (
                 <motion.p
@@ -673,7 +672,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT ── */}
           <div
-            className="mt-3 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
+            className="mt-4 rounded-[22px] border border-white/12 bg-white/[0.035] standard-shadow"
             style={{ transition: "border-color 0.3s ease, box-shadow 0.3s ease" }}
             onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(255,255,255,0.12), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
             onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.boxShadow = "0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56)"; }}
@@ -696,7 +695,7 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── BEGIN READING (always present) ── */}
-          <div className="mt-3 flex flex-col items-center">
+          <div className="mt-4 flex flex-col items-center">
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             <Button
               type="button"
@@ -720,7 +719,7 @@ export default function ReadingIntakeScreen({
           <button
             type="button"
             onClick={() => setShowJxl(true)}
-            className="tap-fix standard-shadow mt-3 flex h-[56px] w-[72%] self-center items-center justify-center gap-2.5 rounded-full border"
+            className="tap-fix standard-shadow mt-4 flex h-[84px] w-[calc(50%_-_6px)] self-center items-center justify-center gap-2.5 rounded-[20px] border"
             style={{
               borderColor: "rgba(129,140,248,0.35)",
               background: "rgba(7,10,22,0.72)",
