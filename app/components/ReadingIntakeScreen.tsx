@@ -173,6 +173,11 @@ const HERO_ELEMENT_COLORS: Record<ElementName, { text: string; bar: string; glow
 
 const HERO_ELEMENT_ORDER: ElementName[] = ["Earth", "Fire", "Water", "Air"];
 
+function signAccentColor(sign: string): string {
+  const element = SIGN_ELEMENTS[sign];
+  return element ? HERO_ELEMENT_COLORS[element].text : "rgba(203,213,225,0.72)";
+}
+
 function MoonDisc({ illumination, waxing, size = 58 }: { illumination: number; waxing: boolean; size?: number }) {
   const f = Math.min(1, Math.max(0, illumination / 100));
   const r = 46;
@@ -224,7 +229,7 @@ function SunDisc({ size = 58 }: { size?: number }) {
         </radialGradient>
       </defs>
       <circle cx="50" cy="50" r="49" fill="url(#intakeSunHalo)" />
-      <circle cx="50" cy="50" r="35" fill="url(#intakeSunCore)" stroke="rgba(255,248,214,0.45)" strokeWidth="1" />
+      <circle cx="50" cy="50" r="46" fill="url(#intakeSunCore)" stroke="rgba(255,248,214,0.45)" strokeWidth="1" />
       <circle cx="40" cy="38" r="5.5" fill="rgba(255,255,255,0.12)" />
       <circle cx="61" cy="58" r="4" fill="rgba(180,83,9,0.10)" />
       <circle cx="56" cy="31" r="2.8" fill="rgba(255,255,255,0.10)" />
@@ -481,9 +486,9 @@ export default function ReadingIntakeScreen({
 
     return {
       personal: [
-        { role: "Sun", sign: natalSun?.sign ?? "—" },
-        { role: "Moon", sign: natalMoon?.sign ?? "—" },
-        { role: "Rising", sign: natalRising?.sign ?? "—" },
+        { role: "Sun", sign: natalSun?.sign ?? "—", degree: natalSun?.degree },
+        { role: "Moon", sign: natalMoon?.sign ?? "—", degree: natalMoon?.degree },
+        { role: "Rising", sign: natalRising?.sign ?? "—", degree: natalRising?.degree },
       ],
       currentSun,
       currentMoon,
@@ -903,7 +908,7 @@ export default function ReadingIntakeScreen({
                 </p>
 
                 {/* Four-slide information display: Birth Chart → Today → Mercury → Elements */}
-                <div className="absolute inset-x-0 top-[119px] h-[91px]">
+                <div className="absolute inset-x-0 top-[126px] h-[91px]">
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                       key={heroInfoMode}
@@ -920,10 +925,18 @@ export default function ReadingIntakeScreen({
                               key={`personal-${item.role}`}
                               className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border border-slate-200/30 bg-white/[0.018] px-1 shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.06)]"
                             >
+                              <span
+                                className="mb-[3px] text-[7px] font-semibold leading-none tabular-nums"
+                                style={{
+                                  color: signAccentColor(item.sign),
+                                }}
+                              >
+                                {item.degree ?? "—"}
+                              </span>
                               <span className="max-w-full truncate text-[10.5px] font-semibold leading-none text-slate-100/92">
                                 {item.sign}
                               </span>
-                              <span className="mt-[5px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
+                              <span className="mt-[4px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
                                 {item.role}
                               </span>
                             </div>
