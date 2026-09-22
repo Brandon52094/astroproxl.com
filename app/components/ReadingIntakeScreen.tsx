@@ -582,7 +582,7 @@ export default function ReadingIntakeScreen({
       setSelectedArea(null);
       setQuestion("");
       selectionTimeoutRef.current = null;
-    }, 7000);
+    }, 8000);
   }, [clearSelectionTimeout]);
 
   useEffect(() => {
@@ -730,44 +730,55 @@ export default function ReadingIntakeScreen({
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── Aurora OUTLINE glow — palette responds to selected reading ── */
-        /* Typed color properties let topic → default palette changes interpolate instead of snapping. */
+        /* ── HERO AURA — separate from hero content so focus can remove only the glow ── */
         @property --hero-c1-color { syntax: "<color>"; inherits: false; initial-value: rgb(52, 211, 153); }
         @property --hero-c2-color { syntax: "<color>"; inherits: false; initial-value: rgb(34, 211, 238); }
         @property --hero-c3-color { syntax: "<color>"; inherits: false; initial-value: rgb(56, 189, 248); }
         @property --hero-c4-color { syntax: "<color>"; inherits: false; initial-value: rgb(168, 85, 247); }
 
-        .hero-outline {
+        .hero-glow-shell {
+          position: relative;
+          border-radius: 28px;
+          box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+        }
+        .hero-glow-shell::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          opacity: 1;
           border: 1px solid color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
           box-shadow:
             0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent),
             0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent),
-            0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent),
-            0 18px 44px rgba(0,0,0,0.72),
-            0 36px 80px rgba(0,0,0,0.56);
-          transition:
-            --hero-c1-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
-            --hero-c2-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
-            --hero-c3-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
-            --hero-c4-color 900ms cubic-bezier(0.22, 1, 0.36, 1);
+            0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent);
           animation: heroBorderGlow 9s ease-in-out infinite;
+          /* Focus release: let the aura bloom back in instead of snapping back. */
+          transition: opacity 1600ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .hero-glow-shell-focus::before {
+          opacity: 0;
+          /* Enter focus responsively; the reverse transition uses 1600ms above. */
+          transition-duration: 900ms;
         }
         @keyframes heroBorderGlow {
           0%, 100% {
             border-color: color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent);
           }
           25% {
             border-color: color-mix(in srgb, var(--hero-c2-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c2-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c2-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c2-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c2-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c2-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c2-color) 26%, transparent);
           }
           50% {
             border-color: color-mix(in srgb, var(--hero-c3-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c3-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c3-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c3-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c3-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c3-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c3-color) 26%, transparent);
           }
           75% {
             border-color: color-mix(in srgb, var(--hero-c4-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c4-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c4-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c4-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c4-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c4-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c4-color) 26%, transparent);
           }
         }
 
@@ -999,7 +1010,6 @@ export default function ReadingIntakeScreen({
 
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
-          .hero-outline,
           .ask-premium,
           .ask-premium::before,
           .ask-mic-halo { animation: none !important; }
@@ -1030,6 +1040,7 @@ export default function ReadingIntakeScreen({
             style={{
               opacity: selectedArea || heroInspecting ? 0.52 : 1,
               filter: selectedArea || heroInspecting ? "brightness(0.34) saturate(0.55)" : "brightness(1) saturate(1)",
+              transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
@@ -1037,9 +1048,18 @@ export default function ReadingIntakeScreen({
           </button>
 
           {/* ── HERO (animated color-cycling outline glow) ── */}
-          <section className="mb-[18px] pt-0">
+          <section className="mb-[14px] pt-0">
             <div
-              className="hero-shine hero-outline relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className={`hero-glow-shell ${selectedArea && !heroInspecting ? "hero-glow-shell-focus" : ""}`}
+              style={{
+                "--hero-c1-color": `rgb(${heroPalette[0]})`,
+                "--hero-c2-color": `rgb(${heroPalette[1]})`,
+                "--hero-c3-color": `rgb(${heroPalette[2]})`,
+                "--hero-c4-color": `rgb(${heroPalette[3]})`,
+              } as React.CSSProperties}
+            >
+            <div
+              className="hero-shine relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]"
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture?.(e.pointerId);
                 beginHeroHold();
@@ -1051,10 +1071,7 @@ export default function ReadingIntakeScreen({
               style={{
                 opacity: heroInspecting ? 1 : selectedArea ? 0.72 : 1,
                 filter: heroInspecting ? "brightness(1) saturate(1)" : selectedArea ? "brightness(0.38) saturate(0.55)" : "brightness(1) saturate(1)",
-                "--hero-c1-color": `rgb(${heroPalette[0]})`,
-                "--hero-c2-color": `rgb(${heroPalette[1]})`,
-                "--hero-c3-color": `rgb(${heroPalette[2]})`,
-                "--hero-c4-color": `rgb(${heroPalette[3]})`,
+                transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
@@ -1217,6 +1234,7 @@ export default function ReadingIntakeScreen({
                 </div>
               </div>
             </div>
+            </div>
           </section>
 
           {/* ── Dynamic reading header ──
@@ -1273,6 +1291,7 @@ export default function ReadingIntakeScreen({
                       : selectedArea && !isSelected
                         ? "brightness(0.30) saturate(0.48)"
                         : "brightness(1) saturate(1)",
+                    transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
                   }}
                 >
                   {Icon ? (
@@ -1308,6 +1327,7 @@ export default function ReadingIntakeScreen({
             style={{
               opacity: heroInspecting ? 0.52 : 1,
               filter: heroInspecting ? "brightness(0.30) saturate(0.45)" : "brightness(1) saturate(1)",
+              transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
             }}
           >
             <div
@@ -1344,7 +1364,7 @@ export default function ReadingIntakeScreen({
                       setSelectedArea(null);
                       setQuestion("");
                       selectionTimeoutRef.current = null;
-                    }, 7000);
+                    }, 8000);
                   }
                 }}
                 onChange={(e) => {
@@ -1376,6 +1396,7 @@ export default function ReadingIntakeScreen({
             style={{
               opacity: heroInspecting ? 0.48 : 1,
               filter: heroInspecting ? "brightness(0.28) saturate(0.42)" : "brightness(1) saturate(1)",
+              transitionDuration: heroInspecting ? "950ms" : "1450ms",
             }}
           >
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
@@ -1419,6 +1440,7 @@ export default function ReadingIntakeScreen({
                   : selectedArea
                     ? "brightness(0.42) saturate(0.42)"
                     : "brightness(1) saturate(1)",
+                transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
               }}
             >
               <span className="ask-mic-halo mr-4 shrink-0">
