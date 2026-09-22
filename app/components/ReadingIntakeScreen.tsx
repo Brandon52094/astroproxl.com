@@ -842,7 +842,9 @@ export default function ReadingIntakeScreen({
                   type="button"
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
+                  aria-label={area.title}
+                  title={area.title}
+                  className="tap-fix flex h-[84px] items-center justify-center rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
@@ -853,19 +855,13 @@ export default function ReadingIntakeScreen({
                   }}
                 >
                   <Icon
-                    className="h-6 w-6 transition-[color,filter,transform] duration-500 ease-out"
+                    className="h-7 w-7 transition-[color,filter,transform] duration-500 ease-out"
                     style={{
                       color: isSelected ? c.text : "rgba(203,213,225,0.68)",
                       filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
                       transform: isSelected ? "scale(1.035)" : "scale(1)",
                     }}
                   />
-                  <span
-                    className="text-[13px] font-semibold"
-                    style={{ color: isSelected ? "#ffffff" : "rgba(226,232,240,0.9)" }}
-                  >
-                    {area.title}
-                  </span>
                 </button>
               );
             })}
