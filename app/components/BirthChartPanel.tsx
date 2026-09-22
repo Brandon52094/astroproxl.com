@@ -1,31 +1,121 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { Sparkles, Compass, ChevronLeft, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { cn } from "@/lib/utils";
-import { loadChart } from "@/lib/chartStore";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  PLANET_MEANING,
-  SIGN_MEANING,
-  HOUSE_MEANING,
-} from "@/lib/chartMeanings";
+  Mic,
+  Crown,
+  ChevronLeft,
+} from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
+import StarfieldBackground from "./StarfieldBackground";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import {
+  saveIntake,
+  loadChart,
+  saveChart,
+  isChartFresh,
+  clearIntake,
+  clearReading,
+} from "@/lib/chartStore";
+import { PRICING, formatUsd } from "@/lib/paywallConfig";
+import JxlPanel from "./JxlPanel";
 
-/**
- * YOUR BIRTH CHART — sibling panel to Today's Sky.
- *
- * Where Today's Sky is present-tense ("what's the sky doing now"), this
- * panel is timeless ("who you are"): the Big 3 elementally outlined as
- * the hero, an element-balance strip, the profection YEAR (the sign/house
- * theme coloring your current year — Time Lord stays on Today's Sky), and
- * the full placement list.
- *
- * Shares Today's Sky's visual language exactly — same starfield, same card
- * chrome, same elemental colors and shine — so the two read as brother and
- * sister. This panel has NO overflow of its own; PagerContainer's wrapper
- * scrolls it.
- */
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+
+declare global {
+  interface Window {
+    ttq?: {
+      track: (event: string, params?: Record<string, unknown>) => void;
+    };
+  }
+}
+
+function trackTtq(event: string, params?: Record<string, unknown>) {
+  try {
+    if (typeof window !== "undefined" && window.ttq) {
+      window.ttq.track(event, params);
+    }
+  } catch {
+    // silent
+  }
+}
+
+const AREAS = [
+  {
+    id: "love",
+    title: "Love",
+    description: "Relationships, romance, or emotional patterns",
+    emoji: "❤️",
+    placeholder: "Ask something specific about love, timing, or where this connection is headed.",
+    defaultQuestion: "What is coming for me in love over the next 30–45 days?",
+  },
+  {
+    id: "money",
+    title: "Money",
+    description: "Income, stability, opportunities, and financial timing",
+    emoji: "💰",
+    placeholder: "Ask something specific about money, stability, or the opportunities opening next.",
+    defaultQuestion: "What is coming for me with money over the next 30–45 days?",
+  },
+  {
+    id: "career",
+    title: "Career",
+    description: "Work, recognition, direction, and next steps",
+    emoji: "💼",
+    placeholder: "Ask something specific about work, momentum, or the direction your career is moving.",
+    defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
+  },
+  {
+    id: "other",
+    title: "What's Coming",
+    description: "What to expect in the next 30–45 days.",
+    emoji: "🔮",
+    placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
+    defaultQuestion: "What is coming for me in the next 30–45 days?",
+  },
+];
+
+// Hero glow palettes respond to the selected reading topic.
+// Reading-topic glow palettes stay separate from the white/glowy Astro Plus language.
+const HERO_PALETTES: Record<string, [string, string, string, string]> = {
+  default: [
+    "52, 211, 153",  // emerald
+    "34, 211, 238",  // cyan
+    "56, 189, 248",  // sky
+    "168, 85, 247",  // violet
+  ],
+  love: [
+    "244, 114, 182", // blush pink
+    "251, 113, 133", // rose
+    "225, 29, 72",   // raspberry
+    "192, 132, 252", // soft violet
+  ],
+  money: [
+    "52, 211, 153",  // emerald
+    "16, 185, 129",  // jade
+    "110, 231, 183", // mint
+    "45, 212, 191",  // teal
+  ],
+  career: [
+    "125, 211, 252", // ice blue
+    "56, 189, 248",  // electric blue
+    "37, 99, 235",   // cobalt
+    "99, 102, 241",  // indigo
+  ],
+  other: [
+    "216, 180, 254", // lavender
+    "192, 132, 252", // violet
+    "139, 92, 246",  // deep purple
+    "96, 165, 250",  // cool blue
+  ],
+};
+
 
 interface UserStatus {
   credits: number;
@@ -34,765 +124,940 @@ interface UserStatus {
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
+  pwaFreeReadingUsed?: boolean;
 }
 
-interface BirthChartPanelProps {
+interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
+  onSwipeLeft?: () => void;
 }
 
-interface NatalPlacement {
+/* ── Chart shapes used by the hero information system ─────────────── */
+interface Placement {
   name: string;
   sign: string;
-  degree: string;
+  degree?: string;
   house?: number;
+  isRetrograde?: boolean;
 }
 
-interface NatalAspect {
-  type: string;
-  planetA: string;
-  planetB: string;
-  orbDegrees: number;
+type ThemeName = "cosmic";
+
+interface ThemeColors {
+  name: ThemeName;
+  areaColors: {
+    love: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    money: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    career: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    other: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+  };
 }
 
-interface ProfectionData {
-  profectionYear: number;
-  age: number;
-  activatedSign: string;
-  activatedHouse?: number;
-  timeLord: string;
-}
-
-// U+FE0E forces text presentation so iOS never swaps these for emoji.
-const T = "\uFE0E";
-const GLYPHS: Record<string, string> = {
-  Sun: `☉${T}`, Moon: `☽${T}`, Mercury: `☿${T}`, Venus: `♀${T}`, Mars: `♂${T}`,
-  Jupiter: `♃${T}`, Saturn: `♄${T}`, Uranus: `♅${T}`, Neptune: `♆${T}`,
-  Pluto: `♇${T}`, "North Node": `☊${T}`, "South Node": `☋${T}`,
-  Ascendant: `↑${T}`,
+const THEMES: Record<ThemeName, ThemeColors> = {
+  cosmic: {
+    name: "cosmic",
+    areaColors: {
+      love: {
+        bg: "rgba(131, 24, 67, 0.18)",
+        border: "rgba(251, 113, 133, 0.78)",
+        glow: "rgba(244, 114, 182, 0.20)",
+        text: "#FDA4AF",
+        iconBg: "rgba(131, 24, 67, 0.46)",
+        gradient: "linear-gradient(135deg, rgba(131,24,67,0.78) 0%, rgba(190,24,93,0.56) 38%, rgba(244,114,182,0.16) 100%)",
+      },
+      money: {
+        bg: "rgba(20, 83, 45, 0.22)",
+        border: "rgba(52, 211, 153, 0.74)",
+        glow: "rgba(34, 197, 94, 0.22)",
+        text: "#86EFAC",
+        iconBg: "rgba(20, 83, 45, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
+      },
+      career: {
+        bg: "rgba(30, 58, 138, 0.22)",
+        border: "rgba(147, 197, 253, 0.76)",
+        glow: "rgba(59, 130, 246, 0.22)",
+        text: "#93C5FD",
+        iconBg: "rgba(30, 58, 138, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
+      },
+      other: {
+        bg: "rgba(49, 46, 129, 0.22)",
+        border: "rgba(139, 92, 246, 0.76)",
+        glow: "rgba(139, 92, 246, 0.22)",
+        text: "#C4B5FD",
+        iconBg: "rgba(49, 46, 129, 0.55)",
+        gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
+      },
+    },
+  },
 };
 
-// Aspect sections, ordered most-harmonious → most-tense.
-// rank sets display order; color fades green → amber → dark red.
-const ASPECT_META: Record<
-  string,
-  { header: string; rank: number; text: string; border: string; glow: string }
-> = {
-  trine:       { header: "Harmony",     rank: 1, text: "#6EE7B7", border: "rgba(52,211,153,0.55)",  glow: "rgba(16,185,129,0.20)" },
-  sextile:     { header: "Opportunity", rank: 2, text: "#A7F3D0", border: "rgba(110,231,183,0.45)", glow: "rgba(16,185,129,0.14)" },
-  conjunction: { header: "Intensity",   rank: 3, text: "#FCD34D", border: "rgba(251,191,36,0.45)",  glow: "rgba(245,158,11,0.16)" },
-  square:      { header: "Challenge",   rank: 4, text: "#FDBA74", border: "rgba(249,115,22,0.50)",  glow: "rgba(249,115,22,0.18)" },
-  opposition:  { header: "Tension",     rank: 5, text: "#F87171", border: "rgba(239,68,68,0.50)",   glow: "rgba(239,68,68,0.20)" },
-};
-
-const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
-
-/* ── The four elements ─────────────────────────────────────────────── */
-
-type Element = "Fire" | "Earth" | "Air" | "Water";
-
-const SIGN_ELEMENTS: Record<string, Element> = {
-  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
-  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
-  Gemini: "Air", Libra: "Air", Aquarius: "Air",
-  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
-};
-
-const ELEMENT_COLORS: Record<Element, { border: string; glow: string; text: string; bar: string }> = {
-  Fire:  { border: "rgba(249, 115, 22, 0.75)", glow: "rgba(239, 68, 68, 0.28)",  text: "#FDBA74", bar: "#F97316" },
-  Earth: { border: "rgba(52, 211, 153, 0.65)", glow: "rgba(16, 185, 129, 0.24)", text: "#6EE7B7", bar: "#34D399" },
-  Air:   { border: "rgba(186, 230, 253, 0.60)", glow: "rgba(125, 211, 252, 0.22)", text: "#BAE6FD", bar: "#7DD3FC" },
-  Water: { border: "rgba(96, 165, 250, 0.70)",  glow: "rgba(59, 130, 246, 0.26)",  text: "#93C5FD", bar: "#60A5FA" },
-};
-
-const ELEMENT_ORDER: Element[] = ["Fire", "Earth", "Air", "Water"];
-
-function elementOf(sign?: string): Element | null {
-  if (!sign) return null;
-  return SIGN_ELEMENTS[sign] ?? null;
-}
-
-function ordinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
-}
-
-/* ── Card chrome — identical to Today's Sky ────────────────────────── */
-
-function SkyCard({
-  icon: Icon,
-  label,
-  className,
-  children,
-}: {
-  icon: React.ElementType;
-  label: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm",
-        className
-      )}
-    >
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-          {label}
-        </span>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/* ── Panel ──────────────────────────────────────────────────────────── */
-
-export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
-  const shouldReduceMotion = useReducedMotion();
+export default function ReadingIntakeScreen({
+  userStatus: propUserStatus,
+  onSwipeLeft,
+}: ReadingIntakeScreenProps) {
   const router = useRouter();
-
-  const [natal, setNatal] = useState<NatalPlacement[]>([]);
-  const [aspects, setAspects] = useState<NatalAspect[]>([]);
-  const [aspectsOpen, setAspectsOpen] = useState(false);
-  const [showWeaker, setShowWeaker] = useState(false);
-  const [openPlacement, setOpenPlacement] = useState<string | null>(null);
-  const [profection, setProfection] = useState<ProfectionData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
+  const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const [question, setQuestion] = useState("");
+  const [contextFocused, setContextFocused] = useState(false);
+  const [isCreatingReading, setIsCreatingReading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
+  const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
   useEffect(() => {
-    let cancelled = false;
-    const tryLoad = () => {
-      const chart = loadChart();
-      if (!chart?.chartData) return false; // not ready yet
-      const data = chart.chartData as unknown as {
-        profection?: ProfectionData;
-        tropical?: { planets?: NatalPlacement[]; aspects?: NatalAspect[] };
-      };
-      if (data.profection) setProfection(data.profection);
-      const planets = data.tropical?.planets ?? [];
-      setNatal(
-        planets
-          .filter((p) => NATAL_ORDER.includes(p.name))
-          .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
-      );
-      // Major aspects only — the five your engine computes
-      setAspects(data.tropical?.aspects ?? []);
-      setIsLoading(false);
-      return true; // loaded
-    };
+    if (propUserStatus) setUserStatus(propUserStatus);
+  }, [propUserStatus]);
+  const [showJxl, setShowJxl] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const theme = THEMES.cosmic;
 
-    if (tryLoad()) return;
+  // Chart-derived data for the hero information circles.
+  const [natal, setNatal] = useState<Placement[]>([]);
+  const [transits, setTransits] = useState<Placement[]>([]);
+  // Alternate between the user's Big Three and the current Sun/Moon.
+  const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky">("personal");
 
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      if (cancelled || tryLoad() || attempts > 20) {
-        clearInterval(interval);
-        if (attempts > 20) setIsLoading(false);
-      }
-    }, 250);
-
-    return () => { cancelled = true; clearInterval(interval); };
+  // If a reading is selected but the user does not continue into context or Begin Reading,
+  // gently return the interface to its neutral state.
+  const selectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearSelectionTimeout = useCallback(() => {
+    if (selectionTimeoutRef.current) {
+      clearTimeout(selectionTimeoutRef.current);
+      selectionTimeoutRef.current = null;
+    }
   }, []);
 
-  // Same star recipe as the other panels — continuous sky across swipes.
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 68 }).map((_, i) => ({
-        id: i,
-        left: `${(i * 37) % 100}%`,
-        top: `${(i * 19 + 13) % 100}%`,
-        size: i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5,
-        opacity: i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34,
-        delay: (i * 0.37) % 4,
-      })),
-    []
-  );
+  useEffect(() => {
+    async function ensureChart() {
+      if (isChartFresh()) { setChartStatus("ready"); return; }
+      try {
+        const response = await fetch("/api/user/get-chart");
+        const data = await response.json();
+        if (!data.chart) { router.push("/chart-data"); return; }
+        setChartStatus("recalculating");
+        const calcResponse = await fetch("/api/chart-calculate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            birthDate: data.chart.birthDate,
+            birthTime: data.chart.birthTime,
+            birthPlace: data.chart.birthPlace,
+            lat: data.chart.lat,
+            lng: data.chart.lng,
+            timezone: data.chart.timezone,
+          }),
+        });
+        const calcData = await calcResponse.json();
+        if (!calcResponse.ok || !calcData.success) { setChartStatus("error"); return; }
+        saveChart({
+          birthDate: data.chart.birthDate,
+          birthTime: data.chart.birthTime,
+          birthPlace: data.chart.birthPlace,
+          lat: data.chart.lat,
+          lng: data.chart.lng,
+          timezone: data.chart.timezone,
+          // Current location fields — required by StoredChart
+          currentLat: data.chart.currentLat ?? undefined,
+          currentLng: data.chart.currentLng ?? undefined,
+          currentPlace: data.chart.currentPlace ?? "",
+          currentTimezone: data.chart.currentTimezone ?? "",
+          chartData: calcData,
+        });
+        setChartStatus("ready");
+      } catch { setChartStatus("error"); }
+    }
+    ensureChart();
+  }, [router]);
 
-  const bigThree = useMemo(() => {
-    const find = (n: string) => natal.find((p) => p.name === n);
-    return { sun: find("Sun"), moon: find("Moon"), rising: find("Ascendant") };
-  }, [natal]);
+  // Once the chart is ready, read natal placements/angles + current transits.
+  // Chart payloads are not guaranteed to store `angles` as an array, so normalize
+  // arrays and keyed objects before putting them into React state.
+  useEffect(() => {
+    if (chartStatus !== "ready") return;
 
-  // Element balance across all placements (planets + rising).
-  const elementBalance = useMemo(() => {
-    const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
-    natal.forEach((p) => {
-      const el = elementOf(p.sign);
-      if (el) counts[el] += 1;
-    });
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    const dominant = ELEMENT_ORDER.reduce((top, el) => (counts[el] > counts[top] ? el : top), "Fire");
-    return { counts, total, dominant };
-  }, [natal]);
+    const normalizePlacements = (value: unknown): Placement[] => {
+      if (Array.isArray(value)) {
+        return value.flatMap((raw) => {
+          if (!raw || typeof raw !== "object") return [];
+          const item = raw as Record<string, unknown>;
+          if (typeof item.sign !== "string") return [];
+          return [{
+            name: typeof item.name === "string" ? item.name : "",
+            sign: item.sign,
+            degree: typeof item.degree === "string" ? item.degree : undefined,
+            house: typeof item.house === "number" ? item.house : undefined,
+            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
+          }];
+        });
+      }
 
-  const STRONG_ORB = 4;
+      if (value && typeof value === "object") {
+        return Object.entries(value as Record<string, unknown>).flatMap(([key, raw]) => {
+          if (!raw || typeof raw !== "object") return [];
+          const item = raw as Record<string, unknown>;
+          if (typeof item.sign !== "string") return [];
+          return [{
+            name: typeof item.name === "string" && item.name ? item.name : key,
+            sign: item.sign,
+            degree: typeof item.degree === "string" ? item.degree : undefined,
+            house: typeof item.house === "number" ? item.house : undefined,
+            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
+          }];
+        });
+      }
 
-  const groupedAspects = useMemo(() => {
-    const strong = aspects.filter((a) => a.orbDegrees <= STRONG_ORB);
-    const weak = aspects
-      .filter((a) => a.orbDegrees > STRONG_ORB)
-      .sort((a, b) => a.orbDegrees - b.orbDegrees);
+      return [];
+    };
 
-    // Bucket strong aspects by type, then order sections by rank.
-    const sections = Object.keys(ASPECT_META)
-      .map((type) => ({
-        type,
-        meta: ASPECT_META[type],
-        items: strong
-          .filter((a) => a.type?.toLowerCase() === type)
-          .sort((a, b) => a.orbDegrees - b.orbDegrees),
-      }))
-      .filter((s) => s.items.length > 0)
-      .sort((a, b) => a.meta.rank - b.meta.rank);
+    const chart = loadChart();
+    const data = chart?.chartData as unknown as {
+      tropical?: { planets?: unknown; angles?: unknown };
+      transits?: unknown;
+    } | undefined;
 
-    return { sections, weak };
-  }, [aspects]);
+    if (!data) return;
 
-  const hasProfection =
-    !!profection &&
-    typeof profection.profectionYear === "number" &&
-    !!profection.activatedSign;
+    setNatal([
+      ...normalizePlacements(data.tropical?.planets),
+      ...normalizePlacements(data.tropical?.angles),
+    ]);
+    setTransits(normalizePlacements(data.transits));
+  }, [chartStatus]);
 
-  const profectionElement = elementOf(profection?.activatedSign);
-  const profectionColors = profectionElement ? ELEMENT_COLORS[profectionElement] : null;
+  const fetchInFlight = useRef(false);
+  const fetchStatus = useCallback(async () => {
+    if (fetchInFlight.current) return;
+    fetchInFlight.current = true;
+    try {
+      const response = await fetch("/api/user/credits");
+      const data = await response.json();
+      setUserStatus({
+        credits: Number(data.credits ?? 0),
+        isSubscribed: data.isSubscribed === true,
+        readingsCompleted: Number(data.readingsCompleted ?? 0),
+        onCooldown: data.onCooldown === true,
+        cooldownExpiresAt: data.cooldownExpiresAt ?? null,
+        canBypass: data.canBypass === true,
+        pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
+      });
+    } catch { }
+    finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
+  }, []);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-[#050816]">
-        <div className="text-sm text-slate-400">Casting your chart…</div>
-      </div>
-    );
-  }
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
-  const hasChart = natal.length > 0;
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchStatus();
+        setTimeout(() => fetchStatus(), 2000);
+        setTimeout(() => fetchStatus(), 5000);
+        setTimeout(() => fetchStatus(), 10000);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [fetchStatus]);
+
+  const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
+  const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
+
+  /* ── Hero information — one intentional transition system ───────── */
+  const heroInfo = useMemo(() => {
+    const find = (arr: Placement[], names: string[]) =>
+      arr.find((p) =>
+        typeof p?.name === "string" &&
+        names.some((name) => p.name.toLowerCase() === name.toLowerCase())
+      );
+
+    const natalSun = find(natal, ["Sun"]);
+    const natalMoon = find(natal, ["Moon"]);
+    const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
+    const currentSun = find(transits, ["Sun"]);
+    const currentMoon = find(transits, ["Moon"]);
+
+    return {
+      personal: [
+        { role: "Sun", sign: natalSun?.sign ?? "—" },
+        { role: "Moon", sign: natalMoon?.sign ?? "—" },
+        { role: "Rising", sign: natalRising?.sign ?? "—" },
+      ],
+      sky: [
+        { role: "Sun Now", sign: currentSun?.sign ?? "—" },
+        { role: "Moon Now", sign: currentMoon?.sign ?? "—" },
+      ],
+    };
+  }, [natal, transits]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setHeroInfoMode((mode) => (mode === "personal" ? "sky" : "personal"));
+    }, 7000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const buttonCopy = useMemo(() => {
+    if (chartStatus === "recalculating") return "Loading your chart…";
+    if (isCreatingReading) return "Preparing reading...";
+    if (!selectedAreaConfig) return "Begin Reading";
+    const hasCredits = Number(userStatus?.credits ?? 0) > 0;
+    const isSubscribed = userStatus?.isSubscribed === true;
+    if (!hasCredits && !isSubscribed) {
+      return `Begin Reading — ${formatUsd(PRICING.reading.price)}`;
+    }
+    return "Begin Reading";
+  }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
+
+  // Context is optional now — only a selection + a ready chart are required.
+  const canSubmit = useMemo(() => {
+    if (!selectedArea) return false;
+    if (chartStatus !== "ready") return false;
+    return true;
+  }, [selectedArea, chartStatus]);
+
+  const selectArea = useCallback((id: string) => {
+    clearSelectionTimeout();
+    setSelectedArea(id);
+    setQuestion("");
+    const area = AREAS.find((a) => a.id === id);
+    trackTtq("ViewContent", { content_id: id, content_name: area?.title });
+
+    selectionTimeoutRef.current = setTimeout(() => {
+      setSelectedArea(null);
+      setQuestion("");
+      selectionTimeoutRef.current = null;
+    }, 10000);
+  }, [clearSelectionTimeout]);
+
+  useEffect(() => {
+    return () => clearSelectionTimeout();
+  }, [clearSelectionTimeout]);
+
+  const handleStartReading = async () => {
+    if (!canSubmit || !selectedArea) return;
+    clearSelectionTimeout();
+    setIsCreatingReading(true);
+    setSubmitError(null);
+    trackTtq("AddToCart", { content_id: selectedArea });
+    try {
+      clearIntake();
+      clearReading();
+      localStorage.removeItem("dfp_followup_return");
+      localStorage.removeItem("dfp_followup_question");
+      const topic = selectedArea === "love" ? "love" : selectedArea === "career" ? "career" : selectedArea === "money" ? "money" : "general";
+      const areaCfg = AREAS.find((a) => a.id === selectedArea);
+      const trimmed = question.trim();
+      const finalQuestion = trimmed || areaCfg?.defaultQuestion || "What is coming for me in the next 30–45 days?";
+      saveIntake({
+        topic: topic as "love" | "career" | "money" | "general",
+        area: selectedArea,
+        question: finalQuestion,
+        timeframeType: "month",
+        timeframeValue: "next-45-days",
+      });
+
+      let status: UserStatus | null = null;
+      try {
+        const res = await fetch("/api/user/credits", { cache: "no-store" });
+        if (res.ok) {
+          const d = await res.json();
+          status = {
+            credits: Number(d.credits ?? 0),
+            isSubscribed: d.isSubscribed === true,
+            readingsCompleted: Number(d.readingsCompleted ?? 0),
+            onCooldown: d.onCooldown === true,
+            cooldownExpiresAt: d.cooldownExpiresAt ?? null,
+            canBypass: d.canBypass === true,
+            pwaFreeReadingUsed: d.pwaFreeReadingUsed === true,
+          };
+          setUserStatus(status);
+        }
+      } catch { }
+
+      if (!status) {
+        setSubmitError("Couldn't verify your credits. Please try again.");
+        return;
+      }
+
+      const CREDITS_PER_READING = 1;
+      const hasCredits = status.credits >= CREDITS_PER_READING;
+
+      if (hasCredits || status.isSubscribed) {
+        router.push("/reading/preparing");
+        return;
+      }
+
+      const readingValue = PRICING.reading.price / 100;
+      trackTtq("InitiateCheckout", { content_id: selectedArea, value: readingValue, currency: "USD" });
+
+      const checkoutRes = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "one_time",
+          // Still sent only to satisfy the route's `if (!returnUrl)` guard.
+          // The embedded flow never navigates to it — we stay in the app.
+          returnUrl: window.location.origin + "/reading/preparing",
+        }),
+      });
+      const checkoutData = await checkoutRes.json();
+
+      // Support both Stripe checkout styles:
+      // - embedded checkout returns clientSecret
+      // - hosted checkout returns url
+      if (checkoutData?.clientSecret) {
+        setClientSecret(checkoutData.clientSecret);
+        return;
+      }
+
+      if (checkoutData?.url) {
+        window.location.href = checkoutData.url;
+        return;
+      }
+
+      setSubmitError("Couldn't start checkout. Please try again.");
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Something went wrong");
+    } finally {
+      setIsCreatingReading(false);
+    }
+  };
+
+  const getAreaColors = useCallback((areaId: string) => {
+    const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
+    return theme.areaColors[key];
+  }, [theme]);
 
   return (
     <div
-      className="relative min-h-screen w-full font-sans text-slate-100"
+      className="no-scrollbar relative min-h-[100dvh] overflow-x-hidden text-slate-100"
       style={{
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
       <style jsx>{`
-        @keyframes elementShine {
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+        .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+        .nebula {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 0;
+          background:
+            radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%),
+            radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%),
+            radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%);
+          opacity: 0.94;
+        }
+
+        @keyframes heroShine {
           0% { transform: translateX(-140%) skewX(-18deg); }
-          60% { transform: translateX(240%) skewX(-18deg); }
+          32% { transform: translateX(240%) skewX(-18deg); }
           100% { transform: translateX(240%) skewX(-18deg); }
         }
-        .element-box { position: relative; overflow: hidden; isolation: isolate; }
-        .element-box::after {
+        .hero-shine { position: relative; overflow: hidden; isolation: isolate; }
+        .hero-shine::after {
           content: "";
           position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
+          top: 0; bottom: 0; left: 0;
           width: 45%;
-          background: linear-gradient(
-            105deg,
-            transparent 0%,
-            rgba(255, 255, 255, 0.09) 45%,
-            rgba(255, 255, 255, 0.16) 50%,
-            rgba(255, 255, 255, 0.09) 55%,
-            transparent 100%
-          );
+          background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%);
           transform: translateX(-140%) skewX(-18deg);
-          animation: elementShine 4.6s ease-in-out infinite;
+          animation: heroShine 8.6s ease-in-out infinite;
           pointer-events: none;
           z-index: 1;
         }
-        .element-box > * { position: relative; z-index: 2; }
+        .hero-shine > * { position: relative; z-index: 2; }
+
+        /* ── Aurora OUTLINE glow — palette responds to selected reading ── */
+        .hero-outline {
+          border: 1px solid rgba(var(--hero-c1), 0.9);
+          box-shadow:
+            0 0 26px 2px rgba(var(--hero-c1), 0.70),
+            0 0 70px 10px rgba(var(--hero-c1), 0.42),
+            0 0 130px 26px rgba(var(--hero-c1), 0.26),
+            0 18px 44px rgba(0,0,0,0.72),
+            0 36px 80px rgba(0,0,0,0.56);
+          animation: heroBorderGlow 9s ease-in-out infinite;
+        }
+        @keyframes heroBorderGlow {
+          0%, 100% {
+            border-color: rgba(var(--hero-c1), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c1), 0.70), 0 0 70px 10px rgba(var(--hero-c1), 0.42), 0 0 130px 26px rgba(var(--hero-c1), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
+          25% {
+            border-color: rgba(var(--hero-c2), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c2), 0.70), 0 0 70px 10px rgba(var(--hero-c2), 0.42), 0 0 130px 26px rgba(var(--hero-c2), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
+          50% {
+            border-color: rgba(var(--hero-c3), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c3), 0.70), 0 0 70px 10px rgba(var(--hero-c3), 0.42), 0 0 130px 26px rgba(var(--hero-c3), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
+          75% {
+            border-color: rgba(var(--hero-c4), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c4), 0.70), 0 0 70px 10px rgba(var(--hero-c4), 0.42), 0 0 130px 26px rgba(var(--hero-c4), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          }
+        }
+
+        .standard-shadow {
+          box-shadow:
+            0 18px 38px rgba(0,0,0,0.78),
+            0 34px 72px rgba(0,0,0,0.58),
+            0 48px 96px rgba(0,0,0,0.34);
+        }
+
+        /* ── ASK ANYTHING — flagship showpiece ── */
+        @keyframes askPremiumPulse {
+          0%, 100% {
+            box-shadow:
+              0 0 0 1px rgba(34,211,238,0.14),
+              0 0 26px rgba(34,211,238,0.13),
+              0 0 54px rgba(99,102,241,0.08),
+              0 20px 42px rgba(0,0,0,0.82),
+              0 38px 78px rgba(0,0,0,0.46);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(168,85,247,0.16),
+              0 0 30px rgba(139,92,246,0.14),
+              0 0 58px rgba(34,211,238,0.08),
+              0 20px 42px rgba(0,0,0,0.82),
+              0 38px 78px rgba(0,0,0,0.46);
+          }
+        }
+
+        @keyframes askPremiumSweep {
+          0% { transform: translateX(-175%) skewX(-18deg); opacity: 0; }
+          12% { opacity: 0; }
+          20% { opacity: 0.56; }
+          34% { transform: translateX(330%) skewX(-18deg); opacity: 0; }
+          100% { transform: translateX(330%) skewX(-18deg); opacity: 0; }
+        }
+
+        @keyframes askMicBreathe {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 14px rgba(34,211,238,0.14), 0 0 24px rgba(139,92,246,0.07);
+          }
+          50% {
+            transform: scale(1.045);
+            box-shadow: 0 0 20px rgba(34,211,238,0.22), 0 0 32px rgba(139,92,246,0.10);
+          }
+        }
+
+        .ask-premium {
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+          border: 1px solid transparent;
+          background:
+            radial-gradient(circle at 16% 18%, rgba(34,211,238,0.085), transparent 34%) padding-box,
+            radial-gradient(circle at 84% 84%, rgba(139,92,246,0.11), transparent 42%) padding-box,
+            linear-gradient(145deg, rgba(10,14,32,0.985), rgba(5,8,20,0.985)) padding-box,
+            linear-gradient(118deg,
+              rgba(34,211,238,0.74) 0%,
+              rgba(99,102,241,0.74) 46%,
+              rgba(168,85,247,0.78) 100%) border-box;
+          animation: askPremiumPulse 5.2s ease-in-out infinite;
+        }
+
+        .ask-premium::before {
+          content: "";
+          position: absolute;
+          inset: -34% auto -34% -34%;
+          width: 24%;
+          background: linear-gradient(105deg, transparent, rgba(255,255,255,0.15), rgba(255,255,255,0.055), transparent);
+          transform: translateX(-175%) skewX(-18deg);
+          animation: askPremiumSweep 9.2s ease-in-out infinite;
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        .ask-premium::after {
+          content: "";
+          position: absolute;
+          inset: 1px;
+          border-radius: 23px;
+          pointer-events: none;
+          background: linear-gradient(180deg, rgba(255,255,255,0.032), transparent 42%);
+          z-index: 1;
+        }
+
+        .ask-premium > * { position: relative; z-index: 2; }
+
+        .ask-mic-halo {
+          display: flex;
+          height: 42px;
+          width: 42px;
+          align-items: center;
+          justify-content: center;
+          border-radius: 9999px;
+          border: 1px solid transparent;
+          background:
+            radial-gradient(circle, rgba(8,15,32,0.98), rgba(7,10,24,0.99)) padding-box,
+            linear-gradient(135deg, rgba(34,211,238,0.74), rgba(139,92,246,0.76)) border-box;
+          animation: askMicBreathe 3.4s ease-in-out infinite;
+        }
+
+        .ask-title {
+          color: #f8fafc;
+          text-shadow: 0 1px 14px rgba(34,211,238,0.10), 0 0 20px rgba(168,85,247,0.07);
+        }
+
+        .ask-subtitle {
+          color: rgba(203,213,225,0.72);
+          text-shadow: 0 2px 8px rgba(0,0,0,0.82);
+        }
 
         @media (prefers-reduced-motion: reduce) {
-          .element-box::after { animation: none !important; opacity: 0; }
+          .hero-shine::after,
+          .hero-outline,
+          .ask-premium,
+          .ask-premium::before,
+          .ask-mic-halo { animation: none !important; }
         }
       `}</style>
 
-      {/* ── Starfield ── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {stars.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{ left: star.left, top: star.top, width: star.size, height: star.size, opacity: star.opacity }}
-            animate={
-              shouldReduceMotion
-                ? undefined
-                : { opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4], scale: [1, 1.6, 1] }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : { duration: 2.34 + (star.id % 5) * 0.54, repeat: Infinity, ease: "easeInOut", delay: star.delay }
-            }
-          />
-        ))}
-      </div>
+      <div className="nebula" aria-hidden="true" />
+      <StarfieldBackground />
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] px-4"
-  style={{
-    paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-    paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
-  }}
->
-        {/* ── HERO — the Big 3, elementally outlined ── */}
-        <motion.header
-          initial={{ opacity: 0, y: 12 }}
+        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top) + 8px)",
+          paddingBottom: "calc(2rem + env(safe-area-inset-bottom))",
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="mb-6"
+          className="flex flex-col top-section"
         >
-          <p className="text-center text-[10px] uppercase tracking-[0.24em] text-slate-500">
-            Your Birth Chart
-          </p>
-          <h1 className="mt-1 text-center text-[22px] font-light tracking-tight text-white">
-            The map of you
-          </h1>
-
-          {hasChart ? (
-            <div className="mt-5 grid grid-cols-3 gap-2.5">
-              {(
-                [
-                  { label: "Sun", p: bigThree.sun },
-                  { label: "Moon", p: bigThree.moon },
-                  { label: "Rising", p: bigThree.rising },
-                ] as const
-              ).map(({ label, p }) => {
-                const element = elementOf(p?.sign);
-                const colors = element ? ELEMENT_COLORS[element] : null;
-                return (
-                  <div
-                    key={label}
-                    className="element-box rounded-2xl border bg-black/20 px-2 py-4 text-center"
-                    style={
-                      colors
-                        ? {
-                            borderColor: colors.border,
-                            boxShadow: `0 0 22px ${colors.glow}, inset 0 0 14px ${colors.glow}`,
-                          }
-                        : { borderColor: "rgba(255,255,255,0.10)" }
-                    }
-                  >
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                    <p className="mt-1.5 text-[17px] font-medium leading-tight text-white">{p?.sign ?? "—"}</p>
-                    <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
-                    {element && colors && (
-                      <p
-                        className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.18em]"
-                        style={{ color: colors.text }}
-                      >
-                        {element}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="mt-6 text-center text-[13px] leading-6 text-slate-400">
-              Enter your birth details to reveal your chart.
-            </p>
-          )}
-        </motion.header>
-
-        {hasChart && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-            className="space-y-3"
+          {/* ── Swipe cue — integrated above hero ── */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85"
+            style={{
+              textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
+            }}
           >
-            {/* ── Profection Year — the sign/house theme of your current year ── */}
-            {hasProfection && (
-              <SkyCard icon={Compass} label="Your Profection Year">
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[26px] font-light leading-tight text-white">
-                      {profection!.activatedSign} Year
-                    </p>
-                    <p className="mt-2 text-[12px] leading-5 text-slate-400">
-                      {typeof profection!.activatedHouse === "number"
-                        ? `${ordinal(profection!.activatedHouse)} house activated`
-                        : `${ordinal(profection!.profectionYear)} house year`}
-                      {typeof profection!.age === "number" ? ` · age ${profection!.age}` : ""}.
-                    </p>
-                  </div>
-                  {profectionColors && (
-                    <div
-                      className="element-box flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border bg-black/20"
-                      style={{
-                        borderColor: profectionColors.border,
-                        boxShadow: `0 0 22px ${profectionColors.glow}, inset 0 0 14px ${profectionColors.glow}`,
-                      }}
-                    >
-                      <span className="text-2xl" style={{ color: profectionColors.text }}>
-                        {GLYPHS[SIGN_RULER_GLYPH(profection!.activatedSign)] ?? "✦"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </SkyCard>
-            )}
+            Swipe Left To Explore
+          </button>
 
-            {/* ── Element Balance — quick "about me" read ── */}
-            {elementBalance.total > 0 && (
-              <SkyCard icon={Sparkles} label="Element Balance">
-                <div className="space-y-2.5">
-                  {ELEMENT_ORDER.map((el) => {
-                    const count = elementBalance.counts[el];
-                    const pct = Math.round((count / elementBalance.total) * 100);
-                    const colors = ELEMENT_COLORS[el];
-                    return (
-                      <div key={el} className="flex items-center gap-3">
-                        <span
-                          className="w-14 text-[11px] font-medium uppercase tracking-[0.12em]"
-                          style={{ color: colors.text }}
-                        >
-                          {el}
-                        </span>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${pct}%` }}
-                            transition={{ duration: 0.7, ease: "easeOut" }}
-                            className="h-full rounded-full"
-                            style={{ backgroundColor: colors.bar, opacity: 0.85 }}
-                          />
-                        </div>
-                        <span className="w-6 text-right text-[12px] text-slate-400 tabular-nums">
-                          {count}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="mt-3 text-[12px] leading-5 text-slate-400">
-                  Your chart leans{" "}
-                  <span style={{ color: ELEMENT_COLORS[elementBalance.dominant].text }}>
-                    {elementBalance.dominant}
-                  </span>
-                  .
-                </p>
-              </SkyCard>
-            )}
-
-            {/* ── Recalculate — heals charts built by older engine versions ── */}
-            <button
-              type="button"
-              onClick={() => router.push("/chart-data?recalculate=true")}
+          {/* ── HERO (animated color-cycling outline glow) ── */}
+          <section className="mb-[18px] pt-0">
+            <div
+              className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center"
               style={{
-                display: "block",
-                margin: "8px auto 20px",
-                background: "transparent",
-                border: "none",
-                color: "#64748b",
-                fontSize: "13px",
-                textDecoration: "underline",
-                textUnderlineOffset: "3px",
-                cursor: "pointer",
-              }}
+                "--hero-c1": heroPalette[0],
+                "--hero-c2": heroPalette[1],
+                "--hero-c3": heroPalette[2],
+                "--hero-c4": heroPalette[3],
+              } as React.CSSProperties}
             >
-              Recalculate chart
-            </button>
+              <div className="relative z-10 mx-auto h-full max-w-[560px]">
+                {/* Hero statement — slightly larger, same locked 236px shell */}
+                <div className="absolute left-1/2 top-[28px] w-fit max-w-full -translate-x-1/2 text-left">
+                  <p
+                    className="mb-[3px] pl-[2px] text-[14px] font-medium uppercase tracking-[0.22em] text-slate-200/76"
+                    style={{ textShadow: "0 3px 13px rgba(0,0,0,0.92)" }}
+                  >
+                    Your
+                  </p>
 
-            {/* ── Full placements — tap to explore ── */}
-            <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
-              <div className="mb-4 text-center">
-                <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                  Tap Each Placement To Learn
-                </span>
-              </div>
+                  <h1
+                    className="whitespace-nowrap text-[36.5px] font-semibold leading-[0.94] tracking-[-0.048em] text-white"
+                    style={{
+                      textShadow:
+                        "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
+                    }}
+                  >
+                    Astrological Predictions
+                  </h1>
+                </div>
 
-              <div className="space-y-3">
-                {natal.map((planet, index) => {
-                  const element = elementOf(planet.sign);
-                  const colors = element ? ELEMENT_COLORS[element] : null;
-                  const displayName =
-                    planet.name === "Ascendant" ? "Rising" : planet.name;
-
-                  const isOpen = openPlacement === planet.name;
-
-                  return (
-                    <div
-                      key={planet.name}
-                      className={cn(
-                        index < natal.length - 1 &&
-                          "border-b border-white/5 pb-3"
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenPlacement((current) =>
-                            current === planet.name ? null : planet.name
-                          )
-                        }
-                        aria-expanded={isOpen}
-                        className="flex w-full items-center gap-3 text-left"
-                      >
-                        <span
-                          className="w-8 shrink-0 text-center text-xl transition-all"
-                          style={
-                            colors
-                              ? {
-                                  color: colors.text,
-                                  textShadow: isOpen
-                                    ? `0 0 10px ${colors.glow}`
-                                    : "none",
-                                }
-                              : {
-                                  color: "#64748b",
-                                }
-                          }
-                        >
-                          {GLYPHS[planet.name] ?? "•"}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
-                            isOpen ? "text-white" : "text-slate-300"
-                          )}
-                        >
-                          {displayName}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "min-w-0 flex-1 text-[15px] transition-colors",
-                            isOpen ? "text-white" : "text-slate-300"
-                          )}
-                        >
-                          {planet.sign}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
-                            isOpen ? "text-slate-300" : "text-slate-400"
-                          )}
-                        >
-                          {planet.degree}
-
-                          {planet.house ? (
-                            <span className="ml-1 text-slate-500">
-                              · {ordinal(planet.house)}
-                            </span>
-                          ) : null}
-                        </span>
-                      </button>
-
-                      <motion.div
-                        initial={false}
-                        animate={{
-                          height: isOpen ? "auto" : 0,
-                          opacity: isOpen ? 1 : 0,
-                        }}
-                        transition={{
-                          duration: shouldReduceMotion ? 0 : 0.22,
-                          ease: "easeOut",
-                        }}
-                        className="overflow-hidden"
-                      >
-                        <div className="pt-3 pl-1">
-                          <div
-                            className="border-l pl-3"
-                            style={{
-                              borderColor:
-                                colors?.border ?? "rgba(255,255,255,0.10)",
-                            }}
-                          >
-                            <p
-                              className="text-[10px] font-medium uppercase tracking-[0.16em]"
-                              style={{
-                                color: colors?.text ?? "#94A3B8",
-                              }}
-                            >
-                              {planet.name === "Ascendant"
-                                ? `${planet.sign} Rising`
-                                : `${planet.name} in ${planet.sign}`}
-                            </p>
-
-                            {PLANET_MEANING[planet.name] && (
-                              <div className="mt-2">
-                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                  The Planet
-                                </p>
-                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                  {PLANET_MEANING[planet.name]}
-                                </p>
-                              </div>
-                            )}
-
-                            {SIGN_MEANING[planet.sign] && (
-                              <div className="mt-3">
-                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                  The Sign
-                                </p>
-                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                  {SIGN_MEANING[planet.sign]}
-                                </p>
-                              </div>
-                            )}
-
-                            {planet.house && HOUSE_MEANING[String(planet.house)] && (
-                              <div className="mt-3">
-                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                  The {ordinal(planet.house)} House
-                                </p>
-                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                  {HOUSE_MEANING[String(planet.house)]}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ── Major Aspects (collapsible, text, sorted by strength) ── */}
-            {aspects.length > 0 && (
-              <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm">
-                <button
-                  type="button"
-                  onClick={() => setAspectsOpen((v) => !v)}
-                  className="flex w-full items-center justify-between p-4"
+                {/* Product identity — supportive, not competing with the H1 */}
+                <p
+                  className="absolute inset-x-0 top-[95px] text-[9.5px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
+                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                 >
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                      Major Aspects
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-2 text-slate-500">
-                    <span className="text-[11px] tabular-nums">{aspects.length}</span>
-                    <ChevronRight
-                      className={cn(
-                        "h-4 w-4 transition-transform",
-                        aspectsOpen && "rotate-90"
-                      )}
-                    />
-                  </span>
-                </button>
+                  <span className="text-indigo-200/72">AstroProXL</span>
+                  <span className="mx-2 text-slate-500/70">|</span>
+                  <span>The Astrology Engine</span>
+                </p>
 
-                {aspectsOpen && (
-                  <div className="px-4 pb-3">
-                    {groupedAspects.sections.map((section) => (
-                      <div key={section.type} className="mb-3 last:mb-1">
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <span
-                            className="h-1.5 w-1.5 rounded-full"
-                            style={{
-                              backgroundColor: section.meta.text,
-                              boxShadow: `0 0 6px ${section.meta.glow}`,
-                            }}
-                          />
-                          <span
-                            className="text-[10px] font-medium uppercase tracking-[0.16em]"
-                            style={{ color: section.meta.text }}
-                          >
-                            {section.meta.header}
+                {/* One information system: Big Three ↔ current Sun/Moon */}
+                <div className="absolute inset-x-0 top-[125px] h-[76px]">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={heroInfoMode}
+                      initial={{ opacity: 0, y: 5, filter: "blur(3px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, y: -4, filter: "blur(3px)" }}
+                      transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-0 flex items-center justify-center gap-7 sm:gap-8"
+                    >
+                      {heroInfo[heroInfoMode].map((item) => (
+                        <div
+                          key={`${heroInfoMode}-${item.role}`}
+                          className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border border-slate-200/30 bg-white/[0.018] px-1 shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.06)]"
+                        >
+                          <span className="max-w-full truncate text-[10.5px] font-semibold leading-none text-slate-100/92">
+                            {item.sign}
+                          </span>
+                          <span className="mt-[5px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
+                            {item.role}
                           </span>
                         </div>
-                        <div className="divide-y divide-white/5">
-                          {section.items.map((asp, i) => {
-                            const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                            const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                            return (
-                              <div
-                                key={`${asp.planetA}-${asp.planetB}-${i}`}
-                                className="flex items-center justify-between py-2 text-[13px]"
-                              >
-                                <span className="text-slate-200">
-                                  {nameA}{" "}
-                                  <span className="italic text-slate-500">{asp.type}</span>{" "}
-                                  {nameB}
-                                </span>
-                                <span className="text-[11px] text-slate-500 tabular-nums">
-                                  {asp.orbDegrees}°
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-
-                    {groupedAspects.sections.length === 0 && (
-                      <p className="py-2 text-[12px] text-slate-500">
-                        No tight aspects within {STRONG_ORB}°.
-                      </p>
-                    )}
-
-                    {groupedAspects.weak.length > 0 && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setShowWeaker((v) => !v)}
-                          className="mt-1 w-full text-left text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
-                        >
-                          {showWeaker ? "Hide weaker aspects" : "Show weaker aspects"} →
-                        </button>
-                        {showWeaker && (
-                          <div className="mt-2 divide-y divide-white/5 opacity-70">
-                            {groupedAspects.weak.map((asp, i) => {
-                              const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                              const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                              return (
-                                <div
-                                  key={`weak-${asp.planetA}-${asp.planetB}-${i}`}
-                                  className="flex items-center justify-between py-2 text-[13px]"
-                                >
-                                  <span className="text-slate-400">
-                                    {nameA}{" "}
-                                    <span className="italic text-slate-600">{asp.type}</span>{" "}
-                                    {nameB}
-                                  </span>
-                                  <span className="text-[11px] text-slate-600 tabular-nums">
-                                    {asp.orbDegrees}°
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
+                      ))}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
               </div>
-            )}
+            </div>
+          </section>
 
-            <p className="flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
-              <span className="flex items-center gap-1">
-                <ChevronLeft className="h-3 w-3" /> Readings
+          {/* ── Dynamic reading header ──
+              The heading keeps one visual treatment; selection only changes the word. */}
+          <div className="relative mb-[14px] h-[26px] text-center">
+            <AnimatePresence mode="sync" initial={false}>
+              <motion.p
+                key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
+                initial={{ opacity: 0, y: 2, filter: "blur(2px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -2, filter: "blur(2px)" }}
+                transition={{ duration: selectedAreaConfig ? 0.38 : 0.58, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+                style={{
+                  textShadow:
+                    "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
+                }}
+              >
+                {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+
+          {/* ── READING GRID (2×2) ── */}
+          <section className="grid grid-cols-2 gap-x-3 gap-y-4">
+            {AREAS.map((area) => {
+              const isSelected = selectedArea === area.id;
+              const c = getAreaColors(area.id);
+              return (
+                <button
+                  key={area.id}
+                  type="button"
+                  onClick={() => selectArea(area.id)}
+                  aria-pressed={isSelected}
+                  aria-label={area.title}
+                  className="tap-fix flex h-[84px] items-center justify-center rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
+                  style={{
+                    borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
+                    backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
+                    boxShadow: isSelected
+                      ? `0 0 22px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
+                      : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                    transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="text-[32px] leading-none transition-[filter,transform,opacity] duration-500 ease-out"
+                    style={{
+                      filter: isSelected ? `drop-shadow(0 0 9px ${c.glow})` : "drop-shadow(0 4px 8px rgba(0,0,0,0.42))",
+                      transform: isSelected ? "scale(1.07)" : "scale(1)",
+                      opacity: isSelected ? 1 : 0.9,
+                    }}
+                  >
+                    {area.emoji}
+                  </span>
+                </button>
+              );
+            })}
+          </section>
+
+          {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
+          <div
+            className="relative mt-3 h-[84px] rounded-[20px] border border-white/[0.10] bg-white/[0.035] standard-shadow transition-[border-color,box-shadow] duration-300 focus-within:border-white/[0.16]"
+          >
+            <div
+              className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+              style={{
+                border: "1px solid rgba(248,250,252,0.28)",
+                background: "rgba(248,250,252,0.035)",
+                boxShadow: "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
+              }}
+              aria-hidden="true"
+            >
+              <Crown className="h-3.5 w-3.5" style={{ color: "rgba(248,250,252,0.88)", filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))" }} />
+            </div>
+
+            <div className="relative h-full rounded-[20px] bg-white/[0.02] px-4 py-2 pr-12">
+              {!contextFocused && question.length === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center pr-8 text-[14px] font-medium text-slate-400/72">
+                  Add Context (Optional)
+                </div>
+              )}
+              <Textarea
+                id="question"
+                rows={2}
+                value={question}
+                onFocus={() => {
+                  clearSelectionTimeout();
+                  setContextFocused(true);
+                }}
+                onBlur={() => setContextFocused(false)}
+                onChange={(e) => {
+                  clearSelectionTimeout();
+                  setQuestion(e.target.value);
+                }}
+                placeholder=""
+                className="h-full min-h-0 w-full resize-none rounded-[14px] !border-0 !bg-transparent px-1 py-1 text-[16px] leading-6 text-white !shadow-none focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
+                style={{ backgroundColor: "transparent" }}
+              />
+            </div>
+          </div>
+
+          {/* ── BEGIN READING (always present) ── */}
+          <div className="mt-3 flex flex-col items-center">
+            {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
+            <Button
+              type="button"
+              onClick={handleStartReading}
+              disabled={!canSubmit || isCreatingReading}
+              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-500 ease-out hover:opacity-90 disabled:cursor-not-allowed"
+              style={{
+                background: canSubmit && !isCreatingReading
+                  ? "linear-gradient(180deg, rgba(45,212,191,0.055), rgba(45,212,191,0.015))"
+                  : "rgba(255,255,255,0.012)",
+                border: canSubmit && !isCreatingReading
+                  ? "2px solid rgba(94,234,212,0.72)"
+                  : "1px solid rgba(203,213,225,0.16)",
+                color: canSubmit && !isCreatingReading
+                  ? "rgba(94,234,212,0.98)"
+                  : "rgba(203,213,225,0.34)",
+                opacity: canSubmit && !isCreatingReading ? 1 : 0.58,
+                transform: canSubmit && !isCreatingReading ? "scale(1)" : "scale(0.975)",
+                boxShadow: canSubmit && !isCreatingReading
+                  ? "0 0 0 1px rgba(94,234,212,0.08), 0 0 22px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
+                  : "0 14px 28px rgba(0,0,0,0.56)",
+              }}
+            >
+              {buttonCopy}
+            </Button>
+          </div>
+
+          {/* ── ASK ANYTHING — flagship premium feature, intentionally separate from readings ── */}
+          <section className="mt-3 border-t border-white/[0.06] pt-4">
+            <button
+              type="button"
+              onClick={() => setShowJxl(true)}
+              className="ask-premium tap-fix relative flex h-[108px] w-full items-center rounded-[24px] px-5 text-left transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
+            >
+              <span className="ask-mic-halo mr-4 shrink-0">
+                <Mic className="h-[20px] w-[20px]" style={{ color: "rgba(207,250,254,0.98)" }} />
               </span>
-              <span className="text-slate-700">·</span>
-              <span className="flex items-center gap-1">
-                Today's Sky <ChevronRight className="h-3 w-3" />
+
+              <span className="min-w-0">
+                <span className="ask-title block text-[20px] font-semibold leading-6 tracking-[-0.01em]">
+                  Ask Anything
+                </span>
+                <span className="ask-subtitle mt-1 block text-[11px] leading-4">
+                  Real-time astrological guidance on your current situation
+                </span>
+                <span className="mt-1.5 block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-teal-200/85">
+                  Press &amp; hold · Speak what’s on your mind
+                </span>
               </span>
-            </p>
-          </motion.div>
-        )}
+            </button>
+          </section>
+
+
+        </motion.div>
       </div>
+
+      {/* ── JXL overlay (portaled to body) ── */}
+      {showJxl && typeof document !== "undefined" &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
+            <button
+              type="button"
+              onClick={() => setShowJxl(false)}
+              style={{
+                position: "fixed",
+                top: "calc(12px + env(safe-area-inset-top))",
+                left: "16px",
+                zIndex: 100,
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                background: "rgba(5,8,22,0.6)",
+                border: "1px solid rgba(148,163,184,0.2)",
+                borderRadius: "999px",
+                padding: "6px 12px 6px 8px",
+                color: "#cbd5e1",
+                fontSize: "13px",
+                cursor: "pointer",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <ChevronLeft size={16} />
+              Back
+            </button>
+            <JxlPanel isActive={showJxl} />
+          </div>,
+          document.body
+        )}
+
+      {/* ── Embedded Stripe checkout (portaled) ── */}
+      {clientSecret && typeof document !== "undefined" &&
+        createPortal(
+          <div style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(4,6,17,0.85)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "24px 16px calc(24px + env(safe-area-inset-bottom))" }}>
+            <div style={{ width: "100%", maxWidth: 480 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => { setClientSecret(null); setIsCreatingReading(false); }}
+                  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "#e2e8f0", borderRadius: 9999, width: 36, height: 36, cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+                  aria-label="Close checkout"
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+                <EmbeddedCheckoutProvider
+                  stripe={stripePromise}
+                  options={{
+                    clientSecret,
+                    onComplete: async () => {
+                      // Payment succeeded in-app. The Stripe webhook grants the
+                      // reading credit asynchronously, so poll until it lands
+                      // before generating — otherwise /api/readings sees 0 credits.
+                      for (let i = 0; i < 10; i++) {
+                        try {
+                          const res = await fetch("/api/user/credits", { cache: "no-store" });
+                          const d = await res.json();
+                          if (Number(d.credits ?? 0) >= 1 || d.isSubscribed === true) break;
+                        } catch { /* keep polling */ }
+                        await new Promise((r) => setTimeout(r, 800));
+                      }
+                      setClientSecret(null);
+                      router.push("/reading/preparing");
+                    },
+                  }}
+                >
+                  <EmbeddedCheckout />
+                </EmbeddedCheckoutProvider>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
-}
-
-/* Maps a sign to its ruling planet's name (for the profection glyph). */
-function SIGN_RULER_GLYPH(sign: string): string {
-  const rulers: Record<string, string> = {
-    Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
-    Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
-    Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
-  };
-  return rulers[sign] ?? "Sun";
 }
