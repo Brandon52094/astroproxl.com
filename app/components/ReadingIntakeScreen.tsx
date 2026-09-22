@@ -689,32 +689,43 @@ export default function ReadingIntakeScreen({
         .hero-shine > * { position: relative; z-index: 2; }
 
         /* ── Aurora OUTLINE glow — palette responds to selected reading ── */
+        /* Typed color properties let topic → default palette changes interpolate instead of snapping. */
+        @property --hero-c1-color { syntax: "<color>"; inherits: false; initial-value: rgb(52, 211, 153); }
+        @property --hero-c2-color { syntax: "<color>"; inherits: false; initial-value: rgb(34, 211, 238); }
+        @property --hero-c3-color { syntax: "<color>"; inherits: false; initial-value: rgb(56, 189, 248); }
+        @property --hero-c4-color { syntax: "<color>"; inherits: false; initial-value: rgb(168, 85, 247); }
+
         .hero-outline {
-          border: 1px solid rgba(var(--hero-c1), 0.9);
+          border: 1px solid color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
           box-shadow:
-            0 0 26px 2px rgba(var(--hero-c1), 0.70),
-            0 0 70px 10px rgba(var(--hero-c1), 0.42),
-            0 0 130px 26px rgba(var(--hero-c1), 0.26),
+            0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent),
+            0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent),
+            0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent),
             0 18px 44px rgba(0,0,0,0.72),
             0 36px 80px rgba(0,0,0,0.56);
+          transition:
+            --hero-c1-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
+            --hero-c2-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
+            --hero-c3-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
+            --hero-c4-color 900ms cubic-bezier(0.22, 1, 0.36, 1);
           animation: heroBorderGlow 9s ease-in-out infinite;
         }
         @keyframes heroBorderGlow {
           0%, 100% {
-            border-color: rgba(var(--hero-c1), 0.9);
-            box-shadow: 0 0 26px 2px rgba(var(--hero-c1), 0.70), 0 0 70px 10px rgba(var(--hero-c1), 0.42), 0 0 130px 26px rgba(var(--hero-c1), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           25% {
-            border-color: rgba(var(--hero-c2), 0.9);
-            box-shadow: 0 0 26px 2px rgba(var(--hero-c2), 0.70), 0 0 70px 10px rgba(var(--hero-c2), 0.42), 0 0 130px 26px rgba(var(--hero-c2), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: color-mix(in srgb, var(--hero-c2-color) 90%, transparent);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c2-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c2-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c2-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           50% {
-            border-color: rgba(var(--hero-c3), 0.9);
-            box-shadow: 0 0 26px 2px rgba(var(--hero-c3), 0.70), 0 0 70px 10px rgba(var(--hero-c3), 0.42), 0 0 130px 26px rgba(var(--hero-c3), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: color-mix(in srgb, var(--hero-c3-color) 90%, transparent);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c3-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c3-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c3-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           75% {
-            border-color: rgba(var(--hero-c4), 0.9);
-            box-shadow: 0 0 26px 2px rgba(var(--hero-c4), 0.70), 0 0 70px 10px rgba(var(--hero-c4), 0.42), 0 0 130px 26px rgba(var(--hero-c4), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: color-mix(in srgb, var(--hero-c4-color) 90%, transparent);
+            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c4-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c4-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c4-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
         }
 
@@ -857,8 +868,10 @@ export default function ReadingIntakeScreen({
           <button
             type="button"
             onClick={() => onSwipeLeft?.()}
-            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85"
+            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-700 ease-out"
             style={{
+              opacity: selectedArea ? 0.28 : 1,
+              filter: selectedArea ? "brightness(0.62)" : "brightness(1)",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
@@ -868,11 +881,14 @@ export default function ReadingIntakeScreen({
           {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-[18px] pt-0">
             <div
-              className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center"
+              className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center transition-[opacity,filter] duration-700 ease-out"
               style={{
-                "--hero-c1": heroPalette[0],
-                "--hero-c2": heroPalette[1],
-                "--hero-c3": heroPalette[2],
+                opacity: selectedArea ? 0.56 : 1,
+                filter: selectedArea ? "brightness(0.66) saturate(0.78)" : "brightness(1) saturate(1)",
+                "--hero-c1-color": `rgb(${heroPalette[0]})`,
+                "--hero-c2-color": `rgb(${heroPalette[1]})`,
+                "--hero-c3-color": `rgb(${heroPalette[2]})`,
+                "--hero-c4-color": `rgb(${heroPalette[3]})`,
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
@@ -880,14 +896,14 @@ export default function ReadingIntakeScreen({
                 {/* Hero statement — slightly larger, same locked 236px shell */}
                 <div className="absolute left-1/2 top-[28px] w-fit max-w-full -translate-x-1/2 text-left">
                   <p
-                    className="mb-[3px] pl-[2px] text-[14px] font-medium uppercase tracking-[0.22em] text-slate-200/76"
+                    className="mb-[3px] pl-[2px] text-[14.5px] font-medium uppercase tracking-[0.22em] text-slate-200/76"
                     style={{ textShadow: "0 3px 13px rgba(0,0,0,0.92)" }}
                   >
                     Your
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-[36.5px] font-semibold leading-[0.94] tracking-[-0.048em] text-white"
+                    className="whitespace-nowrap text-[38px] font-semibold leading-[0.94] tracking-[-0.048em] text-white"
                     style={{
                       textShadow:
                         "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
@@ -899,7 +915,7 @@ export default function ReadingIntakeScreen({
 
                 {/* Product identity — supportive, not competing with the H1 */}
                 <p
-                  className="absolute inset-x-0 top-[95px] text-[9.5px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
+                  className="absolute inset-x-0 top-[96px] text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
                   style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                 >
                   <span className="text-indigo-200/72">AstroProXL</span>
@@ -908,7 +924,7 @@ export default function ReadingIntakeScreen({
                 </p>
 
                 {/* Four-slide information display: Birth Chart → Today → Mercury → Elements */}
-                <div className="absolute inset-x-0 top-[126px] h-[91px]">
+                <div className="absolute inset-x-0 top-[133px] h-[91px]">
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                       key={heroInfoMode}
@@ -1032,7 +1048,12 @@ export default function ReadingIntakeScreen({
 
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
-          <div className="relative mb-[14px] h-[26px] text-center">
+          <div className="relative mb-[14px] h-[26px] text-center transition-[opacity,filter] duration-700 ease-out"
+            style={{
+              opacity: selectedArea ? 0.34 : 1,
+              filter: selectedArea ? "brightness(0.66)" : "brightness(1)",
+            }}
+          >
             <AnimatePresence mode="sync" initial={false}>
               <motion.p
                 key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
@@ -1064,19 +1085,21 @@ export default function ReadingIntakeScreen({
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
                   aria-label={area.title}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform,opacity,filter] duration-[850ms] ease-out"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
                     boxShadow: isSelected
-                      ? `0 0 22px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
-                      : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                      ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
+                      : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
+                    opacity: selectedArea && !isSelected ? 0.30 : 1,
+                    filter: selectedArea && !isSelected ? "brightness(0.58) saturate(0.72)" : "brightness(1) saturate(1)",
                   }}
                 >
                   {Icon ? (
                     <Icon
-                      className="h-7 w-7 transition-[color,filter,transform] duration-500 ease-out"
+                      className="h-7 w-7 transition-[color,filter,transform] duration-[850ms] ease-out"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.68)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
@@ -1086,7 +1109,7 @@ export default function ReadingIntakeScreen({
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-500 ease-out"
+                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-[850ms] ease-out"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.72)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
