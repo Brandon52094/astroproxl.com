@@ -763,24 +763,29 @@ export default function ReadingIntakeScreen({
                   </AnimatePresence>
                 </div>
 
-                {/* Hero statement — this is what the product does */}
-                <p
-                  className="absolute inset-x-0 top-[48px] text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/58"
-                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
-                >
-                  Your
-                </p>
+                {/* Hero statement — fixed-width lockup so desktop never inflates past the card */}
+                <div className="absolute left-1/2 top-[46px] w-fit max-w-full -translate-x-1/2 text-left">
+                  <p
+                    className="mb-[3px] pl-[2px] text-[13px] font-medium uppercase tracking-[0.22em] text-slate-200/72"
+                    style={{ textShadow: "0 3px 12px rgba(0,0,0,0.88)" }}
+                  >
+                    Your
+                  </p>
 
-                <h1
-                  className="absolute inset-x-0 top-[63px] whitespace-nowrap text-[35px] font-semibold leading-none tracking-[-0.04em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.88)] sm:text-[46px]"
-                  style={{ textShadow: "0 0 30px rgba(148,163,184,0.20)" }}
-                >
-                  Astrological Predictions
-                </h1>
+                  <h1
+                    className="whitespace-nowrap text-[35px] font-semibold leading-[0.94] tracking-[-0.045em] text-white"
+                    style={{
+                      textShadow:
+                        "0 5px 5px rgba(0,0,0,0.88), 0 12px 22px rgba(0,0,0,0.72), 0 0 24px rgba(148,163,184,0.16)",
+                    }}
+                  >
+                    Astrological Predictions
+                  </h1>
+                </div>
 
                 {/* Product identity — supportive, not competing with the H1 */}
                 <p
-                  className="absolute inset-x-0 top-[108px] text-[9.5px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
+                  className="absolute inset-x-0 top-[111px] text-[9.5px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
                   style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                 >
                   <span className="text-indigo-200/72">AstroProXL</span>
@@ -805,49 +810,23 @@ export default function ReadingIntakeScreen({
           </section>
 
           {/* ── Dynamic reading header ──
-              Before selection: "Select A Reading".
-              After selection: reuse this exact space for the reading context. */}
+              The heading keeps one visual treatment; selection only changes the word. */}
           <div className="relative mb-[14px] h-[26px] text-center">
-            {/* Keep both states in the same fixed-height layer so the swap never nudges layout.
-                mode=sync lets the old copy fade out while the new copy fades in. */}
             <AnimatePresence mode="sync" initial={false}>
-              {selectedAreaConfig ? (
-                <motion.p
-                  key={`reading-context-${selectedAreaConfig.id}`}
-                  initial={{ opacity: 0, y: 3, filter: "blur(2px)" }}
-                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                  exit={{ opacity: 0, y: -2, filter: "blur(1.5px)" }}
-                  transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center whitespace-nowrap text-[12px] leading-[20px] text-slate-300/80 sm:text-[12.5px]"
-                  style={{
-                    textShadow: "0 3px 14px rgba(0,0,0,0.92)",
-                  }}
-                >
-                  <span
-                    className="text-[12.5px] font-semibold sm:text-[13px]"
-                    style={{ color: getAreaColors(selectedAreaConfig.id).text }}
-                  >
-                    {selectedAreaConfig.title}
-                  </span>
-                  <span className="mx-2 text-slate-600">·</span>
-                  <span>{selectedAreaConfig.description}</span>
-                </motion.p>
-              ) : (
-                <motion.p
-                  key="select-reading"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0, y: -2 }}
-                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
-                  style={{
-                    textShadow:
-                      "0 3px 14px rgba(0,0,0,0.98), 0 0 18px rgba(148,163,184,0.24)",
-                  }}
-                >
-                  Select A Reading
-                </motion.p>
-              )}
+              <motion.p
+                key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
+                initial={{ opacity: 0, y: 2 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -2 }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+                style={{
+                  textShadow:
+                    "0 3px 14px rgba(0,0,0,0.98), 0 0 18px rgba(148,163,184,0.24)",
+                }}
+              >
+                {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
+              </motion.p>
             </AnimatePresence>
           </div>
 
