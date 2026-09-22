@@ -341,37 +341,24 @@ export default function ReadingIntakeScreen({
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
   const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
 
-  /* ── Hero fade line — rotating chart facts ───────────────────────── */
+  /* ── Hero anchor line — current sky only (daily-news behavior) ───── */
   const facts = useMemo(() => {
     const out: string[] = [];
     const find = (arr: Placement[], n: string) => arr.find((p) => p.name === n);
 
-    const sun = find(natal, "Sun");
-    const moon = find(natal, "Moon");
-    const rising = find(natal, "Ascendant");
-    if (sun?.sign && moon?.sign && rising?.sign) {
-      out.push(`${sun.sign} Sun · ${moon.sign} Moon · ${rising.sign} Rising`);
-    }
-
-    if (profection?.activatedSign) {
-      const house =
-        typeof profection.activatedHouse === "number"
-          ? profection.activatedHouse
-          : profection.profectionYear;
-      out.push(`${profection.activatedSign} Year · ${ordinal(house)} House`);
-    }
+    // Keep this line focused on what is happening now. Natal Big Three and
+    // annual profection context belong elsewhere in the hero/product.
+    const tMoon = find(transits, "Moon");
+    if (tMoon?.sign) out.push(`Moon in ${tMoon.sign}${tMoon.degree ? ` · ${tMoon.degree}` : ""}`);
 
     const tSun = find(transits, "Sun");
     if (tSun?.sign) out.push(`Sun in ${tSun.sign}${tSun.degree ? ` · ${tSun.degree}` : ""}`);
 
-    const tMoon = find(transits, "Moon");
-    if (tMoon?.sign) out.push(`Moon in ${tMoon.sign}${tMoon.degree ? ` · ${tMoon.degree}` : ""}`);
-
     const merc = find(transits, "Mercury");
     if (merc) out.push(merc.isRetrograde ? "Mercury Retrograde" : "Mercury Direct");
 
-    return out.length ? out : ["Now You'll Know."];
-  }, [natal, profection, transits]);
+    return out.length ? out : ["Current sky updating…"];
+  }, [transits]);
 
   // Keep the index in range whenever the fact set changes.
   useEffect(() => { setFactIndex(0); }, [facts.length]);
@@ -753,50 +740,14 @@ export default function ReadingIntakeScreen({
               } as React.CSSProperties}
             >
               <div className="relative z-10 mx-auto h-full max-w-[560px]">
-                {/* Brand stamp — hugs the top edge */}
-                <div className="absolute left-1/2 top-[10px] inline-flex -translate-x-1/2 items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-                    AstroProXL
-                  </span>
-                </div>
-
-                {/* Quiet product identity — intentionally subordinate to the headline */}
-                <p
-                  className="absolute inset-x-0 top-[48px] text-[9.5px] font-medium uppercase tracking-[0.30em] text-slate-300/48 sm:text-[10px]"
-                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
-                >
-                  The Astrology Engine
-                </p>
-
-                {/* Hero headline — the visual center and strongest statement */}
-                <h1
-                  className="absolute inset-x-0 top-1/2 -translate-y-1/2 whitespace-nowrap text-[32px] font-semibold leading-none tracking-[-0.035em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[44px]"
-                  style={{ textShadow: "0 0 28px rgba(148,163,184,0.17)" }}
-                >
-                  Astrological Predictions
-                </h1>
-
-                {/* Big Three placeholders — centered between headline and rotating context */}
-                <div
-                  className="absolute inset-x-0 top-[151px] flex items-center justify-center gap-6 sm:gap-7"
-                  aria-hidden="true"
-                >
-                  {[0, 1, 2].map((index) => (
-                    <span
-                      key={index}
-                      className="block h-[52px] w-[52px] rounded-full border border-slate-200/30 bg-white/[0.018] shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.05)] sm:h-[56px] sm:w-[56px]"
-                    />
-                  ))}
-                </div>
-
-                {/* Rotating context — hugs the lower edge without changing hero height */}
+                {/* Daily anchor — current sky, no extra label */}
                 <div
                   data-no-swipe
                   onPointerDown={() => setFactPaused(true)}
                   onPointerUp={() => setFactPaused(false)}
                   onPointerLeave={() => setFactPaused(false)}
                   onPointerCancel={() => setFactPaused(false)}
-                  className="absolute inset-x-0 bottom-[9px] mx-auto h-5 max-w-[34ch] select-none"
+                  className="absolute inset-x-0 top-[13px] mx-auto h-5 max-w-[34ch] select-none"
                 >
                   <AnimatePresence mode="wait">
                     <motion.p
@@ -810,6 +761,44 @@ export default function ReadingIntakeScreen({
                       {facts[factIndex] ?? facts[0]}
                     </motion.p>
                   </AnimatePresence>
+                </div>
+
+                {/* Hero statement — this is what the product does */}
+                <p
+                  className="absolute inset-x-0 top-[48px] text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/58"
+                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
+                >
+                  Your
+                </p>
+
+                <h1
+                  className="absolute inset-x-0 top-[63px] whitespace-nowrap text-[35px] font-semibold leading-none tracking-[-0.04em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.88)] sm:text-[46px]"
+                  style={{ textShadow: "0 0 30px rgba(148,163,184,0.20)" }}
+                >
+                  Astrological Predictions
+                </h1>
+
+                {/* Product identity — supportive, not competing with the H1 */}
+                <p
+                  className="absolute inset-x-0 top-[108px] text-[9.5px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
+                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
+                >
+                  <span className="text-indigo-200/72">AstroProXL</span>
+                  <span className="mx-2 text-slate-500/70">|</span>
+                  <span>The Astrology Engine</span>
+                </p>
+
+                {/* Big Three placeholders — large, permanent personal layer */}
+                <div
+                  className="absolute inset-x-0 top-[139px] flex items-center justify-center gap-7 sm:gap-8"
+                  aria-hidden="true"
+                >
+                  {[0, 1, 2].map((index) => (
+                    <span
+                      key={index}
+                      className="block h-[58px] w-[58px] rounded-full border border-slate-200/30 bg-white/[0.018] shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.05)] sm:h-[62px] sm:w-[62px]"
+                    />
+                  ))}
                 </div>
               </div>
             </div>
