@@ -1,13 +1,9 @@
-"use client";
+ "use client";
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Heart,
-  Briefcase,
-  Wallet,
-  Eye,
   Mic,
   Crown,
   ChevronLeft,
@@ -55,7 +51,7 @@ const AREAS = [
     id: "love",
     title: "Love",
     description: "Relationships, romance, or emotional patterns",
-    icon: Heart,
+    emoji: "❤️",
     placeholder: "Ask something specific about love, timing, or where this connection is headed.",
     defaultQuestion: "What is coming for me in love over the next 30–45 days?",
   },
@@ -63,7 +59,7 @@ const AREAS = [
     id: "money",
     title: "Money",
     description: "Income, stability, opportunities, and financial timing",
-    icon: Wallet,
+    emoji: "💰",
     placeholder: "Ask something specific about money, stability, or the opportunities opening next.",
     defaultQuestion: "What is coming for me with money over the next 30–45 days?",
   },
@@ -71,7 +67,7 @@ const AREAS = [
     id: "career",
     title: "Career",
     description: "Work, recognition, direction, and next steps",
-    icon: Briefcase,
+    emoji: "💼",
     placeholder: "Ask something specific about work, momentum, or the direction your career is moving.",
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
@@ -79,7 +75,7 @@ const AREAS = [
     id: "other",
     title: "What's Coming",
     description: "What to expect in the next 30–45 days.",
-    icon: Eye,
+    emoji: "30–45",
     placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
@@ -143,6 +139,93 @@ interface Placement {
   degree?: string;
   house?: number;
   isRetrograde?: boolean;
+}
+
+interface MoonPhaseData {
+  phaseName?: string;
+  illuminationPercent: number;
+  nextEventName?: "New Moon" | "Full Moon";
+  daysUntilNextEvent?: number;
+  moonSign?: string;
+  moonDegree?: string;
+}
+
+type ElementName = "Earth" | "Fire" | "Water" | "Air";
+
+const SIGN_ELEMENTS: Record<string, ElementName> = {
+  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
+  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
+  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
+  Gemini: "Air", Libra: "Air", Aquarius: "Air",
+};
+
+// Keep the intake hero aligned with the elemental language already used by BirthChartPanel.
+const HERO_ELEMENT_COLORS: Record<ElementName, { text: string; bar: string; glow: string }> = {
+  Earth: { text: "#6EE7B7", bar: "#34D399", glow: "rgba(16,185,129,0.30)" },
+  Fire:  { text: "#FDBA74", bar: "#F97316", glow: "rgba(239,68,68,0.32)" },
+  Water: { text: "#93C5FD", bar: "#60A5FA", glow: "rgba(59,130,246,0.30)" },
+  Air:   { text: "#BAE6FD", bar: "#7DD3FC", glow: "rgba(125,211,252,0.26)" },
+};
+
+const HERO_ELEMENT_ORDER: ElementName[] = ["Earth", "Fire", "Water", "Air"];
+
+function MoonDisc({ illumination, waxing, size = 58 }: { illumination: number; waxing: boolean; size?: number }) {
+  const f = Math.min(1, Math.max(0, illumination / 100));
+  const r = 46;
+  const c = 50;
+  const top = `${c} ${c - r}`;
+  const bottom = `${c} ${c + r}`;
+  const rx = Math.abs(1 - 2 * f) * r;
+  const outerSweep = waxing ? 1 : 0;
+  const terminatorSweep = f >= 0.5 ? (waxing ? 1 : 0) : (waxing ? 0 : 1);
+  const litPath = `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+      <defs>
+        <radialGradient id="intakeMoonLit" cx="38%" cy="34%" r="75%">
+          <stop offset="0%" stopColor="#F1EFF7" />
+          <stop offset="55%" stopColor="#C9C7D6" />
+          <stop offset="100%" stopColor="#9A98AC" />
+        </radialGradient>
+      </defs>
+      <circle cx={c} cy={c} r={r} fill="#151A30" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+      {f > 0.995 ? (
+        <circle cx={c} cy={c} r={r} fill="url(#intakeMoonLit)" />
+      ) : f > 0.005 ? (
+        <path d={litPath} fill="url(#intakeMoonLit)" />
+      ) : null}
+      <circle cx="38" cy="40" r="7" fill="rgba(0,0,0,0.10)" />
+      <circle cx="60" cy="58" r="5" fill="rgba(0,0,0,0.09)" />
+      <circle cx="52" cy="30" r="3.5" fill="rgba(0,0,0,0.08)" />
+      <circle cx="42" cy="66" r="4" fill="rgba(0,0,0,0.08)" />
+    </svg>
+  );
+}
+
+function SunDisc({ size = 58 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+      <defs>
+        <radialGradient id="intakeSunCore" cx="38%" cy="34%" r="72%">
+          <stop offset="0%" stopColor="#FFFCE8" />
+          <stop offset="48%" stopColor="#FDE68A" />
+          <stop offset="78%" stopColor="#F59E0B" />
+          <stop offset="100%" stopColor="#D97706" />
+        </radialGradient>
+        <radialGradient id="intakeSunHalo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(253,230,138,0.34)" />
+          <stop offset="68%" stopColor="rgba(245,158,11,0.12)" />
+          <stop offset="100%" stopColor="rgba(245,158,11,0)" />
+        </radialGradient>
+      </defs>
+      <circle cx="50" cy="50" r="49" fill="url(#intakeSunHalo)" />
+      <circle cx="50" cy="50" r="35" fill="url(#intakeSunCore)" stroke="rgba(255,248,214,0.45)" strokeWidth="1" />
+      <circle cx="40" cy="38" r="5.5" fill="rgba(255,255,255,0.12)" />
+      <circle cx="61" cy="58" r="4" fill="rgba(180,83,9,0.10)" />
+      <circle cx="56" cy="31" r="2.8" fill="rgba(255,255,255,0.10)" />
+    </svg>
+  );
 }
 
 type ThemeName = "cosmic";
@@ -219,8 +302,9 @@ export default function ReadingIntakeScreen({
   // Chart-derived data for the hero information circles.
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
-  // Alternate between the user's Big Three and the current Sun/Moon.
-  const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky">("personal");
+  const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
+  // Four compact information slides share the same locked hero stage.
+  const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky" | "mercury" | "elements">("personal");
 
   // If a reading is selected but the user does not continue into context or Begin Reading,
   // gently return the interface to its neutral state.
@@ -318,6 +402,7 @@ export default function ReadingIntakeScreen({
     const data = chart?.chartData as unknown as {
       tropical?: { planets?: unknown; angles?: unknown };
       transits?: unknown;
+      moonPhase?: MoonPhaseData;
     } | undefined;
 
     if (!data) return;
@@ -327,6 +412,7 @@ export default function ReadingIntakeScreen({
       ...normalizePlacements(data.tropical?.angles),
     ]);
     setTransits(normalizePlacements(data.transits));
+    setMoonPhase(data.moonPhase ?? null);
   }, [chartStatus]);
 
   const fetchInFlight = useRef(false);
@@ -367,8 +453,8 @@ export default function ReadingIntakeScreen({
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
   const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
 
-  /* ── Hero information — one intentional transition system ───────── */
-  const heroInfo = useMemo(() => {
+  /* ── Hero information — four quiet slides, one fixed stage ───────── */
+  const heroData = useMemo(() => {
     const find = (arr: Placement[], names: string[]) =>
       arr.find((p) =>
         typeof p?.name === "string" &&
@@ -380,6 +466,14 @@ export default function ReadingIntakeScreen({
     const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
     const currentSun = find(transits, ["Sun"]);
     const currentMoon = find(transits, ["Moon"]);
+    const mercury = find(transits, ["Mercury"]);
+
+    const counts: Record<ElementName, number> = { Earth: 0, Fire: 0, Water: 0, Air: 0 };
+    natal.forEach((placement) => {
+      const element = SIGN_ELEMENTS[placement.sign];
+      if (element) counts[element] += 1;
+    });
+    const maxElementCount = Math.max(1, ...Object.values(counts));
 
     return {
       personal: [
@@ -387,17 +481,26 @@ export default function ReadingIntakeScreen({
         { role: "Moon", sign: natalMoon?.sign ?? "—" },
         { role: "Rising", sign: natalRising?.sign ?? "—" },
       ],
-      sky: [
-        { role: "Sun Now", sign: currentSun?.sign ?? "—" },
-        { role: "Moon Now", sign: currentMoon?.sign ?? "—" },
-      ],
+      currentSun,
+      currentMoon,
+      mercury,
+      counts,
+      maxElementCount,
     };
   }, [natal, transits]);
 
+  const moonWaxing = moonPhase?.nextEventName === "Full Moon";
+
   useEffect(() => {
+    const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
+      "personal",
+      "sky",
+      "mercury",
+      "elements",
+    ];
     const id = window.setInterval(() => {
-      setHeroInfoMode((mode) => (mode === "personal" ? "sky" : "personal"));
-    }, 7000);
+      setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
+    }, 4800);
     return () => window.clearInterval(id);
   }, []);
 
@@ -795,30 +898,114 @@ export default function ReadingIntakeScreen({
                   <span>The Astrology Engine</span>
                 </p>
 
-                {/* One information system: Big Three ↔ current Sun/Moon */}
-                <div className="absolute inset-x-0 top-[125px] h-[76px]">
+                {/* Four-slide information display: Birth Chart → Today → Mercury → Elements */}
+                <div className="absolute inset-x-0 top-[119px] h-[91px]">
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                       key={heroInfoMode}
-                      initial={{ opacity: 0, y: 5, filter: "blur(3px)" }}
+                      initial={{ opacity: 0, y: 4, filter: "blur(3px)" }}
                       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                      exit={{ opacity: 0, y: -4, filter: "blur(3px)" }}
+                      exit={{ opacity: 0, y: -3, filter: "blur(3px)" }}
                       transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
-                      className="absolute inset-0 flex items-center justify-center gap-7 sm:gap-8"
+                      className="absolute inset-0 flex items-center justify-center"
                     >
-                      {heroInfo[heroInfoMode].map((item) => (
-                        <div
-                          key={`${heroInfoMode}-${item.role}`}
-                          className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border border-slate-200/30 bg-white/[0.018] px-1 shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.06)]"
-                        >
-                          <span className="max-w-full truncate text-[10.5px] font-semibold leading-none text-slate-100/92">
-                            {item.sign}
+                      {heroInfoMode === "personal" && (
+                        <div className="flex items-center justify-center gap-7 sm:gap-8">
+                          {heroData.personal.map((item) => (
+                            <div
+                              key={`personal-${item.role}`}
+                              className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border border-slate-200/30 bg-white/[0.018] px-1 shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.06)]"
+                            >
+                              <span className="max-w-full truncate text-[10.5px] font-semibold leading-none text-slate-100/92">
+                                {item.sign}
+                              </span>
+                              <span className="mt-[5px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
+                                {item.role}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {heroInfoMode === "sky" && (
+                        <div className="flex items-center justify-center gap-12">
+                          <div className="flex w-[78px] flex-col items-center">
+                            <div style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.20))" }}>
+                              <SunDisc size={62} />
+                            </div>
+                            <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
+                              {heroData.currentSun?.sign ?? "—"}
+                            </span>
+                            <span className="mt-[3px] text-[6.5px] font-medium uppercase tracking-[0.15em] text-slate-400/65">Sun</span>
+                          </div>
+
+                          <div className="flex w-[78px] flex-col items-center">
+                            <div style={{ filter: "drop-shadow(0 0 18px rgba(226,223,240,0.16))" }}>
+                              <MoonDisc
+                                illumination={moonPhase?.illuminationPercent ?? 50}
+                                waxing={moonWaxing}
+                                size={62}
+                              />
+                            </div>
+                            <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
+                              {moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}
+                            </span>
+                            <span className="mt-[3px] text-[6.5px] font-medium uppercase tracking-[0.15em] text-slate-400/65">Moon</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {heroInfoMode === "mercury" && (
+                        <div className="flex flex-col items-center justify-center text-center">
+                          <span className="text-[9px] font-medium uppercase tracking-[0.28em] text-slate-400/68">Mercury</span>
+                          <span
+                            className="mt-1 text-[25px] font-semibold uppercase leading-none tracking-[-0.025em] text-white"
+                            style={{ textShadow: "0 5px 14px rgba(0,0,0,0.88), 0 0 18px rgba(148,163,184,0.12)" }}
+                          >
+                            {heroData.mercury?.isRetrograde ? "Retrograde ℞" : "Direct"}
                           </span>
-                          <span className="mt-[5px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
-                            {item.role}
+                          <span className="mt-2 text-[8px] font-medium uppercase tracking-[0.17em] text-slate-400/62">
+                            {heroData.mercury?.sign ?? "Current status"}
                           </span>
                         </div>
-                      ))}
+                      )}
+
+                      {heroInfoMode === "elements" && (
+                        <div className="flex h-[84px] items-end justify-center gap-[18px] sm:gap-5">
+                          {HERO_ELEMENT_ORDER.map((element) => {
+                            const count = heroData.counts[element];
+                            const ratio = count / heroData.maxElementCount;
+                            const height = count === 0 ? 5 : 12 + ratio * 38;
+                            const colors = HERO_ELEMENT_COLORS[element];
+                            return (
+                              <div key={element} className="flex w-[38px] flex-col items-center justify-end">
+                                <div className="relative flex h-[52px] w-full items-end justify-center">
+                                  <motion.div
+                                    initial={{ height: 4, opacity: 0.4 }}
+                                    animate={{ height, opacity: 0.95 }}
+                                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                                    className="w-[5px] rounded-full"
+                                    style={{
+                                      backgroundColor: colors.bar,
+                                      boxShadow: `0 0 10px ${colors.glow}`,
+                                    }}
+                                  />
+                                  <span
+                                    className="absolute bottom-[-3px] h-[6px] w-[6px] rounded-full"
+                                    style={{ backgroundColor: colors.bar, boxShadow: `0 0 8px ${colors.glow}` }}
+                                  />
+                                </div>
+                                <span
+                                  className="mt-[7px] text-[6.5px] font-semibold uppercase tracking-[0.10em]"
+                                  style={{ color: colors.text }}
+                                >
+                                  {element}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </motion.div>
                   </AnimatePresence>
                 </div>
@@ -850,7 +1037,6 @@ export default function ReadingIntakeScreen({
           {/* ── READING GRID (2×2) ── */}
           <section className="grid grid-cols-2 gap-x-3 gap-y-4">
             {AREAS.map((area) => {
-              const Icon = area.icon;
               const isSelected = selectedArea === area.id;
               const c = getAreaColors(area.id);
               return (
@@ -859,7 +1045,8 @@ export default function ReadingIntakeScreen({
                   type="button"
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
+                  aria-label={area.title}
+                  className="tap-fix flex h-[84px] items-center justify-center rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
@@ -869,19 +1056,19 @@ export default function ReadingIntakeScreen({
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
                   }}
                 >
-                  <Icon
-                    className="h-6 w-6 transition-[color,filter,transform] duration-500 ease-out"
-                    style={{
-                      color: isSelected ? c.text : "rgba(203,213,225,0.68)",
-                      filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
-                      transform: isSelected ? "scale(1.035)" : "scale(1)",
-                    }}
-                  />
                   <span
-                    className="text-[13px] font-semibold"
-                    style={{ color: isSelected ? "#ffffff" : "rgba(226,232,240,0.9)" }}
+                    aria-hidden="true"
+                    className={cn(
+                      "leading-none transition-[filter,transform,opacity] duration-500 ease-out",
+                      area.id === "other" ? "text-[18px] font-semibold tracking-[-0.02em]" : "text-[32px]"
+                    )}
+                    style={{
+                      filter: isSelected ? `drop-shadow(0 0 9px ${c.glow})` : "drop-shadow(0 4px 8px rgba(0,0,0,0.42))",
+                      transform: isSelected ? "scale(1.07)" : "scale(1)",
+                      opacity: isSelected ? 1 : 0.9,
+                    }}
                   >
-                    {area.title}
+                    {area.emoji}
                   </span>
                 </button>
               );
