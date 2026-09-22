@@ -75,7 +75,7 @@ const AREAS = [
     id: "other",
     title: "What's Coming",
     description: "What to expect in the next 30–45 days.",
-    emoji: "🔮",
+    emoji: "30–45",
     placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
@@ -500,7 +500,7 @@ export default function ReadingIntakeScreen({
     ];
     const id = window.setInterval(() => {
       setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
-    }, 6500);
+    }, 4800);
     return () => window.clearInterval(id);
   }, []);
 
@@ -931,7 +931,7 @@ export default function ReadingIntakeScreen({
                         <div className="flex items-center justify-center gap-12">
                           <div className="flex w-[78px] flex-col items-center">
                             <div style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.20))" }}>
-                              <SunDisc size={58} />
+                              <SunDisc size={62} />
                             </div>
                             <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
                               {heroData.currentSun?.sign ?? "—"}
@@ -944,7 +944,7 @@ export default function ReadingIntakeScreen({
                               <MoonDisc
                                 illumination={moonPhase?.illuminationPercent ?? 50}
                                 waxing={moonWaxing}
-                                size={58}
+                                size={62}
                               />
                             </div>
                             <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
@@ -1058,7 +1058,10 @@ export default function ReadingIntakeScreen({
                 >
                   <span
                     aria-hidden="true"
-                    className="text-[32px] leading-none transition-[filter,transform,opacity] duration-500 ease-out"
+                    className={cn(
+                      "leading-none transition-[filter,transform,opacity] duration-500 ease-out",
+                      area.id === "other" ? "text-[18px] font-semibold tracking-[-0.02em]" : "text-[32px]"
+                    )}
                     style={{
                       filter: isSelected ? `drop-shadow(0 0 9px ${c.glow})` : "drop-shadow(0 4px 8px rgba(0,0,0,0.42))",
                       transform: isSelected ? "scale(1.07)" : "scale(1)",
