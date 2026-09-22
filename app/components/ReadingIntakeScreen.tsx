@@ -1,9 +1,12 @@
- "use client";
+"use client";
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Heart,
+  Briefcase,
+  Wallet,
   Mic,
   Crown,
   ChevronLeft,
@@ -51,7 +54,7 @@ const AREAS = [
     id: "love",
     title: "Love",
     description: "Relationships, romance, or emotional patterns",
-    emoji: "❤️",
+    icon: Heart,
     placeholder: "Ask something specific about love, timing, or where this connection is headed.",
     defaultQuestion: "What is coming for me in love over the next 30–45 days?",
   },
@@ -59,7 +62,7 @@ const AREAS = [
     id: "money",
     title: "Money",
     description: "Income, stability, opportunities, and financial timing",
-    emoji: "💰",
+    icon: Wallet,
     placeholder: "Ask something specific about money, stability, or the opportunities opening next.",
     defaultQuestion: "What is coming for me with money over the next 30–45 days?",
   },
@@ -67,7 +70,7 @@ const AREAS = [
     id: "career",
     title: "Career",
     description: "Work, recognition, direction, and next steps",
-    emoji: "💼",
+    icon: Briefcase,
     placeholder: "Ask something specific about work, momentum, or the direction your career is moving.",
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
@@ -75,7 +78,8 @@ const AREAS = [
     id: "other",
     title: "What's Coming",
     description: "What to expect in the next 30–45 days.",
-    emoji: "30–45",
+    icon: null,
+    marker: "30–45",
     placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
@@ -1034,9 +1038,10 @@ export default function ReadingIntakeScreen({
             </AnimatePresence>
           </div>
 
-          {/* ── READING GRID (2×2) ── */}
+          {/* ── READING GRID (2×2) — original line-icon treatment restored ── */}
           <section className="grid grid-cols-2 gap-x-3 gap-y-4">
             {AREAS.map((area) => {
+              const Icon = area.icon;
               const isSelected = selectedArea === area.id;
               const c = getAreaColors(area.id);
               return (
@@ -1046,7 +1051,7 @@ export default function ReadingIntakeScreen({
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
                   aria-label={area.title}
-                  className="tap-fix flex h-[84px] items-center justify-center rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
@@ -1056,19 +1061,33 @@ export default function ReadingIntakeScreen({
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
                   }}
                 >
+                  {Icon ? (
+                    <Icon
+                      className="h-6 w-6 transition-[color,filter,transform] duration-500 ease-out"
+                      style={{
+                        color: isSelected ? c.text : "rgba(203,213,225,0.68)",
+                        filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
+                        transform: isSelected ? "scale(1.035)" : "scale(1)",
+                      }}
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="text-[17px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-500 ease-out"
+                      style={{
+                        color: isSelected ? c.text : "rgba(203,213,225,0.72)",
+                        filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
+                        transform: isSelected ? "scale(1.035)" : "scale(1)",
+                      }}
+                    >
+                      {area.marker}
+                    </span>
+                  )}
                   <span
-                    aria-hidden="true"
-                    className={cn(
-                      "leading-none transition-[filter,transform,opacity] duration-500 ease-out",
-                      area.id === "other" ? "text-[18px] font-semibold tracking-[-0.02em]" : "text-[32px]"
-                    )}
-                    style={{
-                      filter: isSelected ? `drop-shadow(0 0 9px ${c.glow})` : "drop-shadow(0 4px 8px rgba(0,0,0,0.42))",
-                      transform: isSelected ? "scale(1.07)" : "scale(1)",
-                      opacity: isSelected ? 1 : 0.9,
-                    }}
+                    className="text-[13px] font-semibold"
+                    style={{ color: isSelected ? "#ffffff" : "rgba(226,232,240,0.9)" }}
                   >
-                    {area.emoji}
+                    {area.title}
                   </span>
                 </button>
               );
