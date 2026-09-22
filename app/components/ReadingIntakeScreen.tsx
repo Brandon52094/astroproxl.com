@@ -50,12 +50,6 @@ function trackTtq(event: string, params?: Record<string, unknown>) {
   }
 }
 
-function ordinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
-}
-
 const AREAS = [
   {
     id: "love",
@@ -92,7 +86,7 @@ const AREAS = [
 ];
 
 // Hero glow palettes respond to the selected reading topic.
-// Gold is intentionally excluded so it remains reserved for subscriber-only UI.
+// Reading-topic glow palettes stay separate from the white/glowy Astro Plus language.
 const HERO_PALETTES: Record<string, [string, string, string, string]> = {
   default: [
     "52, 211, 153",  // emerald
@@ -142,19 +136,13 @@ interface ReadingIntakeScreenProps {
   onSwipeLeft?: () => void;
 }
 
-/* ── Chart shapes we read for the fade line ────────────────────────── */
+/* ── Chart shapes used by the hero information system ─────────────── */
 interface Placement {
   name: string;
   sign: string;
   degree?: string;
   house?: number;
   isRetrograde?: boolean;
-}
-interface Profection {
-  profectionYear: number;
-  age: number;
-  activatedSign: string;
-  activatedHouse?: number;
 }
 
 type ThemeName = "cosmic";
@@ -216,6 +204,7 @@ export default function ReadingIntakeScreen({
   const router = useRouter();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
+  const [contextFocused, setContextFocused] = useState(false);
   const [isCreatingReading, setIsCreatingReading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [chartStatus, setChartStatus] = useState<"checking" | "ready" | "recalculating" | "error">("checking");
@@ -227,14 +216,11 @@ export default function ReadingIntakeScreen({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
 
-  // Chart-derived data for the hero fade line.
+  // Chart-derived data for the hero information circles.
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
-  const [profection, setProfection] = useState<Profection | null>(null);
-
-  // Fade line state.
-  const [factIndex, setFactIndex] = useState(0);
-  const [factPaused, setFactPaused] = useState(false);
+  // Alternate between the user's Big Three and the current Sun/Moon.
+  const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky">("personal");
 
   // If a reading is selected but the user does not continue into context or Begin Reading,
   // gently return the interface to its neutral state.
@@ -288,18 +274,16 @@ export default function ReadingIntakeScreen({
     ensureChart();
   }, [router]);
 
-  // Once the chart is ready, read placements + profection + transits for the fade line.
+  // Once the chart is ready, read natal placements/angles + current transits.
   useEffect(() => {
     if (chartStatus !== "ready") return;
     const chart = loadChart();
     const data = chart?.chartData as unknown as {
-      profection?: Profection;
-      tropical?: { planets?: Placement[] };
+      tropical?: { planets?: Placement[]; angles?: Placement[] };
       transits?: Placement[];
     } | undefined;
     if (!data) return;
-    if (data.profection) setProfection(data.profection);
-    setNatal(data.tropical?.planets ?? []);
+    setNatal([...(data.tropical?.planets ?? []), ...(data.tropical?.angles ?? [])]);
     setTransits(data.transits ?? []);
   }, [chartStatus]);
 
@@ -341,36 +325,36 @@ export default function ReadingIntakeScreen({
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
   const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
 
-  /* ── Hero anchor line — current sky only (daily-news behavior) ───── */
-  const facts = useMemo(() => {
-    const out: string[] = [];
-    const find = (arr: Placement[], n: string) => arr.find((p) => p.name === n);
+  /* ── Hero information — one intentional transition system ───────── */
+  const heroInfo = useMemo(() => {
+    const find = (arr: Placement[], names: string[]) =>
+      arr.find((p) => names.some((name) => p.name.toLowerCase() === name.toLowerCase()));
 
-    // Keep this line focused on what is happening now. Natal Big Three and
-    // annual profection context belong elsewhere in the hero/product.
-    const tMoon = find(transits, "Moon");
-    if (tMoon?.sign) out.push(`Moon in ${tMoon.sign}${tMoon.degree ? ` · ${tMoon.degree}` : ""}`);
+    const natalSun = find(natal, ["Sun"]);
+    const natalMoon = find(natal, ["Moon"]);
+    const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
+    const currentSun = find(transits, ["Sun"]);
+    const currentMoon = find(transits, ["Moon"]);
 
-    const tSun = find(transits, "Sun");
-    if (tSun?.sign) out.push(`Sun in ${tSun.sign}${tSun.degree ? ` · ${tSun.degree}` : ""}`);
+    return {
+      personal: [
+        { role: "Sun", sign: natalSun?.sign ?? "—" },
+        { role: "Moon", sign: natalMoon?.sign ?? "—" },
+        { role: "Rising", sign: natalRising?.sign ?? "—" },
+      ],
+      sky: [
+        { role: "Sun Now", sign: currentSun?.sign ?? "—" },
+        { role: "Moon Now", sign: currentMoon?.sign ?? "—" },
+      ],
+    };
+  }, [natal, transits]);
 
-    const merc = find(transits, "Mercury");
-    if (merc) out.push(merc.isRetrograde ? "Mercury Retrograde" : "Mercury Direct");
-
-    return out.length ? out : ["Current sky updating…"];
-  }, [transits]);
-
-  // Keep the index in range whenever the fact set changes.
-  useEffect(() => { setFactIndex(0); }, [facts.length]);
-
-  // Auto-advance slowly enough to be read at a glance; press-and-hold pauses it.
   useEffect(() => {
-    if (factPaused || facts.length <= 1) return;
-    const id = setInterval(() => {
-      setFactIndex((i) => (i + 1) % facts.length);
-    }, 6000);
-    return () => clearInterval(id);
-  }, [factPaused, facts.length]);
+    const id = window.setInterval(() => {
+      setHeroInfoMode((mode) => (mode === "personal" ? "sky" : "personal"));
+    }, 7000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -525,11 +509,7 @@ export default function ReadingIntakeScreen({
             radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%),
             radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%),
             radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%);
-          animation: nebula-drift 24s ease-in-out infinite alternate;
-        }
-        @keyframes nebula-drift {
-          0% { transform: translate(0, 0) scale(1); opacity: 0.85; }
-          100% { transform: translate(-3%, 2%) scale(1.08); opacity: 1; }
+          opacity: 0.94;
         }
 
         @keyframes heroShine {
@@ -740,43 +720,20 @@ export default function ReadingIntakeScreen({
               } as React.CSSProperties}
             >
               <div className="relative z-10 mx-auto h-full max-w-[560px]">
-                {/* Daily anchor — current sky, no extra label */}
-                <div
-                  data-no-swipe
-                  onPointerDown={() => setFactPaused(true)}
-                  onPointerUp={() => setFactPaused(false)}
-                  onPointerLeave={() => setFactPaused(false)}
-                  onPointerCancel={() => setFactPaused(false)}
-                  className="absolute inset-x-0 top-[13px] mx-auto h-5 max-w-[34ch] select-none"
-                >
-                  <AnimatePresence mode="wait">
-                    <motion.p
-                      key={factIndex}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.5, ease: "easeInOut" }}
-                      className="absolute inset-0 text-[12.5px] leading-5 text-slate-300/78 sm:text-[13px]"
-                    >
-                      {facts[factIndex] ?? facts[0]}
-                    </motion.p>
-                  </AnimatePresence>
-                </div>
-
-                {/* Hero statement — fixed-width lockup so desktop never inflates past the card */}
-                <div className="absolute left-1/2 top-[46px] w-fit max-w-full -translate-x-1/2 text-left">
+                {/* Hero statement — slightly larger, same locked 236px shell */}
+                <div className="absolute left-1/2 top-[28px] w-fit max-w-full -translate-x-1/2 text-left">
                   <p
-                    className="mb-[3px] pl-[2px] text-[13px] font-medium uppercase tracking-[0.22em] text-slate-200/72"
-                    style={{ textShadow: "0 3px 12px rgba(0,0,0,0.88)" }}
+                    className="mb-[3px] pl-[2px] text-[14px] font-medium uppercase tracking-[0.22em] text-slate-200/76"
+                    style={{ textShadow: "0 3px 13px rgba(0,0,0,0.92)" }}
                   >
                     Your
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-[35px] font-semibold leading-[0.94] tracking-[-0.045em] text-white"
+                    className="whitespace-nowrap text-[36.5px] font-semibold leading-[0.94] tracking-[-0.048em] text-white"
                     style={{
                       textShadow:
-                        "0 5px 5px rgba(0,0,0,0.88), 0 12px 22px rgba(0,0,0,0.72), 0 0 24px rgba(148,163,184,0.16)",
+                        "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
                     }}
                   >
                     Astrological Predictions
@@ -785,7 +742,7 @@ export default function ReadingIntakeScreen({
 
                 {/* Product identity — supportive, not competing with the H1 */}
                 <p
-                  className="absolute inset-x-0 top-[111px] text-[9.5px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
+                  className="absolute inset-x-0 top-[95px] text-[9.5px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
                   style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                 >
                   <span className="text-indigo-200/72">AstroProXL</span>
@@ -793,17 +750,32 @@ export default function ReadingIntakeScreen({
                   <span>The Astrology Engine</span>
                 </p>
 
-                {/* Big Three placeholders — large, permanent personal layer */}
-                <div
-                  className="absolute inset-x-0 top-[139px] flex items-center justify-center gap-7 sm:gap-8"
-                  aria-hidden="true"
-                >
-                  {[0, 1, 2].map((index) => (
-                    <span
-                      key={index}
-                      className="block h-[58px] w-[58px] rounded-full border border-slate-200/30 bg-white/[0.018] shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.05)] sm:h-[62px] sm:w-[62px]"
-                    />
-                  ))}
+                {/* One information system: Big Three ↔ current Sun/Moon */}
+                <div className="absolute inset-x-0 top-[125px] h-[76px]">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={heroInfoMode}
+                      initial={{ opacity: 0, y: 5, filter: "blur(3px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, y: -4, filter: "blur(3px)" }}
+                      transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-0 flex items-center justify-center gap-7 sm:gap-8"
+                    >
+                      {heroInfo[heroInfoMode].map((item) => (
+                        <div
+                          key={`${heroInfoMode}-${item.role}`}
+                          className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border border-slate-200/30 bg-white/[0.018] px-1 shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.06)]"
+                        >
+                          <span className="max-w-full truncate text-[10.5px] font-semibold leading-none text-slate-100/92">
+                            {item.sign}
+                          </span>
+                          <span className="mt-[5px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
+                            {item.role}
+                          </span>
+                        </div>
+                      ))}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </div>
             </div>
@@ -815,14 +787,14 @@ export default function ReadingIntakeScreen({
             <AnimatePresence mode="sync" initial={false}>
               <motion.p
                 key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
-                initial={{ opacity: 0, y: 2 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -2 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ opacity: 0, y: 2, filter: "blur(2px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -2, filter: "blur(2px)" }}
+                transition={{ duration: selectedAreaConfig ? 0.38 : 0.58, ease: [0.22, 1, 0.36, 1] }}
                 className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
                 style={{
                   textShadow:
-                    "0 3px 14px rgba(0,0,0,0.98), 0 0 18px rgba(148,163,184,0.24)",
+                    "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
                 }}
               >
                 {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
@@ -842,9 +814,7 @@ export default function ReadingIntakeScreen({
                   type="button"
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
-                  aria-label={area.title}
-                  title={area.title}
-                  className="tap-fix flex h-[84px] items-center justify-center rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
@@ -855,13 +825,19 @@ export default function ReadingIntakeScreen({
                   }}
                 >
                   <Icon
-                    className="h-7 w-7 transition-[color,filter,transform] duration-500 ease-out"
+                    className="h-6 w-6 transition-[color,filter,transform] duration-500 ease-out"
                     style={{
                       color: isSelected ? c.text : "rgba(203,213,225,0.68)",
                       filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
                       transform: isSelected ? "scale(1.035)" : "scale(1)",
                     }}
                   />
+                  <span
+                    className="text-[13px] font-semibold"
+                    style={{ color: isSelected ? "#ffffff" : "rgba(226,232,240,0.9)" }}
+                  >
+                    {area.title}
+                  </span>
                 </button>
               );
             })}
@@ -874,31 +850,36 @@ export default function ReadingIntakeScreen({
             <div
               className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
               style={{
-                border: "1px solid rgba(202,162,38,0.46)",
-                background: "rgba(202,162,38,0.07)",
-                boxShadow: "0 0 12px rgba(202,162,38,0.10)",
+                border: "1px solid rgba(248,250,252,0.28)",
+                background: "rgba(248,250,252,0.035)",
+                boxShadow: "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
               }}
               aria-hidden="true"
             >
-              <Crown className="h-3.5 w-3.5" style={{ color: "rgba(234,190,63,0.92)" }} />
+              <Crown className="h-3.5 w-3.5" style={{ color: "rgba(248,250,252,0.88)", filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))" }} />
             </div>
 
-            <div className="h-full rounded-[20px] bg-white/[0.02] px-4 py-2 pr-12">
+            <div className="relative h-full rounded-[20px] bg-white/[0.02] px-4 py-2 pr-12">
+              {!contextFocused && question.length === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center pr-8 text-[14px] font-medium text-slate-400/72">
+                  Add Context (Optional)
+                </div>
+              )}
               <Textarea
                 id="question"
                 rows={2}
                 value={question}
-                onFocus={clearSelectionTimeout}
+                onFocus={() => {
+                  clearSelectionTimeout();
+                  setContextFocused(true);
+                }}
+                onBlur={() => setContextFocused(false)}
                 onChange={(e) => {
                   clearSelectionTimeout();
                   setQuestion(e.target.value);
                 }}
-                placeholder={
-                  selectedArea
-                    ? "Tap to add context (optional)"
-                    : "Select a reading, then add context (optional)"
-                }
-                className="h-full min-h-0 w-full resize-none rounded-[14px] !border-0 !bg-transparent px-1 py-1 text-[16px] leading-6 text-white !shadow-none placeholder:text-slate-500 focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
+                placeholder=""
+                className="h-full min-h-0 w-full resize-none rounded-[14px] !border-0 !bg-transparent px-1 py-1 text-[16px] leading-6 text-white !shadow-none focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
                 style={{ backgroundColor: "transparent" }}
               />
             </div>
