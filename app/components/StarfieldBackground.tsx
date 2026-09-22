@@ -11,57 +11,36 @@ export default function StarfieldBackground() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    type PStar = { x: number; y: number; r: number };
+    type Star = { x: number; y: number; r: number; a: number };
     type TStar = { x: number; y: number; r: number; ph: number; sp: number };
-    type CStar = { x: number; y: number; vx: number; vy: number; r: number };
+    type CStar = { x: number; y: number; r: number };
 
-    // Keep the canvas crisp without asking high-DPI phones to render at a full 2x
-    // every animation frame.
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const W = () => canvas.offsetWidth;
     const H = () => canvas.offsetHeight;
-    const resize = () => {
-      canvas.width = Math.max(1, Math.round(W() * dpr));
-      canvas.height = Math.max(1, Math.round(H() * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    window.addEventListener("resize", resize);
 
-    const parallax: PStar[][] = [];
-    const pc = [26, 16, 9];
-    const psp = [0.04, 0.09, 0.16];
-    const psz = [0.5, 0.8, 1.2];
-    const pa = [0.28, 0.5, 0.75];
-    for (let L = 0; L < 3; L++) {
-      const arr: PStar[] = [];
-      for (let i = 0; i < pc[L]; i++) {
-        arr.push({ x: Math.random(), y: Math.random(), r: Math.random() * psz[L] + 0.3 });
-      }
-      parallax.push(arr);
-    }
+    const staticStars: Star[] = Array.from({ length: 52 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      r: Math.random() * 1.05 + 0.3,
+      a: Math.random() * 0.48 + 0.22,
+    }));
 
-    const twink: TStar[] = [];
-    for (let i = 0; i < 34; i++) {
-      twink.push({
-        x: Math.random(),
-        y: Math.random(),
-        r: Math.random() * 1.1 + 0.4,
-        ph: Math.random() * 6.28,
-        sp: Math.random() * 0.025 + 0.008,
-      });
-    }
+    const twink: TStar[] = Array.from({ length: 28 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      r: Math.random() * 1.05 + 0.4,
+      ph: Math.random() * Math.PI * 2,
+      sp: Math.random() * 0.018 + 0.006,
+    }));
 
-    const con: CStar[] = [];
-    for (let i = 0; i < 12; i++) {
-      con.push({
-        x: Math.random(),
-        y: Math.random(),
-        vx: (Math.random() - 0.5) * 0.0002,
-        vy: (Math.random() - 0.5) * 0.0002,
-        r: Math.random() * 1.2 + 0.7,
-      });
-    }
+    // Ambient constellation points remain fixed. The old drifting-network motion
+    // was subtle but still required continuous position updates.
+    const con: CStar[] = Array.from({ length: 10 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      r: Math.random() * 1.1 + 0.65,
+    }));
 
     const cons = [
       { a: 0.30, d: 0.62, s: 0.15, stars: [[0,0],[0.7,0.05],[0.35,0.5],[0.2,0.95],[0.5,0.95],[0.35,0.7],[-0.05,1.35],[0.75,1.3]], lines: [[0,1],[0,2],[1,2],[2,3],[2,4],[3,4],[3,6],[4,7]] },
@@ -77,15 +56,23 @@ export default function StarfieldBackground() {
     const cstars: { ci: number; i: number; ph: number; sp: number }[] = [];
     cons.forEach((c, ci) => {
       c.stars.forEach((_, i) => {
-        cstars.push({ ci, i, ph: Math.random() * 6.28, sp: Math.random() * 0.015 + 0.005 });
+        cstars.push({ ci, i, ph: Math.random() * Math.PI * 2, sp: Math.random() * 0.011 + 0.004 });
       });
     });
+
+    const resize = () => {
+      canvas.width = Math.max(1, Math.round(W() * dpr));
+      canvas.height = Math.max(1, Math.round(H() * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener("resize", resize);
 
     let rot = 0;
     let raf = 0;
     let running = true;
     let lastFrame = 0;
-    const frameInterval = 1000 / 30; // 30fps is plenty for this ambient background.
+    const frameInterval = 1000 / 30;
 
     const draw = (now: number) => {
       if (!running) return;
@@ -97,28 +84,15 @@ export default function StarfieldBackground() {
       const h = H();
       ctx.clearRect(0, 0, w, h);
 
-      for (let L = 0; L < 3; L++) {
-        const arr = parallax[L];
-        for (const a of arr) {
-          a.x -= psp[L] / w;
-          if (a.x < 0) {
-            a.x = 1;
-            a.y = Math.random();
-          }
-          ctx.fillStyle = `rgba(219,234,254,${pa[L]})`;
-          ctx.beginPath();
-          ctx.arc(a.x * w, a.y * h, a.r, 0, 7);
-          ctx.fill();
-        }
+      // Static depth field: keeps the richness without horizontal pseudo-parallax.
+      for (const s of staticStars) {
+        ctx.fillStyle = `rgba(219,234,254,${s.a})`;
+        ctx.beginPath();
+        ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
+        ctx.fill();
       }
 
-      for (const a of con) {
-        a.x += a.vx;
-        a.y += a.vy;
-        if (a.x < 0 || a.x > 1) a.vx *= -1;
-        if (a.y < 0 || a.y > 1) a.vy *= -1;
-      }
-
+      // Fixed ambient constellation network.
       for (let i = 0; i < con.length; i++) {
         for (let j = i + 1; j < con.length; j++) {
           const a = con[i];
@@ -127,7 +101,7 @@ export default function StarfieldBackground() {
           const dy = (a.y - b.y) * h;
           const d = Math.sqrt(dx * dx + dy * dy);
           if (d < 80) {
-            ctx.strokeStyle = `rgba(147,197,253,${0.22 * (1 - d / 80)})`;
+            ctx.strokeStyle = `rgba(147,197,253,${0.18 * (1 - d / 80)})`;
             ctx.lineWidth = 0.6;
             ctx.beginPath();
             ctx.moveTo(a.x * w, a.y * h);
@@ -136,15 +110,15 @@ export default function StarfieldBackground() {
           }
         }
       }
-
       for (const a of con) {
-        ctx.fillStyle = "rgba(191,219,254,0.85)";
+        ctx.fillStyle = "rgba(191,219,254,0.72)";
         ctx.beginPath();
-        ctx.arc(a.x * w, a.y * h, a.r, 0, 7);
+        ctx.arc(a.x * w, a.y * h, a.r, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      rot += 0.0008;
+      // Keep one slow, recognizable sky motion: constellation rotation.
+      rot += 0.00042;
       const cxp = w * 0.5;
       const cyp = h * 0.5;
       const R = h * 0.62;
@@ -159,7 +133,7 @@ export default function StarfieldBackground() {
       };
 
       for (const c of cons) {
-        ctx.strokeStyle = "rgba(147,197,253,0.24)";
+        ctx.strokeStyle = "rgba(147,197,253,0.22)";
         ctx.lineWidth = 0.8;
         for (const ln of c.lines) {
           const A = cpos(c, c.stars[ln[0]]);
@@ -176,18 +150,19 @@ export default function StarfieldBackground() {
         const tw = (Math.sin(s.ph) + 1) / 2;
         const c = cons[s.ci];
         const pt = cpos(c, c.stars[s.i]);
-        ctx.fillStyle = `rgba(226,232,240,${0.5 + tw * 0.45})`;
+        ctx.fillStyle = `rgba(226,232,240,${0.5 + tw * 0.4})`;
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 1.5 + tw * 0.6, 0, 7);
+        ctx.arc(pt.x, pt.y, 1.45 + tw * 0.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
+      // A smaller twinkle layer keeps the sky alive without competing with content.
       for (const a of twink) {
         a.ph += a.sp;
         const tw = (Math.sin(a.ph) + 1) / 2;
-        ctx.fillStyle = `rgba(226,232,240,${0.2 + tw * 0.6})`;
+        ctx.fillStyle = `rgba(226,232,240,${0.18 + tw * 0.52})`;
         ctx.beginPath();
-        ctx.arc(a.x * w, a.y * h, a.r * (0.7 + tw * 0.4), 0, 7);
+        ctx.arc(a.x * w, a.y * h, a.r * (0.76 + tw * 0.28), 0, Math.PI * 2);
         ctx.fill();
       }
     };
