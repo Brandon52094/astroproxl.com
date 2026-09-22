@@ -178,6 +178,11 @@ function signAccentColor(sign: string): string {
   return element ? HERO_ELEMENT_COLORS[element].text : "rgba(203,213,225,0.72)";
 }
 
+function signAccentGlow(sign: string): string {
+  const element = SIGN_ELEMENTS[sign];
+  return element ? HERO_ELEMENT_COLORS[element].glow : "rgba(148,163,184,0.12)";
+}
+
 function MoonDisc({ illumination, waxing, size = 58 }: { illumination: number; waxing: boolean; size?: number }) {
   const f = Math.min(1, Math.max(0, illumination / 100));
   const r = 46;
@@ -736,33 +741,60 @@ export default function ReadingIntakeScreen({
             0 48px 96px rgba(0,0,0,0.34);
         }
 
-        /* ── PREMIUM CONTEXT — pearl / champagne marble edge ── */
+        /* ── PREMIUM CONTEXT — border-only pearl / champagne marble edge ── */
         .premium-context {
-          border-color: transparent;
-          background:
-            linear-gradient(rgba(255,255,255,0.035), rgba(255,255,255,0.035)) padding-box,
-            linear-gradient(118deg,
-              rgba(255,255,255,0.94) 0%,
-              rgba(229,213,172,0.92) 18%,
-              rgba(255,255,255,0.72) 34%,
-              rgba(184,145,70,0.88) 51%,
-              rgba(255,255,255,0.90) 69%,
-              rgba(219,190,125,0.88) 84%,
-              rgba(255,255,255,0.92) 100%) border-box;
+          position: relative;
+          isolation: isolate;
+          border-color: rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.035);
           box-shadow:
-            0 0 0 1px rgba(236,220,180,0.22),
-            0 0 18px 2px rgba(229,213,172,0.16),
-            0 0 34px 5px rgba(255,255,255,0.07),
+            0 0 18px rgba(229,213,172,0.08),
             0 18px 34px rgba(0,0,0,0.78),
             0 34px 68px rgba(0,0,0,0.46);
         }
-        .premium-context:focus-within {
-          box-shadow:
-            0 0 0 1px rgba(255,248,228,0.36),
-            0 0 20px 3px rgba(229,213,172,0.22),
-            0 0 38px 6px rgba(255,255,255,0.09),
-            0 18px 34px rgba(0,0,0,0.78),
-            0 34px 68px rgba(0,0,0,0.46);
+
+        .premium-context::before {
+          content: "";
+          position: absolute;
+          inset: -2px;
+          z-index: 0;
+          border-radius: 22px;
+          padding: 2px;
+          pointer-events: none;
+          background: linear-gradient(
+            118deg,
+            rgba(255,255,255,0.98) 0%,
+            rgba(255,255,255,0.76) 13%,
+            rgba(207,168,88,0.94) 28%,
+            rgba(255,255,255,0.96) 44%,
+            rgba(185,143,63,0.96) 59%,
+            rgba(255,255,255,0.90) 76%,
+            rgba(221,190,124,0.94) 88%,
+            rgba(255,255,255,0.98) 100%
+          );
+          -webkit-mask:
+            linear-gradient(#fff 0 0) content-box,
+            linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          opacity: 0.78;
+          filter:
+            drop-shadow(0 0 5px rgba(255,255,255,0.16))
+            drop-shadow(0 0 8px rgba(205,164,82,0.18));
+          transition: opacity 950ms cubic-bezier(0.22,1,0.36,1), filter 950ms cubic-bezier(0.22,1,0.36,1);
+        }
+
+        .premium-context:focus-within::before,
+        .premium-context-active::before {
+          opacity: 1;
+          filter:
+            drop-shadow(0 0 6px rgba(255,255,255,0.24))
+            drop-shadow(0 0 12px rgba(205,164,82,0.28));
+        }
+
+        .premium-context > * {
+          position: relative;
+          z-index: 1;
         }
 
         /* Focus mode veil: dims Ask Anything while preserving the pulsing mic as a reminder. */
@@ -982,17 +1014,22 @@ export default function ReadingIntakeScreen({
                           {heroData.personal.map((item) => (
                             <div
                               key={`personal-${item.role}`}
-                              className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border border-slate-200/30 bg-white/[0.018] px-1 shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.06)]"
+                              className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border bg-white/[0.018] px-1"
+                              style={{
+                                borderColor: signAccentColor(item.sign),
+                                boxShadow: `inset 0 0 16px rgba(255,255,255,0.025), 0 0 18px ${signAccentGlow(item.sign)}`,
+                              }}
                             >
-                              <span
-                                className="mb-[3px] text-[7px] font-semibold leading-none tabular-nums"
-                                style={{
-                                  color: signAccentColor(item.sign),
-                                }}
-                              >
+                              <span className="mb-[3px] text-[7px] font-semibold leading-none tabular-nums text-slate-300/72">
                                 {item.degree ?? "—"}
                               </span>
-                              <span className="max-w-full truncate text-[10.5px] font-semibold leading-none text-slate-100/92">
+                              <span
+                                className="max-w-full truncate text-[10.5px] font-semibold leading-none"
+                                style={{
+                                  color: signAccentColor(item.sign),
+                                  textShadow: `0 0 9px ${signAccentGlow(item.sign)}`,
+                                }}
+                              >
                                 {item.sign}
                               </span>
                               <span className="mt-[4px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
@@ -1164,7 +1201,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className="premium-context relative mt-3 h-[84px] rounded-[20px] border bg-white/[0.035] standard-shadow transition-[border-color,box-shadow,background] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-white/[0.035] standard-shadow transition-[border-color,box-shadow,background] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
           >
             <div
               className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
