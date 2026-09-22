@@ -689,43 +689,32 @@ export default function ReadingIntakeScreen({
         .hero-shine > * { position: relative; z-index: 2; }
 
         /* ── Aurora OUTLINE glow — palette responds to selected reading ── */
-        /* Typed color properties let topic → default palette changes interpolate instead of snapping. */
-        @property --hero-c1-color { syntax: "<color>"; inherits: false; initial-value: rgb(52, 211, 153); }
-        @property --hero-c2-color { syntax: "<color>"; inherits: false; initial-value: rgb(34, 211, 238); }
-        @property --hero-c3-color { syntax: "<color>"; inherits: false; initial-value: rgb(56, 189, 248); }
-        @property --hero-c4-color { syntax: "<color>"; inherits: false; initial-value: rgb(168, 85, 247); }
-
         .hero-outline {
-          border: 1px solid color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
+          border: 1px solid rgba(var(--hero-c1), 0.9);
           box-shadow:
-            0 0 23px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent),
-            0 0 63px 9px color-mix(in srgb, var(--hero-c1-color) 42%, transparent),
-            0 0 117px 23px color-mix(in srgb, var(--hero-c1-color) 26%, transparent),
+            0 0 26px 2px rgba(var(--hero-c1), 0.70),
+            0 0 70px 10px rgba(var(--hero-c1), 0.42),
+            0 0 130px 26px rgba(var(--hero-c1), 0.26),
             0 18px 44px rgba(0,0,0,0.72),
             0 36px 80px rgba(0,0,0,0.56);
-          transition:
-            --hero-c1-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
-            --hero-c2-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
-            --hero-c3-color 900ms cubic-bezier(0.22, 1, 0.36, 1),
-            --hero-c4-color 900ms cubic-bezier(0.22, 1, 0.36, 1);
           animation: heroBorderGlow 9s ease-in-out infinite;
         }
         @keyframes heroBorderGlow {
           0%, 100% {
-            border-color: color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
-            box-shadow: 0 0 23px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent), 0 0 63px 9px color-mix(in srgb, var(--hero-c1-color) 42%, transparent), 0 0 117px 23px color-mix(in srgb, var(--hero-c1-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c1), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c1), 0.70), 0 0 70px 10px rgba(var(--hero-c1), 0.42), 0 0 130px 26px rgba(var(--hero-c1), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           25% {
-            border-color: color-mix(in srgb, var(--hero-c2-color) 90%, transparent);
-            box-shadow: 0 0 23px 2px color-mix(in srgb, var(--hero-c2-color) 70%, transparent), 0 0 63px 9px color-mix(in srgb, var(--hero-c2-color) 42%, transparent), 0 0 117px 23px color-mix(in srgb, var(--hero-c2-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c2), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c2), 0.70), 0 0 70px 10px rgba(var(--hero-c2), 0.42), 0 0 130px 26px rgba(var(--hero-c2), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           50% {
-            border-color: color-mix(in srgb, var(--hero-c3-color) 90%, transparent);
-            box-shadow: 0 0 23px 2px color-mix(in srgb, var(--hero-c3-color) 70%, transparent), 0 0 63px 9px color-mix(in srgb, var(--hero-c3-color) 42%, transparent), 0 0 117px 23px color-mix(in srgb, var(--hero-c3-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c3), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c3), 0.70), 0 0 70px 10px rgba(var(--hero-c3), 0.42), 0 0 130px 26px rgba(var(--hero-c3), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
           75% {
-            border-color: color-mix(in srgb, var(--hero-c4-color) 90%, transparent);
-            box-shadow: 0 0 23px 2px color-mix(in srgb, var(--hero-c4-color) 70%, transparent), 0 0 63px 9px color-mix(in srgb, var(--hero-c4-color) 42%, transparent), 0 0 117px 23px color-mix(in srgb, var(--hero-c4-color) 26%, transparent), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+            border-color: rgba(var(--hero-c4), 0.9);
+            box-shadow: 0 0 26px 2px rgba(var(--hero-c4), 0.70), 0 0 70px 10px rgba(var(--hero-c4), 0.42), 0 0 130px 26px rgba(var(--hero-c4), 0.26), 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
           }
         }
 
@@ -881,10 +870,9 @@ export default function ReadingIntakeScreen({
             <div
               className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center"
               style={{
-                "--hero-c1-color": `rgb(${heroPalette[0]})`,
-                "--hero-c2-color": `rgb(${heroPalette[1]})`,
-                "--hero-c3-color": `rgb(${heroPalette[2]})`,
-                "--hero-c4-color": `rgb(${heroPalette[3]})`,
+                "--hero-c1": heroPalette[0],
+                "--hero-c2": heroPalette[1],
+                "--hero-c3": heroPalette[2],
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
@@ -1076,19 +1064,19 @@ export default function ReadingIntakeScreen({
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
                   aria-label={area.title}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-[850ms] ease-out"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform] duration-500 ease-out"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
                     boxShadow: isSelected
-                      ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
-                      : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
+                      ? `0 0 22px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
+                      : "0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
                   }}
                 >
                   {Icon ? (
                     <Icon
-                      className="h-7 w-7 transition-[color,filter,transform] duration-[850ms] ease-out"
+                      className="h-7 w-7 transition-[color,filter,transform] duration-500 ease-out"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.68)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
@@ -1098,7 +1086,7 @@ export default function ReadingIntakeScreen({
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-[850ms] ease-out"
+                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-500 ease-out"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.72)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
