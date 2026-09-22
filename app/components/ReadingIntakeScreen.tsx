@@ -741,7 +741,17 @@ export default function ReadingIntakeScreen({
             0 48px 96px rgba(0,0,0,0.34);
         }
 
-        /* ── PREMIUM CONTEXT — dark/transparent interior; premium edge appears on selection ── */
+        /* ── PREMIUM CONTEXT — soft circulating pearl/champagne invitation ── */
+        @property --context-orbit {
+          syntax: "<angle>";
+          inherits: false;
+          initial-value: 0deg;
+        }
+
+        @keyframes contextOrbit {
+          to { --context-orbit: 360deg; }
+        }
+
         .premium-context {
           position: relative;
           isolation: isolate;
@@ -752,6 +762,7 @@ export default function ReadingIntakeScreen({
             0 34px 68px rgba(0,0,0,0.46);
         }
 
+        /* The visible edge: intentionally soft, not a hard metallic stroke. */
         .premium-context::before {
           content: "";
           position: absolute;
@@ -760,16 +771,17 @@ export default function ReadingIntakeScreen({
           border-radius: 22px;
           padding: 2px;
           pointer-events: none;
-          background: linear-gradient(
-            112deg,
-            rgba(255,255,255,0.98) 0%,
-            rgba(255,255,255,0.94) 23%,
-            rgba(207,168,88,0.96) 27%,
-            rgba(196,151,67,0.96) 48%,
-            rgba(255,255,255,0.96) 52%,
-            rgba(255,255,255,0.92) 73%,
-            rgba(219,184,108,0.96) 77%,
-            rgba(190,145,61,0.98) 100%
+          background: conic-gradient(
+            from var(--context-orbit) at 50% 50%,
+            rgba(255,255,255,0.92) 0deg,
+            rgba(255,255,255,0.52) 62deg,
+            rgba(224,195,132,0.84) 90deg,
+            rgba(191,148,67,0.64) 152deg,
+            rgba(255,255,255,0.88) 180deg,
+            rgba(255,255,255,0.48) 242deg,
+            rgba(221,188,116,0.82) 270deg,
+            rgba(191,148,67,0.62) 332deg,
+            rgba(255,255,255,0.92) 360deg
           );
           -webkit-mask:
             linear-gradient(#fff 0 0) content-box,
@@ -777,24 +789,61 @@ export default function ReadingIntakeScreen({
           -webkit-mask-composite: xor;
           mask-composite: exclude;
           opacity: 0;
-          filter:
-            drop-shadow(0 0 6px rgba(255,255,255,0.18))
-            drop-shadow(0 0 11px rgba(205,164,82,0.22));
+          filter: blur(0.35px);
+          animation: contextOrbit 8s linear infinite;
           transition:
-            opacity 950ms cubic-bezier(0.22,1,0.36,1),
-            filter 950ms cubic-bezier(0.22,1,0.36,1);
+            opacity 700ms cubic-bezier(0.22,1,0.36,1),
+            filter 700ms cubic-bezier(0.22,1,0.36,1);
+        }
+
+        /* A blurred aura beneath the edge makes the motion read as light, not a border. */
+        .premium-context::after {
+          content: "";
+          position: absolute;
+          inset: -5px;
+          z-index: -1;
+          border-radius: 25px;
+          pointer-events: none;
+          background: conic-gradient(
+            from var(--context-orbit) at 50% 50%,
+            rgba(255,255,255,0.24) 0deg,
+            rgba(255,255,255,0.08) 62deg,
+            rgba(218,183,105,0.30) 90deg,
+            rgba(185,139,55,0.12) 152deg,
+            rgba(255,255,255,0.22) 180deg,
+            rgba(255,255,255,0.07) 242deg,
+            rgba(218,183,105,0.28) 270deg,
+            rgba(185,139,55,0.11) 332deg,
+            rgba(255,255,255,0.24) 360deg
+          );
+          opacity: 0;
+          filter: blur(10px);
+          animation: contextOrbit 8s linear infinite;
+          transition: opacity 700ms cubic-bezier(0.22,1,0.36,1);
         }
 
         .premium-context:focus-within::before,
         .premium-context-active::before {
-          opacity: 1;
-          filter:
-            drop-shadow(0 0 7px rgba(255,255,255,0.22))
-            drop-shadow(0 0 13px rgba(205,164,82,0.27));
+          opacity: 0.88;
+          filter: blur(0.45px)
+            drop-shadow(0 0 4px rgba(255,255,255,0.16))
+            drop-shadow(0 0 8px rgba(205,164,82,0.18));
+        }
+
+        .premium-context:focus-within::after,
+        .premium-context-active::after {
+          opacity: 0.78;
         }
 
         .premium-context > * {
           z-index: 1;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .premium-context::before,
+          .premium-context::after {
+            animation: none;
+          }
         }
 
         /* Focus mode: Ask Anything recedes as one unit, including the microphone. */
