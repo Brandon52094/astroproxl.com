@@ -1454,7 +1454,7 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING — flagship premium feature, intentionally separate from readings ── */}
-          <section className="mt-3 border-t border-white/[0.06] pt-4">
+          <section className="mt-3">
             <button
               type="button"
               onClick={() => setShowJxl(true)}
