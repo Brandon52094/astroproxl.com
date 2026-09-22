@@ -1038,7 +1038,7 @@ export default function ReadingIntakeScreen({
             </AnimatePresence>
           </div>
 
-          {/* ── READING GRID (2×2) — original line-icon treatment restored ── */}
+          {/* ── READING GRID (2×2) — symbols only ── */}
           <section className="grid grid-cols-2 gap-x-3 gap-y-4">
             {AREAS.map((area) => {
               const Icon = area.icon;
@@ -1063,7 +1063,7 @@ export default function ReadingIntakeScreen({
                 >
                   {Icon ? (
                     <Icon
-                      className="h-6 w-6 transition-[color,filter,transform] duration-500 ease-out"
+                      className="h-7 w-7 transition-[color,filter,transform] duration-500 ease-out"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.68)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
@@ -1073,7 +1073,7 @@ export default function ReadingIntakeScreen({
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="text-[17px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-500 ease-out"
+                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-500 ease-out"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.72)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
@@ -1083,12 +1083,6 @@ export default function ReadingIntakeScreen({
                       {area.marker}
                     </span>
                   )}
-                  <span
-                    className="text-[13px] font-semibold"
-                    style={{ color: isSelected ? "#ffffff" : "rgba(226,232,240,0.9)" }}
-                  >
-                    {area.title}
-                  </span>
                 </button>
               );
             })}
