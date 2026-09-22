@@ -736,6 +736,49 @@ export default function ReadingIntakeScreen({
             0 48px 96px rgba(0,0,0,0.34);
         }
 
+        /* ── PREMIUM CONTEXT — pearl / champagne marble edge ── */
+        .premium-context {
+          border-color: transparent;
+          background:
+            linear-gradient(rgba(255,255,255,0.035), rgba(255,255,255,0.035)) padding-box,
+            linear-gradient(118deg,
+              rgba(255,255,255,0.94) 0%,
+              rgba(229,213,172,0.92) 18%,
+              rgba(255,255,255,0.72) 34%,
+              rgba(184,145,70,0.88) 51%,
+              rgba(255,255,255,0.90) 69%,
+              rgba(219,190,125,0.88) 84%,
+              rgba(255,255,255,0.92) 100%) border-box;
+          box-shadow:
+            0 0 0 1px rgba(236,220,180,0.22),
+            0 0 18px 2px rgba(229,213,172,0.16),
+            0 0 34px 5px rgba(255,255,255,0.07),
+            0 18px 34px rgba(0,0,0,0.78),
+            0 34px 68px rgba(0,0,0,0.46);
+        }
+        .premium-context:focus-within {
+          box-shadow:
+            0 0 0 1px rgba(255,248,228,0.36),
+            0 0 20px 3px rgba(229,213,172,0.22),
+            0 0 38px 6px rgba(255,255,255,0.09),
+            0 18px 34px rgba(0,0,0,0.78),
+            0 34px 68px rgba(0,0,0,0.46);
+        }
+
+        /* Focus mode veil: dims Ask Anything while preserving the pulsing mic as a reminder. */
+        .ask-focus-veil {
+          position: absolute !important;
+          inset: 0;
+          z-index: 3 !important;
+          border-radius: 24px;
+          pointer-events: none;
+          background: rgba(2, 5, 15, 0.84);
+          transition: opacity 950ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .ask-mic-halo {
+          z-index: 4 !important;
+        }
+
         /* ── ASK ANYTHING — flagship showpiece ── */
         @keyframes askPremiumPulse {
           0%, 100% {
@@ -868,7 +911,7 @@ export default function ReadingIntakeScreen({
           <button
             type="button"
             onClick={() => onSwipeLeft?.()}
-            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-700 ease-out"
+            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
               opacity: selectedArea ? 0.28 : 1,
               filter: selectedArea ? "brightness(0.62)" : "brightness(1)",
@@ -881,7 +924,7 @@ export default function ReadingIntakeScreen({
           {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-[18px] pt-0">
             <div
-              className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center transition-[opacity,filter] duration-700 ease-out"
+              className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 opacity: selectedArea ? 0.56 : 1,
                 filter: selectedArea ? "brightness(0.66) saturate(0.78)" : "brightness(1) saturate(1)",
@@ -903,7 +946,7 @@ export default function ReadingIntakeScreen({
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-[38px] font-semibold leading-[0.94] tracking-[-0.048em] text-white"
+                    className="whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                     style={{
                       textShadow:
                         "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
@@ -1048,12 +1091,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
-          <div className="relative mb-[14px] h-[26px] text-center transition-[opacity,filter] duration-700 ease-out"
-            style={{
-              opacity: selectedArea ? 0.34 : 1,
-              filter: selectedArea ? "brightness(0.66)" : "brightness(1)",
-            }}
-          >
+          <div className="relative mb-[14px] h-[26px] text-center">
             <AnimatePresence mode="sync" initial={false}>
               <motion.p
                 key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
@@ -1085,7 +1123,7 @@ export default function ReadingIntakeScreen({
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
                   aria-label={area.title}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform,opacity,filter] duration-[850ms] ease-out"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
@@ -1099,7 +1137,7 @@ export default function ReadingIntakeScreen({
                 >
                   {Icon ? (
                     <Icon
-                      className="h-7 w-7 transition-[color,filter,transform] duration-[850ms] ease-out"
+                      className="h-7 w-7 transition-[color,filter,transform] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.68)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
@@ -1109,7 +1147,7 @@ export default function ReadingIntakeScreen({
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-[850ms] ease-out"
+                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                       style={{
                         color: isSelected ? c.text : "rgba(203,213,225,0.72)",
                         filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
@@ -1126,7 +1164,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className="relative mt-3 h-[84px] rounded-[20px] border border-white/[0.10] bg-white/[0.035] standard-shadow transition-[border-color,box-shadow] duration-300 focus-within:border-white/[0.16]"
+            className="premium-context relative mt-3 h-[84px] rounded-[20px] border bg-white/[0.035] standard-shadow transition-[border-color,box-shadow,background] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
           >
             <div
               className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
@@ -1217,6 +1255,13 @@ export default function ReadingIntakeScreen({
                   Press &amp; hold · Speak what’s on your mind
                 </span>
               </span>
+
+              {/* During a reading selection, the card recedes but the microphone stays visible and breathing. */}
+              <span
+                aria-hidden="true"
+                className="ask-focus-veil"
+                style={{ opacity: selectedArea ? 0.72 : 0 }}
+              />
             </button>
           </section>
 
