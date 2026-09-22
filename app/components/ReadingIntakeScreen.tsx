@@ -319,6 +319,9 @@ export default function ReadingIntakeScreen({
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   // Four compact information slides share the same locked hero stage.
   const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky" | "mercury" | "elements">("personal");
+  const [heroInspecting, setHeroInspecting] = useState(false);
+  const heroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heroHoldActivatedRef = useRef(false);
 
   // If a reading is selected but the user does not continue into context or Begin Reading,
   // gently return the interface to its neutral state.
@@ -327,6 +330,34 @@ export default function ReadingIntakeScreen({
     if (selectionTimeoutRef.current) {
       clearTimeout(selectionTimeoutRef.current);
       selectionTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearReadingFocus = useCallback(() => {
+    clearSelectionTimeout();
+    setSelectedArea(null);
+    setQuestion("");
+    setContextFocused(false);
+  }, [clearSelectionTimeout]);
+
+  const beginHeroHold = useCallback(() => {
+    if (heroHoldTimerRef.current) clearTimeout(heroHoldTimerRef.current);
+    heroHoldActivatedRef.current = false;
+    heroHoldTimerRef.current = setTimeout(() => {
+      heroHoldActivatedRef.current = true;
+      setHeroInspecting(true);
+      heroHoldTimerRef.current = null;
+    }, 420);
+  }, []);
+
+  const endHeroHold = useCallback(() => {
+    if (heroHoldTimerRef.current) {
+      clearTimeout(heroHoldTimerRef.current);
+      heroHoldTimerRef.current = null;
+    }
+    if (heroHoldActivatedRef.current) {
+      setHeroInspecting(false);
+      heroHoldActivatedRef.current = false;
     }
   }, []);
 
@@ -465,7 +496,8 @@ export default function ReadingIntakeScreen({
   }, [fetchStatus]);
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
-  const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
+  // The hero now keeps one native palette; reading selections no longer recolor it.
+  const heroPalette = HERO_PALETTES.default;
 
   /* ── Hero information — four quiet slides, one fixed stage ───────── */
   const heroData = useMemo(() => {
@@ -506,6 +538,8 @@ export default function ReadingIntakeScreen({
   const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
   useEffect(() => {
+    if (heroInspecting) return;
+
     const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
       "personal",
       "sky",
@@ -516,7 +550,7 @@ export default function ReadingIntakeScreen({
       setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
     }, 4800);
     return () => window.clearInterval(id);
-  }, []);
+  }, [heroInspecting]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -552,7 +586,10 @@ export default function ReadingIntakeScreen({
   }, [clearSelectionTimeout]);
 
   useEffect(() => {
-    return () => clearSelectionTimeout();
+    return () => {
+      clearSelectionTimeout();
+      if (heroHoldTimerRef.current) clearTimeout(heroHoldTimerRef.current);
+    };
   }, [clearSelectionTimeout]);
 
   const handleStartReading = async () => {
@@ -991,8 +1028,8 @@ export default function ReadingIntakeScreen({
             onClick={() => onSwipeLeft?.()}
             className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: selectedArea ? 0.52 : 1,
-              filter: selectedArea ? "brightness(0.34) saturate(0.55)" : "brightness(1) saturate(1)",
+              opacity: selectedArea || heroInspecting ? 0.52 : 1,
+              filter: selectedArea || heroInspecting ? "brightness(0.34) saturate(0.55)" : "brightness(1) saturate(1)",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
@@ -1002,10 +1039,18 @@ export default function ReadingIntakeScreen({
           {/* ── HERO (animated color-cycling outline glow) ── */}
           <section className="mb-[18px] pt-0">
             <div
-              className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className="hero-shine hero-outline relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                beginHeroHold();
+              }}
+              onPointerUp={endHeroHold}
+              onPointerCancel={endHeroHold}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label="Press and hold to pause hero information"
               style={{
-                opacity: selectedArea ? 0.72 : 1,
-                filter: selectedArea ? "brightness(0.38) saturate(0.55)" : "brightness(1) saturate(1)",
+                opacity: heroInspecting ? 1 : selectedArea ? 0.72 : 1,
+                filter: heroInspecting ? "brightness(1) saturate(1)" : selectedArea ? "brightness(0.38) saturate(0.55)" : "brightness(1) saturate(1)",
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
                 "--hero-c3-color": `rgb(${heroPalette[2]})`,
@@ -1176,7 +1221,13 @@ export default function ReadingIntakeScreen({
 
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
-          <div className="relative mb-[14px] h-[26px] text-center">
+          <div
+            className="relative mb-[14px] h-[26px] text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+            style={{
+              opacity: heroInspecting ? 0.52 : 1,
+              filter: heroInspecting ? "brightness(0.34) saturate(0.55)" : "brightness(1) saturate(1)",
+            }}
+          >
             <AnimatePresence mode="sync" initial={false}>
               <motion.p
                 key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
@@ -1216,8 +1267,12 @@ export default function ReadingIntakeScreen({
                       ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: selectedArea && !isSelected ? 0.58 : 1,
-                    filter: selectedArea && !isSelected ? "brightness(0.30) saturate(0.48)" : "brightness(1) saturate(1)",
+                    opacity: heroInspecting ? 0.52 : selectedArea && !isSelected ? 0.58 : 1,
+                    filter: heroInspecting
+                      ? "brightness(0.28) saturate(0.42)"
+                      : selectedArea && !isSelected
+                        ? "brightness(0.30) saturate(0.48)"
+                        : "brightness(1) saturate(1)",
                   }}
                 >
                   {Icon ? (
@@ -1249,7 +1304,11 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
+            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
+            style={{
+              opacity: heroInspecting ? 0.52 : 1,
+              filter: heroInspecting ? "brightness(0.30) saturate(0.45)" : "brightness(1) saturate(1)",
+            }}
           >
             <div
               className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
@@ -1299,11 +1358,30 @@ export default function ReadingIntakeScreen({
             </div>
           </div>
 
+          {/* ── BELOW-CONTEXT EXIT ZONE ──
+              While a reading is focused, tapping anywhere down here restores the neutral
+              screen. Begin Reading is the one exception and keeps its normal action. */}
+          <div
+            onClickCapture={(e) => {
+              if (!selectedArea) return;
+              const target = e.target as HTMLElement;
+              if (target.closest('[data-begin-reading="true"]')) return;
+              clearReadingFocus();
+              e.stopPropagation();
+            }}
+          >
           {/* ── BEGIN READING (always present) ── */}
-          <div className="mt-3 flex flex-col items-center">
+          <div
+            className="mt-3 flex flex-col items-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+            style={{
+              opacity: heroInspecting ? 0.48 : 1,
+              filter: heroInspecting ? "brightness(0.28) saturate(0.42)" : "brightness(1) saturate(1)",
+            }}
+          >
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
             <Button
               type="button"
+              data-begin-reading="true"
               onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
               className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-500 ease-out hover:opacity-90 disabled:cursor-not-allowed"
@@ -1335,8 +1413,12 @@ export default function ReadingIntakeScreen({
               onClick={() => setShowJxl(true)}
               className="ask-premium tap-fix relative flex h-[108px] w-full items-center rounded-[24px] px-5 text-left transition-[transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
               style={{
-                opacity: selectedArea ? 0.62 : 1,
-                filter: selectedArea ? "brightness(0.42) saturate(0.42)" : "brightness(1) saturate(1)",
+                opacity: heroInspecting ? 0.48 : selectedArea ? 0.62 : 1,
+                filter: heroInspecting
+                  ? "brightness(0.26) saturate(0.36)"
+                  : selectedArea
+                    ? "brightness(0.42) saturate(0.42)"
+                    : "brightness(1) saturate(1)",
               }}
             >
               <span className="ask-mic-halo mr-4 shrink-0">
@@ -1359,10 +1441,11 @@ export default function ReadingIntakeScreen({
               <span
                 aria-hidden="true"
                 className="ask-focus-veil"
-                style={{ opacity: selectedArea ? 0.48 : 0 }}
+                style={{ opacity: heroInspecting ? 0.58 : selectedArea ? 0.48 : 0 }}
               />
             </button>
           </section>
+          </div>
 
 
         </motion.div>
