@@ -465,8 +465,7 @@ export default function ReadingIntakeScreen({
   }, [fetchStatus]);
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
-  // Keep the hero on its native palette; reading selection no longer recolors it.
-  const heroPalette = HERO_PALETTES.default;
+  const heroPalette = HERO_PALETTES[selectedArea ?? "default"] ?? HERO_PALETTES.default;
 
   /* ── Hero information — four quiet slides, one fixed stage ───────── */
   const heroData = useMemo(() => {
@@ -1175,34 +1174,41 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Reading header stays fixed; selected subject moves beside its chosen tile. ── */}
+          {/* ── Dynamic reading header ──
+              The heading keeps one visual treatment; selection only changes the word. */}
           <div className="relative mb-[14px] h-[26px] text-center">
-            <p
-              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
-              style={{
-                textShadow:
-                  "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-              }}
-            >
-              Select A Reading
-            </p>
+            <AnimatePresence mode="sync" initial={false}>
+              <motion.p
+                key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
+                initial={{ opacity: 0, y: 2, filter: "blur(2px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -2, filter: "blur(2px)" }}
+                transition={{ duration: selectedAreaConfig ? 0.38 : 0.58, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+                style={{
+                  textShadow:
+                    "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
+                }}
+              >
+                {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
+              </motion.p>
+            </AnimatePresence>
           </div>
 
-          {/* ── READING GRID (2×2) — subject appears nearest the selected tile. ── */}
+          {/* ── READING GRID (2×2) — symbols only ── */}
           <section className="grid grid-cols-2 gap-x-3 gap-y-4">
             {AREAS.map((area) => {
               const Icon = area.icon;
               const isSelected = selectedArea === area.id;
               const c = getAreaColors(area.id);
-              const subjectBelow = area.id === "love" || area.id === "money";
               return (
-                <div key={area.id} className="relative">
-                  <button
+                <button
+                  key={area.id}
                   type="button"
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
                   aria-label={area.title}
-                  className="tap-fix flex h-[84px] w-full flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                   style={{
                     borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
                     backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
@@ -1236,29 +1242,7 @@ export default function ReadingIntakeScreen({
                       {area.marker}
                     </span>
                   )}
-                  </button>
-
-                  <AnimatePresence initial={false}>
-                    {isSelected && (
-                      <motion.p
-                        key={`subject-${area.id}`}
-                        initial={{ opacity: 0, y: subjectBelow ? -2 : 2, filter: "blur(2px)" }}
-                        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                        exit={{ opacity: 0, y: subjectBelow ? -2 : 2, filter: "blur(2px)" }}
-                        transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-                        className={`pointer-events-none absolute left-0 right-0 z-20 flex h-[20px] items-center justify-center whitespace-nowrap text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px] ${
-                          subjectBelow ? "-bottom-[18px]" : "-top-[18px]"
-                        }`}
-                        style={{
-                          textShadow:
-                            "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-                        }}
-                      >
-                        {area.title}
-                      </motion.p>
-                    )}
-                  </AnimatePresence>
-                </div>
+                </button>
               );
             })}
           </section>
