@@ -548,7 +548,7 @@ export default function ReadingIntakeScreen({
       setSelectedArea(null);
       setQuestion("");
       selectionTimeoutRef.current = null;
-    }, 10000);
+    }, 7000);
   }, [clearSelectionTimeout]);
 
   useEffect(() => {
@@ -741,14 +741,13 @@ export default function ReadingIntakeScreen({
             0 48px 96px rgba(0,0,0,0.34);
         }
 
-        /* ── PREMIUM CONTEXT — border-only pearl / champagne marble edge ── */
+        /* ── PREMIUM CONTEXT — dark/transparent interior; premium edge appears on selection ── */
         .premium-context {
           position: relative;
           isolation: isolate;
-          border-color: rgba(255,255,255,0.08);
-          background: rgba(255,255,255,0.035);
+          border-color: rgba(255,255,255,0.10);
+          background: transparent;
           box-shadow:
-            0 0 18px rgba(229,213,172,0.08),
             0 18px 34px rgba(0,0,0,0.78),
             0 34px 68px rgba(0,0,0,0.46);
         }
@@ -762,53 +761,51 @@ export default function ReadingIntakeScreen({
           padding: 2px;
           pointer-events: none;
           background: linear-gradient(
-            118deg,
+            112deg,
             rgba(255,255,255,0.98) 0%,
-            rgba(255,255,255,0.76) 13%,
-            rgba(207,168,88,0.94) 28%,
-            rgba(255,255,255,0.96) 44%,
-            rgba(185,143,63,0.96) 59%,
-            rgba(255,255,255,0.90) 76%,
-            rgba(221,190,124,0.94) 88%,
-            rgba(255,255,255,0.98) 100%
+            rgba(255,255,255,0.94) 23%,
+            rgba(207,168,88,0.96) 27%,
+            rgba(196,151,67,0.96) 48%,
+            rgba(255,255,255,0.96) 52%,
+            rgba(255,255,255,0.92) 73%,
+            rgba(219,184,108,0.96) 77%,
+            rgba(190,145,61,0.98) 100%
           );
           -webkit-mask:
             linear-gradient(#fff 0 0) content-box,
             linear-gradient(#fff 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
-          opacity: 0.78;
+          opacity: 0;
           filter:
-            drop-shadow(0 0 5px rgba(255,255,255,0.16))
-            drop-shadow(0 0 8px rgba(205,164,82,0.18));
-          transition: opacity 950ms cubic-bezier(0.22,1,0.36,1), filter 950ms cubic-bezier(0.22,1,0.36,1);
+            drop-shadow(0 0 6px rgba(255,255,255,0.18))
+            drop-shadow(0 0 11px rgba(205,164,82,0.22));
+          transition:
+            opacity 950ms cubic-bezier(0.22,1,0.36,1),
+            filter 950ms cubic-bezier(0.22,1,0.36,1);
         }
 
         .premium-context:focus-within::before,
         .premium-context-active::before {
           opacity: 1;
           filter:
-            drop-shadow(0 0 6px rgba(255,255,255,0.24))
-            drop-shadow(0 0 12px rgba(205,164,82,0.28));
+            drop-shadow(0 0 7px rgba(255,255,255,0.22))
+            drop-shadow(0 0 13px rgba(205,164,82,0.27));
         }
 
         .premium-context > * {
-          position: relative;
           z-index: 1;
         }
 
-        /* Focus mode veil: dims Ask Anything while preserving the pulsing mic as a reminder. */
+        /* Focus mode: Ask Anything recedes as one unit, including the microphone. */
         .ask-focus-veil {
           position: absolute !important;
           inset: 0;
-          z-index: 3 !important;
+          z-index: 5 !important;
           border-radius: 24px;
           pointer-events: none;
-          background: rgba(2, 5, 15, 0.84);
+          background: rgba(0, 2, 9, 0.72);
           transition: opacity 950ms cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .ask-mic-halo {
-          z-index: 4 !important;
         }
 
         /* ── ASK ANYTHING — flagship showpiece ── */
@@ -945,8 +942,8 @@ export default function ReadingIntakeScreen({
             onClick={() => onSwipeLeft?.()}
             className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: selectedArea ? 0.28 : 1,
-              filter: selectedArea ? "brightness(0.62)" : "brightness(1)",
+              opacity: selectedArea ? 0.52 : 1,
+              filter: selectedArea ? "brightness(0.34) saturate(0.55)" : "brightness(1) saturate(1)",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
@@ -958,8 +955,8 @@ export default function ReadingIntakeScreen({
             <div
               className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
-                opacity: selectedArea ? 0.56 : 1,
-                filter: selectedArea ? "brightness(0.66) saturate(0.78)" : "brightness(1) saturate(1)",
+                opacity: selectedArea ? 0.72 : 1,
+                filter: selectedArea ? "brightness(0.38) saturate(0.55)" : "brightness(1) saturate(1)",
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
                 "--hero-c3-color": `rgb(${heroPalette[2]})`,
@@ -980,6 +977,8 @@ export default function ReadingIntakeScreen({
                   <h1
                     className="whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                     style={{
+                      transform: "scaleY(1.045)",
+                      transformOrigin: "left bottom",
                       textShadow:
                         "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
                     }}
@@ -1168,8 +1167,8 @@ export default function ReadingIntakeScreen({
                       ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: selectedArea && !isSelected ? 0.30 : 1,
-                    filter: selectedArea && !isSelected ? "brightness(0.58) saturate(0.72)" : "brightness(1) saturate(1)",
+                    opacity: selectedArea && !isSelected ? 0.58 : 1,
+                    filter: selectedArea && !isSelected ? "brightness(0.30) saturate(0.48)" : "brightness(1) saturate(1)",
                   }}
                 >
                   {Icon ? (
@@ -1201,7 +1200,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
-            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-white/[0.035] standard-shadow transition-[border-color,box-shadow,background] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
+            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
           >
             <div
               className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
@@ -1215,9 +1214,9 @@ export default function ReadingIntakeScreen({
               <Crown className="h-3.5 w-3.5" style={{ color: "rgba(248,250,252,0.88)", filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))" }} />
             </div>
 
-            <div className="relative h-full rounded-[20px] bg-white/[0.02] px-4 py-2 pr-12">
+            <div className="relative h-full rounded-[20px] bg-transparent px-4 py-2 pr-12">
               {!contextFocused && question.length === 0 && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center pr-8 text-[14px] font-medium text-slate-400/72">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[14px] font-medium text-slate-400/72">
                   Add Context (Optional)
                 </div>
               )}
@@ -1229,7 +1228,17 @@ export default function ReadingIntakeScreen({
                   clearSelectionTimeout();
                   setContextFocused(true);
                 }}
-                onBlur={() => setContextFocused(false)}
+                onBlur={() => {
+                  setContextFocused(false);
+                  if (selectedArea) {
+                    clearSelectionTimeout();
+                    selectionTimeoutRef.current = setTimeout(() => {
+                      setSelectedArea(null);
+                      setQuestion("");
+                      selectionTimeoutRef.current = null;
+                    }, 7000);
+                  }
+                }}
                 onChange={(e) => {
                   clearSelectionTimeout();
                   setQuestion(e.target.value);
@@ -1275,7 +1284,11 @@ export default function ReadingIntakeScreen({
             <button
               type="button"
               onClick={() => setShowJxl(true)}
-              className="ask-premium tap-fix relative flex h-[108px] w-full items-center rounded-[24px] px-5 text-left transition-transform duration-300 hover:-translate-y-[1px] active:translate-y-0"
+              className="ask-premium tap-fix relative flex h-[108px] w-full items-center rounded-[24px] px-5 text-left transition-[transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
+              style={{
+                opacity: selectedArea ? 0.62 : 1,
+                filter: selectedArea ? "brightness(0.42) saturate(0.42)" : "brightness(1) saturate(1)",
+              }}
             >
               <span className="ask-mic-halo mr-4 shrink-0">
                 <Mic className="h-[20px] w-[20px]" style={{ color: "rgba(207,250,254,0.98)" }} />
@@ -1293,11 +1306,11 @@ export default function ReadingIntakeScreen({
                 </span>
               </span>
 
-              {/* During a reading selection, the card recedes but the microphone stays visible and breathing. */}
+              {/* During a reading selection, the entire Ask Anything card recedes together. */}
               <span
                 aria-hidden="true"
                 className="ask-focus-veil"
-                style={{ opacity: selectedArea ? 0.72 : 0 }}
+                style={{ opacity: selectedArea ? 0.48 : 0 }}
               />
             </button>
           </section>
