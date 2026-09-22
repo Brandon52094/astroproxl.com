@@ -275,16 +275,58 @@ export default function ReadingIntakeScreen({
   }, [router]);
 
   // Once the chart is ready, read natal placements/angles + current transits.
+  // Chart payloads are not guaranteed to store `angles` as an array, so normalize
+  // arrays and keyed objects before putting them into React state.
   useEffect(() => {
     if (chartStatus !== "ready") return;
+
+    const normalizePlacements = (value: unknown): Placement[] => {
+      if (Array.isArray(value)) {
+        return value.flatMap((raw) => {
+          if (!raw || typeof raw !== "object") return [];
+          const item = raw as Record<string, unknown>;
+          if (typeof item.sign !== "string") return [];
+          return [{
+            name: typeof item.name === "string" ? item.name : "",
+            sign: item.sign,
+            degree: typeof item.degree === "string" ? item.degree : undefined,
+            house: typeof item.house === "number" ? item.house : undefined,
+            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
+          }];
+        });
+      }
+
+      if (value && typeof value === "object") {
+        return Object.entries(value as Record<string, unknown>).flatMap(([key, raw]) => {
+          if (!raw || typeof raw !== "object") return [];
+          const item = raw as Record<string, unknown>;
+          if (typeof item.sign !== "string") return [];
+          return [{
+            name: typeof item.name === "string" && item.name ? item.name : key,
+            sign: item.sign,
+            degree: typeof item.degree === "string" ? item.degree : undefined,
+            house: typeof item.house === "number" ? item.house : undefined,
+            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
+          }];
+        });
+      }
+
+      return [];
+    };
+
     const chart = loadChart();
     const data = chart?.chartData as unknown as {
-      tropical?: { planets?: Placement[]; angles?: Placement[] };
-      transits?: Placement[];
+      tropical?: { planets?: unknown; angles?: unknown };
+      transits?: unknown;
     } | undefined;
+
     if (!data) return;
-    setNatal([...(data.tropical?.planets ?? []), ...(data.tropical?.angles ?? [])]);
-    setTransits(data.transits ?? []);
+
+    setNatal([
+      ...normalizePlacements(data.tropical?.planets),
+      ...normalizePlacements(data.tropical?.angles),
+    ]);
+    setTransits(normalizePlacements(data.transits));
   }, [chartStatus]);
 
   const fetchInFlight = useRef(false);
@@ -328,7 +370,10 @@ export default function ReadingIntakeScreen({
   /* ── Hero information — one intentional transition system ───────── */
   const heroInfo = useMemo(() => {
     const find = (arr: Placement[], names: string[]) =>
-      arr.find((p) => names.some((name) => p.name.toLowerCase() === name.toLowerCase()));
+      arr.find((p) =>
+        typeof p?.name === "string" &&
+        names.some((name) => p.name.toLowerCase() === name.toLowerCase())
+      );
 
     const natalSun = find(natal, ["Sun"]);
     const natalMoon = find(natal, ["Moon"]);
