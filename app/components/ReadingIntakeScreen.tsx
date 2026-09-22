@@ -742,69 +742,78 @@ export default function ReadingIntakeScreen({
           </button>
 
           {/* ── HERO (animated color-cycling outline glow) ── */}
-<section className="mb-[18px] pt-0">
-  <div
-    className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center"
-    style={{
-      "--hero-c1": heroPalette[0],
-      "--hero-c2": heroPalette[1],
-      "--hero-c3": heroPalette[2],
-      "--hero-c4": heroPalette[3],
-    } as React.CSSProperties}
-  >
-    <div className="relative z-10 mx-auto h-full max-w-[560px]">
-      {/* Brand stamp — pinned to top */}
-      <div className="absolute left-1/2 top-[16px] inline-flex -translate-x-1/2 items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
-        <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
-          AstroProXL
-        </span>
-      </div>
+          <section className="mb-[18px] pt-0">
+            <div
+              className="hero-shine hero-outline relative h-[236px] overflow-hidden rounded-[28px] bg-white/[0.03] px-5 text-center"
+              style={{
+                "--hero-c1": heroPalette[0],
+                "--hero-c2": heroPalette[1],
+                "--hero-c3": heroPalette[2],
+                "--hero-c4": heroPalette[3],
+              } as React.CSSProperties}
+            >
+              <div className="relative z-10 mx-auto h-full max-w-[560px]">
+                {/* Brand stamp — hugs the top edge */}
+                <div className="absolute left-1/2 top-[10px] inline-flex -translate-x-1/2 items-center rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200">
+                    AstroProXL
+                  </span>
+                </div>
 
-      {/* Center composition — clears the pinned chrome above/below */}
-      <div className="absolute inset-x-0 top-[52px] bottom-[46px] flex flex-col items-center justify-center">
-        <h1
-          className="whitespace-nowrap text-[28px] font-semibold leading-none tracking-[-0.03em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[44px]"
-          style={{ textShadow: "0 0 24px rgba(148,163,184,0.14)" }}
-        >
-          Astrological Predictions
-        </h1>
+                {/* Quiet product identity — intentionally subordinate to the headline */}
+                <p
+                  className="absolute inset-x-0 top-[48px] text-[9.5px] font-medium uppercase tracking-[0.30em] text-slate-300/48 sm:text-[10px]"
+                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
+                >
+                  The Astrology Engine
+                </p>
 
-        {/* Big Three placeholders — 10% larger */}
-        <div className="mt-5 flex items-center justify-center gap-5" aria-hidden="true">
-          {[0, 1, 2].map((index) => (
-            <span
-              key={index}
-              className="block h-[42px] w-[42px] rounded-full border border-slate-200/28 bg-white/[0.018] shadow-[inset_0_0_14px_rgba(255,255,255,0.025),0_0_16px_rgba(148,163,184,0.045)] sm:h-[48px] sm:w-[48px]"
-            />
-          ))}
-        </div>
-      </div>
+                {/* Hero headline — the visual center and strongest statement */}
+                <h1
+                  className="absolute inset-x-0 top-1/2 -translate-y-1/2 whitespace-nowrap text-[32px] font-semibold leading-none tracking-[-0.035em] text-white drop-shadow-[0_14px_34px_rgba(0,0,0,0.85)] sm:text-[44px]"
+                  style={{ textShadow: "0 0 28px rgba(148,163,184,0.17)" }}
+                >
+                  Astrological Predictions
+                </h1>
 
-      {/* Rotating context — anchored close to the bottom edge */}
-      <div
-        data-no-swipe
-        onPointerDown={() => setFactPaused(true)}
-        onPointerUp={() => setFactPaused(false)}
-        onPointerLeave={() => setFactPaused(false)}
-        onPointerCancel={() => setFactPaused(false)}
-        className="absolute inset-x-0 bottom-[15px] mx-auto h-5 max-w-[34ch] select-none"
-      >
-        <AnimatePresence mode="wait">
-          <motion.p
-            key={factIndex}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5, ease: "easeInOut" }}
-            className="absolute inset-0 text-[12.5px] leading-5 text-slate-300/78 sm:text-[13px]"
-          >
-            {facts[factIndex] ?? facts[0]}
-          </motion.p>
-        </AnimatePresence>
-      </div>
-    </div>
-  </div>
-</section>
+                {/* Big Three placeholders — centered between headline and rotating context */}
+                <div
+                  className="absolute inset-x-0 top-[151px] flex items-center justify-center gap-6 sm:gap-7"
+                  aria-hidden="true"
+                >
+                  {[0, 1, 2].map((index) => (
+                    <span
+                      key={index}
+                      className="block h-[52px] w-[52px] rounded-full border border-slate-200/30 bg-white/[0.018] shadow-[inset_0_0_16px_rgba(255,255,255,0.025),0_0_18px_rgba(148,163,184,0.05)] sm:h-[56px] sm:w-[56px]"
+                    />
+                  ))}
+                </div>
+
+                {/* Rotating context — hugs the lower edge without changing hero height */}
+                <div
+                  data-no-swipe
+                  onPointerDown={() => setFactPaused(true)}
+                  onPointerUp={() => setFactPaused(false)}
+                  onPointerLeave={() => setFactPaused(false)}
+                  onPointerCancel={() => setFactPaused(false)}
+                  className="absolute inset-x-0 bottom-[9px] mx-auto h-5 max-w-[34ch] select-none"
+                >
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={factIndex}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5, ease: "easeInOut" }}
+                      className="absolute inset-0 text-[12.5px] leading-5 text-slate-300/78 sm:text-[13px]"
+                    >
+                      {facts[factIndex] ?? facts[0]}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+          </section>
 
           {/* ── Dynamic reading header ──
               Before selection: "Select A Reading".
