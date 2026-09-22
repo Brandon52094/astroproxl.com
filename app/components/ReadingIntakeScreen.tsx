@@ -1091,8 +1091,12 @@ export default function ReadingIntakeScreen({
               onContextMenu={(e) => e.preventDefault()}
               aria-label="Tap to cycle hero information. Press and hold to pause."
               style={{
-                opacity: heroInspecting ? 1 : selectedArea ? 0.72 : 1,
-                filter: heroInspecting ? "brightness(1) saturate(1)" : selectedArea ? "brightness(0.38) saturate(0.55)" : "brightness(1) saturate(1)",
+                opacity: heroInspecting ? 1 : selectedArea ? 0.48 : 1,
+                filter: heroInspecting
+                  ? "brightness(1) saturate(1)"
+                  : selectedArea
+                    ? "grayscale(1) brightness(0.30) saturate(0)"
+                    : "grayscale(0) brightness(1) saturate(1)",
                 transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
