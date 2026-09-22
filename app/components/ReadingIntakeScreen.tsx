@@ -320,8 +320,10 @@ export default function ReadingIntakeScreen({
   // Four compact information slides share the same locked hero stage.
   const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky" | "mercury" | "elements">("personal");
   const [heroInspecting, setHeroInspecting] = useState(false);
+  const [heroCycleReset, setHeroCycleReset] = useState(0);
   const heroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heroHoldActivatedRef = useRef(false);
+  const suppressNextHeroTapRef = useRef(false);
 
   // If a reading is selected but the user does not continue into context or Begin Reading,
   // gently return the interface to its neutral state.
@@ -356,9 +358,28 @@ export default function ReadingIntakeScreen({
       heroHoldTimerRef.current = null;
     }
     if (heroHoldActivatedRef.current) {
+      suppressNextHeroTapRef.current = true;
       setHeroInspecting(false);
       heroHoldActivatedRef.current = false;
     }
+  }, []);
+
+  const cycleHeroInfo = useCallback(() => {
+    if (suppressNextHeroTapRef.current) {
+      suppressNextHeroTapRef.current = false;
+      return;
+    }
+
+    const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
+      "personal",
+      "sky",
+      "mercury",
+      "elements",
+    ];
+
+    setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
+    // Give the newly selected slide a full viewing interval before auto-rotation resumes.
+    setHeroCycleReset((value) => value + 1);
   }, []);
 
   useEffect(() => {
@@ -550,7 +571,7 @@ export default function ReadingIntakeScreen({
       setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
     }, 4800);
     return () => window.clearInterval(id);
-  }, [heroInspecting]);
+  }, [heroInspecting, heroCycleReset]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -1066,8 +1087,9 @@ export default function ReadingIntakeScreen({
               }}
               onPointerUp={endHeroHold}
               onPointerCancel={endHeroHold}
+              onClick={cycleHeroInfo}
               onContextMenu={(e) => e.preventDefault()}
-              aria-label="Press and hold to pause hero information"
+              aria-label="Tap to cycle hero information. Press and hold to pause."
               style={{
                 opacity: heroInspecting ? 1 : selectedArea ? 0.72 : 1,
                 filter: heroInspecting ? "brightness(1) saturate(1)" : selectedArea ? "brightness(0.38) saturate(0.55)" : "brightness(1) saturate(1)",
