@@ -1081,7 +1081,7 @@ export default function ReadingIntakeScreen({
               } as React.CSSProperties}
             >
               <div className="relative z-10 mx-auto h-full max-w-[560px]">
-                {/* Hero statement — fluid inside the locked 236px shell so narrow phones scale cleanly */}
+                {/* Hero statement — slightly larger, same locked 236px shell */}
                 <div className="absolute inset-x-0 top-[28px] px-[2px] text-left">
                   <p
                     className="mb-[3px] pl-[2px] text-[14.5px] font-medium uppercase tracking-[0.22em] text-slate-200/76"
@@ -1091,7 +1091,7 @@ export default function ReadingIntakeScreen({
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-[clamp(23px,7.7vw,34px)] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                    className="whitespace-nowrap text-[clamp(27px,8.75vw,39px)] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                     style={{
                       transform: "scaleY(1.045)",
                       transformOrigin: "left bottom",
