@@ -263,7 +263,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-[#050816]">
+      <div className="flex min-h-full w-full min-w-0 max-w-full items-center justify-center bg-[#050816]">
         <div className="text-sm text-slate-400">Casting your chart…</div>
       </div>
     );
@@ -273,7 +273,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
 
   return (
     <div
-      className="relative min-h-screen w-full font-sans text-slate-100"
+      className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden font-sans text-slate-100"
       style={{
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
@@ -392,7 +392,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
       </div>
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] px-4"
+  className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
   style={{
     paddingTop: "calc(env(safe-area-inset-top) + 8px)",
     paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
@@ -406,7 +406,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
           className="mb-4"
         >
           {hasChart ? (
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-[clamp(6px,2.5vw,10px)]">
               {(
                 [
                   { label: "Sun", p: bigThree.sun },
@@ -430,7 +430,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                     }
                   >
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                    <p className="mt-1.5 text-[17px] font-medium leading-tight text-white">{p?.sign ?? "—"}</p>
+                    <p className="mt-1.5 text-[clamp(15px,4.4vw,17px)] font-medium leading-tight text-white">{p?.sign ?? "—"}</p>
                     <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
                     {element && colors && (
                       <p

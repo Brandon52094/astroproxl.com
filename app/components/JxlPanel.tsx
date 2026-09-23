@@ -1042,6 +1042,8 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           position: relative;
           height: 100%;
           width: 100%;
+          min-width: 0;
+          max-width: 100%;
           overflow: hidden;
           background: #05060f;
           color: #e6e9f5;
@@ -1151,7 +1153,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           z-index: 10;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
-          padding: max(env(safe-area-inset-top), 52px) 20px calc(220px + env(safe-area-inset-bottom));
+          padding: max(env(safe-area-inset-top), 52px) clamp(14px, 5vw, 20px) calc(220px + env(safe-area-inset-bottom));
         }
         .inner { max-width: 560px; margin: 0 auto; }
 
@@ -1306,7 +1308,7 @@ export default function JxlPanel({ isActive = true, onBack }: JxlPanelProps) {
           position: absolute;
           left: 0; right: 0; bottom: 0;
           z-index: 30;
-          padding: 16px 20px calc(18px + env(safe-area-inset-bottom));
+          padding: 16px clamp(14px, 5vw, 20px) calc(18px + env(safe-area-inset-bottom));
           background: linear-gradient(180deg, rgba(5,6,15,0) 0%, rgba(5,6,15,0.88) 42%, rgba(5,6,15,0.98) 100%);
         }
         .replies {

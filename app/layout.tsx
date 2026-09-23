@@ -71,9 +71,9 @@ export default function RootLayout({
             This allows your deep dark [#040611] background to fill the whole screen (borders gone), 
             but keeps the actual layout items perfectly within the safe boundaries.
           */}
-          <main className="h-full w-full bg-[#040611]">
-            {children}
-          </main>
+          <main className="h-full w-full min-w-0 max-w-full overflow-hidden bg-[#040611]">
+  {children}
+</main>
         </ClerkProvider>
       </body>
     </html>

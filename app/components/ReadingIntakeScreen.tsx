@@ -710,7 +710,7 @@ export default function ReadingIntakeScreen({
 
   return (
     <div
-      className="no-scrollbar relative min-h-[100dvh] overflow-x-hidden text-slate-100"
+      className="no-scrollbar relative min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden text-slate-100"
       style={{
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
@@ -1041,7 +1041,7 @@ export default function ReadingIntakeScreen({
       <StarfieldBackground />
 
       <div
-        className="relative z-10 mx-auto w-full max-w-[430px] flex flex-col px-4"
+        className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col px-[clamp(12px,4vw,16px)]"
         style={{
           paddingTop: "calc(env(safe-area-inset-top) + 8px)",
           paddingBottom: "calc(2rem + env(safe-area-inset-bottom))",
@@ -1112,7 +1112,7 @@ export default function ReadingIntakeScreen({
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                    className="whitespace-nowrap text-[clamp(31px,9.4vw,39px)] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                     style={{
                       transform: "scaleY(1.045)",
                       transformOrigin: "left bottom",
@@ -1126,7 +1126,7 @@ export default function ReadingIntakeScreen({
 
                 {/* Product identity — supportive, not competing with the H1 */}
                 <p
-                  className="absolute inset-x-0 top-[96px] text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/52 sm:text-[10px]"
+                  className="absolute inset-x-0 top-[96px] whitespace-nowrap text-[clamp(8px,2.5vw,10px)] font-medium uppercase tracking-[clamp(0.14em,0.7vw,0.24em)] text-slate-300/52"
                   style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                 >
                   <span className="text-indigo-200/72">AstroProXL</span>

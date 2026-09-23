@@ -242,7 +242,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-[#050816]">
+      <div className="flex min-h-full w-full min-w-0 max-w-full items-center justify-center bg-[#050816]">
         <div className="text-sm text-slate-400">Reading the sky…</div>
       </div>
     );
@@ -250,7 +250,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
   return (
     <div
-      className="relative min-h-screen w-full font-sans text-slate-100"
+      className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden font-sans text-slate-100"
       style={{
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
@@ -277,7 +277,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       </div>
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] px-4"
+  className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
   style={{
     paddingTop: "calc(env(safe-area-inset-top) + 8px)",
     paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
@@ -300,7 +300,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                 <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
                   {GLYPHS.Sun} Sun Season
                 </p>
-                <p className="text-[34px] font-light leading-tight text-white">
+                <p className="text-[clamp(30px,8.7vw,34px)] font-light leading-tight text-white">
                   {sunNow?.sign ?? "—"}
                 </p>
                 {heroDetail(sunNow)}
@@ -309,7 +309,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                 <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
                   {GLYPHS.Moon} Moon
                 </p>
-                <p className="text-[34px] font-light leading-tight text-white">
+                <p className="text-[clamp(30px,8.7vw,34px)] font-light leading-tight text-white">
                   {moonPhase?.moonSign ?? moonNow?.sign ?? "—"}
                 </p>
                 {heroDetail(moonNow, moonPhase?.moonDegree)}
@@ -356,7 +356,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           {/* ── ROW: Retrogrades | Time Lord ── */}
           <div className="grid grid-cols-2 gap-3">
             <SkyCard icon={RotateCcw} label="Retrogrades">
-              <p className="text-[38px] font-extralight leading-none text-white tabular-nums">
+              <p className="text-[clamp(32px,9.7vw,38px)] font-extralight leading-none text-white tabular-nums">
                 {retrogrades.length}
               </p>
               <p className="mt-4 text-[12px] leading-5 text-slate-400">

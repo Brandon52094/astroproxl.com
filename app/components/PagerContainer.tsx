@@ -117,7 +117,11 @@ export default function PagerContainer() {
   }, []);
 
   // ── Clone snap-back after each transition ────────────────────────────
-  const handleTrackTransitionEnd = useCallback(() => {
+  const handleTrackTransitionEnd = useCallback((event: React.TransitionEvent<HTMLDivElement>) => {
+    // Ignore transitionend events bubbling up from animated children. Only the
+    // pager track's own transform transition is allowed to trigger clone snaps.
+    if (event.target !== event.currentTarget || event.propertyName !== "transform") return;
+
     // When we've swiped to the last clone (index totalPanels + 1), snap to the real first panel (index 1)
     if (extendedIndex === totalPanels + 1) {
       setSuppressTransition(true);
@@ -243,10 +247,36 @@ export default function PagerContainer() {
 
   const noAnimation = isDragging || suppressTransition;
 
+  // Keep every panel locked to the pager viewport. `overflow-y-auto` by itself
+  // can make overflow-x compute to `auto` on mobile browsers, which allows a
+  // wide child to create a sideways scroll position inside a panel.
+  const panelClass =
+    "h-full w-full min-w-full max-w-full min-w-0 flex-shrink-0 overflow-y-auto overflow-x-hidden overscroll-x-none";
+
+  // Mobile browsers can restore a horizontal scroll offset when returning to a
+  // page. The pager itself is transform-driven, so document/panel scrollLeft
+  // should always be zero. This does not touch the pager transform animation.
+  useEffect(() => {
+    const normalizeHorizontalPosition = () => {
+      document.documentElement.scrollLeft = 0;
+      document.body.scrollLeft = 0;
+      if (containerRef.current) containerRef.current.scrollLeft = 0;
+      containerRef.current
+        ?.querySelectorAll<HTMLElement>("[data-pager-panel]")
+        .forEach((panel) => {
+          panel.scrollLeft = 0;
+        });
+    };
+
+    normalizeHorizontalPosition();
+    window.addEventListener("pageshow", normalizeHorizontalPosition);
+    return () => window.removeEventListener("pageshow", normalizeHorizontalPosition);
+  }, []);
+
   return (
-    <div className="relative h-screen overflow-hidden bg-[#040611]" ref={containerRef}>
+    <div className="relative h-dvh w-full min-w-0 max-w-full overflow-hidden bg-[#040611]" ref={containerRef}>
       <div
-        className="h-full w-full"
+        className="h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -256,7 +286,7 @@ export default function PagerContainer() {
         onMouseLeave={handleMouseUp}
       >
         <div
-          className="flex h-full w-full"
+          className="flex h-full w-full min-w-0 max-w-full"
           onTransitionEnd={handleTrackTransitionEnd}
           style={{
             transform: `translateX(-${extendedIndex * 100}%)`,
@@ -269,34 +299,34 @@ export default function PagerContainer() {
         >
           {/* ── CLONE: Credits (before the real first panel) ── */}
           <div
-            className="min-w-full h-full flex-shrink-0 overflow-y-auto"
+            data-pager-panel className={panelClass}
             aria-hidden="true"
           >
             <CreditsPanel embedded />
           </div>
 
           {/* ── PANEL 0: Reading Intake (main) ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div data-pager-panel className={panelClass}>
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
 
           {/* ── PANEL 1: Your Birth Chart ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div data-pager-panel className={panelClass}>
             <BirthChartPanel userStatus={userStatus} />
           </div>
 
           {/* ── PANEL 2: Today's Sky ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div data-pager-panel className={panelClass}>
             <TodaySkyPanel userStatus={userStatus} />
           </div>
 
           {/* ── PANEL 3: Credits ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div data-pager-panel className={panelClass}>
             <CreditsPanel embedded />
           </div>
 
           {/* ── CLONE: Reading Intake (after the real last panel) ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
+          <div data-pager-panel className={panelClass} aria-hidden="true">
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
         </div>

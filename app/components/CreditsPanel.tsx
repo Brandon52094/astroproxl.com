@@ -241,8 +241,8 @@ export default function CreditsPanel({
   );
 
   const rootClass = embedded
-    ? "relative min-h-full w-full overflow-visible font-sans text-slate-100"
-    : "fixed inset-0 z-50 min-h-screen w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
+    ? "relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible font-sans text-slate-100"
+    : "fixed inset-0 z-50 min-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
 
   return (
     <div
@@ -306,7 +306,7 @@ export default function CreditsPanel({
       )}
 
       <div
-  className="relative z-10 mx-auto w-full max-w-[430px] px-4"
+  className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
   style={{
     paddingTop: "calc(env(safe-area-inset-top) + 8px)",
     paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
