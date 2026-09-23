@@ -32,8 +32,8 @@ interface UserStatus {
  */
 
 const DIRECTION_LOCK_THRESHOLD = 12;
-const SWIPE_COMMIT_THRESHOLD = 70;
-const HORIZONTAL_DOMINANCE_RATIO = 1.4;
+const SWIPE_COMMIT_THRESHOLD = 48;
+const HORIZONTAL_DOMINANCE_RATIO = 1.15;
 
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
@@ -45,9 +45,33 @@ export default function PagerContainer() {
   const [suppressTransition, setSuppressTransition] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
 
   // Real panel currently on screen (0-indexed), used to pause off-screen work.
   const activePanel = ((extendedIndex - 1) % totalPanels + totalPanels) % totalPanels;
+
+  // Measure the actual pager viewport instead of assuming every browser maps
+  // 100% / 100vw identically. ResizeObserver also catches rotation, browser
+  // chrome changes, split-screen, and different Android/iPhone viewport sizes.
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const updateWidth = () => {
+      const nextWidth = Math.round(node.getBoundingClientRect().width);
+      if (nextWidth > 0) setViewportWidth(nextWidth);
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(node);
+    window.addEventListener("orientationchange", updateWidth);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("orientationchange", updateWidth);
+    };
+  }, []);
 
   // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
@@ -244,9 +268,10 @@ export default function PagerContainer() {
   const noAnimation = isDragging || suppressTransition;
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[#040611]" ref={containerRef}>
+    <div className="relative h-dvh w-full max-w-full overflow-hidden bg-[#040611]" ref={containerRef}>
       <div
-        className="h-full w-full"
+        className="h-full w-full max-w-full overflow-hidden"
+        style={{ touchAction: "pan-y", overscrollBehaviorX: "none" }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -256,10 +281,12 @@ export default function PagerContainer() {
         onMouseLeave={handleMouseUp}
       >
         <div
-          className="flex h-full w-full"
+          className="flex h-full"
           onTransitionEnd={handleTrackTransitionEnd}
           style={{
-            transform: `translateX(-${extendedIndex * 100}%)`,
+            transform: `translate3d(-${extendedIndex * viewportWidth}px, 0, 0)`,
+            width: viewportWidth ? `${viewportWidth * (totalPanels + 2)}px` : "600%",
+            willChange: "transform",
             transition: noAnimation
               ? "none"
               : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
@@ -269,34 +296,41 @@ export default function PagerContainer() {
         >
           {/* ── CLONE: Credits (before the real first panel) ── */}
           <div
-            className="min-w-full h-full flex-shrink-0 overflow-y-auto"
+            className="h-full min-w-0 flex-none overflow-x-hidden overflow-y-auto"
+            style={{ width: viewportWidth || "100%", maxWidth: viewportWidth || "100%" }}
             aria-hidden="true"
           >
             <CreditsPanel embedded />
           </div>
 
           {/* ── PANEL 0: Reading Intake (main) ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div className="h-full min-w-0 flex-none overflow-x-hidden overflow-y-auto"
+            style={{ width: viewportWidth || "100%", maxWidth: viewportWidth || "100%" }}>
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
 
           {/* ── PANEL 1: Your Birth Chart ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div className="h-full min-w-0 flex-none overflow-x-hidden overflow-y-auto"
+            style={{ width: viewportWidth || "100%", maxWidth: viewportWidth || "100%" }}>
             <BirthChartPanel userStatus={userStatus} />
           </div>
 
           {/* ── PANEL 2: Today's Sky ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div className="h-full min-w-0 flex-none overflow-x-hidden overflow-y-auto"
+            style={{ width: viewportWidth || "100%", maxWidth: viewportWidth || "100%" }}>
             <TodaySkyPanel userStatus={userStatus} />
           </div>
 
           {/* ── PANEL 3: Credits ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto">
+          <div className="h-full min-w-0 flex-none overflow-x-hidden overflow-y-auto"
+            style={{ width: viewportWidth || "100%", maxWidth: viewportWidth || "100%" }}>
             <CreditsPanel embedded />
           </div>
 
           {/* ── CLONE: Reading Intake (after the real last panel) ── */}
-          <div className="min-w-full h-full flex-shrink-0 overflow-y-auto" aria-hidden="true">
+          <div className="h-full min-w-0 flex-none overflow-x-hidden overflow-y-auto"
+            style={{ width: viewportWidth || "100%", maxWidth: viewportWidth || "100%" }}
+            aria-hidden="true">
             <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
           </div>
         </div>
