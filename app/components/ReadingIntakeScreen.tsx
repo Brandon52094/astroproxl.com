@@ -120,6 +120,11 @@ const HERO_PALETTES: Record<string, [string, string, string, string]> = {
   ],
 };
 
+// The hero's information is designed once at this width, then the entire
+// composition scales together to fit the live card.
+const HERO_CANVAS_WIDTH = 374;
+const HERO_HORIZONTAL_INSET = 20;
+
 
 interface UserStatus {
   credits: number;
@@ -321,9 +326,30 @@ export default function ReadingIntakeScreen({
   const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky" | "mercury" | "elements">("personal");
   const [heroInspecting, setHeroInspecting] = useState(false);
   const [heroCycleReset, setHeroCycleReset] = useState(0);
+  const [heroCompositionScale, setHeroCompositionScale] = useState(1);
+  const heroStageRef = useRef<HTMLDivElement | null>(null);
   const heroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heroHoldActivatedRef = useRef(false);
   const suppressNextHeroTapRef = useRef(false);
+
+  useEffect(() => {
+    const stage = heroStageRef.current;
+    if (!stage) return;
+
+    const updateHeroScale = (stageWidth: number) => {
+      const availableWidth = Math.max(0, stageWidth - HERO_HORIZONTAL_INSET * 2);
+      setHeroCompositionScale(Math.min(1, availableWidth / HERO_CANVAS_WIDTH));
+    };
+
+    updateHeroScale(stage.getBoundingClientRect().width);
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      updateHeroScale(entry.contentRect.width);
+    });
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
 
   // If a reading is selected but the user does not continue into context or Begin Reading,
   // gently return the interface to its neutral state.
@@ -1059,7 +1085,8 @@ export default function ReadingIntakeScreen({
               } as React.CSSProperties}
             >
             <div
-              className="hero-shine relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] px-5 text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              ref={heroStageRef}
+              className="hero-shine relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]"
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture?.(e.pointerId);
                 beginHeroHold();
@@ -1080,18 +1107,30 @@ export default function ReadingIntakeScreen({
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
-              <div className="relative z-10 mx-auto h-full max-w-[560px]">
-                {/* Hero statement — slightly larger, same locked 236px shell */}
-                <div className="absolute inset-x-0 top-[28px] px-[2px] text-left">
+              {/* One master canvas: every informational element scales and moves together. */}
+              <div
+                className="absolute left-1/2 top-1/2 z-10 h-[236px] w-[374px]"
+                style={{
+                  transform: `translate(-50%, -50%) scale(${heroCompositionScale})`,
+                  transformOrigin: "center center",
+                }}
+              >
+                {/* Hero statement */}
+                <div className="absolute inset-x-0 top-[20px] px-[2px] text-left">
                   <p
-                    className="mb-[3px] pl-[2px] text-[14.5px] font-medium uppercase tracking-[0.22em] text-slate-200/76"
-                    style={{ textShadow: "0 3px 13px rgba(0,0,0,0.92)" }}
+                    className="mb-[1px] text-center text-[25px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
+                    style={{
+                      fontFamily:
+                        '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
+                      textShadow:
+                        "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
+                    }}
                   >
-                    Your
+                    Personalized
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-[clamp(27px,8.75vw,39px)] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                    className="whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                     style={{
                       transform: "scaleY(1.045)",
                       transformOrigin: "left bottom",
@@ -1105,7 +1144,7 @@ export default function ReadingIntakeScreen({
 
                 {/* Product identity — supportive, not competing with the H1 */}
                 <p
-                  className="absolute inset-x-0 top-[96px] whitespace-nowrap text-[clamp(8px,2.5vw,10px)] font-medium uppercase tracking-[clamp(0.14em,0.7vw,0.24em)] text-slate-300/52"
+                  className="absolute inset-x-0 top-[96px] whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/52"
                   style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                 >
                   <span className="text-indigo-200/72">AstroProXL</span>
@@ -1125,7 +1164,7 @@ export default function ReadingIntakeScreen({
                       className="absolute inset-0 flex items-center justify-center"
                     >
                       {heroInfoMode === "personal" && (
-                        <div className="flex items-center justify-center gap-7 sm:gap-8">
+                        <div className="flex items-center justify-center gap-8">
                           {heroData.personal.map((item) => (
                             <div
                               key={`personal-${item.role}`}
@@ -1199,7 +1238,7 @@ export default function ReadingIntakeScreen({
                       )}
 
                       {heroInfoMode === "elements" && (
-                        <div className="flex h-[84px] items-end justify-center gap-[18px] sm:gap-5">
+                        <div className="flex h-[84px] items-end justify-center gap-5">
                           {HERO_ELEMENT_ORDER.map((element) => {
                             const count = heroData.counts[element];
                             const ratio = count / heroData.maxElementCount;
