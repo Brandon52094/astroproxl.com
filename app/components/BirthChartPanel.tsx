@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Sparkles, Compass, ChevronLeft, ChevronRight } from "lucide-react";
+import { Sparkles, Compass, Crown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
@@ -159,6 +159,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
   const [aspectsOpen, setAspectsOpen] = useState(false);
   const [showWeaker, setShowWeaker] = useState(false);
   const [openPlacement, setOpenPlacement] = useState<string | null>(null);
+  const [chartOpen, setChartOpen] = useState(false);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -306,8 +307,66 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
         }
         .element-box > * { position: relative; z-index: 2; }
 
+        @property --plus-angle {
+          syntax: "<angle>";
+          inherits: false;
+          initial-value: 0deg;
+        }
+
+        .astro-plus-shell {
+          position: relative;
+          isolation: isolate;
+          background: transparent;
+          border-radius: 28px;
+        }
+
+        .astro-plus-shell::before,
+        .astro-plus-shell::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          padding: 1.25px;
+          background:
+            conic-gradient(
+              from var(--plus-angle),
+              rgba(255,255,255,0.94) 0deg,
+              rgba(255,255,255,0.74) 54deg,
+              rgba(218,183,104,0.88) 112deg,
+              rgba(255,239,195,0.82) 172deg,
+              rgba(255,255,255,0.96) 226deg,
+              rgba(193,151,67,0.86) 296deg,
+              rgba(255,255,255,0.94) 360deg
+            );
+          -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          animation: plusOrbit 12s linear infinite;
+        }
+
+        .astro-plus-shell::before {
+          z-index: 0;
+          opacity: 0.82;
+        }
+
+        .astro-plus-shell::after {
+          inset: -1px;
+          z-index: -1;
+          padding: 2px;
+          opacity: 0.52;
+          filter: blur(8px);
+        }
+
+        @keyframes plusOrbit {
+          to { --plus-angle: 360deg; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
+          .astro-plus-shell::before, .astro-plus-shell::after { animation: none !important; }
         }
       `}</style>
 
@@ -339,22 +398,15 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
     paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
   }}
 >
-        {/* ── HERO — the Big 3, elementally outlined ── */}
+        {/* ── PROFILE IDENTITY — Big Three first, no extra hero copy ── */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="mb-6"
+          className="mb-4"
         >
-          <p className="text-center text-[10px] uppercase tracking-[0.24em] text-slate-500">
-            Your Birth Chart
-          </p>
-          <h1 className="mt-1 text-center text-[22px] font-light tracking-tight text-white">
-            The map of you
-          </h1>
-
           {hasChart ? (
-            <div className="mt-5 grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2.5">
               {(
                 [
                   { label: "Sun", p: bigThree.sun },
@@ -393,7 +445,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
               })}
             </div>
           ) : (
-            <p className="mt-6 text-center text-[13px] leading-6 text-slate-400">
+            <p className="py-8 text-center text-[13px] leading-6 text-slate-400">
               Enter your birth details to reveal your chart.
             </p>
           )}
@@ -406,370 +458,394 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
             transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
             className="space-y-3"
           >
-            {/* ── Profection Year — the sign/house theme of your current year ── */}
-            {hasProfection && (
-              <SkyCard icon={Compass} label="Your Profection Year">
-                <div className="flex items-center gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[26px] font-light leading-tight text-white">
-                      {profection!.activatedSign} Year
-                    </p>
-                    <p className="mt-2 text-[12px] leading-5 text-slate-400">
-                      {typeof profection!.activatedHouse === "number"
-                        ? `${ordinal(profection!.activatedHouse)} house activated`
-                        : `${ordinal(profection!.profectionYear)} house year`}
-                      {typeof profection!.age === "number" ? ` · age ${profection!.age}` : ""}.
-                    </p>
-                  </div>
-                  {profectionColors && (
-                    <div
-                      className="element-box flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border bg-black/20"
-                      style={{
-                        borderColor: profectionColors.border,
-                        boxShadow: `0 0 22px ${profectionColors.glow}, inset 0 0 14px ${profectionColors.glow}`,
-                      }}
-                    >
-                      <span className="text-2xl" style={{ color: profectionColors.text }}>
-                        {GLYPHS[SIGN_RULER_GLYPH(profection!.activatedSign)] ?? "✦"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </SkyCard>
-            )}
-
-            {/* ── Element Balance — quick "about me" read ── */}
-            {elementBalance.total > 0 && (
-              <SkyCard icon={Sparkles} label="Element Balance">
-                <div className="space-y-2.5">
-                  {ELEMENT_ORDER.map((el) => {
-                    const count = elementBalance.counts[el];
-                    const pct = Math.round((count / elementBalance.total) * 100);
-                    const colors = ELEMENT_COLORS[el];
-                    return (
-                      <div key={el} className="flex items-center gap-3">
-                        <span
-                          className="w-14 text-[11px] font-medium uppercase tracking-[0.12em]"
-                          style={{ color: colors.text }}
-                        >
-                          {el}
-                        </span>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${pct}%` }}
-                            transition={{ duration: 0.7, ease: "easeOut" }}
-                            className="h-full rounded-full"
-                            style={{ backgroundColor: colors.bar, opacity: 0.85 }}
-                          />
-                        </div>
-                        <span className="w-6 text-right text-[12px] text-slate-400 tabular-nums">
-                          {count}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="mt-3 text-[12px] leading-5 text-slate-400">
-                  Your chart leans{" "}
-                  <span style={{ color: ELEMENT_COLORS[elementBalance.dominant].text }}>
-                    {elementBalance.dominant}
-                  </span>
-                  .
-                </p>
-              </SkyCard>
-            )}
-
-            {/* ── Recalculate — heals charts built by older engine versions ── */}
-            <button
-              type="button"
-              onClick={() => router.push("/chart-data?recalculate=true")}
-              style={{
-                display: "block",
-                margin: "8px auto 20px",
-                background: "transparent",
-                border: "none",
-                color: "#64748b",
-                fontSize: "13px",
-                textDecoration: "underline",
-                textUnderlineOffset: "3px",
-                cursor: "pointer",
-              }}
-            >
-              Recalculate chart
-            </button>
-
-            {/* ── Full placements — tap to explore ── */}
-            <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
-              <div className="mb-4 text-center">
-                <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                  Tap Each Placement To Learn
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {natal.map((planet, index) => {
-                  const element = elementOf(planet.sign);
-                  const colors = element ? ELEMENT_COLORS[element] : null;
-                  const displayName =
-                    planet.name === "Ascendant" ? "Rising" : planet.name;
-
-                  const isOpen = openPlacement === planet.name;
-
-                  return (
-                    <div
-                      key={planet.name}
-                      className={cn(
-                        index < natal.length - 1 &&
-                          "border-b border-white/5 pb-3"
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenPlacement((current) =>
-                            current === planet.name ? null : planet.name
-                          )
-                        }
-                        aria-expanded={isOpen}
-                        className="flex w-full items-center gap-3 text-left"
-                      >
-                        <span
-                          className="w-8 shrink-0 text-center text-xl transition-all"
-                          style={
-                            colors
-                              ? {
-                                  color: colors.text,
-                                  textShadow: isOpen
-                                    ? `0 0 10px ${colors.glow}`
-                                    : "none",
-                                }
-                              : {
-                                  color: "#64748b",
-                                }
-                          }
-                        >
-                          {GLYPHS[planet.name] ?? "•"}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
-                            isOpen ? "text-white" : "text-slate-300"
-                          )}
-                        >
-                          {displayName}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "min-w-0 flex-1 text-[15px] transition-colors",
-                            isOpen ? "text-white" : "text-slate-300"
-                          )}
-                        >
-                          {planet.sign}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
-                            isOpen ? "text-slate-300" : "text-slate-400"
-                          )}
-                        >
-                          {planet.degree}
-
-                          {planet.house ? (
-                            <span className="ml-1 text-slate-500">
-                              · {ordinal(planet.house)}
-                            </span>
-                          ) : null}
-                        </span>
-                      </button>
-
-                      <motion.div
-                        initial={false}
-                        animate={{
-                          height: isOpen ? "auto" : 0,
-                          opacity: isOpen ? 1 : 0,
-                        }}
-                        transition={{
-                          duration: shouldReduceMotion ? 0 : 0.22,
-                          ease: "easeOut",
-                        }}
-                        className="overflow-hidden"
-                      >
-                        <div className="pt-3 pl-1">
-                          <div
-                            className="border-l pl-3"
-                            style={{
-                              borderColor:
-                                colors?.border ?? "rgba(255,255,255,0.10)",
-                            }}
-                          >
-                            <p
-                              className="text-[10px] font-medium uppercase tracking-[0.16em]"
-                              style={{
-                                color: colors?.text ?? "#94A3B8",
-                              }}
-                            >
-                              {planet.name === "Ascendant"
-                                ? `${planet.sign} Rising`
-                                : `${planet.name} in ${planet.sign}`}
-                            </p>
-
-                            {PLANET_MEANING[planet.name] && (
-                              <div className="mt-2">
-                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                  The Planet
-                                </p>
-                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                  {PLANET_MEANING[planet.name]}
-                                </p>
-                              </div>
-                            )}
-
-                            {SIGN_MEANING[planet.sign] && (
-                              <div className="mt-3">
-                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                  The Sign
-                                </p>
-                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                  {SIGN_MEANING[planet.sign]}
-                                </p>
-                              </div>
-                            )}
-
-                            {planet.house && HOUSE_MEANING[String(planet.house)] && (
-                              <div className="mt-3">
-                                <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                  The {ordinal(planet.house)} House
-                                </p>
-                                <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                  {HOUSE_MEANING[String(planet.house)]}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ── Major Aspects (collapsible, text, sorted by strength) ── */}
-            {aspects.length > 0 && (
-              <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm">
-                <button
-                  type="button"
-                  onClick={() => setAspectsOpen((v) => !v)}
-                  className="flex w-full items-center justify-between p-4"
-                >
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                      Major Aspects
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-2 text-slate-500">
-                    <span className="text-[11px] tabular-nums">{aspects.length}</span>
-                    <ChevronRight
-                      className={cn(
-                        "h-4 w-4 transition-transform",
-                        aspectsOpen && "rotate-90"
-                      )}
-                    />
-                  </span>
-                </button>
-
-                {aspectsOpen && (
-                  <div className="px-4 pb-3">
-                    {groupedAspects.sections.map((section) => (
-                      <div key={section.type} className="mb-3 last:mb-1">
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <span
-                            className="h-1.5 w-1.5 rounded-full"
-                            style={{
-                              backgroundColor: section.meta.text,
-                              boxShadow: `0 0 6px ${section.meta.glow}`,
-                            }}
-                          />
-                          <span
-                            className="text-[10px] font-medium uppercase tracking-[0.16em]"
-                            style={{ color: section.meta.text }}
-                          >
-                            {section.meta.header}
+            {/* ── PERSONAL CONTEXT — Profection + Element Balance combined ── */}
+            {(hasProfection || elementBalance.total > 0) && (
+              <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+                {hasProfection && (
+                  <>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Compass className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
+                          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                            My Profection Year
                           </span>
                         </div>
-                        <div className="divide-y divide-white/5">
-                          {section.items.map((asp, i) => {
-                            const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                            const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                            return (
-                              <div
-                                key={`${asp.planetA}-${asp.planetB}-${i}`}
-                                className="flex items-center justify-between py-2 text-[13px]"
-                              >
-                                <span className="text-slate-200">
-                                  {nameA}{" "}
-                                  <span className="italic text-slate-500">{asp.type}</span>{" "}
-                                  {nameB}
-                                </span>
-                                <span className="text-[11px] text-slate-500 tabular-nums">
-                                  {asp.orbDegrees}°
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <p className="mt-2 text-[27px] font-light leading-tight text-white">
+                          {profection!.activatedSign} Year
+                        </p>
+                        <p className="mt-1.5 text-[11px] leading-5 text-slate-500">
+                          {typeof profection!.activatedHouse === "number"
+                            ? `${ordinal(profection!.activatedHouse)} house activated`
+                            : `${ordinal(profection!.profectionYear)} house year`}
+                          {typeof profection!.age === "number" ? ` · age ${profection!.age}` : ""}.
+                        </p>
                       </div>
-                    ))}
 
-                    {groupedAspects.sections.length === 0 && (
-                      <p className="py-2 text-[12px] text-slate-500">
-                        No tight aspects within {STRONG_ORB}°.
-                      </p>
-                    )}
-
-                    {groupedAspects.weak.length > 0 && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setShowWeaker((v) => !v)}
-                          className="mt-1 w-full text-left text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                      {profectionColors && (
+                        <div
+                          className="element-box flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-black/20"
+                          style={{
+                            borderColor: profectionColors.border,
+                            boxShadow: `0 0 18px ${profectionColors.glow}, inset 0 0 12px ${profectionColors.glow}`,
+                          }}
                         >
-                          {showWeaker ? "Hide weaker aspects" : "Show weaker aspects"} →
-                        </button>
-                        {showWeaker && (
-                          <div className="mt-2 divide-y divide-white/5 opacity-70">
-                            {groupedAspects.weak.map((asp, i) => {
-                              const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                              const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                              return (
-                                <div
-                                  key={`weak-${asp.planetA}-${asp.planetB}-${i}`}
-                                  className="flex items-center justify-between py-2 text-[13px]"
-                                >
-                                  <span className="text-slate-400">
-                                    {nameA}{" "}
-                                    <span className="italic text-slate-600">{asp.type}</span>{" "}
-                                    {nameB}
-                                  </span>
-                                  <span className="text-[11px] text-slate-600 tabular-nums">
-                                    {asp.orbDegrees}°
-                                  </span>
-                                </div>
-                              );
-                            })}
+                          <span className="text-[23px]" style={{ color: profectionColors.text }}>
+                            {GLYPHS[SIGN_RULER_GLYPH(profection!.activatedSign)] ?? "✦"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {elementBalance.total > 0 && <div className="my-4 h-px bg-white/[0.06]" />}
+                  </>
+                )}
+
+                {elementBalance.total > 0 && (
+                  <div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {ELEMENT_ORDER.map((el) => {
+                        const count = elementBalance.counts[el];
+                        const maxCount = Math.max(...ELEMENT_ORDER.map((key) => elementBalance.counts[key]), 1);
+                        const height = 12 + Math.round((count / maxCount) * 28);
+                        const colors = ELEMENT_COLORS[el];
+
+                        return (
+                          <div key={el} className="flex flex-col items-center">
+                            <div className="flex h-11 items-end justify-center">
+                              <motion.span
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height, opacity: 1 }}
+                                transition={{ duration: 0.65, ease: "easeOut" }}
+                                className="w-[3px] rounded-full"
+                                style={{
+                                  backgroundColor: colors.bar,
+                                  boxShadow: `0 0 10px ${colors.glow}`,
+                                }}
+                              />
+                            </div>
+                            <span
+                              className="mt-1 text-[9px] font-medium uppercase tracking-[0.14em]"
+                              style={{ color: colors.text }}
+                            >
+                              {el}
+                            </span>
+                            <span className="mt-0.5 text-[10px] text-slate-500 tabular-nums">{count}</span>
                           </div>
-                        )}
-                      </>
-                    )}
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-center gap-2">
+                      <Sparkles className="h-3 w-3 text-slate-500" strokeWidth={2.1} />
+                      <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                        My Elemental Balance
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
             )}
+
+            {/* ── VIEW MY CHART — technical chart data lives behind one disclosure ── */}
+            <button
+              type="button"
+              onClick={() => setChartOpen((v) => !v)}
+              aria-expanded={chartOpen}
+              className="standard-shadow flex w-full items-center justify-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.025] px-4 py-3 text-[12px] font-medium uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.04]"
+            >
+              <span>{chartOpen ? "Hide My Chart" : "View My Chart"}</span>
+              <ChevronDown
+                className={cn("h-4 w-4 text-slate-500 transition-transform", chartOpen && "rotate-180")}
+              />
+            </button>
+
+            <motion.div
+              initial={false}
+              animate={{ height: chartOpen ? "auto" : 0, opacity: chartOpen ? 1 : 0 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: "easeOut" }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-3 pt-1">
+                {/* Recalculate stays with the full technical chart. */}
+                <button
+                  type="button"
+                  onClick={() => router.push("/chart-data?recalculate=true")}
+                  style={{
+                    display: "block",
+                    margin: "4px auto 14px",
+                    background: "transparent",
+                    border: "none",
+                    color: "#64748b",
+                    fontSize: "13px",
+                    textDecoration: "underline",
+                    textUnderlineOffset: "3px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Recalculate chart
+                </button>
+
+                {/* Full placements — tap to explore. */}
+                <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+                  <div className="mb-4 text-center">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                      Tap Each Placement To Learn
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {natal.map((planet, index) => {
+                      const element = elementOf(planet.sign);
+                      const colors = element ? ELEMENT_COLORS[element] : null;
+                      const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
+                      const isOpen = openPlacement === planet.name;
+
+                      return (
+                        <div
+                          key={planet.name}
+                          className={cn(index < natal.length - 1 && "border-b border-white/5 pb-3")}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenPlacement((current) => current === planet.name ? null : planet.name)
+                            }
+                            aria-expanded={isOpen}
+                            className="flex w-full items-center gap-3 text-left"
+                          >
+                            <span
+                              className="w-8 shrink-0 text-center text-xl transition-all"
+                              style={
+                                colors
+                                  ? {
+                                      color: colors.text,
+                                      textShadow: isOpen ? `0 0 10px ${colors.glow}` : "none",
+                                    }
+                                  : { color: "#64748b" }
+                              }
+                            >
+                              {GLYPHS[planet.name] ?? "•"}
+                            </span>
+
+                            <span
+                              className={cn(
+                                "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
+                                isOpen ? "text-white" : "text-slate-300"
+                              )}
+                            >
+                              {displayName}
+                            </span>
+
+                            <span
+                              className={cn(
+                                "min-w-0 flex-1 text-[15px] transition-colors",
+                                isOpen ? "text-white" : "text-slate-300"
+                              )}
+                            >
+                              {planet.sign}
+                            </span>
+
+                            <span
+                              className={cn(
+                                "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
+                                isOpen ? "text-slate-300" : "text-slate-400"
+                              )}
+                            >
+                              {planet.degree}
+                              {planet.house ? (
+                                <span className="ml-1 text-slate-500">· {ordinal(planet.house)}</span>
+                              ) : null}
+                            </span>
+                          </button>
+
+                          <motion.div
+                            initial={false}
+                            animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
+                            transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
+                            className="overflow-hidden"
+                          >
+                            <div className="pt-3 pl-1">
+                              <div
+                                className="border-l pl-3"
+                                style={{ borderColor: colors?.border ?? "rgba(255,255,255,0.10)" }}
+                              >
+                                <p
+                                  className="text-[10px] font-medium uppercase tracking-[0.16em]"
+                                  style={{ color: colors?.text ?? "#94A3B8" }}
+                                >
+                                  {planet.name === "Ascendant"
+                                    ? `${planet.sign} Rising`
+                                    : `${planet.name} in ${planet.sign}`}
+                                </p>
+
+                                {PLANET_MEANING[planet.name] && (
+                                  <div className="mt-2">
+                                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                      The Planet
+                                    </p>
+                                    <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                      {PLANET_MEANING[planet.name]}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {SIGN_MEANING[planet.sign] && (
+                                  <div className="mt-3">
+                                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                      The Sign
+                                    </p>
+                                    <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                      {SIGN_MEANING[planet.sign]}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {planet.house && HOUSE_MEANING[String(planet.house)] && (
+                                  <div className="mt-3">
+                                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                      The {ordinal(planet.house)} House
+                                    </p>
+                                    <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                      {HOUSE_MEANING[String(planet.house)]}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Major Aspects stay inside View My Chart. */}
+                {aspects.length > 0 && (
+                  <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm">
+                    <button
+                      type="button"
+                      onClick={() => setAspectsOpen((v) => !v)}
+                      className="flex w-full items-center justify-between p-4"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
+                        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                          Major Aspects
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-2 text-slate-500">
+                        <span className="text-[11px] tabular-nums">{aspects.length}</span>
+                        <ChevronRight
+                          className={cn("h-4 w-4 transition-transform", aspectsOpen && "rotate-90")}
+                        />
+                      </span>
+                    </button>
+
+                    {aspectsOpen && (
+                      <div className="px-4 pb-3">
+                        {groupedAspects.sections.map((section) => (
+                          <div key={section.type} className="mb-3 last:mb-1">
+                            <div className="mb-1.5 flex items-center gap-2">
+                              <span
+                                className="h-1.5 w-1.5 rounded-full"
+                                style={{
+                                  backgroundColor: section.meta.text,
+                                  boxShadow: `0 0 6px ${section.meta.glow}`,
+                                }}
+                              />
+                              <span
+                                className="text-[10px] font-medium uppercase tracking-[0.16em]"
+                                style={{ color: section.meta.text }}
+                              >
+                                {section.meta.header}
+                              </span>
+                            </div>
+
+                            <div className="divide-y divide-white/5">
+                              {section.items.map((asp, i) => {
+                                const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
+                                const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
+                                return (
+                                  <div
+                                    key={`${asp.planetA}-${asp.planetB}-${i}`}
+                                    className="flex items-center justify-between py-2 text-[13px]"
+                                  >
+                                    <span className="text-slate-200">
+                                      {nameA} <span className="italic text-slate-500">{asp.type}</span> {nameB}
+                                    </span>
+                                    <span className="text-[11px] text-slate-500 tabular-nums">
+                                      {asp.orbDegrees}°
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+
+                        {groupedAspects.sections.length === 0 && (
+                          <p className="py-2 text-[12px] text-slate-500">
+                            No tight aspects within {STRONG_ORB}°.
+                          </p>
+                        )}
+
+                        {groupedAspects.weak.length > 0 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setShowWeaker((v) => !v)}
+                              className="mt-1 w-full text-left text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                            >
+                              {showWeaker ? "Hide weaker aspects" : "Show weaker aspects"} →
+                            </button>
+
+                            {showWeaker && (
+                              <div className="mt-2 divide-y divide-white/5 opacity-70">
+                                {groupedAspects.weak.map((asp, i) => {
+                                  const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
+                                  const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
+                                  return (
+                                    <div
+                                      key={`weak-${asp.planetA}-${asp.planetB}-${i}`}
+                                      className="flex items-center justify-between py-2 text-[13px]"
+                                    >
+                                      <span className="text-slate-400">
+                                        {nameA} <span className="italic text-slate-600">{asp.type}</span> {nameB}
+                                      </span>
+                                      <span className="text-[11px] text-slate-600 tabular-nums">
+                                        {asp.orbDegrees}°
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* ── ASTRO PLUS — intentionally empty skeleton for now ── */}
+            <section
+              className="astro-plus-shell min-h-[270px] w-full"
+              aria-label={userStatus?.isSubscribed ? "Astro Plus member area" : "Astro Plus locked area"}
+            >
+              <div className="relative z-10 flex min-h-[270px] flex-col bg-transparent p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500">
+                    Astro Plus
+                  </span>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/10">
+                    <Crown className="h-4 w-4 text-slate-300" strokeWidth={1.8} />
+                  </span>
+                </div>
+              </div>
+            </section>
 
             <p className="flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
               <span className="flex items-center gap-1">
