@@ -44,6 +44,9 @@ export default function PagerContainer() {
   const [suppressTransition, setSuppressTransition] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const slideOffsetRef = useRef<-1 | 0 | 1>(0);
+  const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffLockedRef = useRef(false);
 
   const wrapPanelIndex = useCallback(
     (index: number) => (index + totalPanels) % totalPanels,
@@ -119,32 +122,73 @@ export default function PagerContainer() {
       .catch(() => {});
   }, []);
 
-  const goToNext = useCallback(() => {
-    setSlideOffset((prev) => (prev === 0 ? 1 : prev));
-  }, []);
+  // Finish a swipe exactly once. Mobile browsers can occasionally miss a
+  // transform transitionend while the four keyed panels are being reordered,
+  // so every swipe also gets a small timeout fallback. This keeps the circular
+  // pager from ever getting stranded with slideOffset stuck at -1 or 1.
+  const completeSlide = useCallback(() => {
+    const completedDirection = slideOffsetRef.current;
+    if (completedDirection === 0 || handoffLockedRef.current) return;
 
-  const goToPrevious = useCallback(() => {
-    setSlideOffset((prev) => (prev === 0 ? -1 : prev));
-  }, []);
+    handoffLockedRef.current = true;
+    if (handoffTimerRef.current) {
+      clearTimeout(handoffTimerRef.current);
+      handoffTimerRef.current = null;
+    }
+
+    setSuppressTransition(true);
+    setCurrentIndex((prev) => wrapPanelIndex(prev + completedDirection));
+    slideOffsetRef.current = 0;
+    setSlideOffset(0);
+  }, [wrapPanelIndex]);
+
+  const startSlide = useCallback((direction: -1 | 1) => {
+    if (slideOffsetRef.current !== 0 || handoffLockedRef.current) return;
+
+    slideOffsetRef.current = direction;
+    setSlideOffset(direction);
+
+    // The CSS transition is 500ms. This is only a backstop if transitionend
+    // does not arrive; the normal path still completes from transitionend.
+    handoffTimerRef.current = setTimeout(() => {
+      completeSlide();
+    }, 560);
+  }, [completeSlide]);
+
+  const goToNext = useCallback(() => startSlide(1), [startSlide]);
+  const goToPrevious = useCallback(() => startSlide(-1), [startSlide]);
 
   // ── Circular handoff after each transition ──────────────────────────
   const handleTrackTransitionEnd = useCallback((event: React.TransitionEvent<HTMLDivElement>) => {
     // Ignore transitionend events bubbling up from animated children. Only the
     // pager track's own transform transition completes a page swipe.
     if (event.target !== event.currentTarget || event.propertyName !== "transform") return;
-    if (slideOffset === 0) return;
-
-    const completedDirection = slideOffset;
-    setSuppressTransition(true);
-    setCurrentIndex((prev) => wrapPanelIndex(prev + completedDirection));
-    setSlideOffset(0);
-  }, [slideOffset, wrapPanelIndex]);
+    completeSlide();
+  }, [completeSlide]);
 
   useEffect(() => {
     if (!suppressTransition) return;
-    const raf = requestAnimationFrame(() => setSuppressTransition(false));
-    return () => cancelAnimationFrame(raf);
+
+    // Two frames guarantees the no-transition snap back to the center slot is
+    // actually painted before transitions are re-enabled. One frame can be
+    // coalesced on Safari/Chrome during a keyed DOM reorder.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        handoffLockedRef.current = false;
+        setSuppressTransition(false);
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
   }, [suppressTransition]);
+
+  useEffect(() => () => {
+    if (handoffTimerRef.current) clearTimeout(handoffTimerRef.current);
+  }, []);
 
   // ── Direction-locked touch handlers ─────────────────────────────────
   const touchStartX = useRef(0);
