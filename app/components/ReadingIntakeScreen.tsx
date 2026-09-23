@@ -946,14 +946,6 @@ export default function ReadingIntakeScreen({
           }
         }
 
-        @keyframes askPremiumSweep {
-          0% { transform: translateX(-175%) skewX(-18deg); opacity: 0; }
-          12% { opacity: 0; }
-          20% { opacity: 0.56; }
-          34% { transform: translateX(330%) skewX(-18deg); opacity: 0; }
-          100% { transform: translateX(330%) skewX(-18deg); opacity: 0; }
-        }
-
         @keyframes askMicBreathe {
           0%, 100% {
             transform: scale(1);
@@ -979,18 +971,6 @@ export default function ReadingIntakeScreen({
               rgba(99,102,241,0.74) 46%,
               rgba(168,85,247,0.78) 100%) border-box;
           animation: askPremiumPulse 5.2s ease-in-out infinite;
-        }
-
-        .ask-premium::before {
-          content: "";
-          position: absolute;
-          inset: -34% auto -34% -34%;
-          width: 24%;
-          background: linear-gradient(105deg, transparent, rgba(255,255,255,0.15), rgba(255,255,255,0.055), transparent);
-          transform: translateX(-175%) skewX(-18deg);
-          animation: askPremiumSweep 9.2s ease-in-out infinite;
-          pointer-events: none;
-          z-index: 1;
         }
 
         .ask-premium::after {
@@ -1032,7 +1012,6 @@ export default function ReadingIntakeScreen({
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
           .ask-premium,
-          .ask-premium::before,
           .ask-mic-halo { animation: none !important; }
         }
       `}</style>
@@ -1103,7 +1082,7 @@ export default function ReadingIntakeScreen({
             >
               <div className="relative z-10 mx-auto h-full max-w-[560px]">
                 {/* Hero statement — slightly larger, same locked 236px shell */}
-                <div className="absolute left-1/2 top-[28px] w-fit max-w-full -translate-x-1/2 text-left">
+                <div className="absolute inset-x-0 top-[28px] px-[2px] text-left">
                   <p
                     className="mb-[3px] pl-[2px] text-[14.5px] font-medium uppercase tracking-[0.22em] text-slate-200/76"
                     style={{ textShadow: "0 3px 13px rgba(0,0,0,0.92)" }}
@@ -1112,7 +1091,7 @@ export default function ReadingIntakeScreen({
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-[clamp(31px,9.4vw,39px)] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                    className="whitespace-nowrap text-[clamp(27px,8.75vw,39px)] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                     style={{
                       transform: "scaleY(1.045)",
                       transformOrigin: "left bottom",

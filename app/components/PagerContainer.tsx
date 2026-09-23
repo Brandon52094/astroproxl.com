@@ -19,16 +19,14 @@ interface UserStatus {
 }
 
 /**
- * PAGER — four panels:
+ * PAGER — four real panels in a circular loop:
  *
- *   [0: Reading Intake (main)] ⇄ [1: Birth Chart] ⇄ [2: Today's Sky] ⇄ [3: Credits]
+ *   Reading Intake ⇄ Birth Chart ⇄ Today's Sky ⇄ Credits ⇄ Reading Intake
  *
- * The loop wraps: one more left from Credits returns to the main screen.
- *
- * The infinite-loop clone technique: a clone of the last panel sits before the
- * first, and a clone of the first sits after the last. When a transition lands
- * on a clone we disable the transition for one frame and snap to the matching
- * real panel, so the wraparound is seamless in both directions.
+ * No duplicate Reading/Credits components are mounted. Instead, the four real
+ * panels are cyclically reordered after each completed swipe while transitions
+ * are disabled for one frame. To the user, every swipe still moves exactly one
+ * page and the loop has no visible beginning or end.
  */
 
 const DIRECTION_LOCK_THRESHOLD = 12;
@@ -40,14 +38,27 @@ type GestureAxis = "undecided" | "horizontal" | "vertical";
 export default function PagerContainer() {
   const totalPanels = 4;
 
-  const [extendedIndex, setExtendedIndex] = useState(1);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [slideOffset, setSlideOffset] = useState<-1 | 0 | 1>(0);
   const [isDragging, setIsDragging] = useState(false);
   const [suppressTransition, setSuppressTransition] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Real panel currently on screen (0-indexed), used to pause off-screen work.
-  const activePanel = ((extendedIndex - 1) % totalPanels + totalPanels) % totalPanels;
+  const wrapPanelIndex = useCallback(
+    (index: number) => (index + totalPanels) % totalPanels,
+    [totalPanels]
+  );
+
+  // Keep the active panel in slot 1. Slot 0 is its real previous neighbor and
+  // slots 2–3 are its real next neighbors. These are the same four components,
+  // simply reordered after each swipe — there are no clones.
+  const panelOrder = [
+    wrapPanelIndex(currentIndex - 1),
+    currentIndex,
+    wrapPanelIndex(currentIndex + 1),
+    wrapPanelIndex(currentIndex + 2),
+  ];
 
   // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
@@ -109,36 +120,30 @@ export default function PagerContainer() {
   }, []);
 
   const goToNext = useCallback(() => {
-    setExtendedIndex((prev) => prev + 1);
+    setSlideOffset((prev) => (prev === 0 ? 1 : prev));
   }, []);
 
   const goToPrevious = useCallback(() => {
-    setExtendedIndex((prev) => prev - 1);
+    setSlideOffset((prev) => (prev === 0 ? -1 : prev));
   }, []);
 
-  // ── Clone snap-back after each transition ────────────────────────────
+  // ── Circular handoff after each transition ──────────────────────────
   const handleTrackTransitionEnd = useCallback((event: React.TransitionEvent<HTMLDivElement>) => {
     // Ignore transitionend events bubbling up from animated children. Only the
-    // pager track's own transform transition is allowed to trigger clone snaps.
+    // pager track's own transform transition completes a page swipe.
     if (event.target !== event.currentTarget || event.propertyName !== "transform") return;
+    if (slideOffset === 0) return;
 
-    // When we've swiped to the last clone (index totalPanels + 1), snap to the real first panel (index 1)
-    if (extendedIndex === totalPanels + 1) {
-      setSuppressTransition(true);
-      setExtendedIndex(1);
-    } 
-    // When we've swiped to the first clone (index 0), snap to the real last panel (index totalPanels)
-    else if (extendedIndex === 0) {
-      setSuppressTransition(true);
-      setExtendedIndex(totalPanels);
-    }
-  }, [extendedIndex, totalPanels]);
+    const completedDirection = slideOffset;
+    setSuppressTransition(true);
+    setCurrentIndex((prev) => wrapPanelIndex(prev + completedDirection));
+    setSlideOffset(0);
+  }, [slideOffset, wrapPanelIndex]);
 
   useEffect(() => {
-    if (suppressTransition) {
-      const raf = requestAnimationFrame(() => setSuppressTransition(false));
-      return () => cancelAnimationFrame(raf);
-    }
+    if (!suppressTransition) return;
+    const raf = requestAnimationFrame(() => setSuppressTransition(false));
+    return () => cancelAnimationFrame(raf);
   }, [suppressTransition]);
 
   // ── Direction-locked touch handlers ─────────────────────────────────
@@ -289,7 +294,7 @@ export default function PagerContainer() {
           className="flex h-full w-full min-w-0 max-w-full"
           onTransitionEnd={handleTrackTransitionEnd}
           style={{
-            transform: `translateX(-${extendedIndex * 100}%)`,
+            transform: `translateX(-${(1 + slideOffset) * 100}%)`,
             transition: noAnimation
               ? "none"
               : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
@@ -297,38 +302,16 @@ export default function PagerContainer() {
             height: "100%",
           }}
         >
-          {/* ── CLONE: Credits (before the real first panel) ── */}
-          <div
-            data-pager-panel className={panelClass}
-            aria-hidden="true"
-          >
-            <CreditsPanel embedded />
-          </div>
-
-          {/* ── PANEL 0: Reading Intake (main) ── */}
-          <div data-pager-panel className={panelClass}>
-            <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
-          </div>
-
-          {/* ── PANEL 1: Your Birth Chart ── */}
-          <div data-pager-panel className={panelClass}>
-            <BirthChartPanel userStatus={userStatus} />
-          </div>
-
-          {/* ── PANEL 2: Today's Sky ── */}
-          <div data-pager-panel className={panelClass}>
-            <TodaySkyPanel userStatus={userStatus} />
-          </div>
-
-          {/* ── PANEL 3: Credits ── */}
-          <div data-pager-panel className={panelClass}>
-            <CreditsPanel embedded />
-          </div>
-
-          {/* ── CLONE: Reading Intake (after the real last panel) ── */}
-          <div data-pager-panel className={panelClass} aria-hidden="true">
-            <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
-          </div>
+          {panelOrder.map((panelIndex) => (
+            <div key={panelIndex} data-pager-panel className={panelClass}>
+              {panelIndex === 0 && (
+                <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
+              )}
+              {panelIndex === 1 && <BirthChartPanel userStatus={userStatus} />}
+              {panelIndex === 2 && <TodaySkyPanel userStatus={userStatus} />}
+              {panelIndex === 3 && <CreditsPanel embedded />}
+            </div>
+          ))}
         </div>
       </div>
     </div>
