@@ -1105,7 +1105,7 @@ export default function BirthChartPanel({
                   onOpenReadings();
                   return;
                 }
-                window.location.assign("/readings/page.tsx");
+                window.location.assign("app/api/readings/page.tsx");
               }}
               className="your-readings-shell order-4 flex min-h-[68px] w-[78%] self-center items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
               aria-label="Open your saved readings"
