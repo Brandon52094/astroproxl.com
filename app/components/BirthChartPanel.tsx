@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Compass, Crown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Compass, Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 import {
@@ -322,7 +322,8 @@ export default function BirthChartPanel({
       ? "grayscale(1) brightness(0.30) saturate(0)"
       : "grayscale(0) brightness(1) saturate(1)",
     transitionProperty: "opacity, filter",
-    transitionDuration: chartOpen ? "950ms" : "1450ms",
+    transitionDuration: chartOpen ? "950ms" : "420ms",
+    transitionDelay: chartOpen ? "0ms" : "60ms",
     transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
     pointerEvents: chartOpen ? "none" : "auto",
   };
@@ -333,7 +334,8 @@ export default function BirthChartPanel({
       ? "grayscale(1) brightness(0.28) saturate(0)"
       : "grayscale(0) brightness(1) saturate(1)",
     transitionProperty: "opacity, filter",
-    transitionDuration: chartOpen ? "950ms" : "1450ms",
+    transitionDuration: chartOpen ? "950ms" : "420ms",
+    transitionDelay: chartOpen ? "0ms" : "60ms",
     transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
     pointerEvents: chartOpen ? "none" : "auto",
   };
@@ -476,7 +478,8 @@ export default function BirthChartPanel({
         initial={false}
         animate={{ opacity: chartOpen ? 0.64 : 0 }}
         transition={{
-          duration: shouldReduceMotion ? 0 : chartOpen ? 0.95 : 1.45,
+          duration: shouldReduceMotion ? 0 : chartOpen ? 0.95 : 0.3,
+          delay: shouldReduceMotion || chartOpen ? 0 : 0.06,
           ease: [0.22, 1, 0.36, 1],
         }}
       />
@@ -510,7 +513,8 @@ export default function BirthChartPanel({
               : "grayscale(0) brightness(1) saturate(1)",
           }}
           transition={{
-            duration: shouldReduceMotion ? 0 : chartOpen ? 0.95 : 1.45,
+            duration: shouldReduceMotion ? 0 : chartOpen ? 0.95 : 0.42,
+            delay: shouldReduceMotion || chartOpen ? 0 : 0.06,
             ease: [0.22, 1, 0.36, 1],
           }}
           className="mb-3"
@@ -680,18 +684,27 @@ export default function BirthChartPanel({
                 type="button"
                 onClick={() => setChartOpen((v) => !v)}
                 aria-expanded={chartOpen}
-                className="chart-focus-surface flex w-full items-center justify-center gap-2 px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200 transition-[color,filter,background] duration-500 hover:text-white"
+                className="chart-focus-surface flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200 transition-[color,filter,background] duration-500 hover:text-white"
               >
-                <span>{chartOpen ? "My Birth Chart" : "View My Chart"}</span>
-                <ChevronDown
-                  className={cn("h-[18px] w-[18px] text-slate-500 transition-transform", chartOpen && "rotate-180")}
-                />
+                <span>{chartOpen ? "Close Chart" : "View My Chart"}</span>
               </button>
 
               <motion.div
                 initial={false}
                 animate={{ height: chartOpen ? "auto" : 0, opacity: chartOpen ? 1 : 0 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: "easeOut" }}
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : chartOpen
+                      ? {
+                          height: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
+                          opacity: { duration: 0.2, delay: 0.04, ease: "easeOut" },
+                        }
+                      : {
+                          opacity: { duration: 0.1, ease: "easeOut" },
+                          height: { duration: 0.2, delay: 0.035, ease: [0.4, 0, 0.2, 1] },
+                        }
+                }
                 className={cn("overflow-hidden", chartOpen && "border-t border-white/[0.06]")}
               >
                 <div className="pt-3">
