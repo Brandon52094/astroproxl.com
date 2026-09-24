@@ -469,11 +469,34 @@ export default function BirthChartPanel({
         ))}
       </div>
 
+      {/* Deepens the entire sky during chart focus without dimming the chart UI itself. */}
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[5] bg-black"
+        initial={false}
+        animate={{ opacity: chartOpen ? 0.64 : 0 }}
+        transition={{
+          duration: shouldReduceMotion ? 0 : chartOpen ? 0.95 : 1.45,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+      />
+
       <div
   className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
   style={{
     paddingTop: "calc(env(safe-area-inset-top) + 8px)",
     paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+  }}
+  onClickCapture={(event) => {
+    if (!chartOpen) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-birth-chart-focus]")) return;
+
+    // While focused, any tap on the faded interface quietly dismisses the
+    // chart. Capture prevents a muted control beneath the tap from firing.
+    event.preventDefault();
+    event.stopPropagation();
+    setChartOpen(false);
   }}
 >
         {/* ── PROFILE IDENTITY — Big Three first, no extra hero copy ── */}
@@ -647,6 +670,7 @@ export default function BirthChartPanel({
 
             {/* ── VIEW MY CHART — technical chart data lives behind one disclosure ── */}
             <div
+              data-birth-chart-focus
               className={cn(
                 "standard-shadow relative order-1 overflow-hidden rounded-[18px] border border-white/10 bg-transparent",
                 chartOpen && "z-20 border-white/[0.14]"
