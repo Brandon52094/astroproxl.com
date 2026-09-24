@@ -313,6 +313,31 @@ export default function BirthChartPanel({
 
   const hasChart = natal.length > 0;
 
+  // Birth-chart focus mode mirrors the Reading Intake selection treatment:
+  // surrounding content stays visible, but drains into the background so the
+  // open chart becomes the only active layer.
+  const identityFocusStyle: React.CSSProperties = {
+    opacity: chartOpen ? 0.44 : 1,
+    filter: chartOpen
+      ? "grayscale(1) brightness(0.30) saturate(0)"
+      : "grayscale(0) brightness(1) saturate(1)",
+    transitionProperty: "opacity, filter",
+    transitionDuration: chartOpen ? "950ms" : "1450ms",
+    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+    pointerEvents: chartOpen ? "none" : "auto",
+  };
+
+  const outsideFocusStyle: React.CSSProperties = {
+    opacity: chartOpen ? 0.34 : 1,
+    filter: chartOpen
+      ? "grayscale(1) brightness(0.28) saturate(0)"
+      : "grayscale(0) brightness(1) saturate(1)",
+    transitionProperty: "opacity, filter",
+    transitionDuration: chartOpen ? "950ms" : "1450ms",
+    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+    pointerEvents: chartOpen ? "none" : "auto",
+  };
+
   return (
     <div
       className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden font-sans text-slate-100"
@@ -348,6 +373,17 @@ export default function BirthChartPanel({
           z-index: 1;
         }
         .element-box > * { position: relative; z-index: 2; }
+
+        .chart-focus-surface {
+          background:
+            radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%),
+            linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88));
+          -webkit-backdrop-filter: blur(14px);
+          backdrop-filter: blur(14px);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.055),
+            inset 0 -1px 0 rgba(255,255,255,0.025);
+        }
 
         @property --plus-angle {
           syntax: "<angle>";
@@ -443,9 +479,19 @@ export default function BirthChartPanel({
         {/* ── PROFILE IDENTITY — Big Three first, no extra hero copy ── */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
+          animate={{
+            opacity: chartOpen ? 0.44 : 1,
+            y: 0,
+            filter: chartOpen
+              ? "grayscale(1) brightness(0.30) saturate(0)"
+              : "grayscale(0) brightness(1) saturate(1)",
+          }}
+          transition={{
+            duration: shouldReduceMotion ? 0 : chartOpen ? 0.95 : 1.45,
+            ease: [0.22, 1, 0.36, 1],
+          }}
           className="mb-3"
+          style={{ pointerEvents: identityFocusStyle.pointerEvents }}
         >
           <h1 className="mb-3 text-center text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
             Your Astrology
@@ -506,7 +552,10 @@ export default function BirthChartPanel({
           >
             {/* ── PERSONAL CONTEXT — Profection + Element Balance combined ── */}
             {(hasProfection || elementBalance.total > 0) && (
-              <div className="standard-shadow order-2 rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-sm">
+              <div
+                className="standard-shadow order-2 rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-sm"
+                style={outsideFocusStyle}
+              >
                 {hasProfection && (
                   <>
                     <div className="grid grid-cols-[minmax(0,1fr)_auto_48px] items-center gap-3">
@@ -597,12 +646,17 @@ export default function BirthChartPanel({
             )}
 
             {/* ── VIEW MY CHART — technical chart data lives behind one disclosure ── */}
-            <div className="standard-shadow order-1 overflow-hidden rounded-[18px] border border-white/10 bg-white/[0.025]">
+            <div
+              className={cn(
+                "standard-shadow relative order-1 overflow-hidden rounded-[18px] border border-white/10 bg-transparent",
+                chartOpen && "z-20 border-white/[0.14]"
+              )}
+            >
               <button
                 type="button"
                 onClick={() => setChartOpen((v) => !v)}
                 aria-expanded={chartOpen}
-                className="flex w-full items-center justify-center gap-2 px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.04]"
+                className="chart-focus-surface flex w-full items-center justify-center gap-2 px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200 transition-[color,filter,background] duration-500 hover:text-white"
               >
                 <span>{chartOpen ? "My Birth Chart" : "View My Chart"}</span>
                 <ChevronDown
@@ -616,7 +670,8 @@ export default function BirthChartPanel({
                 transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: "easeOut" }}
                 className={cn("overflow-hidden", chartOpen && "border-t border-white/[0.06]")}
               >
-                <div className="space-y-3 px-4 pb-4 pt-3">
+                <div className="pt-3">
+                  <div className="px-4 pb-3">
                   {/* Full placements live directly inside the chart container. */}
                   <div className="mb-3 text-center">
                     <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
@@ -748,10 +803,11 @@ export default function BirthChartPanel({
                       );
                     })}
                   </div>
+                  </div>
 
                 {/* Major Aspects stay inside View My Chart. */}
                 {aspects.length > 0 && (
-                  <div className="border-t border-white/[0.07] pt-1">
+                  <div className="chart-focus-surface mt-1 border-t border-white/[0.09] px-4 pt-1">
                     <button
                       type="button"
                       onClick={() => setAspectsOpen((v) => !v)}
@@ -864,6 +920,7 @@ export default function BirthChartPanel({
                 borderColor: "rgba(218,183,105,0.62)",
                 boxShadow:
                   "0 0 0 1px rgba(255,255,255,0.05), 0 0 22px rgba(185,139,55,0.10), 0 18px 44px rgba(0,0,0,0.42)",
+                ...outsideFocusStyle,
               }}
               aria-live="polite"
             >
@@ -887,6 +944,7 @@ export default function BirthChartPanel({
             <section
               className="astro-plus-shell order-4 min-h-[270px] w-full"
               aria-label={userStatus?.isSubscribed ? "Astro Plus member area" : "Astro Plus locked area"}
+              style={outsideFocusStyle}
             >
               <div className="relative z-10 flex min-h-[270px] flex-col bg-transparent p-5">
                 <div className="flex items-center justify-between">
@@ -900,7 +958,10 @@ export default function BirthChartPanel({
               </div>
             </section>
 
-            <p className="order-5 flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
+            <p
+              className="order-5 flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600"
+              style={outsideFocusStyle}
+            >
               <span className="flex items-center gap-1">
                 <ChevronLeft className="h-3 w-3" /> Readings
               </span>
