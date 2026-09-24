@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Compass, ChevronRight } from "lucide-react";
+import { Compass, Crown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 import {
@@ -515,6 +515,39 @@ export default function BirthChartPanel({
           transform: translateY(0);
         }
 
+        @keyframes readingsShimmer {
+          0% { transform: translateX(-145%) skewX(-18deg); }
+          100% { transform: translateX(245%) skewX(-18deg); }
+        }
+
+        .your-readings-shimmer {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          overflow: hidden;
+          border-radius: inherit;
+          pointer-events: none;
+        }
+
+        .your-readings-shimmer::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 45%;
+          background: linear-gradient(
+            105deg,
+            transparent 0%,
+            rgba(255,255,255,0.08) 45%,
+            rgba(255,255,255,0.17) 50%,
+            rgba(255,255,255,0.08) 55%,
+            transparent 100%
+          );
+          transform: translateX(-145%) skewX(-18deg);
+          animation: readingsShimmer 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+        }
+
         @keyframes readingsOrbit {
           to { --readings-angle: 360deg; }
         }
@@ -522,6 +555,7 @@ export default function BirthChartPanel({
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
           .your-readings-shell::before, .your-readings-shell::after { animation: none !important; }
+          .your-readings-shimmer::after { animation: none !important; opacity: 0; }
         }
       `}</style>
 
@@ -1030,10 +1064,10 @@ export default function BirthChartPanel({
               className="standard-shadow order-3 flex min-h-[84px] w-full items-center justify-center rounded-[20px] border px-5 py-4 text-center"
               style={{
                 background:
-                  "radial-gradient(circle at 50% -45%, rgba(255,236,183,0.15), transparent 62%), linear-gradient(145deg, rgba(24,21,22,0.96), rgba(9,12,24,0.96))",
-                borderColor: "rgba(225,195,126,0.76)",
+                  "radial-gradient(circle at 50% -45%, rgba(248,250,252,0.14), transparent 62%), linear-gradient(145deg, rgba(18,21,29,0.97), rgba(7,10,22,0.97))",
+                borderColor: "rgba(248,250,252,0.68)",
                 boxShadow:
-                  "inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(255,255,255,0.045), 0 0 24px rgba(203,164,78,0.16), 0 18px 44px rgba(0,0,0,0.48)",
+                  "inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 1px rgba(255,255,255,0.07), 0 0 18px rgba(248,250,252,0.16), 0 0 36px rgba(203,213,225,0.09), 0 18px 44px rgba(0,0,0,0.48)",
                 ...outsideFocusStyle,
               }}
               aria-live="polite"
@@ -1049,8 +1083,8 @@ export default function BirthChartPanel({
                     type="button"
                     onClick={revealDailyHoroscope}
                     disabled={horoscopeLoading}
-                    className="flex min-h-[52px] w-full items-center justify-center text-[13px] font-medium uppercase tracking-[0.15em] text-[#E8D5A5] transition-[color,opacity,text-shadow] duration-300 enabled:hover:text-[#FFF1C9] disabled:cursor-wait disabled:opacity-65"
-                    style={{ textShadow: "0 0 16px rgba(218,183,105,0.20)" }}
+                    className="flex min-h-[52px] w-full items-center justify-center text-[13px] font-medium uppercase tracking-[0.15em] text-slate-100 transition-[color,opacity,text-shadow] duration-300 enabled:hover:text-white disabled:cursor-wait disabled:opacity-65"
+                    style={{ textShadow: "0 0 16px rgba(248,250,252,0.22)" }}
                   >
                     {horoscopeLoading ? "Preparing Today’s Horoscope…" : horoscopeError ? "Try Daily Horoscope Again" : "Tap For Daily Horoscope"}
                   </button>
@@ -1077,6 +1111,25 @@ export default function BirthChartPanel({
               aria-label="Open your saved readings"
               style={outsideFocusStyle}
             >
+              <span className="your-readings-shimmer" aria-hidden="true" />
+              <span
+                className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+                style={{
+                  border: "1px solid rgba(248,250,252,0.28)",
+                  background: "rgba(248,250,252,0.035)",
+                  boxShadow:
+                    "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
+                }}
+                aria-hidden="true"
+              >
+                <Crown
+                  className="h-3.5 w-3.5"
+                  style={{
+                    color: "rgba(248,250,252,0.88)",
+                    filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
+                  }}
+                />
+              </span>
               <span
                 className="relative z-10 text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-100"
                 style={{
