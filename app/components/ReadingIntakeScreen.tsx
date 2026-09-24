@@ -85,38 +85,38 @@ const AREAS = [
   },
 ];
 
-// Hero glow palettes respond to the selected reading topic.
-// Reading-topic glow palettes stay separate from the white/glowy Astro Plus language.
-const HERO_PALETTES: Record<string, [string, string, string, string]> = {
+// The hero aura follows the user's Sun-sign element. Each set is intentionally
+// varied rather than monochromatic, and tuned to glow against the dark sky.
+const HERO_ELEMENT_PALETTES: Record<string, [string, string, string, string]> = {
   default: [
     "52, 211, 153",  // emerald
     "34, 211, 238",  // cyan
     "56, 189, 248",  // sky
     "168, 85, 247",  // violet
   ],
-  love: [
-    "244, 114, 182", // blush pink
-    "251, 113, 133", // rose
-    "225, 29, 72",   // raspberry
-    "192, 132, 252", // soft violet
+  Earth: [
+    "110, 139, 93",  // moss
+    "202, 169, 92",  // antique gold
+    "61, 132, 116",  // mineral teal
+    "50, 96, 58",    // deep forest
   ],
-  money: [
-    "52, 211, 153",  // emerald
-    "16, 185, 129",  // jade
-    "110, 231, 183", // mint
-    "45, 212, 191",  // teal
+  Fire: [
+    "239, 68, 68",   // crimson
+    "249, 115, 22",  // ember orange
+    "251, 191, 36",  // molten gold
+    "236, 72, 153",  // hot magenta
   ],
-  career: [
+  Water: [
+    "37, 99, 235",   // deep ocean blue
+    "6, 182, 212",   // aqua
+    "129, 140, 248", // moonlit lavender
+    "45, 212, 191",  // sea glass
+  ],
+  Air: [
+    "226, 232, 240", // silver white
     "125, 211, 252", // ice blue
-    "56, 189, 248",  // electric blue
-    "37, 99, 235",   // cobalt
-    "99, 102, 241",  // indigo
-  ],
-  other: [
-    "216, 180, 254", // lavender
-    "192, 132, 252", // violet
-    "139, 92, 246",  // deep purple
-    "96, 165, 250",  // cool blue
+    "103, 232, 249", // pale cyan
+    "196, 181, 253", // soft lilac
   ],
 };
 
@@ -337,6 +337,7 @@ export default function ReadingIntakeScreen({
   const suppressNextHeroTapRef = useRef(false);
   const [heroSweepActive, setHeroSweepActive] = useState(false);
   const heroWasActiveRef = useRef(false);
+  const previousSelectedAreaRef = useRef<string | null>(null);
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -353,6 +354,20 @@ export default function ReadingIntakeScreen({
     const frame = window.requestAnimationFrame(() => setHeroSweepActive(true));
     return () => window.cancelAnimationFrame(frame);
   }, [isActive, shouldReduceMotion]);
+
+  // When the user dismisses a reading choice, sweep once as the full page
+  // returns. Switching directly between reading choices does not retrigger it.
+  useEffect(() => {
+    const hadReadingFocus = previousSelectedAreaRef.current !== null;
+    const hasReadingFocus = selectedArea !== null;
+    previousSelectedAreaRef.current = selectedArea;
+
+    if (!hadReadingFocus || hasReadingFocus || !isActive || shouldReduceMotion) return;
+
+    setHeroSweepActive(false);
+    const frame = window.requestAnimationFrame(() => setHeroSweepActive(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedArea, isActive, shouldReduceMotion]);
 
   useEffect(() => {
     const stage = heroStageRef.current;
@@ -565,8 +580,13 @@ export default function ReadingIntakeScreen({
   }, [fetchStatus]);
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
-  // The hero now keeps one native palette; reading selections no longer recolor it.
-  const heroPalette = HERO_PALETTES.default;
+  const sunElement = useMemo<ElementName | null>(() => {
+    const sun = natal.find((placement) => placement.name.trim().toLowerCase() === "sun");
+    if (!sun?.sign) return null;
+    const normalizedSign = `${sun.sign.charAt(0).toUpperCase()}${sun.sign.slice(1).toLowerCase()}`;
+    return SIGN_ELEMENTS[normalizedSign] ?? null;
+  }, [natal]);
+  const heroPalette = HERO_ELEMENT_PALETTES[sunElement ?? "default"];
 
   /* ── Hero information — four quiet slides, one fixed stage ───────── */
   const heroData = useMemo(() => {
@@ -798,7 +818,7 @@ export default function ReadingIntakeScreen({
           z-index: 1;
         }
         .hero-shine-sweep::after {
-          animation: heroShine 2s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+          animation: heroShine 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
