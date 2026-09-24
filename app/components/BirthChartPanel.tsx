@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Sparkles, Compass, Crown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Compass, Crown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 import {
@@ -38,7 +37,8 @@ interface UserStatus {
 
 interface BirthChartPanelProps {
   userStatus: UserStatus | null;
-  onOpenHoroscope?: () => void;
+  dailyHoroscope?: string | null;
+  onOpenHoroscope?: () => Promise<string | null | void> | string | null | void;
 }
 
 interface NatalPlacement {
@@ -118,6 +118,14 @@ function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
+function localDayKey(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /* ── Card chrome — identical to Today's Sky ────────────────────────── */
 
 function SkyCard({
@@ -151,9 +159,12 @@ function SkyCard({
 
 /* ── Panel ──────────────────────────────────────────────────────────── */
 
-export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthChartPanelProps) {
+export default function BirthChartPanel({
+  userStatus,
+  dailyHoroscope: dailyHoroscopeProp,
+  onOpenHoroscope,
+}: BirthChartPanelProps) {
   const shouldReduceMotion = useReducedMotion();
-  const router = useRouter();
 
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [aspects, setAspects] = useState<NatalAspect[]>([]);
@@ -163,6 +174,36 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
   const [chartOpen, setChartOpen] = useState(false);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [dailyHoroscope, setDailyHoroscope] = useState<string | null>(null);
+  const [horoscopeLoading, setHoroscopeLoading] = useState(false);
+
+  useEffect(() => {
+    const storageKey = `astroproxl:daily-horoscope:${localDayKey()}`;
+    const cached = window.localStorage.getItem(storageKey);
+    if (cached) setDailyHoroscope(cached);
+  }, []);
+
+  useEffect(() => {
+    const horoscope = dailyHoroscopeProp?.trim();
+    if (!horoscope) return;
+    setDailyHoroscope(horoscope);
+    window.localStorage.setItem(`astroproxl:daily-horoscope:${localDayKey()}`, horoscope);
+  }, [dailyHoroscopeProp]);
+
+  const revealDailyHoroscope = async () => {
+    if (dailyHoroscope || horoscopeLoading || !onOpenHoroscope) return;
+    setHoroscopeLoading(true);
+    try {
+      const result = await onOpenHoroscope();
+      if (typeof result === "string" && result.trim()) {
+        const horoscope = result.trim();
+        setDailyHoroscope(horoscope);
+        window.localStorage.setItem(`astroproxl:daily-horoscope:${localDayKey()}`, horoscope);
+      }
+    } finally {
+      setHoroscopeLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -468,8 +509,8 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
               <div className="standard-shadow order-2 rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-sm">
                 {hasProfection && (
                   <>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_48px] items-center gap-3">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <Compass className="h-3 w-3 text-slate-500" strokeWidth={2.2} />
                           <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
@@ -482,9 +523,14 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
                         <p className="mt-1 text-[10px] leading-4 text-slate-500">
                           {typeof profection!.activatedHouse === "number"
                             ? `${ordinal(profection!.activatedHouse)} house activated`
-                            : `${ordinal(profection!.profectionYear)} house year`}
-                          {typeof profection!.age === "number" ? ` · age ${profection!.age}` : ""}.
+                            : `${ordinal(profection!.profectionYear)} house year`}.
                         </p>
+                      </div>
+
+                      <div className="text-center">
+                        <span className="block whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 tabular-nums">
+                          Age {profection!.age}
+                        </span>
                       </div>
 
                       {profectionColors && (
@@ -556,11 +602,11 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
                 type="button"
                 onClick={() => setChartOpen((v) => !v)}
                 aria-expanded={chartOpen}
-                className="flex w-full items-center justify-center gap-2 px-4 py-3 text-[12px] font-medium uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.04]"
+                className="flex w-full items-center justify-center gap-2 px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.04]"
               >
                 <span>{chartOpen ? "My Birth Chart" : "View My Chart"}</span>
                 <ChevronDown
-                  className={cn("h-4 w-4 text-slate-500 transition-transform", chartOpen && "rotate-180")}
+                  className={cn("h-[18px] w-[18px] text-slate-500 transition-transform", chartOpen && "rotate-180")}
                 />
               </button>
 
@@ -570,29 +616,9 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
                 transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: "easeOut" }}
                 className={cn("overflow-hidden", chartOpen && "border-t border-white/[0.06]")}
               >
-                <div className="space-y-3 p-3">
-                {/* Recalculate stays with the full technical chart. */}
-                <button
-                  type="button"
-                  onClick={() => router.push("/chart-data?recalculate=true")}
-                  style={{
-                    display: "block",
-                    margin: "4px auto 14px",
-                    background: "transparent",
-                    border: "none",
-                    color: "#64748b",
-                    fontSize: "13px",
-                    textDecoration: "underline",
-                    textUnderlineOffset: "3px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Recalculate chart
-                </button>
-
-                {/* Full placements — tap to explore. */}
-                <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
-                  <div className="mb-4 text-center">
+                <div className="space-y-3 px-4 pb-4 pt-3">
+                  {/* Full placements live directly inside the chart container. */}
+                  <div className="mb-3 text-center">
                     <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
                       Tap Each Placement To Learn
                     </span>
@@ -722,21 +748,17 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
                       );
                     })}
                   </div>
-                </div>
 
                 {/* Major Aspects stay inside View My Chart. */}
                 {aspects.length > 0 && (
-                  <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] backdrop-blur-sm">
+                  <div className="border-t border-white/[0.07] pt-1">
                     <button
                       type="button"
                       onClick={() => setAspectsOpen((v) => !v)}
-                      className="flex w-full items-center justify-between p-4"
+                      className="flex w-full items-center justify-between py-3"
                     >
-                      <span className="flex items-center gap-2">
-                        <Sparkles className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-                        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                          Major Aspects
-                        </span>
+                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                        Major Aspects
                       </span>
                       <span className="flex items-center gap-2 text-slate-500">
                         <span className="text-[11px] tabular-nums">{aspects.length}</span>
@@ -747,7 +769,7 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
                     </button>
 
                     {aspectsOpen && (
-                      <div className="px-4 pb-3">
+                      <div className="pb-1">
                         {groupedAspects.sections.map((section) => (
                           <div key={section.type} className="mb-3 last:mb-1">
                             <div className="mb-1.5 flex items-center gap-2">
@@ -835,26 +857,31 @@ export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthCh
               </motion.div>
             </div>
 
-            {/* ── DAILY HOROSCOPE — API hookup arrives in the next pass ── */}
-            <button
-              type="button"
-              onClick={() => onOpenHoroscope?.()}
-              aria-label="Open today's personalized horoscope"
-              className="standard-shadow order-3 flex w-full items-center justify-between rounded-[18px] border border-white/10 bg-white/[0.025] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+            {/* ── DAILY HOROSCOPE — the prompt is replaced by today's saved result ── */}
+            <section
+              className="standard-shadow order-3 flex min-h-[84px] w-full items-center justify-center rounded-[20px] border bg-white/[0.025] px-5 py-4 text-center"
+              style={{
+                borderColor: "rgba(218,183,105,0.62)",
+                boxShadow:
+                  "0 0 0 1px rgba(255,255,255,0.05), 0 0 22px rgba(185,139,55,0.10), 0 18px 44px rgba(0,0,0,0.42)",
+              }}
+              aria-live="polite"
             >
-              <span className="flex items-center gap-2.5">
-                <Sparkles className="h-3.5 w-3.5 text-slate-500" strokeWidth={2.1} />
-                <span>
-                  <span className="block text-[9px] font-medium uppercase tracking-[0.20em] text-slate-500">
-                    Your Horoscope Today
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-slate-300">
-                    Tap for your personalized forecast
-                  </span>
-                </span>
-              </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" />
-            </button>
+              {dailyHoroscope ? (
+                <p className="text-[13px] leading-5 text-slate-300">
+                  {dailyHoroscope}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={revealDailyHoroscope}
+                  disabled={horoscopeLoading || !onOpenHoroscope}
+                  className="flex min-h-[52px] w-full items-center justify-center text-[14px] font-medium text-slate-300 transition-colors enabled:hover:text-white disabled:cursor-default"
+                >
+                  {horoscopeLoading ? "Preparing Today’s Horoscope…" : "Tap For Daily Horoscope"}
+                </button>
+              )}
+            </section>
 
             {/* ── ASTRO PLUS — intentionally empty skeleton for now ── */}
             <section
