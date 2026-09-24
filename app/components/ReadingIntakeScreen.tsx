@@ -802,12 +802,12 @@ export default function ReadingIntakeScreen({
             0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent),
             0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent);
           animation: heroBorderGlow 9s ease-in-out infinite;
-          /* Focus release: let the aura bloom back in instead of snapping back. */
-          transition: opacity 1600ms cubic-bezier(0.22, 1, 0.36, 1);
+          /* Focus release: return quickly, without a hard snap. */
+          transition: opacity 350ms cubic-bezier(0.22, 1, 0.36, 1);
         }
         .hero-glow-shell-focus::before {
           opacity: 0;
-          /* Enter focus responsively; the reverse transition uses 1600ms above. */
+          /* Enter focus responsively; the reverse transition uses 350ms above. */
           transition-duration: 900ms;
         }
         @keyframes heroBorderGlow {
@@ -1051,7 +1051,7 @@ export default function ReadingIntakeScreen({
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-[5] bg-black"
         initial={false}
-        animate={{ opacity: selectedArea ? 0.64 : 0 }}
+        animate={{ opacity: selectedArea ? 0.78 : 0 }}
         transition={{
           duration: shouldReduceMotion ? 0 : selectedArea ? 0.95 : 0.3,
           ease: [0.22, 1, 0.36, 1],
@@ -1060,6 +1060,17 @@ export default function ReadingIntakeScreen({
 
       <div
         className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col px-[clamp(12px,4vw,16px)]"
+        onClickCapture={(e) => {
+          if (!selectedArea) return;
+          const target = e.target as HTMLElement;
+          if (
+            target.closest('[data-reading-choice="true"]') ||
+            target.closest('[data-reading-context="true"]') ||
+            target.closest('[data-begin-reading="true"]')
+          ) return;
+          clearReadingFocus();
+          e.stopPropagation();
+        }}
         style={{
           paddingTop: "calc(env(safe-area-inset-top) + 8px)",
           paddingBottom: "calc(2rem + env(safe-area-inset-bottom))",
@@ -1078,8 +1089,8 @@ export default function ReadingIntakeScreen({
             className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
               opacity: selectedArea || heroInspecting ? 0.52 : 1,
-              filter: selectedArea || heroInspecting ? "brightness(0.34) saturate(0.55)" : "brightness(1) saturate(1)",
-              transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
+              filter: selectedArea || heroInspecting ? "grayscale(1) brightness(0.24) saturate(0)" : "brightness(1) saturate(1)",
+              transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
@@ -1116,7 +1127,7 @@ export default function ReadingIntakeScreen({
                   : selectedArea
                     ? "grayscale(1) brightness(0.30) saturate(0)"
                     : "grayscale(0) brightness(1) saturate(1)",
-                transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
+                transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
                 "--hero-c4": heroPalette[3],
               } as React.CSSProperties}
             >
@@ -1331,6 +1342,7 @@ export default function ReadingIntakeScreen({
                 <button
                   key={area.id}
                   type="button"
+                  data-reading-choice="true"
                   onClick={() => selectArea(area.id)}
                   aria-pressed={isSelected}
                   aria-label={area.title}
@@ -1344,11 +1356,11 @@ export default function ReadingIntakeScreen({
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
                     opacity: heroInspecting ? 0.52 : selectedArea && !isSelected ? 0.58 : 1,
                     filter: heroInspecting
-                      ? "brightness(0.28) saturate(0.42)"
+                      ? "grayscale(1) brightness(0.24) saturate(0)"
                       : selectedArea && !isSelected
-                        ? "brightness(0.30) saturate(0.48)"
+                        ? "grayscale(1) brightness(0.24) saturate(0)"
                         : "brightness(1) saturate(1)",
-                    transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
+                    transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
                   }}
                 >
                   {Icon ? (
@@ -1380,11 +1392,12 @@ export default function ReadingIntakeScreen({
 
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
+            data-reading-context="true"
             className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
             style={{
               opacity: heroInspecting ? 0.52 : 1,
               filter: heroInspecting ? "brightness(0.30) saturate(0.45)" : "brightness(1) saturate(1)",
-              transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
+              transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
             }}
           >
             <div
@@ -1435,25 +1448,14 @@ export default function ReadingIntakeScreen({
             </div>
           </div>
 
-          {/* ── BELOW-CONTEXT EXIT ZONE ──
-              While a reading is focused, tapping anywhere down here restores the neutral
-              screen. Begin Reading is the one exception and keeps its normal action. */}
-          <div
-            onClickCapture={(e) => {
-              if (!selectedArea) return;
-              const target = e.target as HTMLElement;
-              if (target.closest('[data-begin-reading="true"]')) return;
-              clearReadingFocus();
-              e.stopPropagation();
-            }}
-          >
+          <div>
           {/* ── BEGIN READING (always present) ── */}
           <div
             className="mt-3 flex flex-col items-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
               opacity: heroInspecting ? 0.48 : 1,
               filter: heroInspecting ? "brightness(0.28) saturate(0.42)" : "brightness(1) saturate(1)",
-              transitionDuration: heroInspecting ? "950ms" : "1450ms",
+              transitionDuration: heroInspecting ? "950ms" : "350ms",
             }}
           >
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
@@ -1493,11 +1495,11 @@ export default function ReadingIntakeScreen({
               style={{
                 opacity: heroInspecting ? 0.48 : selectedArea ? 0.62 : 1,
                 filter: heroInspecting
-                  ? "brightness(0.26) saturate(0.36)"
+                  ? "grayscale(1) brightness(0.24) saturate(0)"
                   : selectedArea
-                    ? "brightness(0.42) saturate(0.42)"
+                    ? "grayscale(1) brightness(0.24) saturate(0)"
                     : "brightness(1) saturate(1)",
-                transitionDuration: selectedArea || heroInspecting ? "950ms" : "1450ms",
+                transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
               }}
             >
               <span className="ask-mic-halo mr-4 shrink-0">
