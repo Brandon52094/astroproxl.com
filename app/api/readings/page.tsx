@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -9,7 +8,6 @@ import {
   MAX_SAVED_READINGS,
   type SavedReadingRecord,
 } from "@/lib/savedReadingsStore";
-
 function formatTopic(topic: string) {
   return topic.replace(/[_-]+/g, " ").trim() || "Reading";
 }
@@ -31,7 +29,6 @@ export default function SavedReadingsPage() {
   const [managing, setManaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
-
   const refresh = useCallback(async () => {
     try {
       setReadings(await listSavedReadings());
@@ -42,12 +39,10 @@ export default function SavedReadingsPage() {
       setLoading(false);
     }
   }, []);
-
   useEffect(() => {
     setLimitNotice(new URLSearchParams(window.location.search).get("limit") === "1");
     void refresh();
   }, [refresh]);
-
   const slots = useMemo(
     () => Array.from({ length: MAX_SAVED_READINGS }, (_, index) => readings[index] ?? null),
     [readings],
@@ -79,15 +74,12 @@ export default function SavedReadingsPage() {
           {managing ? "Done" : "Edit"}
         </button>
       </header>
-
       {limitNotice && (
         <p className="notice" role="status">
           All {MAX_SAVED_READINGS} spaces are filled. Remove one reading to save another.
         </p>
       )}
-
       {error && <p className="notice error" role="alert">{error}</p>}
-
       <section className="reading-grid" aria-label="Saved readings">
         {slots.map((reading, index) =>
           reading ? (
@@ -119,11 +111,9 @@ export default function SavedReadingsPage() {
           ),
         )}
       </section>
-
       {!loading && readings.length === 0 && !error && (
         <p className="empty-copy">Saved readings will appear among the stars.</p>
       )}
-
       <style jsx>{`
         .saved-readings-page {
           min-height: 100dvh;

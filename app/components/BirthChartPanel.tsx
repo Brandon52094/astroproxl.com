@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Compass, Crown, ChevronRight } from "lucide-react";
@@ -65,6 +64,7 @@ interface ProfectionData {
 }
 
 // U+FE0E forces text presentation so iOS never swaps these for emoji.
+
 const T = "\uFE0E";
 const GLYPHS: Record<string, string> = {
   Sun: `☉${T}`, Moon: `☽${T}`, Mercury: `☿${T}`, Venus: `♀${T}`, Mars: `♂${T}`,
@@ -74,7 +74,9 @@ const GLYPHS: Record<string, string> = {
 };
 
 // Aspect sections, ordered most-harmonious → most-tense.
+
 // rank sets display order; color fades green → amber → dark red.
+
 const ASPECT_META: Record<
   string,
   { header: string; rank: number; text: string; border: string; glow: string }
@@ -91,7 +93,6 @@ const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Ju
 /* ── The four elements ─────────────────────────────────────────────── */
 
 type Element = "Fire" | "Earth" | "Air" | "Water";
-
 const SIGN_ELEMENTS: Record<string, Element> = {
   Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
   Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
@@ -107,7 +108,6 @@ const ELEMENT_COLORS: Record<Element, { border: string; glow: string; text: stri
 };
 
 const ELEMENT_ORDER: Element[] = ["Fire", "Earth", "Air", "Water"];
-
 function elementOf(sign?: string): Element | null {
   if (!sign) return null;
   return SIGN_ELEMENTS[sign] ?? null;
@@ -167,7 +167,6 @@ export default function BirthChartPanel({
   onOpenReadings,
 }: BirthChartPanelProps) {
   const shouldReduceMotion = useReducedMotion();
-
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [aspects, setAspects] = useState<NatalAspect[]>([]);
   const [aspectsOpen, setAspectsOpen] = useState(false);
@@ -179,27 +178,23 @@ export default function BirthChartPanel({
   const [dailyHoroscope, setDailyHoroscope] = useState<string | null>(null);
   const [horoscopeLoading, setHoroscopeLoading] = useState(false);
   const [horoscopeError, setHoroscopeError] = useState<string | null>(null);
-
   useEffect(() => {
     const storageKey = `astroproxl:daily-horoscope:${localDayKey()}`;
     const cached = window.localStorage.getItem(storageKey);
     if (cached) setDailyHoroscope(cached);
   }, []);
-
   useEffect(() => {
     const horoscope = dailyHoroscopeProp?.trim();
     if (!horoscope) return;
     setDailyHoroscope(horoscope);
     window.localStorage.setItem(`astroproxl:daily-horoscope:${localDayKey()}`, horoscope);
   }, [dailyHoroscopeProp]);
-
   const revealDailyHoroscope = async () => {
     if (dailyHoroscope || horoscopeLoading) return;
     setHoroscopeLoading(true);
     setHoroscopeError(null);
     try {
       let result: string | null | void;
-
       if (onOpenHoroscope) {
         result = await onOpenHoroscope();
       } else {
@@ -211,7 +206,6 @@ export default function BirthChartPanel({
           profection?: unknown;
           moonPhase?: unknown;
         } | undefined;
-
         if (!chartData?.tropical?.planets?.length) {
           throw new Error("Your chart is still loading. Please try again.");
         }
@@ -228,19 +222,15 @@ export default function BirthChartPanel({
             moonPhase: chartData.moonPhase ?? null,
           }),
         });
-
         const payload = await response.json().catch(() => null) as {
           horoscope?: string;
           error?: string;
         } | null;
-
         if (!response.ok) {
           throw new Error(payload?.error || "Today’s horoscope could not be prepared.");
         }
-
         result = payload?.horoscope ?? null;
       }
-
       if (typeof result === "string" && result.trim()) {
         const horoscope = result.trim();
         setDailyHoroscope(horoscope);
@@ -271,14 +261,14 @@ export default function BirthChartPanel({
           .filter((p) => NATAL_ORDER.includes(p.name))
           .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
       );
+
       // Major aspects only — the five your engine computes
+
       setAspects(data.tropical?.aspects ?? []);
       setIsLoading(false);
       return true; // loaded
     };
-
     if (tryLoad()) return;
-
     let attempts = 0;
     const interval = setInterval(() => {
       attempts++;
@@ -287,11 +277,11 @@ export default function BirthChartPanel({
         if (attempts > 20) setIsLoading(false);
       }
     }, 250);
-
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   // Same star recipe as the other panels — continuous sky across swipes.
+
   const stars = useMemo(
     () =>
       Array.from({ length: 68 }).map((_, i) => ({
@@ -311,6 +301,7 @@ export default function BirthChartPanel({
   }, [natal]);
 
   // Element balance across all placements (planets + rising).
+
   const elementBalance = useMemo(() => {
     const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
     natal.forEach((p) => {
@@ -321,9 +312,7 @@ export default function BirthChartPanel({
     const dominant = ELEMENT_ORDER.reduce((top, el) => (counts[el] > counts[top] ? el : top), "Fire");
     return { counts, total, dominant };
   }, [natal]);
-
   const STRONG_ORB = 4;
-
   const groupedAspects = useMemo(() => {
     const strong = aspects.filter((a) => a.orbDegrees <= STRONG_ORB);
     const weak = aspects
@@ -331,6 +320,7 @@ export default function BirthChartPanel({
       .sort((a, b) => a.orbDegrees - b.orbDegrees);
 
     // Bucket strong aspects by type, then order sections by rank.
+
     const sections = Object.keys(ASPECT_META)
       .map((type) => ({
         type,
@@ -341,18 +331,14 @@ export default function BirthChartPanel({
       }))
       .filter((s) => s.items.length > 0)
       .sort((a, b) => a.meta.rank - b.meta.rank);
-
     return { sections, weak };
   }, [aspects]);
-
   const hasProfection =
     !!profection &&
     typeof profection.profectionYear === "number" &&
     !!profection.activatedSign;
-
   const profectionElement = elementOf(profection?.activatedSign);
   const profectionColors = profectionElement ? ELEMENT_COLORS[profectionElement] : null;
-
   if (isLoading) {
     return (
       <div className="flex min-h-full w-full min-w-0 max-w-full items-center justify-center bg-[#050816]">
@@ -364,8 +350,11 @@ export default function BirthChartPanel({
   const hasChart = natal.length > 0;
 
   // Birth-chart focus mode mirrors the Reading Intake selection treatment:
+
   // surrounding content stays visible, but drains into the background so the
+
   // open chart becomes the only active layer.
+
   const identityFocusStyle: React.CSSProperties = {
     opacity: chartOpen ? 0.44 : 1,
     filter: chartOpen
@@ -379,9 +368,13 @@ export default function BirthChartPanel({
   };
 
   const outsideFocusStyle: React.CSSProperties = {
+
     // Lower profile sections disappear immediately when the chart opens, but
+
     // remain mounted so their layout and state are preserved. On close, wait
+
     // until the chart has fully retracted before fading them back into place.
+
     opacity: chartOpen ? 0 : 1,
     filter: chartOpen
       ? "grayscale(1) brightness(0.28) saturate(0)"
@@ -428,7 +421,6 @@ export default function BirthChartPanel({
           z-index: 1;
         }
         .element-box > * { position: relative; z-index: 2; }
-
         .chart-focus-surface {
           background:
             radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%),
@@ -439,13 +431,11 @@ export default function BirthChartPanel({
             inset 0 1px 0 rgba(255,255,255,0.055),
             inset 0 -1px 0 rgba(255,255,255,0.025);
         }
-
         @property --readings-angle {
           syntax: "<angle>";
           inherits: false;
           initial-value: 0deg;
         }
-
         .your-readings-shell {
           position: relative;
           isolation: isolate;
@@ -460,7 +450,6 @@ export default function BirthChartPanel({
             0 16px 38px rgba(0,0,0,0.46);
           cursor: pointer;
         }
-
         .your-readings-shell::before,
         .your-readings-shell::after {
           content: "";
@@ -487,12 +476,10 @@ export default function BirthChartPanel({
           mask-composite: exclude;
           animation: readingsOrbit 8s linear infinite;
         }
-
         .your-readings-shell::before {
           z-index: 0;
           opacity: 0.82;
         }
-
         .your-readings-shell::after {
           inset: -1px;
           z-index: -1;
@@ -500,7 +487,6 @@ export default function BirthChartPanel({
           opacity: 0.52;
           filter: blur(8px);
         }
-
         .your-readings-shell:hover,
         .your-readings-shell:focus-visible {
           transform: translateY(-1px);
@@ -510,16 +496,13 @@ export default function BirthChartPanel({
             0 18px 42px rgba(0,0,0,0.50);
           outline: none;
         }
-
         .your-readings-shell:active {
           transform: translateY(0);
         }
-
         @keyframes readingsShimmer {
           0% { transform: translateX(-145%) skewX(-18deg); }
           100% { transform: translateX(245%) skewX(-18deg); }
         }
-
         .your-readings-shimmer {
           position: absolute;
           inset: 0;
@@ -528,7 +511,6 @@ export default function BirthChartPanel({
           border-radius: inherit;
           pointer-events: none;
         }
-
         .your-readings-shimmer::after {
           content: "";
           position: absolute;
@@ -547,18 +529,15 @@ export default function BirthChartPanel({
           transform: translateX(-145%) skewX(-18deg);
           animation: readingsShimmer 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
         }
-
         @keyframes readingsOrbit {
           to { --readings-angle: 360deg; }
         }
-
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
           .your-readings-shell::before, .your-readings-shell::after { animation: none !important; }
           .your-readings-shimmer::after { animation: none !important; opacity: 0; }
         }
       `}</style>
-
       {/* ── Starfield ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         {stars.map((star) => (
@@ -579,7 +558,6 @@ export default function BirthChartPanel({
           />
         ))}
       </div>
-
       {/* Deepens the entire sky during chart focus without dimming the chart UI itself. */}
       <motion.div
         aria-hidden="true"
@@ -592,7 +570,6 @@ export default function BirthChartPanel({
           ease: [0.22, 1, 0.36, 1],
         }}
       />
-
       <div
   className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
   style={{
@@ -605,7 +582,9 @@ export default function BirthChartPanel({
     if (target.closest("[data-birth-chart-focus]")) return;
 
     // While focused, any tap on the faded interface quietly dismisses the
+
     // chart. Capture prevents a muted control beneath the tap from firing.
+
     event.preventDefault();
     event.stopPropagation();
     setChartOpen(false);
@@ -632,7 +611,6 @@ export default function BirthChartPanel({
           <h1 className="mb-3 text-center text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
             Your Astrology
           </h1>
-
           {hasChart ? (
             <div className="grid grid-cols-3 gap-[clamp(6px,2.5vw,10px)]">
               {(
@@ -678,7 +656,6 @@ export default function BirthChartPanel({
             </p>
           )}
         </motion.header>
-
         {hasChart && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -711,13 +688,11 @@ export default function BirthChartPanel({
                             : `${ordinal(profection!.profectionYear)} house year`}.
                         </p>
                       </div>
-
                       <div className="text-center">
                         <span className="block whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 tabular-nums">
                           Age {profection!.age}
                         </span>
                       </div>
-
                       {profectionColors && (
                         <div
                           className="element-box flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] border bg-black/20"
@@ -732,11 +707,9 @@ export default function BirthChartPanel({
                         </div>
                       )}
                     </div>
-
                     {elementBalance.total > 0 && <div className="my-2.5 h-px bg-white/[0.06]" />}
                   </>
                 )}
-
                 {elementBalance.total > 0 && (
                   <div>
                     <div className="mb-1 text-center">
@@ -750,7 +723,6 @@ export default function BirthChartPanel({
                         const maxCount = Math.max(...ELEMENT_ORDER.map((key) => elementBalance.counts[key]), 1);
                         const height = 8 + Math.round((count / maxCount) * 20);
                         const colors = ELEMENT_COLORS[el];
-
                         return (
                           <div key={el} className="flex flex-col items-center">
                             <div className="flex h-8 items-end justify-center">
@@ -780,7 +752,6 @@ export default function BirthChartPanel({
                 )}
               </div>
             )}
-
             {/* ── VIEW MY CHART — technical chart data lives behind one disclosure ── */}
             <div
               data-birth-chart-focus
@@ -797,7 +768,6 @@ export default function BirthChartPanel({
               >
                 <span>{chartOpen ? "Close Chart" : "View My Chart"}</span>
               </button>
-
               <motion.div
                 initial={false}
                 animate={{ height: chartOpen ? "auto" : 0, opacity: chartOpen ? 1 : 0 }}
@@ -824,14 +794,12 @@ export default function BirthChartPanel({
                       Tap Each Placement To Learn
                     </span>
                   </div>
-
                   <div className="space-y-3">
                     {natal.map((planet, index) => {
                       const element = elementOf(planet.sign);
                       const colors = element ? ELEMENT_COLORS[element] : null;
                       const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
                       const isOpen = openPlacement === planet.name;
-
                       return (
                         <div
                           key={planet.name}
@@ -858,7 +826,6 @@ export default function BirthChartPanel({
                             >
                               {GLYPHS[planet.name] ?? "•"}
                             </span>
-
                             <span
                               className={cn(
                                 "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
@@ -867,7 +834,6 @@ export default function BirthChartPanel({
                             >
                               {displayName}
                             </span>
-
                             <span
                               className={cn(
                                 "min-w-0 flex-1 text-[15px] transition-colors",
@@ -876,7 +842,6 @@ export default function BirthChartPanel({
                             >
                               {planet.sign}
                             </span>
-
                             <span
                               className={cn(
                                 "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
@@ -889,7 +854,6 @@ export default function BirthChartPanel({
                               ) : null}
                             </span>
                           </button>
-
                           <motion.div
                             initial={false}
                             animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
@@ -909,7 +873,6 @@ export default function BirthChartPanel({
                                     ? `${planet.sign} Rising`
                                     : `${planet.name} in ${planet.sign}`}
                                 </p>
-
                                 {PLANET_MEANING[planet.name] && (
                                   <div className="mt-2">
                                     <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
@@ -920,7 +883,6 @@ export default function BirthChartPanel({
                                     </p>
                                   </div>
                                 )}
-
                                 {SIGN_MEANING[planet.sign] && (
                                   <div className="mt-3">
                                     <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
@@ -931,7 +893,6 @@ export default function BirthChartPanel({
                                     </p>
                                   </div>
                                 )}
-
                                 {planet.house && HOUSE_MEANING[String(planet.house)] && (
                                   <div className="mt-3">
                                     <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
@@ -950,7 +911,6 @@ export default function BirthChartPanel({
                     })}
                   </div>
                   </div>
-
                 {/* Major Aspects stay inside View My Chart. */}
                 {aspects.length > 0 && (
                   <div className="chart-focus-surface mt-1 border-t border-white/[0.09] px-4 pt-1">
@@ -969,7 +929,6 @@ export default function BirthChartPanel({
                         />
                       </span>
                     </button>
-
                     {aspectsOpen && (
                       <div className="pb-1">
                         {groupedAspects.sections.map((section) => (
@@ -989,7 +948,6 @@ export default function BirthChartPanel({
                                 {section.meta.header}
                               </span>
                             </div>
-
                             <div className="divide-y divide-white/5">
                               {section.items.map((asp, i) => {
                                 const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
@@ -1011,13 +969,11 @@ export default function BirthChartPanel({
                             </div>
                           </div>
                         ))}
-
                         {groupedAspects.sections.length === 0 && (
                           <p className="py-2 text-[12px] text-slate-500">
                             No tight aspects within {STRONG_ORB}°.
                           </p>
                         )}
-
                         {groupedAspects.weak.length > 0 && (
                           <>
                             <button
@@ -1027,7 +983,6 @@ export default function BirthChartPanel({
                             >
                               {showWeaker ? "Hide weaker aspects" : "Show weaker aspects"} →
                             </button>
-
                             {showWeaker && (
                               <div className="mt-2 divide-y divide-white/5 opacity-70">
                                 {groupedAspects.weak.map((asp, i) => {
@@ -1058,7 +1013,6 @@ export default function BirthChartPanel({
                 </div>
               </motion.div>
             </div>
-
             {/* ── DAILY HOROSCOPE — the prompt is replaced by today's saved result ── */}
             <section
               className="standard-shadow order-3 flex min-h-[84px] w-full items-center justify-center rounded-[20px] border px-5 py-4 text-center"
@@ -1096,7 +1050,6 @@ export default function BirthChartPanel({
                 </div>
               )}
             </section>
-
             {/* ── YOUR READINGS — compact doorway to the saved-reading archive ── */}
             <button
               type="button"
@@ -1105,7 +1058,7 @@ export default function BirthChartPanel({
                   onOpenReadings();
                   return;
                 }
-                window.location.assign("app/api/readings/page.tsx");
+                window.location.assign("/readings");
               }}
               className="your-readings-shell order-4 flex min-h-[68px] w-[78%] self-center items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
               aria-label="Open your saved readings"
@@ -1148,11 +1101,13 @@ export default function BirthChartPanel({
 }
 
 /* Maps a sign to its ruling planet's name (for the profection glyph). */
+
 function SIGN_RULER_GLYPH(sign: string): string {
   const rulers: Record<string, string> = {
     Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
     Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
     Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
   };
+
   return rulers[sign] ?? "Sun";
 }
