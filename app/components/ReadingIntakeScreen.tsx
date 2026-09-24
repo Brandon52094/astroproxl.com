@@ -85,40 +85,14 @@ const AREAS = [
   },
 ];
 
-// The hero aura follows the user's Sun-sign element. Each set is intentionally
-// varied rather than monochromatic, and tuned to glow against the dark sky.
-const HERO_ELEMENT_PALETTES: Record<string, [string, string, string, string]> = {
-  default: [
-    "52, 211, 153",  // emerald
-    "34, 211, 238",  // cyan
-    "56, 189, 248",  // sky
-    "168, 85, 247",  // violet
-  ],
-  Earth: [
-    "110, 139, 93",  // moss
-    "202, 169, 92",  // antique gold
-    "61, 132, 116",  // mineral teal
-    "50, 96, 58",    // deep forest
-  ],
-  Fire: [
-    "239, 68, 68",   // crimson
-    "249, 115, 22",  // ember orange
-    "251, 191, 36",  // molten gold
-    "236, 72, 153",  // hot magenta
-  ],
-  Water: [
-    "37, 99, 235",   // deep ocean blue
-    "6, 182, 212",   // aqua
-    "129, 140, 248", // moonlit lavender
-    "45, 212, 191",  // sea glass
-  ],
-  Air: [
-    "226, 232, 240", // silver white
-    "125, 211, 252", // ice blue
-    "103, 232, 249", // pale cyan
-    "196, 181, 253", // soft lilac
-  ],
-};
+// One luminous cosmic aura for the current app theme. Personalized theme
+// palettes can be introduced later as an intentional Astro Plus experience.
+const HERO_PALETTE: [string, string, string, string] = [
+  "52, 211, 153",  // emerald
+  "34, 211, 238",  // cyan
+  "56, 189, 248",  // sky
+  "168, 85, 247",  // violet
+];
 
 // The hero's information is designed once at this width, then the entire
 // composition scales together to fit the live card.
@@ -300,6 +274,39 @@ const THEMES: Record<ThemeName, ThemeColors> = {
     },
   },
 };
+
+// Topic-adjacent CTA colors: connected to the selected reading without simply
+// duplicating the card color. Add Context keeps its separate gold/white role.
+const BEGIN_READING_STYLES = {
+  love: {
+    background: "linear-gradient(180deg, rgba(162,28,175,0.18), rgba(88,28,135,0.08))",
+    border: "rgba(240,171,252,0.80)",
+    text: "#F5D0FE",
+    glow: "rgba(217,70,239,0.25)",
+    ring: "rgba(240,171,252,0.12)",
+  },
+  money: {
+    background: "linear-gradient(180deg, rgba(13,148,136,0.17), rgba(15,118,110,0.07))",
+    border: "rgba(94,234,212,0.80)",
+    text: "#99F6E4",
+    glow: "rgba(45,212,191,0.25)",
+    ring: "rgba(94,234,212,0.12)",
+  },
+  career: {
+    background: "linear-gradient(180deg, rgba(79,70,229,0.17), rgba(49,46,129,0.07))",
+    border: "rgba(165,180,252,0.80)",
+    text: "#C7D2FE",
+    glow: "rgba(99,102,241,0.25)",
+    ring: "rgba(165,180,252,0.12)",
+  },
+  other: {
+    background: "linear-gradient(180deg, rgba(147,51,234,0.17), rgba(88,28,135,0.07))",
+    border: "rgba(216,180,254,0.80)",
+    text: "#E9D5FF",
+    glow: "rgba(192,132,252,0.25)",
+    ring: "rgba(216,180,254,0.12)",
+  },
+} as const;
 
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
@@ -580,13 +587,10 @@ export default function ReadingIntakeScreen({
   }, [fetchStatus]);
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
-  const sunElement = useMemo<ElementName | null>(() => {
-    const sun = natal.find((placement) => placement.name.trim().toLowerCase() === "sun");
-    if (!sun?.sign) return null;
-    const normalizedSign = `${sun.sign.charAt(0).toUpperCase()}${sun.sign.slice(1).toLowerCase()}`;
-    return SIGN_ELEMENTS[normalizedSign] ?? null;
-  }, [natal]);
-  const heroPalette = HERO_ELEMENT_PALETTES[sunElement ?? "default"];
+  const heroPalette = HERO_PALETTE;
+  const beginReadingStyle = selectedArea
+    ? BEGIN_READING_STYLES[selectedArea as keyof typeof BEGIN_READING_STYLES]
+    : null;
 
   /* ── Hero information — four quiet slides, one fixed stage ───────── */
   const heroData = useMemo(() => {
@@ -1509,21 +1513,21 @@ export default function ReadingIntakeScreen({
               data-begin-reading="true"
               onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
-              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-2xl text-[14px] font-medium transition-all duration-500 ease-out hover:opacity-90 disabled:cursor-not-allowed"
+              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-[20px] text-[14px] font-medium transition-all duration-500 ease-out hover:-translate-y-[1px] hover:opacity-95 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
               style={{
-                background: canSubmit && !isCreatingReading
-                  ? "linear-gradient(180deg, rgba(45,212,191,0.055), rgba(45,212,191,0.015))"
+                background: canSubmit && !isCreatingReading && beginReadingStyle
+                  ? beginReadingStyle.background
                   : "rgba(255,255,255,0.012)",
-                border: canSubmit && !isCreatingReading
-                  ? "2px solid rgba(94,234,212,0.72)"
+                border: canSubmit && !isCreatingReading && beginReadingStyle
+                  ? `1px solid ${beginReadingStyle.border}`
                   : "1px solid rgba(203,213,225,0.16)",
-                color: canSubmit && !isCreatingReading
-                  ? "rgba(94,234,212,0.98)"
+                color: canSubmit && !isCreatingReading && beginReadingStyle
+                  ? beginReadingStyle.text
                   : "rgba(203,213,225,0.34)",
                 opacity: canSubmit && !isCreatingReading ? 1 : 0.58,
                 transform: canSubmit && !isCreatingReading ? "scale(1)" : "scale(0.975)",
-                boxShadow: canSubmit && !isCreatingReading
-                  ? "0 0 0 1px rgba(94,234,212,0.08), 0 0 22px rgba(45,212,191,0.24), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)"
+                boxShadow: canSubmit && !isCreatingReading && beginReadingStyle
+                  ? `0 0 0 1px ${beginReadingStyle.ring}, 0 0 18px 2px ${beginReadingStyle.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                   : "0 14px 28px rgba(0,0,0,0.56)",
               }}
             >
