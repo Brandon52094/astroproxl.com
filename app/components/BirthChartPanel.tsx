@@ -329,13 +329,16 @@ export default function BirthChartPanel({
   };
 
   const outsideFocusStyle: React.CSSProperties = {
-    opacity: chartOpen ? 0.34 : 1,
+    // Lower profile sections disappear immediately when the chart opens, but
+    // remain mounted so their layout and state are preserved. On close, wait
+    // until the chart has fully retracted before fading them back into place.
+    opacity: chartOpen ? 0 : 1,
     filter: chartOpen
       ? "grayscale(1) brightness(0.28) saturate(0)"
       : "grayscale(0) brightness(1) saturate(1)",
     transitionProperty: "opacity, filter",
-    transitionDuration: chartOpen ? "950ms" : "420ms",
-    transitionDelay: chartOpen ? "0ms" : "60ms",
+    transitionDuration: chartOpen ? "0ms" : "420ms",
+    transitionDelay: chartOpen ? "0ms" : "235ms",
     transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
     pointerEvents: chartOpen ? "none" : "auto",
   };
