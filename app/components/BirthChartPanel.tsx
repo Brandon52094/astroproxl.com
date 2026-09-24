@@ -176,6 +176,7 @@ export default function BirthChartPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [dailyHoroscope, setDailyHoroscope] = useState<string | null>(null);
   const [horoscopeLoading, setHoroscopeLoading] = useState(false);
+  const [horoscopeError, setHoroscopeError] = useState<string | null>(null);
 
   useEffect(() => {
     const storageKey = `astroproxl:daily-horoscope:${localDayKey()}`;
@@ -191,15 +192,62 @@ export default function BirthChartPanel({
   }, [dailyHoroscopeProp]);
 
   const revealDailyHoroscope = async () => {
-    if (dailyHoroscope || horoscopeLoading || !onOpenHoroscope) return;
+    if (dailyHoroscope || horoscopeLoading) return;
     setHoroscopeLoading(true);
+    setHoroscopeError(null);
     try {
-      const result = await onOpenHoroscope();
+      let result: string | null | void;
+
+      if (onOpenHoroscope) {
+        result = await onOpenHoroscope();
+      } else {
+        const chart = loadChart();
+        const chartData = chart?.chartData as unknown as {
+          tropical?: { planets?: unknown[] };
+          transits?: unknown[];
+          transitAspects?: unknown[];
+          profection?: unknown;
+          moonPhase?: unknown;
+        } | undefined;
+
+        if (!chartData?.tropical?.planets?.length) {
+          throw new Error("Your chart is still loading. Please try again.");
+        }
+
+        const response = await fetch("/api/daily-horoscope", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            localDate: localDayKey(),
+            tropicalPlanets: chartData.tropical.planets,
+            currentTransits: chartData.transits ?? [],
+            transitAspects: chartData.transitAspects ?? [],
+            profection: chartData.profection ?? null,
+            moonPhase: chartData.moonPhase ?? null,
+          }),
+        });
+
+        const payload = await response.json().catch(() => null) as {
+          horoscope?: string;
+          error?: string;
+        } | null;
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Today’s horoscope could not be prepared.");
+        }
+
+        result = payload?.horoscope ?? null;
+      }
+
       if (typeof result === "string" && result.trim()) {
         const horoscope = result.trim();
         setDailyHoroscope(horoscope);
         window.localStorage.setItem(`astroproxl:daily-horoscope:${localDayKey()}`, horoscope);
+      } else if (!onOpenHoroscope) {
+        throw new Error("Today’s horoscope returned without a message. Please try again.");
       }
+    } catch (error) {
+      setHoroscopeError(error instanceof Error ? error.message : "Today’s horoscope could not be prepared.");
     } finally {
       setHoroscopeLoading(false);
     }
@@ -955,28 +1003,39 @@ export default function BirthChartPanel({
 
             {/* ── DAILY HOROSCOPE — the prompt is replaced by today's saved result ── */}
             <section
-              className="standard-shadow order-3 flex min-h-[84px] w-full items-center justify-center rounded-[20px] border bg-white/[0.025] px-5 py-4 text-center"
+              className="standard-shadow order-3 flex min-h-[84px] w-full items-center justify-center rounded-[20px] border px-5 py-4 text-center"
               style={{
-                borderColor: "rgba(218,183,105,0.62)",
+                background:
+                  "radial-gradient(circle at 50% -45%, rgba(255,236,183,0.15), transparent 62%), linear-gradient(145deg, rgba(24,21,22,0.96), rgba(9,12,24,0.96))",
+                borderColor: "rgba(225,195,126,0.76)",
                 boxShadow:
-                  "0 0 0 1px rgba(255,255,255,0.05), 0 0 22px rgba(185,139,55,0.10), 0 18px 44px rgba(0,0,0,0.42)",
+                  "inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 1px rgba(255,255,255,0.045), 0 0 24px rgba(203,164,78,0.16), 0 18px 44px rgba(0,0,0,0.48)",
                 ...outsideFocusStyle,
               }}
               aria-live="polite"
+              aria-busy={horoscopeLoading}
             >
               {dailyHoroscope ? (
-                <p className="text-[13px] leading-5 text-slate-300">
+                <p className="text-[13px] leading-[1.55] text-slate-200">
                   {dailyHoroscope}
                 </p>
               ) : (
-                <button
-                  type="button"
-                  onClick={revealDailyHoroscope}
-                  disabled={horoscopeLoading || !onOpenHoroscope}
-                  className="flex min-h-[52px] w-full items-center justify-center text-[14px] font-medium text-slate-300 transition-colors enabled:hover:text-white disabled:cursor-default"
-                >
-                  {horoscopeLoading ? "Preparing Today’s Horoscope…" : "Tap For Daily Horoscope"}
-                </button>
+                <div className="flex w-full flex-col items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={revealDailyHoroscope}
+                    disabled={horoscopeLoading}
+                    className="flex min-h-[52px] w-full items-center justify-center text-[13px] font-medium uppercase tracking-[0.15em] text-[#E8D5A5] transition-[color,opacity,text-shadow] duration-300 enabled:hover:text-[#FFF1C9] disabled:cursor-wait disabled:opacity-65"
+                    style={{ textShadow: "0 0 16px rgba(218,183,105,0.20)" }}
+                  >
+                    {horoscopeLoading ? "Preparing Today’s Horoscope…" : horoscopeError ? "Try Daily Horoscope Again" : "Tap For Daily Horoscope"}
+                  </button>
+                  {horoscopeError && (
+                    <p className="-mt-1 max-w-[310px] text-[10px] leading-4 text-rose-200/75">
+                      {horoscopeError}
+                    </p>
+                  )}
+                </div>
               )}
             </section>
 
