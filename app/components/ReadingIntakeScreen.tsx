@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Heart,
   Briefcase,
@@ -139,6 +139,8 @@ interface UserStatus {
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
   onSwipeLeft?: () => void;
+  /** Set false while this panel is offscreen, then true when the user swipes back. */
+  isActive?: boolean;
 }
 
 /* ── Chart shapes used by the hero information system ─────────────── */
@@ -302,8 +304,10 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
+  isActive = true,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [contextFocused, setContextFocused] = useState(false);
@@ -331,6 +335,24 @@ export default function ReadingIntakeScreen({
   const heroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heroHoldActivatedRef = useRef(false);
   const suppressNextHeroTapRef = useRef(false);
+  const [heroSweepActive, setHeroSweepActive] = useState(false);
+  const heroWasActiveRef = useRef(false);
+
+  // Play the glass sweep once on entry, and once again whenever the swipe
+  // container marks this panel active after the user returns to it.
+  useEffect(() => {
+    if (!isActive) {
+      heroWasActiveRef.current = false;
+      setHeroSweepActive(false);
+      return;
+    }
+    if (heroWasActiveRef.current || shouldReduceMotion) return;
+
+    heroWasActiveRef.current = true;
+    setHeroSweepActive(false);
+    const frame = window.requestAnimationFrame(() => setHeroSweepActive(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActive, shouldReduceMotion]);
 
   useEffect(() => {
     const stage = heroStageRef.current;
@@ -760,7 +782,6 @@ export default function ReadingIntakeScreen({
 
         @keyframes heroShine {
           0% { transform: translateX(-140%) skewX(-18deg); }
-          32% { transform: translateX(240%) skewX(-18deg); }
           100% { transform: translateX(240%) skewX(-18deg); }
         }
         .hero-shine { position: relative; overflow: hidden; isolation: isolate; }
@@ -771,9 +792,11 @@ export default function ReadingIntakeScreen({
           width: 45%;
           background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.09) 45%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.09) 55%, transparent 100%);
           transform: translateX(-140%) skewX(-18deg);
-          animation: heroShine 8.6s ease-in-out infinite;
           pointer-events: none;
           z-index: 1;
+        }
+        .hero-shine-sweep::after {
+          animation: heroShine 2s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
         }
         .hero-shine > * { position: relative; z-index: 2; }
 
@@ -1110,7 +1133,7 @@ export default function ReadingIntakeScreen({
             >
             <div
               ref={heroStageRef}
-              className="hero-shine relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture?.(e.pointerId);
                 beginHeroHold();
