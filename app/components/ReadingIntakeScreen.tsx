@@ -823,10 +823,10 @@ export default function ReadingIntakeScreen({
         .hero-shine > * { position: relative; z-index: 2; }
 
         /* ── HERO AURA — separate from hero content so focus can remove only the glow ── */
-        @property --hero-c1-color { syntax: "<color>"; inherits: false; initial-value: rgb(52, 211, 153); }
-        @property --hero-c2-color { syntax: "<color>"; inherits: false; initial-value: rgb(34, 211, 238); }
-        @property --hero-c3-color { syntax: "<color>"; inherits: false; initial-value: rgb(56, 189, 248); }
-        @property --hero-c4-color { syntax: "<color>"; inherits: false; initial-value: rgb(168, 85, 247); }
+        @property --hero-c1-color { syntax: "<color>"; inherits: true; initial-value: rgb(52, 211, 153); }
+        @property --hero-c2-color { syntax: "<color>"; inherits: true; initial-value: rgb(34, 211, 238); }
+        @property --hero-c3-color { syntax: "<color>"; inherits: true; initial-value: rgb(56, 189, 248); }
+        @property --hero-c4-color { syntax: "<color>"; inherits: true; initial-value: rgb(168, 85, 247); }
 
         .hero-glow-shell {
           position: relative;
