@@ -607,7 +607,9 @@ export default function ReadingIntakeScreen({
   const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
   useEffect(() => {
-    if (heroInspecting) return;
+    // Keep the current slide still while a reading is focused or this panel is
+    // offscreen. The timer restarts from that same slide when focus returns.
+    if (heroInspecting || selectedArea || !isActive) return;
 
     const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
       "personal",
@@ -619,7 +621,7 @@ export default function ReadingIntakeScreen({
       setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
     }, 4800);
     return () => window.clearInterval(id);
-  }, [heroInspecting, heroCycleReset]);
+  }, [heroInspecting, selectedArea, isActive, heroCycleReset]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
