@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Compass, Crown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Compass, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 import {
@@ -39,6 +39,7 @@ interface BirthChartPanelProps {
   userStatus: UserStatus | null;
   dailyHoroscope?: string | null;
   onOpenHoroscope?: () => Promise<string | null | void> | string | null | void;
+  onOpenReadings?: () => void;
 }
 
 interface NatalPlacement {
@@ -163,6 +164,7 @@ export default function BirthChartPanel({
   userStatus,
   dailyHoroscope: dailyHoroscopeProp,
   onOpenHoroscope,
+  onOpenReadings,
 }: BirthChartPanelProps) {
   const shouldReduceMotion = useReducedMotion();
 
@@ -438,21 +440,29 @@ export default function BirthChartPanel({
             inset 0 -1px 0 rgba(255,255,255,0.025);
         }
 
-        @property --plus-angle {
+        @property --readings-angle {
           syntax: "<angle>";
           inherits: false;
           initial-value: 0deg;
         }
 
-        .astro-plus-shell {
+        .your-readings-shell {
           position: relative;
           isolation: isolate;
-          background: transparent;
-          border-radius: 28px;
+          border: 0;
+          border-radius: 22px;
+          background:
+            radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%),
+            linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.08),
+            0 0 22px rgba(203,164,78,0.12),
+            0 16px 38px rgba(0,0,0,0.46);
+          cursor: pointer;
         }
 
-        .astro-plus-shell::before,
-        .astro-plus-shell::after {
+        .your-readings-shell::before,
+        .your-readings-shell::after {
           content: "";
           position: absolute;
           inset: 0;
@@ -461,7 +471,7 @@ export default function BirthChartPanel({
           padding: 1.25px;
           background:
             conic-gradient(
-              from var(--plus-angle),
+              from var(--readings-angle),
               rgba(255,255,255,0.94) 0deg,
               rgba(255,255,255,0.74) 54deg,
               rgba(218,183,104,0.88) 112deg,
@@ -475,15 +485,15 @@ export default function BirthChartPanel({
             linear-gradient(#000 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
-          animation: plusOrbit 12s linear infinite;
+          animation: readingsOrbit 8s linear infinite;
         }
 
-        .astro-plus-shell::before {
+        .your-readings-shell::before {
           z-index: 0;
           opacity: 0.82;
         }
 
-        .astro-plus-shell::after {
+        .your-readings-shell::after {
           inset: -1px;
           z-index: -1;
           padding: 2px;
@@ -491,13 +501,27 @@ export default function BirthChartPanel({
           filter: blur(8px);
         }
 
-        @keyframes plusOrbit {
-          to { --plus-angle: 360deg; }
+        .your-readings-shell:hover,
+        .your-readings-shell:focus-visible {
+          transform: translateY(-1px);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.11),
+            0 0 28px rgba(203,164,78,0.18),
+            0 18px 42px rgba(0,0,0,0.50);
+          outline: none;
+        }
+
+        .your-readings-shell:active {
+          transform: translateY(0);
+        }
+
+        @keyframes readingsOrbit {
+          to { --readings-angle: 360deg; }
         }
 
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
-          .astro-plus-shell::before, .astro-plus-shell::after { animation: none !important; }
+          .your-readings-shell::before, .your-readings-shell::after { animation: none !important; }
         }
       `}</style>
 
@@ -1039,36 +1063,30 @@ export default function BirthChartPanel({
               )}
             </section>
 
-            {/* ── ASTRO PLUS — intentionally empty skeleton for now ── */}
-            <section
-              className="astro-plus-shell order-4 min-h-[270px] w-full"
-              aria-label={userStatus?.isSubscribed ? "Astro Plus member area" : "Astro Plus locked area"}
+            {/* ── YOUR READINGS — compact doorway to the saved-reading archive ── */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenReadings) {
+                  onOpenReadings();
+                  return;
+                }
+                window.location.assign("/readings");
+              }}
+              className="your-readings-shell order-4 flex min-h-[68px] w-[78%] self-center items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
+              aria-label="Open your saved readings"
               style={outsideFocusStyle}
             >
-              <div className="relative z-10 flex min-h-[270px] flex-col bg-transparent p-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500">
-                    Astro Plus
-                  </span>
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/10">
-                    <Crown className="h-4 w-4 text-slate-300" strokeWidth={1.8} />
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            <p
-              className="order-5 flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600"
-              style={outsideFocusStyle}
-            >
-              <span className="flex items-center gap-1">
-                <ChevronLeft className="h-3 w-3" /> Readings
+              <span
+                className="relative z-10 text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-100"
+                style={{
+                  textShadow:
+                    "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
+                }}
+              >
+                Your Readings
               </span>
-              <span className="text-slate-700">·</span>
-              <span className="flex items-center gap-1">
-                Today's Sky <ChevronRight className="h-3 w-3" />
-              </span>
-            </p>
+            </button>
           </motion.div>
         )}
       </div>
