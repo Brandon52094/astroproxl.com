@@ -405,6 +405,10 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="mb-4"
         >
+          <h1 className="mb-3 text-center text-[22px] font-light tracking-tight text-white">
+            Your Astrology
+          </h1>
+
           {hasChart ? (
             <div className="grid grid-cols-3 gap-[clamp(6px,2.5vw,10px)]">
               {(
