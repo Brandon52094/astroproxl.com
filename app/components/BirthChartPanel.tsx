@@ -38,6 +38,7 @@ interface UserStatus {
 
 interface BirthChartPanelProps {
   userStatus: UserStatus | null;
+  onOpenHoroscope?: () => void;
 }
 
 interface NatalPlacement {
@@ -150,7 +151,7 @@ function SkyCard({
 
 /* ── Panel ──────────────────────────────────────────────────────────── */
 
-export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
+export default function BirthChartPanel({ userStatus, onOpenHoroscope }: BirthChartPanelProps) {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
 
@@ -403,9 +404,9 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="mb-4"
+          className="mb-3"
         >
-          <h1 className="mb-3 text-center text-[22px] font-light tracking-tight text-white">
+          <h1 className="mb-3 text-center text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
             Your Astrology
           </h1>
 
@@ -423,7 +424,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                 return (
                   <div
                     key={label}
-                    className="element-box rounded-2xl border bg-black/20 px-2 py-4 text-center"
+                    className="element-box rounded-2xl border bg-black/20 px-2 py-3 text-center"
                     style={
                       colors
                         ? {
@@ -438,7 +439,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                     <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
                     {element && colors && (
                       <p
-                        className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.18em]"
+                            className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em]"
                         style={{ color: colors.text }}
                       >
                         {element}
@@ -460,25 +461,25 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-            className="space-y-3"
+            className="flex flex-col gap-3"
           >
             {/* ── PERSONAL CONTEXT — Profection + Element Balance combined ── */}
             {(hasProfection || elementBalance.total > 0) && (
-              <div className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+              <div className="standard-shadow order-2 rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-sm">
                 {hasProfection && (
                   <>
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <Compass className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-                          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                            My Profection Year
+                          <Compass className="h-3 w-3 text-slate-500" strokeWidth={2.2} />
+                          <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                            Profection Year
                           </span>
                         </div>
-                        <p className="mt-2 text-[27px] font-light leading-tight text-white">
+                        <p className="mt-1 text-[22px] font-light leading-none text-white">
                           {profection!.activatedSign} Year
                         </p>
-                        <p className="mt-1.5 text-[11px] leading-5 text-slate-500">
+                        <p className="mt-1 text-[10px] leading-4 text-slate-500">
                           {typeof profection!.activatedHouse === "number"
                             ? `${ordinal(profection!.activatedHouse)} house activated`
                             : `${ordinal(profection!.profectionYear)} house year`}
@@ -488,35 +489,40 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
 
                       {profectionColors && (
                         <div
-                          className="element-box flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-black/20"
+                          className="element-box flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] border bg-black/20"
                           style={{
                             borderColor: profectionColors.border,
                             boxShadow: `0 0 18px ${profectionColors.glow}, inset 0 0 12px ${profectionColors.glow}`,
                           }}
                         >
-                          <span className="text-[23px]" style={{ color: profectionColors.text }}>
+                          <span className="text-[20px]" style={{ color: profectionColors.text }}>
                             {GLYPHS[SIGN_RULER_GLYPH(profection!.activatedSign)] ?? "✦"}
                           </span>
                         </div>
                       )}
                     </div>
 
-                    {elementBalance.total > 0 && <div className="my-4 h-px bg-white/[0.06]" />}
+                    {elementBalance.total > 0 && <div className="my-2.5 h-px bg-white/[0.06]" />}
                   </>
                 )}
 
                 {elementBalance.total > 0 && (
                   <div>
+                    <div className="mb-1 text-center">
+                      <span className="text-[8px] font-medium uppercase tracking-[0.19em] text-slate-500">
+                        Elemental Balance
+                      </span>
+                    </div>
                     <div className="grid grid-cols-4 gap-2">
                       {ELEMENT_ORDER.map((el) => {
                         const count = elementBalance.counts[el];
                         const maxCount = Math.max(...ELEMENT_ORDER.map((key) => elementBalance.counts[key]), 1);
-                        const height = 12 + Math.round((count / maxCount) * 28);
+                        const height = 8 + Math.round((count / maxCount) * 20);
                         const colors = ELEMENT_COLORS[el];
 
                         return (
                           <div key={el} className="flex flex-col items-center">
-                            <div className="flex h-11 items-end justify-center">
+                            <div className="flex h-8 items-end justify-center">
                               <motion.span
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height, opacity: 1 }}
@@ -529,22 +535,15 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                               />
                             </div>
                             <span
-                              className="mt-1 text-[9px] font-medium uppercase tracking-[0.14em]"
+                              className="mt-1 text-[8px] font-medium uppercase tracking-[0.13em]"
                               style={{ color: colors.text }}
                             >
                               {el}
                             </span>
-                            <span className="mt-0.5 text-[10px] text-slate-500 tabular-nums">{count}</span>
+                            <span className="mt-0.5 text-[9px] text-slate-600 tabular-nums">{count}</span>
                           </div>
                         );
                       })}
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-center gap-2">
-                      <Sparkles className="h-3 w-3 text-slate-500" strokeWidth={2.1} />
-                      <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                        My Elemental Balance
-                      </span>
                     </div>
                   </div>
                 )}
@@ -552,25 +551,26 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
             )}
 
             {/* ── VIEW MY CHART — technical chart data lives behind one disclosure ── */}
-            <button
-              type="button"
-              onClick={() => setChartOpen((v) => !v)}
-              aria-expanded={chartOpen}
-              className="standard-shadow flex w-full items-center justify-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.025] px-4 py-3 text-[12px] font-medium uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.04]"
-            >
-              <span>{chartOpen ? "Hide My Chart" : "View My Chart"}</span>
-              <ChevronDown
-                className={cn("h-4 w-4 text-slate-500 transition-transform", chartOpen && "rotate-180")}
-              />
-            </button>
+            <div className="standard-shadow order-1 overflow-hidden rounded-[18px] border border-white/10 bg-white/[0.025]">
+              <button
+                type="button"
+                onClick={() => setChartOpen((v) => !v)}
+                aria-expanded={chartOpen}
+                className="flex w-full items-center justify-center gap-2 px-4 py-3 text-[12px] font-medium uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.04]"
+              >
+                <span>{chartOpen ? "My Birth Chart" : "View My Chart"}</span>
+                <ChevronDown
+                  className={cn("h-4 w-4 text-slate-500 transition-transform", chartOpen && "rotate-180")}
+                />
+              </button>
 
-            <motion.div
-              initial={false}
-              animate={{ height: chartOpen ? "auto" : 0, opacity: chartOpen ? 1 : 0 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: "easeOut" }}
-              className="overflow-hidden"
-            >
-              <div className="space-y-3 pt-1">
+              <motion.div
+                initial={false}
+                animate={{ height: chartOpen ? "auto" : 0, opacity: chartOpen ? 1 : 0 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: "easeOut" }}
+                className={cn("overflow-hidden", chartOpen && "border-t border-white/[0.06]")}
+              >
+                <div className="space-y-3 p-3">
                 {/* Recalculate stays with the full technical chart. */}
                 <button
                   type="button"
@@ -831,12 +831,34 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
                     )}
                   </div>
                 )}
-              </div>
-            </motion.div>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* ── DAILY HOROSCOPE — API hookup arrives in the next pass ── */}
+            <button
+              type="button"
+              onClick={() => onOpenHoroscope?.()}
+              aria-label="Open today's personalized horoscope"
+              className="standard-shadow order-3 flex w-full items-center justify-between rounded-[18px] border border-white/10 bg-white/[0.025] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+            >
+              <span className="flex items-center gap-2.5">
+                <Sparkles className="h-3.5 w-3.5 text-slate-500" strokeWidth={2.1} />
+                <span>
+                  <span className="block text-[9px] font-medium uppercase tracking-[0.20em] text-slate-500">
+                    Your Horoscope Today
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-slate-300">
+                    Tap for your personalized forecast
+                  </span>
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" />
+            </button>
 
             {/* ── ASTRO PLUS — intentionally empty skeleton for now ── */}
             <section
-              className="astro-plus-shell min-h-[270px] w-full"
+              className="astro-plus-shell order-4 min-h-[270px] w-full"
               aria-label={userStatus?.isSubscribed ? "Astro Plus member area" : "Astro Plus locked area"}
             >
               <div className="relative z-10 flex min-h-[270px] flex-col bg-transparent p-5">
@@ -851,7 +873,7 @@ export default function BirthChartPanel({ userStatus }: BirthChartPanelProps) {
               </div>
             </section>
 
-            <p className="flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
+            <p className="order-5 flex items-center justify-center gap-3 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
               <span className="flex items-center gap-1">
                 <ChevronLeft className="h-3 w-3" /> Readings
               </span>
