@@ -1051,63 +1051,43 @@ export default function BirthChartPanel({
               )}
             </section>
             {/* ── YOUR READINGS — compact doorway to the saved-reading archive ── */}
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenReadings) {
-                  onOpenReadings();
-                  return;
-                }
-                window.location.assign("/readings");
-              }}
-              className="your-readings-shell order-4 flex min-h-[68px] w-[78%] self-center items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
-              aria-label="Open your saved readings"
-              style={outsideFocusStyle}
-            >
-              <span className="your-readings-shimmer" aria-hidden="true" />
-              <span
-                className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
-                style={{
-                  border: "1px solid rgba(248,250,252,0.28)",
-                  background: "rgba(248,250,252,0.035)",
-                  boxShadow:
-                    "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
-                }}
-                aria-hidden="true"
-              >
-                <Crown
-                  className="h-3.5 w-3.5"
-                  style={{
-                    color: "rgba(248,250,252,0.88)",
-                    filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
-                  }}
-                />
-              </span>
-              <span
-                className="relative z-10 text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-100"
-                style={{
-                  textShadow:
-                    "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
-                }}
-              >
-                Your Readings
-              </span>
-            </button>
-          </motion.div>
-        )}
-      </div>
-    </div>
-  );
-}
+<button
+  type="button"
+  onClick={() => {
+    window.location.href = "/readings";
+  }}
+  className="your-readings-shell order-4 flex min-h-[68px] w-[78%] self-center items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
+  aria-label="Open your saved readings"
+  style={outsideFocusStyle}
+>
+  <span className="your-readings-shimmer" aria-hidden="true" />
 
-/* Maps a sign to its ruling planet's name (for the profection glyph). */
+  <span
+    className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+    style={{
+      border: "1px solid rgba(248,250,252,0.28)",
+      background: "rgba(248,250,252,0.035)",
+      boxShadow:
+        "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
+    }}
+    aria-hidden="true"
+  >
+    <Crown
+      className="h-3.5 w-3.5"
+      style={{
+        color: "rgba(248,250,252,0.88)",
+        filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
+      }}
+    />
+  </span>
 
-function SIGN_RULER_GLYPH(sign: string): string {
-  const rulers: Record<string, string> = {
-    Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
-    Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
-    Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
-  };
-
-  return rulers[sign] ?? "Sun";
-}
+  <span
+    className="relative z-10 text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-100"
+    style={{
+      textShadow:
+        "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
+    }}
+  >
+    Your Readings
+  </span>
+</button>
