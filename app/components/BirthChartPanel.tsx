@@ -10,11 +10,6 @@ import {
   SIGN_MEANING,
   HOUSE_MEANING,
 } from "@/lib/chartMeanings";
-import {
-  buildDailyHoroscopePrompt,
-  parseDailyHoroscopeResponse,
-  formatDailyHoroscope,
-} from "@/lib/dailyHoroscopeEngine";
 
 /**
  * YOUR BIRTH CHART — sibling panel to Today's Sky.
