@@ -1045,6 +1045,19 @@ export default function ReadingIntakeScreen({
       <div className="nebula" aria-hidden="true" />
       <StarfieldBackground />
 
+      {/* Match the Birth Chart focus depth: selected readings sit against a
+          near-black sky while the active card and controls remain above it. */}
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[5] bg-black"
+        initial={false}
+        animate={{ opacity: selectedArea ? 0.64 : 0 }}
+        transition={{
+          duration: shouldReduceMotion ? 0 : selectedArea ? 0.95 : 0.3,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+      />
+
       <div
         className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col px-[clamp(12px,4vw,16px)]"
         style={{
