@@ -1258,7 +1258,6 @@ export default function ReadingIntakeScreen({
                 </div>
               </div>
             </div>
-            </div>
           </section>
 
           {/* ── Dynamic reading header ──
