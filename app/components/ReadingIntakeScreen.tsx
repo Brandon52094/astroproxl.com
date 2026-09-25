@@ -333,10 +333,15 @@ export default function ReadingIntakeScreen({
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
-  // The hero is now a static brand statement with one continuous information ticker.
-  const [heroInspecting] = useState(false);
+  // Four compact information slides share the same locked hero stage.
+  const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky" | "mercury" | "elements">("personal");
+  const [heroInspecting, setHeroInspecting] = useState(false);
+  const [heroCycleReset, setHeroCycleReset] = useState(0);
   const [heroCompositionScale, setHeroCompositionScale] = useState(1);
   const heroStageRef = useRef<HTMLDivElement | null>(null);
+  const heroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heroHoldActivatedRef = useRef(false);
+  const suppressNextHeroTapRef = useRef(false);
   const [heroSweepActive, setHeroSweepActive] = useState(false);
   const heroWasActiveRef = useRef(false);
   const previousSelectedAreaRef = useRef<string | null>(null);
@@ -407,6 +412,45 @@ export default function ReadingIntakeScreen({
     setContextFocused(false);
   }, [clearSelectionTimeout]);
 
+  const beginHeroHold = useCallback(() => {
+    if (heroHoldTimerRef.current) clearTimeout(heroHoldTimerRef.current);
+    heroHoldActivatedRef.current = false;
+    heroHoldTimerRef.current = setTimeout(() => {
+      heroHoldActivatedRef.current = true;
+      setHeroInspecting(true);
+      heroHoldTimerRef.current = null;
+    }, 420);
+  }, []);
+
+  const endHeroHold = useCallback(() => {
+    if (heroHoldTimerRef.current) {
+      clearTimeout(heroHoldTimerRef.current);
+      heroHoldTimerRef.current = null;
+    }
+    if (heroHoldActivatedRef.current) {
+      suppressNextHeroTapRef.current = true;
+      setHeroInspecting(false);
+      heroHoldActivatedRef.current = false;
+    }
+  }, []);
+
+  const cycleHeroInfo = useCallback(() => {
+    if (suppressNextHeroTapRef.current) {
+      suppressNextHeroTapRef.current = false;
+      return;
+    }
+
+    const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
+      "personal",
+      "sky",
+      "mercury",
+      "elements",
+    ];
+
+    setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
+    // Give the newly selected slide a full viewing interval before auto-rotation resumes.
+    setHeroCycleReset((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     async function ensureChart() {
@@ -584,21 +628,24 @@ export default function ReadingIntakeScreen({
     };
   }, [natal, transits]);
 
-  const heroTickerItems = useMemo(() => {
-    const personal = heroData.personal;
-    const degree = (value?: string) => (value ? ` ${value}` : "");
+  const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
-    return [
-      `Natal Sun · ${personal[0]?.sign ?? "—"}${degree(personal[0]?.degree)}`,
-      `Natal Moon · ${personal[1]?.sign ?? "—"}${degree(personal[1]?.degree)}`,
-      `Rising · ${personal[2]?.sign ?? "—"}${degree(personal[2]?.degree)}`,
-      `Current Sun · ${heroData.currentSun?.sign ?? "—"}`,
-      `Current Moon · ${moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}`,
-      `Mercury · ${heroData.mercury?.isRetrograde ? "Retrograde ℞" : "Direct"}${heroData.mercury?.sign ? ` in ${heroData.mercury.sign}` : ""}`,
-      `Elements · Earth ${heroData.counts.Earth} · Fire ${heroData.counts.Fire} · Water ${heroData.counts.Water} · Air ${heroData.counts.Air}`,
+  useEffect(() => {
+    // Keep the current slide still while a reading is focused or this panel is
+    // offscreen. The timer restarts from that same slide when focus returns.
+    if (heroInspecting || selectedArea || !isActive) return;
+
+    const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
+      "personal",
+      "sky",
+      "mercury",
+      "elements",
     ];
-  }, [heroData, moonPhase]);
-
+    const id = window.setInterval(() => {
+      setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
+    }, 4800);
+    return () => window.clearInterval(id);
+  }, [heroInspecting, selectedArea, isActive, heroCycleReset]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -636,6 +683,7 @@ export default function ReadingIntakeScreen({
   useEffect(() => {
     return () => {
       clearSelectionTimeout();
+      if (heroHoldTimerRef.current) clearTimeout(heroHoldTimerRef.current);
     };
   }, [clearSelectionTimeout]);
 
@@ -777,67 +825,6 @@ export default function ReadingIntakeScreen({
           animation: heroShine 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
         }
         .hero-shine > * { position: relative; z-index: 2; }
-
-        /* ── HERO INFORMATION TICKER ── */
-        @keyframes heroTickerScroll {
-          from { transform: translate3d(0, 0, 0); }
-          to { transform: translate3d(-50%, 0, 0); }
-        }
-
-        .hero-ticker-window {
-          overflow: hidden;
-          -webkit-mask-image: linear-gradient(
-            90deg,
-            transparent 0%,
-            #000 8%,
-            #000 92%,
-            transparent 100%
-          );
-          mask-image: linear-gradient(
-            90deg,
-            transparent 0%,
-            #000 8%,
-            #000 92%,
-            transparent 100%
-          );
-        }
-
-        .hero-ticker-track {
-          display: flex;
-          width: max-content;
-          will-change: transform;
-          animation: heroTickerScroll 28s linear infinite;
-        }
-
-        .hero-ticker-group {
-          display: flex;
-          flex-shrink: 0;
-          align-items: center;
-          gap: 24px;
-          padding-right: 24px;
-        }
-
-        .hero-ticker-item {
-          position: relative;
-          flex-shrink: 0;
-          white-space: nowrap;
-          color: rgba(203, 213, 225, 0.62);
-          font-size: 8px;
-          font-weight: 500;
-          letter-spacing: 0.17em;
-          text-transform: uppercase;
-          text-shadow: 0 2px 9px rgba(0,0,0,0.82);
-        }
-
-        .hero-ticker-item::after {
-          content: "✦";
-          position: absolute;
-          right: -16px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: rgba(199, 210, 254, 0.34);
-          font-size: 5px;
-        }
 
         /* ── HERO AURA — separate from hero content so focus can remove only the glow ── */
         @property --hero-c1-color { syntax: "<color>"; inherits: true; initial-value: rgb(52, 211, 153); }
@@ -1100,8 +1087,7 @@ export default function ReadingIntakeScreen({
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
           .ask-premium,
-          .ask-mic-halo,
-          .hero-ticker-track { animation: none !important; }
+          .ask-mic-halo { animation: none !important; }
         }
       `}</style>
 
@@ -1173,8 +1159,16 @@ export default function ReadingIntakeScreen({
             >
             <div
               ref={heroStageRef}
-              className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
-              aria-label="Personalized astrological predictions by AstroProXL, The Astrology Engine."
+              className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                beginHeroHold();
+              }}
+              onPointerUp={endHeroHold}
+              onPointerCancel={endHeroHold}
+              onClick={cycleHeroInfo}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label="Tap to cycle hero information. Press and hold to pause."
               style={{
                 opacity: heroInspecting ? 1 : selectedArea ? 0.48 : 1,
                 filter: heroInspecting
@@ -1194,10 +1188,10 @@ export default function ReadingIntakeScreen({
                   transformOrigin: "center center",
                 }}
               >
-                {/* Brand statement — centered as one visual unit. */}
-                <div className="absolute inset-x-0 top-[38px] px-[8px] text-center">
+                {/* Hero statement */}
+                <div className="absolute inset-x-0 top-[20px] px-[2px] text-left">
                   <p
-                    className="mb-[4px] text-center text-[25px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
+                    className="mb-[1px] text-center text-[25px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
                     style={{
                       fontFamily:
                         '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
@@ -1209,10 +1203,10 @@ export default function ReadingIntakeScreen({
                   </p>
 
                   <h1
-                    className="whitespace-nowrap text-center text-[36px] font-semibold leading-[0.98] tracking-[-0.042em] text-white"
+                    className="whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                     style={{
                       transform: "scaleY(1.045)",
-                      transformOrigin: "center bottom",
+                      transformOrigin: "left bottom",
                       textShadow:
                         "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
                     }}
@@ -1221,9 +1215,9 @@ export default function ReadingIntakeScreen({
                   </h1>
                 </div>
 
-                {/* Product identity — centered directly beneath the main statement. */}
+                {/* Product identity — supportive, not competing with the H1 */}
                 <p
-                  className="absolute inset-x-0 top-[118px] whitespace-nowrap text-center text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/52"
+                  className="absolute inset-x-0 top-[96px] whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/52"
                   style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                 >
                   <span className="text-indigo-200/72">AstroProXL</span>
@@ -1231,32 +1225,132 @@ export default function ReadingIntakeScreen({
                   <span>The Astrology Engine</span>
                 </p>
 
-                {/* Continuous chart/sky information now runs quietly along the bottom of the hero. */}
-                <div
-                  className="hero-ticker-window absolute inset-x-[12px] bottom-[19px] h-[24px]"
-                  aria-label={heroTickerItems.join(". ")}
-                >
-                  <div className="hero-ticker-track h-full items-center">
-                    {[0, 1].map((copy) => (
-                      <div
-                        key={`hero-ticker-${copy}`}
-                        className="hero-ticker-group h-full"
-                        aria-hidden={copy === 1}
-                      >
-                        {heroTickerItems.map((item, index) => (
+                {/* Four-slide information display: Birth Chart → Today → Mercury → Elements */}
+                <div className="absolute inset-x-0 top-[133px] h-[91px]">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={heroInfoMode}
+                      initial={{ opacity: 0, y: 4, filter: "blur(3px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, y: -3, filter: "blur(3px)" }}
+                      transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      {heroInfoMode === "personal" && (
+                        <div className="flex items-center justify-center gap-8">
+                          {heroData.personal.map((item) => (
+                            <div
+                              key={`personal-${item.role}`}
+                              className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border bg-white/[0.018] px-1"
+                              style={{
+                                borderColor: signAccentColor(item.sign),
+                                boxShadow: `inset 0 0 16px rgba(255,255,255,0.025), 0 0 18px ${signAccentGlow(item.sign)}`,
+                              }}
+                            >
+                              <span className="mb-[3px] text-[7px] font-semibold leading-none tabular-nums text-slate-300/72">
+                                {item.degree ?? "—"}
+                              </span>
+                              <span
+                                className="max-w-full truncate text-[10.5px] font-semibold leading-none"
+                                style={{
+                                  color: signAccentColor(item.sign),
+                                  textShadow: `0 0 9px ${signAccentGlow(item.sign)}`,
+                                }}
+                              >
+                                {item.sign}
+                              </span>
+                              <span className="mt-[4px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
+                                {item.role}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {heroInfoMode === "sky" && (
+                        <div className="flex items-center justify-center gap-12">
+                          <div className="flex w-[78px] flex-col items-center">
+                            <div style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.20))" }}>
+                              <SunDisc size={62} />
+                            </div>
+                            <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
+                              {heroData.currentSun?.sign ?? "—"}
+                            </span>
+                            <span className="mt-[3px] text-[6.5px] font-medium uppercase tracking-[0.15em] text-slate-400/65">Sun</span>
+                          </div>
+
+                          <div className="flex w-[78px] flex-col items-center">
+                            <div style={{ filter: "drop-shadow(0 0 18px rgba(226,223,240,0.16))" }}>
+                              <MoonDisc
+                                illumination={moonPhase?.illuminationPercent ?? 50}
+                                waxing={moonWaxing}
+                                size={62}
+                              />
+                            </div>
+                            <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
+                              {moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}
+                            </span>
+                            <span className="mt-[3px] text-[6.5px] font-medium uppercase tracking-[0.15em] text-slate-400/65">Moon</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {heroInfoMode === "mercury" && (
+                        <div className="flex flex-col items-center justify-center text-center">
+                          <span className="text-[9px] font-medium uppercase tracking-[0.28em] text-slate-400/68">Mercury</span>
                           <span
-                            key={`${copy}-${index}-${item}`}
-                            className="hero-ticker-item"
+                            className="mt-1 text-[25px] font-semibold uppercase leading-none tracking-[-0.025em] text-white"
+                            style={{ textShadow: "0 5px 14px rgba(0,0,0,0.88), 0 0 18px rgba(148,163,184,0.12)" }}
                           >
-                            {item}
+                            {heroData.mercury?.isRetrograde ? "Retrograde ℞" : "Direct"}
                           </span>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                          <span className="mt-2 text-[8px] font-medium uppercase tracking-[0.17em] text-slate-400/62">
+                            {heroData.mercury?.sign ?? "Current status"}
+                          </span>
+                        </div>
+                      )}
+
+                      {heroInfoMode === "elements" && (
+                        <div className="flex h-[84px] items-end justify-center gap-5">
+                          {HERO_ELEMENT_ORDER.map((element) => {
+                            const count = heroData.counts[element];
+                            const ratio = count / heroData.maxElementCount;
+                            const height = count === 0 ? 5 : 12 + ratio * 38;
+                            const colors = HERO_ELEMENT_COLORS[element];
+                            return (
+                              <div key={element} className="flex w-[38px] flex-col items-center justify-end">
+                                <div className="relative flex h-[52px] w-full items-end justify-center">
+                                  <motion.div
+                                    initial={{ height: 4, opacity: 0.4 }}
+                                    animate={{ height, opacity: 0.95 }}
+                                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                                    className="w-[5px] rounded-full"
+                                    style={{
+                                      backgroundColor: colors.bar,
+                                      boxShadow: `0 0 10px ${colors.glow}`,
+                                    }}
+                                  />
+                                  <span
+                                    className="absolute bottom-[-3px] h-[6px] w-[6px] rounded-full"
+                                    style={{ backgroundColor: colors.bar, boxShadow: `0 0 8px ${colors.glow}` }}
+                                  />
+                                </div>
+                                <span
+                                  className="mt-[7px] text-[6.5px] font-semibold uppercase tracking-[0.10em]"
+                                  style={{ color: colors.text }}
+                                >
+                                  {element}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </div>
+            </div>
             </div>
           </section>
 
