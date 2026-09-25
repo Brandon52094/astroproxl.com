@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { ChevronLeft, Crown } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+
 import {
   deleteSavedReading,
   listSavedReadings,
@@ -11,9 +11,8 @@ import {
   type SavedReadingRecord,
 } from "@/lib/savedReadingsStore";
 
-const FREE_SLOTS = 4;
-const TOTAL_LIBRARY_SLOTS = 16;
-const DELETE_THRESHOLD = -78;
+const DISPLAY_SLOT_COUNT = 8;
+const FREE_SLOT_COUNT = 4;
 
 function formatTopic(topic: string) {
   return topic.replace(/[_-]+/g, " ").trim() || "Reading";
@@ -21,6 +20,7 @@ function formatTopic(topic: string) {
 
 function formatSavedDate(value: string) {
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "Saved";
 
   return new Intl.DateTimeFormat("en-US", {
@@ -32,16 +32,12 @@ function formatSavedDate(value: string) {
 
 export default function SavedReadingsPage() {
   const router = useRouter();
+
   const [readings, setReadings] = useState<SavedReadingRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [managing, setManaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
-
-  // Connect this to the same membership state your app already uses.
-  // The first four slots remain free either way.
-  const isSubscribed = false;
-
-  const draggedReading = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -58,13 +54,14 @@ export default function SavedReadingsPage() {
     setLimitNotice(
       new URLSearchParams(window.location.search).get("limit") === "1",
     );
+
     void refresh();
   }, [refresh]);
 
   const slots = useMemo(
     () =>
       Array.from(
-        { length: Math.max(TOTAL_LIBRARY_SLOTS, MAX_SAVED_READINGS) },
+        { length: DISPLAY_SLOT_COUNT },
         (_, index) => readings[index] ?? null,
       ),
     [readings],
@@ -99,7 +96,8 @@ export default function SavedReadingsPage() {
 
       {limitNotice && (
         <p className="notice" role="status">
-          All available spaces are filled. Remove one reading to save another.
+          All {MAX_SAVED_READINGS} spaces are filled. Remove one reading to save
+          another.
         </p>
       )}
 
@@ -111,73 +109,56 @@ export default function SavedReadingsPage() {
 
       <section className="reading-grid" aria-label="Saved readings">
         {slots.map((reading, index) => {
-          const subscriberSlot = index >= FREE_SLOTS;
-          const locked = subscriberSlot && !isSubscribed;
+          const isFreeSlot = index < FREE_SLOT_COUNT;
 
-          if (locked) {
+          if (reading) {
             return (
-              <div
-                className="premium-slot"
-                key={`premium-${index}`}
-                aria-label="Astro Plus saved reading space"
-              >
-                <Crown aria-hidden="true" />
-                <span>Astro Plus</span>
-              </div>
-            );
-          }
+              <div className="reading-slot" key={reading.id}>
+                <button
+                  type="button"
+                  className="reading-tile"
+                  onClick={() =>
+                    router.push(
+                      `/reading/results?saved=${encodeURIComponent(reading.id)}`,
+                    )
+                  }
+                  aria-label={`Open ${formatTopic(reading.topic)} reading from ${formatSavedDate(reading.savedAt)}`}
+                >
+                  <span className="tile-topic">
+                    {formatTopic(reading.topic)}
+                  </span>
+                  <span className="tile-date">
+                    {formatSavedDate(reading.savedAt)}
+                  </span>
+                </button>
 
-          if (!reading) {
-            return (
-              <div
-                className="empty-slot"
-                key={`empty-${index}`}
-                aria-hidden="true"
-              >
-                <span />
+                {managing && (
+                  <button
+                    type="button"
+                    className="delete-reading"
+                    onClick={() => void removeReading(reading.id)}
+                    aria-label={`Delete ${formatTopic(reading.topic)} reading`}
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                )}
               </div>
             );
           }
 
           return (
-            <div className="reading-slot" key={reading.id}>
-              <motion.button
-                type="button"
-                className="reading-tile"
-                drag="y"
-                dragConstraints={{ top: -120, bottom: 0 }}
-                dragElastic={0.16}
-                whileTap={{ scale: 0.97 }}
-                whileDrag={{ scale: 1.035, opacity: 0.68 }}
-                onDragStart={() => {
-                  draggedReading.current = reading.id;
-                }}
-                onDragEnd={(_, info) => {
-                  const shouldDelete = info.offset.y <= DELETE_THRESHOLD;
-                  draggedReading.current = shouldDelete ? reading.id : null;
-
-                  if (shouldDelete) {
-                    void removeReading(reading.id);
-                    window.setTimeout(() => {
-                      draggedReading.current = null;
-                    }, 250);
-                  }
-                }}
-                onClick={(event) => {
-                  if (draggedReading.current === reading.id) {
-                    event.preventDefault();
-                    return;
-                  }
-
-                  router.push(
-                    `/reading/results?saved=${encodeURIComponent(reading.id)}`,
-                  );
-                }}
-                aria-label={`Open ${formatTopic(reading.topic)} reading from ${formatSavedDate(reading.savedAt)}. Swipe up to remove.`}
-              >
-                <span className="tile-topic">{formatTopic(reading.topic)}</span>
-                <span className="tile-date">{formatSavedDate(reading.savedAt)}</span>
-              </motion.button>
+            <div
+              className={`empty-slot ${
+                isFreeSlot ? "available-slot" : "astro-plus-slot"
+              }`}
+              key={`empty-${index}`}
+              aria-label={
+                isFreeSlot
+                  ? "Available saved reading space"
+                  : "Astro Plus saved reading space"
+              }
+            >
+              <span />
             </div>
           );
         })}
@@ -187,26 +168,34 @@ export default function SavedReadingsPage() {
         <p className="empty-copy">Saved readings will appear among the stars.</p>
       )}
 
-      <p className="gesture-hint">Hold + swipe up to remove a saved reading</p>
-
       <button
         type="button"
-        className="return-button"
-        onClick={() => router.back()}
-        aria-label="Return"
+        className={`bottom-delete-control ${managing ? "active" : ""}`}
+        onClick={() => setManaging((current) => !current)}
+        disabled={readings.length === 0}
+        aria-pressed={managing}
       >
-        Return
+        {managing ? "Done" : "Delete"}
       </button>
 
       <style jsx>{`
         .saved-readings-page {
+          box-sizing: border-box;
+          min-height: 100svh;
           min-height: 100dvh;
           overflow-x: hidden;
           background: #000;
           color: #f8fafc;
-          padding: max(22px, env(safe-area-inset-top)) 20px
-            calc(94px + env(safe-area-inset-bottom));
-          font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+          padding:
+            max(22px, env(safe-area-inset-top))
+            20px
+            calc(104px + env(safe-area-inset-bottom));
+          font-family: var(
+            --font-sans,
+            ui-sans-serif,
+            system-ui,
+            sans-serif
+          );
         }
 
         .saved-header {
@@ -250,14 +239,13 @@ export default function SavedReadingsPage() {
         }
 
         .header-spacer {
-          width: 44px;
-          height: 44px;
-          justify-self: end;
+          width: 54px;
+          height: 1px;
         }
 
         .notice {
           width: min(100%, 440px);
-          margin: 0 auto 18px;
+          margin: 4px auto 22px;
           color: #d8caaa;
           font-family: var(--font-display, Georgia, serif);
           font-size: 13px;
@@ -274,16 +262,16 @@ export default function SavedReadingsPage() {
           margin: 0 auto;
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 16px clamp(10px, 3.4vw, 18px);
+          gap: clamp(18px, 5.5vw, 28px) clamp(10px, 3.4vw, 18px);
         }
 
         .reading-slot,
-        .empty-slot,
-        .premium-slot {
+        .empty-slot {
           position: relative;
           aspect-ratio: 0.9;
         }
 
+        /* Original saved-reading button treatment preserved. */
         .reading-tile {
           position: relative;
           width: 100%;
@@ -316,15 +304,11 @@ export default function SavedReadingsPage() {
           justify-content: center;
           gap: 8px;
           padding: 10px 7px;
-          cursor: grab;
-          touch-action: pan-x;
-          user-select: none;
-          -webkit-user-select: none;
+          cursor: pointer;
           -webkit-tap-highlight-color: transparent;
-        }
-
-        .reading-tile:active {
-          cursor: grabbing;
+          transition:
+            transform 160ms ease,
+            box-shadow 160ms ease;
         }
 
         .reading-tile::before {
@@ -337,6 +321,10 @@ export default function SavedReadingsPage() {
             transparent 42%
           );
           pointer-events: none;
+        }
+
+        .reading-tile:active {
+          transform: scale(0.96);
         }
 
         .tile-topic {
@@ -365,63 +353,61 @@ export default function SavedReadingsPage() {
         }
 
         .empty-slot span {
-          width: 5px;
-          height: 5px;
           border-radius: 999px;
           background: #fff;
-          box-shadow:
-            0 0 5px rgba(255, 255, 255, 0.95),
-            0 0 14px rgba(255, 255, 255, 0.54);
         }
 
-        .empty-slot:nth-child(3n) span {
-          width: 3px;
-          height: 3px;
-          opacity: 0.76;
-        }
-
-        .empty-slot:nth-child(4n) span {
+        /* Free/available save spaces: brighter, but still restrained. */
+        .available-slot span {
           width: 6px;
           height: 6px;
-          opacity: 0.88;
+          opacity: 0.96;
+          box-shadow:
+            0 0 5px rgba(255, 255, 255, 0.98),
+            0 0 13px rgba(255, 255, 255, 0.65),
+            0 0 26px rgba(214, 225, 255, 0.2);
         }
 
-        .premium-slot {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: clamp(18px, 5vw, 24px);
-          background:
-            radial-gradient(
-              circle at 50% -20%,
-              rgba(255, 255, 255, 0.07),
-              transparent 58%
-            ),
-            rgba(255, 255, 255, 0.018);
-          color: rgba(226, 232, 240, 0.34);
+        /* Astro Plus spaces: visible, intentionally quieter. */
+        .astro-plus-slot span {
+          width: 4px;
+          height: 4px;
+          opacity: 0.42;
+          box-shadow:
+            0 0 4px rgba(255, 255, 255, 0.48),
+            0 0 9px rgba(255, 255, 255, 0.18);
         }
 
-        .premium-slot :global(svg) {
-          width: 15px;
-          height: 15px;
-          stroke-width: 1.5;
-          filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.12));
+        .astro-plus-slot:nth-child(3n) span {
+          width: 3px;
+          height: 3px;
+          opacity: 0.34;
         }
 
-        .premium-slot span {
-          font-size: clamp(7px, 1.9vw, 9px);
-          font-weight: 500;
-          letter-spacing: 0.13em;
-          text-transform: uppercase;
-          white-space: nowrap;
+        .delete-reading {
+          position: absolute;
+          z-index: 2;
+          top: -7px;
+          right: -7px;
+          width: 24px;
+          height: 24px;
+          border: 1px solid rgba(255, 255, 255, 0.36);
+          border-radius: 999px;
+          background: #080808;
+          color: #fff;
+          display: grid;
+          place-items: center;
+          cursor: pointer;
+        }
+
+        .delete-reading :global(svg) {
+          width: 13px;
+          height: 13px;
         }
 
         .empty-copy {
           width: min(100%, 440px);
-          margin: 36px auto 0;
+          margin: 34px auto 0;
           color: rgba(148, 163, 184, 0.52);
           font-family: var(--font-display, Georgia, serif);
           font-size: 13px;
@@ -429,52 +415,43 @@ export default function SavedReadingsPage() {
           text-align: center;
         }
 
-        .gesture-hint {
-          width: min(100%, 440px);
-          margin: 28px auto 0;
-          color: rgba(148, 163, 184, 0.28);
-          font-size: 9px;
-          letter-spacing: 0.12em;
-          text-align: center;
-          text-transform: uppercase;
-        }
-
-        .return-button {
+        .bottom-delete-control {
           position: fixed;
           left: 50%;
-          bottom: max(18px, env(safe-area-inset-bottom));
+          bottom: max(16px, env(safe-area-inset-bottom));
           transform: translateX(-50%);
-          z-index: 20;
+          z-index: 30;
           min-width: 108px;
           height: 42px;
-          padding: 0 18px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 0 20px;
+          border: 1px solid rgba(244, 63, 94, 0.32);
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.035);
-          color: rgba(226, 232, 240, 0.58);
+          background: rgba(69, 10, 10, 0.58);
+          color: rgba(254, 202, 202, 0.88);
           font-size: 11px;
-          font-weight: 500;
-          letter-spacing: 0.16em;
+          font-weight: 600;
+          letter-spacing: 0.15em;
           text-transform: uppercase;
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(12px);
+          backdrop-filter: blur(12px);
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
           transition:
+            opacity 160ms ease,
             background 160ms ease,
-            color 160ms ease,
             border-color 160ms ease,
-            transform 160ms ease;
+            color 160ms ease;
         }
 
-        .return-button:hover {
-          color: rgba(248, 250, 252, 0.82);
-          border-color: rgba(255, 255, 255, 0.16);
-          background: rgba(255, 255, 255, 0.055);
+        .bottom-delete-control.active {
+          background: rgba(127, 29, 29, 0.76);
+          border-color: rgba(248, 113, 113, 0.52);
+          color: #fff;
         }
 
-        .return-button:active {
-          transform: translateX(-50%) scale(0.96);
+        .bottom-delete-control:disabled {
+          opacity: 0.24;
+          pointer-events: none;
         }
 
         @media (max-width: 350px) {
@@ -484,16 +461,12 @@ export default function SavedReadingsPage() {
 
           .reading-grid {
             column-gap: 8px;
-            row-gap: 14px;
-          }
-
-          .saved-header {
-            margin-bottom: 18px;
           }
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .return-button {
+          .reading-tile,
+          .bottom-delete-control {
             transition: none;
           }
         }
