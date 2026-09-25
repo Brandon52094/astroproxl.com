@@ -75,7 +75,7 @@ const GLYPHS: Record<string, string> = {
 
 // Aspect sections, ordered most-harmonious → most-tense.
 // rank sets display order; color fades green → amber → dark red.
-const ASPECT_META: Record<
+const ASPECT_META: Record
   string,
   { header: string; rank: number; text: string; border: string; glow: string }
 > = {
@@ -594,23 +594,76 @@ export default function BirthChartPanel({
       />
 
       <div
-  className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
-  style={{
-    paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-    paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
-  }}
-  onClickCapture={(event) => {
-    if (!chartOpen) return;
-    const target = event.target as HTMLElement;
-    if (target.closest("[data-birth-chart-focus]")) return;
+        className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top) + 8px)",
+          paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+        }}
+        onClickCapture={(event) => {
+          if (!chartOpen) return;
+          const target = event.target as HTMLElement;
+          if (target.closest("[data-birth-chart-focus]")) return;
 
-    // While focused, any tap on the faded interface quietly dismisses the
-    // chart. Capture prevents a muted control beneath the tap from firing.
-    event.preventDefault();
-    event.stopPropagation();
-    setChartOpen(false);
-  }}
->
+          // While focused, any tap on the faded interface quietly dismisses the
+          // chart. Capture prevents a muted control beneath the tap from firing.
+          event.preventDefault();
+          event.stopPropagation();
+          setChartOpen(false);
+        }}
+      >
+        {/* ── HOROSCOPES — static hero attached to the daily horoscope ── */}
+        <section
+          className="standard-shadow mb-3 overflow-hidden rounded-[18px] border border-white/10 bg-transparent"
+          style={outsideFocusStyle}
+          aria-live="polite"
+          aria-busy={horoscopeLoading}
+        >
+          {/* Static title bar — same chrome and height as View My Chart, but not interactive. */}
+          <div className="chart-focus-surface flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200">
+            <span>Horoscopes</span>
+          </div>
+
+          {/* Attached daily horoscope body. */}
+          <div
+            className="flex min-h-[84px] w-full items-center justify-center border-t px-5 py-4 text-center"
+            style={{
+              background:
+                "radial-gradient(circle at 50% -45%, rgba(255,244,214,0.15), transparent 62%), linear-gradient(145deg, rgba(26,22,16,0.98), rgba(11,10,9,0.99))",
+              borderColor: "rgba(218,183,105,0.30)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 24px rgba(218,183,105,0.05), 0 0 18px rgba(218,183,105,0.08)",
+            }}
+          >
+            {dailyHoroscope ? (
+              <p className="text-[13px] leading-[1.55] text-slate-200">
+                {dailyHoroscope}
+              </p>
+            ) : (
+              <div className="flex w-full flex-col items-center justify-center">
+                <button
+                  type="button"
+                  onClick={revealDailyHoroscope}
+                  disabled={horoscopeLoading}
+                  className="flex min-h-[52px] w-full items-center justify-center text-[13px] font-medium uppercase tracking-[0.15em] text-slate-100 transition-[color,opacity,text-shadow] duration-300 enabled:hover:text-white disabled:cursor-wait disabled:opacity-65"
+                  style={{ textShadow: "0 0 16px rgba(218,183,105,0.18)" }}
+                >
+                  {horoscopeLoading
+                    ? "Preparing Today’s Horoscope…"
+                    : horoscopeError
+                      ? "Try Daily Horoscope Again"
+                      : "Tap For Daily Horoscope"}
+                </button>
+
+                {horoscopeError && (
+                  <p className="-mt-1 max-w-[310px] text-[10px] leading-4 text-rose-200/75">
+                    {horoscopeError}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* ── PROFILE IDENTITY — Big Three first, no extra hero copy ── */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
@@ -662,7 +715,7 @@ export default function BirthChartPanel({
                     <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
                     {element && colors && (
                       <p
-                            className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em]"
+                        className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em]"
                         style={{ color: colors.text }}
                       >
                         {element}
@@ -818,284 +871,246 @@ export default function BirthChartPanel({
               >
                 <div className="pt-3">
                   <div className="px-4 pb-3">
-                  {/* Full placements live directly inside the chart container. */}
-                  <div className="mb-3 text-center">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                      Tap Each Placement To Learn
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {natal.map((planet, index) => {
-                      const element = elementOf(planet.sign);
-                      const colors = element ? ELEMENT_COLORS[element] : null;
-                      const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
-                      const isOpen = openPlacement === planet.name;
-
-                      return (
-                        <div
-                          key={planet.name}
-                          className={cn(index < natal.length - 1 && "border-b border-white/5 pb-3")}
-                        >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpenPlacement((current) => current === planet.name ? null : planet.name)
-                            }
-                            aria-expanded={isOpen}
-                            className="flex w-full items-center gap-3 text-left"
-                          >
-                            <span
-                              className="w-8 shrink-0 text-center text-xl transition-all"
-                              style={
-                                colors
-                                  ? {
-                                      color: colors.text,
-                                      textShadow: isOpen ? `0 0 10px ${colors.glow}` : "none",
-                                    }
-                                  : { color: "#64748b" }
-                              }
-                            >
-                              {GLYPHS[planet.name] ?? "•"}
-                            </span>
-
-                            <span
-                              className={cn(
-                                "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
-                                isOpen ? "text-white" : "text-slate-300"
-                              )}
-                            >
-                              {displayName}
-                            </span>
-
-                            <span
-                              className={cn(
-                                "min-w-0 flex-1 text-[15px] transition-colors",
-                                isOpen ? "text-white" : "text-slate-300"
-                              )}
-                            >
-                              {planet.sign}
-                            </span>
-
-                            <span
-                              className={cn(
-                                "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
-                                isOpen ? "text-slate-300" : "text-slate-400"
-                              )}
-                            >
-                              {planet.degree}
-                              {planet.house ? (
-                                <span className="ml-1 text-slate-500">· {ordinal(planet.house)}</span>
-                              ) : null}
-                            </span>
-                          </button>
-
-                          <motion.div
-                            initial={false}
-                            animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
-                            transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
-                            className="overflow-hidden"
-                          >
-                            <div className="pt-3 pl-1">
-                              <div
-                                className="border-l pl-3"
-                                style={{ borderColor: colors?.border ?? "rgba(255,255,255,0.10)" }}
-                              >
-                                <p
-                                  className="text-[10px] font-medium uppercase tracking-[0.16em]"
-                                  style={{ color: colors?.text ?? "#94A3B8" }}
-                                >
-                                  {planet.name === "Ascendant"
-                                    ? `${planet.sign} Rising`
-                                    : `${planet.name} in ${planet.sign}`}
-                                </p>
-
-                                {PLANET_MEANING[planet.name] && (
-                                  <div className="mt-2">
-                                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                      The Planet
-                                    </p>
-                                    <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                      {PLANET_MEANING[planet.name]}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {SIGN_MEANING[planet.sign] && (
-                                  <div className="mt-3">
-                                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                      The Sign
-                                    </p>
-                                    <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                      {SIGN_MEANING[planet.sign]}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {planet.house && HOUSE_MEANING[String(planet.house)] && (
-                                  <div className="mt-3">
-                                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                      The {ordinal(planet.house)} House
-                                    </p>
-                                    <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                      {HOUSE_MEANING[String(planet.house)]}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </motion.div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  </div>
-
-                {/* Major Aspects stay inside View My Chart. */}
-                {aspects.length > 0 && (
-                  <div className="chart-focus-surface mt-1 border-t border-white/[0.09] px-4 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setAspectsOpen((v) => !v)}
-                      className="flex w-full items-center justify-between py-3"
-                    >
-                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-                        Major Aspects
+                    {/* Full placements live directly inside the chart container. */}
+                    <div className="mb-3 text-center">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                        Tap Each Placement To Learn
                       </span>
-                      <span className="flex items-center gap-2 text-slate-500">
-                        <span className="text-[11px] tabular-nums">{aspects.length}</span>
-                        <ChevronRight
-                          className={cn("h-4 w-4 transition-transform", aspectsOpen && "rotate-90")}
-                        />
-                      </span>
-                    </button>
+                    </div>
 
-                    {aspectsOpen && (
-                      <div className="pb-1">
-                        {groupedAspects.sections.map((section) => (
-                          <div key={section.type} className="mb-3 last:mb-1">
-                            <div className="mb-1.5 flex items-center gap-2">
-                              <span
-                                className="h-1.5 w-1.5 rounded-full"
-                                style={{
-                                  backgroundColor: section.meta.text,
-                                  boxShadow: `0 0 6px ${section.meta.glow}`,
-                                }}
-                              />
-                              <span
-                                className="text-[10px] font-medium uppercase tracking-[0.16em]"
-                                style={{ color: section.meta.text }}
-                              >
-                                {section.meta.header}
-                              </span>
-                            </div>
+                    <div className="space-y-3">
+                      {natal.map((planet, index) => {
+                        const element = elementOf(planet.sign);
+                        const colors = element ? ELEMENT_COLORS[element] : null;
+                        const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
+                        const isOpen = openPlacement === planet.name;
 
-                            <div className="divide-y divide-white/5">
-                              {section.items.map((asp, i) => {
-                                const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                                const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                                return (
-                                  <div
-                                    key={`${asp.planetA}-${asp.planetB}-${i}`}
-                                    className="flex items-center justify-between py-2 text-[13px]"
-                                  >
-                                    <span className="text-slate-200">
-                                      {nameA} <span className="italic text-slate-500">{asp.type}</span> {nameB}
-                                    </span>
-                                    <span className="text-[11px] text-slate-500 tabular-nums">
-                                      {asp.orbDegrees}°
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-
-                        {groupedAspects.sections.length === 0 && (
-                          <p className="py-2 text-[12px] text-slate-500">
-                            No tight aspects within {STRONG_ORB}°.
-                          </p>
-                        )}
-
-                        {groupedAspects.weak.length > 0 && (
-                          <>
+                        return (
+                          <div
+                            key={planet.name}
+                            className={cn(index < natal.length - 1 && "border-b border-white/5 pb-3")}
+                          >
                             <button
                               type="button"
-                              onClick={() => setShowWeaker((v) => !v)}
-                              className="mt-1 w-full text-left text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                              onClick={() =>
+                                setOpenPlacement((current) => current === planet.name ? null : planet.name)
+                              }
+                              aria-expanded={isOpen}
+                              className="flex w-full items-center gap-3 text-left"
                             >
-                              {showWeaker ? "Hide weaker aspects" : "Show weaker aspects"} →
+                              <span
+                                className="w-8 shrink-0 text-center text-xl transition-all"
+                                style={
+                                  colors
+                                    ? {
+                                        color: colors.text,
+                                        textShadow: isOpen ? `0 0 10px ${colors.glow}` : "none",
+                                      }
+                                    : { color: "#64748b" }
+                                }
+                              >
+                                {GLYPHS[planet.name] ?? "•"}
+                              </span>
+
+                              <span
+                                className={cn(
+                                  "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
+                                  isOpen ? "text-white" : "text-slate-300"
+                                )}
+                              >
+                                {displayName}
+                              </span>
+
+                              <span
+                                className={cn(
+                                  "min-w-0 flex-1 text-[15px] transition-colors",
+                                  isOpen ? "text-white" : "text-slate-300"
+                                )}
+                              >
+                                {planet.sign}
+                              </span>
+
+                              <span
+                                className={cn(
+                                  "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
+                                  isOpen ? "text-slate-300" : "text-slate-400"
+                                )}
+                              >
+                                {planet.degree}
+                                {planet.house ? (
+                                  <span className="ml-1 text-slate-500">· {ordinal(planet.house)}</span>
+                                ) : null}
+                              </span>
                             </button>
 
-                            {showWeaker && (
-                              <div className="mt-2 divide-y divide-white/5 opacity-70">
-                                {groupedAspects.weak.map((asp, i) => {
+                            <motion.div
+                              initial={false}
+                              animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
+                              transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
+                              className="overflow-hidden"
+                            >
+                              <div className="pt-3 pl-1">
+                                <div
+                                  className="border-l pl-3"
+                                  style={{ borderColor: colors?.border ?? "rgba(255,255,255,0.10)" }}
+                                >
+                                  <p
+                                    className="text-[10px] font-medium uppercase tracking-[0.16em]"
+                                    style={{ color: colors?.text ?? "#94A3B8" }}
+                                  >
+                                    {planet.name === "Ascendant"
+                                      ? `${planet.sign} Rising`
+                                      : `${planet.name} in ${planet.sign}`}
+                                  </p>
+
+                                  {PLANET_MEANING[planet.name] && (
+                                    <div className="mt-2">
+                                      <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                        The Planet
+                                      </p>
+                                      <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                        {PLANET_MEANING[planet.name]}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {SIGN_MEANING[planet.sign] && (
+                                    <div className="mt-3">
+                                      <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                        The Sign
+                                      </p>
+                                      <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                        {SIGN_MEANING[planet.sign]}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {planet.house && HOUSE_MEANING[String(planet.house)] && (
+                                    <div className="mt-3">
+                                      <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                        The {ordinal(planet.house)} House
+                                      </p>
+                                      <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                        {HOUSE_MEANING[String(planet.house)]}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </motion.div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Major Aspects stay inside View My Chart. */}
+                  {aspects.length > 0 && (
+                    <div className="chart-focus-surface mt-1 border-t border-white/[0.09] px-4 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setAspectsOpen((v) => !v)}
+                        className="flex w-full items-center justify-between py-3"
+                      >
+                        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                          Major Aspects
+                        </span>
+                        <span className="flex items-center gap-2 text-slate-500">
+                          <span className="text-[11px] tabular-nums">{aspects.length}</span>
+                          <ChevronRight
+                            className={cn("h-4 w-4 transition-transform", aspectsOpen && "rotate-90")}
+                          />
+                        </span>
+                      </button>
+
+                      {aspectsOpen && (
+                        <div className="pb-1">
+                          {groupedAspects.sections.map((section) => (
+                            <div key={section.type} className="mb-3 last:mb-1">
+                              <div className="mb-1.5 flex items-center gap-2">
+                                <span
+                                  className="h-1.5 w-1.5 rounded-full"
+                                  style={{
+                                    backgroundColor: section.meta.text,
+                                    boxShadow: `0 0 6px ${section.meta.glow}`,
+                                  }}
+                                />
+                                <span
+                                  className="text-[10px] font-medium uppercase tracking-[0.16em]"
+                                  style={{ color: section.meta.text }}
+                                >
+                                  {section.meta.header}
+                                </span>
+                              </div>
+
+                              <div className="divide-y divide-white/5">
+                                {section.items.map((asp, i) => {
                                   const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
                                   const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
                                   return (
                                     <div
-                                      key={`weak-${asp.planetA}-${asp.planetB}-${i}`}
+                                      key={`${asp.planetA}-${asp.planetB}-${i}`}
                                       className="flex items-center justify-between py-2 text-[13px]"
                                     >
-                                      <span className="text-slate-400">
-                                        {nameA} <span className="italic text-slate-600">{asp.type}</span> {nameB}
+                                      <span className="text-slate-200">
+                                        {nameA} <span className="italic text-slate-500">{asp.type}</span> {nameB}
                                       </span>
-                                      <span className="text-[11px] text-slate-600 tabular-nums">
+                                      <span className="text-[11px] text-slate-500 tabular-nums">
                                         {asp.orbDegrees}°
                                       </span>
                                     </div>
                                   );
                                 })}
                               </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                            </div>
+                          ))}
+
+                          {groupedAspects.sections.length === 0 && (
+                            <p className="py-2 text-[12px] text-slate-500">
+                              No tight aspects within {STRONG_ORB}°.
+                            </p>
+                          )}
+
+                          {groupedAspects.weak.length > 0 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setShowWeaker((v) => !v)}
+                                className="mt-1 w-full text-left text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                              >
+                                {showWeaker ? "Hide weaker aspects" : "Show weaker aspects"} →
+                              </button>
+
+                              {showWeaker && (
+                                <div className="mt-2 divide-y divide-white/5 opacity-70">
+                                  {groupedAspects.weak.map((asp, i) => {
+                                    const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
+                                    const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
+                                    return (
+                                      <div
+                                        key={`weak-${asp.planetA}-${asp.planetB}-${i}`}
+                                        className="flex items-center justify-between py-2 text-[13px]"
+                                      >
+                                        <span className="text-slate-400">
+                                          {nameA} <span className="italic text-slate-600">{asp.type}</span> {nameB}
+                                        </span>
+                                        <span className="text-[11px] text-slate-600 tabular-nums">
+                                          {asp.orbDegrees}°
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </div>
-
-            {/* ── DAILY HOROSCOPE — the prompt is replaced by today's saved result ── */}
-            <section
-              className="standard-shadow order-3 flex min-h-[84px] w-full items-center justify-center rounded-[20px] border px-5 py-4 text-center"
-              style={{
-                background:
-                  "radial-gradient(circle at 50% -45%, rgba(248,250,252,0.14), transparent 62%), linear-gradient(145deg, rgba(18,21,29,0.97), rgba(7,10,22,0.97))",
-                borderColor: "rgba(248,250,252,0.68)",
-                boxShadow:
-                  "inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 1px rgba(255,255,255,0.07), 0 0 18px rgba(248,250,252,0.16), 0 0 36px rgba(203,213,225,0.09), 0 18px 44px rgba(0,0,0,0.48)",
-                ...outsideFocusStyle,
-              }}
-              aria-live="polite"
-              aria-busy={horoscopeLoading}
-            >
-              {dailyHoroscope ? (
-                <p className="text-[13px] leading-[1.55] text-slate-200">
-                  {dailyHoroscope}
-                </p>
-              ) : (
-                <div className="flex w-full flex-col items-center justify-center">
-                  <button
-                    type="button"
-                    onClick={revealDailyHoroscope}
-                    disabled={horoscopeLoading}
-                    className="flex min-h-[52px] w-full items-center justify-center text-[13px] font-medium uppercase tracking-[0.15em] text-slate-100 transition-[color,opacity,text-shadow] duration-300 enabled:hover:text-white disabled:cursor-wait disabled:opacity-65"
-                    style={{ textShadow: "0 0 16px rgba(248,250,252,0.22)" }}
-                  >
-                    {horoscopeLoading ? "Preparing Today’s Horoscope…" : horoscopeError ? "Try Daily Horoscope Again" : "Tap For Daily Horoscope"}
-                  </button>
-                  {horoscopeError && (
-                    <p className="-mt-1 max-w-[310px] text-[10px] leading-4 text-rose-200/75">
-                      {horoscopeError}
-                    </p>
-                  )}
-                </div>
-              )}
-            </section>
 
             {/* ── YOUR READINGS — compact doorway to the saved-reading archive ── */}
             <button
@@ -1106,7 +1121,7 @@ export default function BirthChartPanel({
                   return;
                 }
                 window.location.assign("/readings");
-}}
+              }}
               className="your-readings-shell order-4 flex min-h-[68px] w-[78%] self-center items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
               aria-label="Open your saved readings"
               style={outsideFocusStyle}
@@ -1147,7 +1162,7 @@ export default function BirthChartPanel({
   );
 }
 
-/* Maps a sign to its ruling planet's name (for åthe profection glyph). */
+/* Maps a sign to its ruling planet's name (for the profection glyph). */
 function SIGN_RULER_GLYPH(sign: string): string {
   const rulers: Record<string, string> = {
     Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
