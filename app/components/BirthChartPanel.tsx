@@ -25,7 +25,6 @@ import {
  * sister. This panel has NO overflow of its own; PagerContainer's wrapper
  * scrolls it.
  */
-
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
@@ -75,7 +74,7 @@ const GLYPHS: Record<string, string> = {
 
 // Aspect sections, ordered most-harmonious → most-tense.
 // rank sets display order; color fades green → amber → dark red.
-const ASPECT_META: Record
+const ASPECT_META: Record<
   string,
   { header: string; rank: number; text: string; border: string; glow: string }
 > = {
@@ -89,7 +88,6 @@ const ASPECT_META: Record
 const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 
 /* ── The four elements ─────────────────────────────────────────────── */
-
 type Element = "Fire" | "Earth" | "Air" | "Water";
 
 const SIGN_ELEMENTS: Record<string, Element> = {
@@ -128,7 +126,6 @@ function localDayKey(): string {
 }
 
 /* ── Card chrome — identical to Today's Sky ────────────────────────── */
-
 function SkyCard({
   icon: Icon,
   label,
@@ -159,7 +156,6 @@ function SkyCard({
 }
 
 /* ── Panel ──────────────────────────────────────────────────────────── */
-
 export default function BirthChartPanel({
   userStatus,
   dailyHoroscope: dailyHoroscopeProp,
@@ -167,7 +163,6 @@ export default function BirthChartPanel({
   onOpenReadings,
 }: BirthChartPanelProps) {
   const shouldReduceMotion = useReducedMotion();
-
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [aspects, setAspects] = useState<NatalAspect[]>([]);
   const [aspectsOpen, setAspectsOpen] = useState(false);
@@ -199,7 +194,6 @@ export default function BirthChartPanel({
     setHoroscopeError(null);
     try {
       let result: string | null | void;
-
       if (onOpenHoroscope) {
         result = await onOpenHoroscope();
       } else {
@@ -211,11 +205,9 @@ export default function BirthChartPanel({
           profection?: unknown;
           moonPhase?: unknown;
         } | undefined;
-
         if (!chartData?.tropical?.planets?.length) {
           throw new Error("Your chart is still loading. Please try again.");
         }
-
         const response = await fetch("/api/daily-horoscope", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -228,19 +220,15 @@ export default function BirthChartPanel({
             moonPhase: chartData.moonPhase ?? null,
           }),
         });
-
         const payload = await response.json().catch(() => null) as {
           horoscope?: string;
           error?: string;
         } | null;
-
         if (!response.ok) {
           throw new Error(payload?.error || "Today’s horoscope could not be prepared.");
         }
-
         result = payload?.horoscope ?? null;
       }
-
       if (typeof result === "string" && result.trim()) {
         const horoscope = result.trim();
         setDailyHoroscope(horoscope);
@@ -276,9 +264,7 @@ export default function BirthChartPanel({
       setIsLoading(false);
       return true; // loaded
     };
-
     if (tryLoad()) return;
-
     let attempts = 0;
     const interval = setInterval(() => {
       attempts++;
@@ -287,7 +273,6 @@ export default function BirthChartPanel({
         if (attempts > 20) setIsLoading(false);
       }
     }, 250);
-
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
@@ -323,13 +308,11 @@ export default function BirthChartPanel({
   }, [natal]);
 
   const STRONG_ORB = 4;
-
   const groupedAspects = useMemo(() => {
     const strong = aspects.filter((a) => a.orbDegrees <= STRONG_ORB);
     const weak = aspects
       .filter((a) => a.orbDegrees > STRONG_ORB)
       .sort((a, b) => a.orbDegrees - b.orbDegrees);
-
     // Bucket strong aspects by type, then order sections by rank.
     const sections = Object.keys(ASPECT_META)
       .map((type) => ({
@@ -341,7 +324,6 @@ export default function BirthChartPanel({
       }))
       .filter((s) => s.items.length > 0)
       .sort((a, b) => a.meta.rank - b.meta.rank);
-
     return { sections, weak };
   }, [aspects]);
 
@@ -428,7 +410,6 @@ export default function BirthChartPanel({
           z-index: 1;
         }
         .element-box > * { position: relative; z-index: 2; }
-
         .chart-focus-surface {
           background:
             radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%),
@@ -439,13 +420,11 @@ export default function BirthChartPanel({
             inset 0 1px 0 rgba(255,255,255,0.055),
             inset 0 -1px 0 rgba(255,255,255,0.025);
         }
-
         @property --readings-angle {
           syntax: "<angle>";
           inherits: false;
           initial-value: 0deg;
         }
-
         .your-readings-shell {
           position: relative;
           isolation: isolate;
@@ -460,7 +439,6 @@ export default function BirthChartPanel({
             0 16px 38px rgba(0,0,0,0.46);
           cursor: pointer;
         }
-
         .your-readings-shell::before,
         .your-readings-shell::after {
           content: "";
@@ -487,12 +465,10 @@ export default function BirthChartPanel({
           mask-composite: exclude;
           animation: readingsOrbit 8s linear infinite;
         }
-
         .your-readings-shell::before {
           z-index: 0;
           opacity: 0.82;
         }
-
         .your-readings-shell::after {
           inset: -1px;
           z-index: -1;
@@ -500,7 +476,6 @@ export default function BirthChartPanel({
           opacity: 0.52;
           filter: blur(8px);
         }
-
         .your-readings-shell:hover,
         .your-readings-shell:focus-visible {
           transform: translateY(-1px);
@@ -510,16 +485,13 @@ export default function BirthChartPanel({
             0 18px 42px rgba(0,0,0,0.50);
           outline: none;
         }
-
         .your-readings-shell:active {
           transform: translateY(0);
         }
-
         @keyframes readingsShimmer {
           0% { transform: translateX(-145%) skewX(-18deg); }
           100% { transform: translateX(245%) skewX(-18deg); }
         }
-
         .your-readings-shimmer {
           position: absolute;
           inset: 0;
@@ -528,7 +500,6 @@ export default function BirthChartPanel({
           border-radius: inherit;
           pointer-events: none;
         }
-
         .your-readings-shimmer::after {
           content: "";
           position: absolute;
@@ -547,11 +518,9 @@ export default function BirthChartPanel({
           transform: translateX(-145%) skewX(-18deg);
           animation: readingsShimmer 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
         }
-
         @keyframes readingsOrbit {
           to { --readings-angle: 360deg; }
         }
-
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
           .your-readings-shell::before, .your-readings-shell::after { animation: none !important; }
@@ -603,7 +572,6 @@ export default function BirthChartPanel({
           if (!chartOpen) return;
           const target = event.target as HTMLElement;
           if (target.closest("[data-birth-chart-focus]")) return;
-
           // While focused, any tap on the faded interface quietly dismisses the
           // chart. Capture prevents a muted control beneath the tap from firing.
           event.preventDefault();
@@ -764,13 +732,11 @@ export default function BirthChartPanel({
                             : `${ordinal(profection!.profectionYear)} house year`}.
                         </p>
                       </div>
-
                       <div className="text-center">
                         <span className="block whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 tabular-nums">
                           Age {profection!.age}
                         </span>
                       </div>
-
                       {profectionColors && (
                         <div
                           className="element-box flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] border bg-black/20"
@@ -785,7 +751,6 @@ export default function BirthChartPanel({
                         </div>
                       )}
                     </div>
-
                     {elementBalance.total > 0 && <div className="my-2.5 h-px bg-white/[0.06]" />}
                   </>
                 )}
@@ -803,7 +768,6 @@ export default function BirthChartPanel({
                         const maxCount = Math.max(...ELEMENT_ORDER.map((key) => elementBalance.counts[key]), 1);
                         const height = 8 + Math.round((count / maxCount) * 20);
                         const colors = ELEMENT_COLORS[el];
-
                         return (
                           <div key={el} className="flex flex-col items-center">
                             <div className="flex h-8 items-end justify-center">
@@ -877,14 +841,12 @@ export default function BirthChartPanel({
                         Tap Each Placement To Learn
                       </span>
                     </div>
-
                     <div className="space-y-3">
                       {natal.map((planet, index) => {
                         const element = elementOf(planet.sign);
                         const colors = element ? ELEMENT_COLORS[element] : null;
                         const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
                         const isOpen = openPlacement === planet.name;
-
                         return (
                           <div
                             key={planet.name}
@@ -911,7 +873,6 @@ export default function BirthChartPanel({
                               >
                                 {GLYPHS[planet.name] ?? "•"}
                               </span>
-
                               <span
                                 className={cn(
                                   "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
@@ -920,7 +881,6 @@ export default function BirthChartPanel({
                               >
                                 {displayName}
                               </span>
-
                               <span
                                 className={cn(
                                   "min-w-0 flex-1 text-[15px] transition-colors",
@@ -929,7 +889,6 @@ export default function BirthChartPanel({
                               >
                                 {planet.sign}
                               </span>
-
                               <span
                                 className={cn(
                                   "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
@@ -962,7 +921,6 @@ export default function BirthChartPanel({
                                       ? `${planet.sign} Rising`
                                       : `${planet.name} in ${planet.sign}`}
                                   </p>
-
                                   {PLANET_MEANING[planet.name] && (
                                     <div className="mt-2">
                                       <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
@@ -973,7 +931,6 @@ export default function BirthChartPanel({
                                       </p>
                                     </div>
                                   )}
-
                                   {SIGN_MEANING[planet.sign] && (
                                     <div className="mt-3">
                                       <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
@@ -984,7 +941,6 @@ export default function BirthChartPanel({
                                       </p>
                                     </div>
                                   )}
-
                                   {planet.house && HOUSE_MEANING[String(planet.house)] && (
                                     <div className="mt-3">
                                       <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
@@ -1042,7 +998,6 @@ export default function BirthChartPanel({
                                   {section.meta.header}
                                 </span>
                               </div>
-
                               <div className="divide-y divide-white/5">
                                 {section.items.map((asp, i) => {
                                   const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
