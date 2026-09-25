@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -11,8 +11,9 @@ import {
   type SavedReadingRecord,
 } from "@/lib/savedReadingsStore";
 
-const DISPLAY_SLOT_COUNT = 8;
+const DISPLAY_SLOT_COUNT = 16;
 const FREE_SLOT_COUNT = 4;
+const LONG_PRESS_MS = 550;
 
 function formatTopic(topic: string) {
   return topic.replace(/[_-]+/g, " ").trim() || "Reading";
@@ -35,9 +36,12 @@ export default function SavedReadingsPage() {
 
   const [readings, setReadings] = useState<SavedReadingRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [managing, setManaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
+  const [selectedReadingId, setSelectedReadingId] = useState<string | null>(null);
+
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -58,6 +62,14 @@ export default function SavedReadingsPage() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
+    };
+  }, []);
+
   const slots = useMemo(
     () =>
       Array.from(
@@ -70,11 +82,54 @@ export default function SavedReadingsPage() {
   const removeReading = async (id: string) => {
     try {
       await deleteSavedReading(id);
+      setSelectedReadingId(null);
       await refresh();
       setLimitNotice(false);
     } catch {
       setError("That reading could not be removed. Please try again.");
     }
+  };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const beginLongPress = (id: string) => {
+    clearLongPressTimer();
+    longPressTriggeredRef.current = false;
+
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setSelectedReadingId(id);
+    }, LONG_PRESS_MS);
+  };
+
+  const handleReadingClick = (reading: SavedReadingRecord) => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
+
+    if (selectedReadingId) {
+      setSelectedReadingId(null);
+      return;
+    }
+
+    router.push(
+      `/reading/results?saved=${encodeURIComponent(reading.id)}`,
+    );
+  };
+
+  const handleBottomAction = () => {
+    if (selectedReadingId) {
+      void removeReading(selectedReadingId);
+      return;
+    }
+
+    router.back();
   };
 
   return (
@@ -112,17 +167,24 @@ export default function SavedReadingsPage() {
           const isFreeSlot = index < FREE_SLOT_COUNT;
 
           if (reading) {
+            const isSelected = selectedReadingId === reading.id;
+
             return (
               <div className="reading-slot" key={reading.id}>
                 <button
                   type="button"
-                  className="reading-tile"
-                  onClick={() =>
-                    router.push(
-                      `/reading/results?saved=${encodeURIComponent(reading.id)}`,
-                    )
+                  className={`reading-tile ${isSelected ? "selected" : ""}`}
+                  onPointerDown={() => beginLongPress(reading.id)}
+                  onPointerUp={clearLongPressTimer}
+                  onPointerCancel={clearLongPressTimer}
+                  onPointerLeave={clearLongPressTimer}
+                  onClick={() => handleReadingClick(reading)}
+                  aria-pressed={isSelected}
+                  aria-label={
+                    isSelected
+                      ? `${formatTopic(reading.topic)} selected for deletion`
+                      : `Open ${formatTopic(reading.topic)} reading from ${formatSavedDate(reading.savedAt)}`
                   }
-                  aria-label={`Open ${formatTopic(reading.topic)} reading from ${formatSavedDate(reading.savedAt)}`}
                 >
                   <span className="tile-topic">
                     {formatTopic(reading.topic)}
@@ -131,17 +193,6 @@ export default function SavedReadingsPage() {
                     {formatSavedDate(reading.savedAt)}
                   </span>
                 </button>
-
-                {managing && (
-                  <button
-                    type="button"
-                    className="delete-reading"
-                    onClick={() => void removeReading(reading.id)}
-                    aria-label={`Delete ${formatTopic(reading.topic)} reading`}
-                  >
-                    <X aria-hidden="true" />
-                  </button>
-                )}
               </div>
             );
           }
@@ -170,12 +221,10 @@ export default function SavedReadingsPage() {
 
       <button
         type="button"
-        className={`bottom-delete-control ${managing ? "active" : ""}`}
-        onClick={() => setManaging((current) => !current)}
-        disabled={readings.length === 0}
-        aria-pressed={managing}
+        className={`bottom-action ${selectedReadingId ? "delete-mode" : ""}`}
+        onClick={handleBottomAction}
       >
-        {managing ? "Done" : "Delete"}
+        {selectedReadingId ? "Delete" : "Return"}
       </button>
 
       <style jsx>{`
@@ -189,7 +238,7 @@ export default function SavedReadingsPage() {
           padding:
             max(22px, env(safe-area-inset-top))
             20px
-            calc(104px + env(safe-area-inset-bottom));
+            calc(112px + env(safe-area-inset-bottom));
           font-family: var(
             --font-sans,
             ui-sans-serif,
@@ -271,7 +320,6 @@ export default function SavedReadingsPage() {
           aspect-ratio: 0.9;
         }
 
-        /* Original saved-reading button treatment preserved. */
         .reading-tile {
           position: relative;
           width: 100%;
@@ -305,10 +353,17 @@ export default function SavedReadingsPage() {
           gap: 8px;
           padding: 10px 7px;
           cursor: pointer;
+          touch-action: manipulation;
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+          user-select: none;
           -webkit-tap-highlight-color: transparent;
           transition:
             transform 160ms ease,
-            box-shadow 160ms ease;
+            box-shadow 180ms ease,
+            background 180ms ease,
+            border-color 180ms ease,
+            filter 180ms ease;
         }
 
         .reading-tile::before {
@@ -325,6 +380,26 @@ export default function SavedReadingsPage() {
 
         .reading-tile:active {
           transform: scale(0.96);
+        }
+
+        .reading-tile.selected {
+          background:
+            linear-gradient(
+                155deg,
+                rgba(86, 88, 96, 0.98),
+                rgba(38, 40, 47, 0.99)
+              )
+              padding-box,
+            linear-gradient(
+                135deg,
+                rgba(235, 235, 235, 0.78),
+                rgba(145, 148, 157, 0.56)
+              )
+              border-box;
+          box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.07) inset,
+            0 0 22px rgba(190, 195, 210, 0.12);
+          filter: saturate(0.25);
         }
 
         .tile-topic {
@@ -347,6 +422,10 @@ export default function SavedReadingsPage() {
           text-transform: uppercase;
         }
 
+        .reading-tile.selected .tile-date {
+          color: rgba(229, 231, 235, 0.65);
+        }
+
         .empty-slot {
           display: grid;
           place-items: center;
@@ -357,7 +436,6 @@ export default function SavedReadingsPage() {
           background: #fff;
         }
 
-        /* Free/available save spaces: brighter, but still restrained. */
         .available-slot span {
           width: 6px;
           height: 6px;
@@ -368,7 +446,6 @@ export default function SavedReadingsPage() {
             0 0 26px rgba(214, 225, 255, 0.2);
         }
 
-        /* Astro Plus spaces: visible, intentionally quieter. */
         .astro-plus-slot span {
           width: 4px;
           height: 4px;
@@ -384,25 +461,10 @@ export default function SavedReadingsPage() {
           opacity: 0.34;
         }
 
-        .delete-reading {
-          position: absolute;
-          z-index: 2;
-          top: -7px;
-          right: -7px;
-          width: 24px;
-          height: 24px;
-          border: 1px solid rgba(255, 255, 255, 0.36);
-          border-radius: 999px;
-          background: #080808;
-          color: #fff;
-          display: grid;
-          place-items: center;
-          cursor: pointer;
-        }
-
-        .delete-reading :global(svg) {
-          width: 13px;
-          height: 13px;
+        .astro-plus-slot:nth-child(4n) span {
+          width: 5px;
+          height: 5px;
+          opacity: 0.38;
         }
 
         .empty-copy {
@@ -415,7 +477,7 @@ export default function SavedReadingsPage() {
           text-align: center;
         }
 
-        .bottom-delete-control {
+        .bottom-action {
           position: fixed;
           left: 50%;
           bottom: max(16px, env(safe-area-inset-bottom));
@@ -424,10 +486,10 @@ export default function SavedReadingsPage() {
           min-width: 108px;
           height: 42px;
           padding: 0 20px;
-          border: 1px solid rgba(244, 63, 94, 0.32);
+          border: 1px solid rgba(255, 255, 255, 0.10);
           border-radius: 999px;
-          background: rgba(69, 10, 10, 0.58);
-          color: rgba(254, 202, 202, 0.88);
+          background: rgba(255, 255, 255, 0.035);
+          color: rgba(226, 232, 240, 0.58);
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0.15em;
@@ -437,21 +499,17 @@ export default function SavedReadingsPage() {
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
           transition:
-            opacity 160ms ease,
-            background 160ms ease,
-            border-color 160ms ease,
-            color 160ms ease;
+            background 180ms ease,
+            border-color 180ms ease,
+            color 180ms ease,
+            box-shadow 180ms ease;
         }
 
-        .bottom-delete-control.active {
-          background: rgba(127, 29, 29, 0.76);
-          border-color: rgba(248, 113, 113, 0.52);
-          color: #fff;
-        }
-
-        .bottom-delete-control:disabled {
-          opacity: 0.24;
-          pointer-events: none;
+        .bottom-action.delete-mode {
+          border-color: rgba(244, 63, 94, 0.42);
+          background: rgba(69, 10, 10, 0.72);
+          color: rgba(254, 202, 202, 0.94);
+          box-shadow: 0 0 18px rgba(190, 24, 93, 0.08);
         }
 
         @media (max-width: 350px) {
@@ -466,7 +524,7 @@ export default function SavedReadingsPage() {
 
         @media (prefers-reduced-motion: reduce) {
           .reading-tile,
-          .bottom-delete-control {
+          .bottom-action {
             transition: none;
           }
         }
