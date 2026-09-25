@@ -588,20 +588,13 @@ export default function BirthChartPanel({
         >
           {/* Static title bar — same chrome and height as View My Chart, but not interactive. */}
           <div className="chart-focus-surface flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200">
-            <span>Horoscopes</span>
+            <span>Your Horoscope</span>
           </div>
 
           {/* Attached daily horoscope body. */}
-          <div
-            className="flex min-h-[84px] w-full items-center justify-center border-t px-5 py-4 text-center"
-            style={{
-              background:
-                "radial-gradient(circle at 50% -45%, rgba(255,244,214,0.15), transparent 62%), linear-gradient(145deg, rgba(26,22,16,0.98), rgba(11,10,9,0.99))",
-              borderColor: "rgba(218,183,105,0.30)",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 24px rgba(218,183,105,0.05), 0 0 18px rgba(218,183,105,0.08)",
-            }}
-          >
+<div
+  className="flex min-h-[84px] w-full items-center justify-center border-t border-white/[0.08] bg-transparent px-5 py-4 text-center"
+>
             {dailyHoroscope ? (
               <p className="text-[13px] leading-[1.55] text-slate-200">
                 {dailyHoroscope}
