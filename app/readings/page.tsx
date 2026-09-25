@@ -124,23 +124,23 @@ export default function SavedReadingsPage() {
   };
 
   const handleBottomAction = () => {
-    if (selectedReadingId) {
-      void removeReading(selectedReadingId);
-      return;
-    }
+  if (selectedReadingId) {
+    void removeReading(selectedReadingId);
+    return;
+  }
 
-    router.back();
-  };
+  router.push("/");
+};
 
   return (
     <main className="saved-readings-page">
       <header className="saved-header">
         <button
-          type="button"
-          className="header-control back"
-          onClick={() => router.back()}
-          aria-label="Go back"
-        >
+  type="button"
+  className="header-control back"
+  onClick={() => router.push("/")}
+  aria-label="Go back"
+>
           <ChevronLeft aria-hidden="true" />
         </button>
 
