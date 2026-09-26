@@ -160,38 +160,6 @@ function ordinal(n: number): string {
 }
 
 type ChartViewMode = "birthchart" | "aspects";
-type SharedScrollClock = {
-  initialized: boolean;
-  offsetMs: number;
-  startedAt: number;
-};
-
-const SHARED_SCROLL_CLOCKS: Record<ChartViewMode, SharedScrollClock> = {
-  birthchart: { initialized: false, offsetMs: 0, startedAt: 0 },
-  aspects: { initialized: false, offsetMs: 0, startedAt: 0 },
-};
-
-function getSharedScrollTime(mode: ChartViewMode, durationMs: number): number {
-  if (durationMs <= 0) return 0;
-  const clock = SHARED_SCROLL_CLOCKS[mode];
-  const now = Date.now();
-
-  if (!clock.initialized) {
-    clock.initialized = true;
-    clock.offsetMs = 0;
-    clock.startedAt = now;
-    return 0;
-  }
-
-  return (clock.offsetMs + (now - clock.startedAt)) % durationMs;
-}
-
-function setSharedScrollTime(mode: ChartViewMode, currentTimeMs: number, durationMs: number) {
-  const clock = SHARED_SCROLL_CLOCKS[mode];
-  clock.initialized = true;
-  clock.offsetMs = durationMs > 0 ? ((currentTimeMs % durationMs) + durationMs) % durationMs : 0;
-  clock.startedAt = Date.now();
-}
 
 function localDayKey(): string {
   const now = new Date();
@@ -422,36 +390,18 @@ export default function BirthChartPanel({
 
   const getChartAnimation = () => chartTrackRef.current?.getAnimations()[0] ?? null;
 
-  useEffect(() => {
-    if (shouldReduceMotion || activeItemCount <= 6) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      const animation = getChartAnimation();
-      if (!animation) return;
-      const duration = activeItemCount * 3000;
-      animation.currentTime = getSharedScrollTime(chartView, duration);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [chartView, activeItemCount, shouldReduceMotion]);
-
   const beginChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (activeItemCount <= 6) return;
-
     const animation = getChartAnimation();
-    const duration = activeItemCount * 3000;
     const currentTime =
       animation && typeof animation.currentTime === "number"
         ? animation.currentTime
-        : getSharedScrollTime(chartView, duration);
-
+        : 0;
     chartDragRef.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
       startTime: currentTime,
     };
-
-    setSharedScrollTime(chartView, currentTime, duration);
     event.currentTarget.setPointerCapture(event.pointerId);
     setChartPaused(true);
   };
@@ -459,37 +409,23 @@ export default function BirthChartPanel({
   const moveChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = chartDragRef.current;
     if (drag.pointerId !== event.pointerId || activeItemCount <= 6) return;
-
     const animation = getChartAnimation();
     if (!animation) return;
-
     const rowHeight = 52;
     const rowDurationMs = 3000;
     const totalDuration = activeItemCount * rowDurationMs;
-
     const deltaY = event.clientY - drag.startY;
     let nextTime = drag.startTime - (deltaY / rowHeight) * rowDurationMs;
-
     nextTime %= totalDuration;
     if (nextTime < 0) nextTime += totalDuration;
-
     animation.currentTime = nextTime;
-    setSharedScrollTime(chartView, nextTime, totalDuration);
   };
 
   const endChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (chartDragRef.current.pointerId !== event.pointerId) return;
-
-    const animation = getChartAnimation();
-    const totalDuration = activeItemCount * 3000;
-    if (animation && typeof animation.currentTime === "number") {
-      setSharedScrollTime(chartView, animation.currentTime, totalDuration);
-    }
-
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-
     chartDragRef.current.pointerId = null;
     setChartPaused(false);
   };
@@ -856,11 +792,111 @@ export default function BirthChartPanel({
         .chart-row {
           height: 52px;
         }
+        .chart-actions-shell {
+          position: relative;
+          isolation: isolate;
+          width: 82%;
+          min-height: 58px;
+          border-radius: 22px;
+          padding: 1.25px;
+          background:
+            conic-gradient(
+              from var(--readings-angle),
+              rgba(255,255,255,0.94) 0deg,
+              rgba(255,255,255,0.72) 52deg,
+              rgba(218,183,104,0.94) 116deg,
+              rgba(255,236,184,0.88) 178deg,
+              rgba(255,255,255,0.96) 232deg,
+              rgba(193,151,67,0.90) 300deg,
+              rgba(255,255,255,0.94) 360deg
+            );
+          box-shadow:
+            0 0 20px rgba(218,183,104,0.16),
+            0 14px 34px rgba(0,0,0,0.44);
+          animation: readingsOrbit 8s linear infinite;
+        }
+        .chart-actions-shell::after {
+          content: "";
+          position: absolute;
+          inset: -2px;
+          z-index: -1;
+          border-radius: inherit;
+          background: inherit;
+          opacity: 0.30;
+          filter: blur(8px);
+          pointer-events: none;
+        }
+        .chart-actions-inner {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          min-height: 56px;
+          overflow: hidden;
+          border-radius: 20.75px;
+          background: linear-gradient(145deg, rgba(10,10,14,0.99), rgba(4,7,16,0.99));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+        .chart-action-half {
+          position: relative;
+          display: flex;
+          flex: 1 1 0;
+          min-width: 0;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          background: transparent;
+          cursor: pointer;
+          transition: background 180ms ease, filter 180ms ease;
+        }
+        .chart-action-half:first-child {
+          padding: 0 13px 0 11px;
+          background: radial-gradient(circle at 28% 0%, rgba(218,183,104,0.12), transparent 68%);
+        }
+        .chart-action-half:last-child {
+          padding: 0 11px 0 13px;
+          background: radial-gradient(circle at 72% 0%, rgba(255,255,255,0.08), transparent 68%);
+        }
+        .chart-action-half:active { filter: brightness(1.16); }
+        .chart-actions-divider {
+          position: absolute;
+          z-index: 4;
+          left: 50%;
+          top: 7px;
+          bottom: 7px;
+          width: 1.25px;
+          transform: translateX(-50%) skewX(-18deg);
+          transform-origin: center;
+          background: linear-gradient(180deg, rgba(255,255,255,0.16), rgba(231,201,130,0.86), rgba(255,255,255,0.20));
+          box-shadow: 0 0 8px rgba(218,183,104,0.20);
+          pointer-events: none;
+        }
+        .chart-action-icon {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          display: flex;
+          height: 21px;
+          width: 21px;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          pointer-events: none;
+        }
+        .chart-action-label {
+          position: relative;
+          z-index: 2;
+          white-space: nowrap;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.11em;
+          text-transform: uppercase;
+        }
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
           .your-readings-shell::before, .your-readings-shell::after, .upgrade-chart-shell::before, .upgrade-chart-shell::after { animation: none !important; }
           .your-readings-shimmer::after, .upgrade-chart-shimmer::after { animation: none !important; opacity: 0; }
           .chart-track { animation: none !important; transform: none !important; }
+          .chart-actions-shell { animation: none !important; }
         }
       `}</style>
 
@@ -960,7 +996,10 @@ export default function BirthChartPanel({
               <button
                 type="button"
                 onClick={advanceContextCard}
-                className="standard-shadow order-1 h-[200px] w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 text-left backdrop-blur-sm"
+                className={cn(
+                  "standard-shadow order-1 w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] text-left backdrop-blur-sm",
+                  selectedContext ? "h-[252px] p-4" : "h-[200px] p-3.5"
+                )}
                 style={outsideFocusStyle}
                 aria-label="Cycle personal astrology context"
               >
@@ -969,7 +1008,7 @@ export default function BirthChartPanel({
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: "easeOut" }}
-                  className="h-full overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  className="h-full overflow-hidden"
                 >
                   {selectedContext?.kind === "placement" ? (() => {
                     const planet = natal.find((item) => item.name === selectedContext.planetName);
@@ -979,7 +1018,7 @@ export default function BirthChartPanel({
                     const displayName = DISPLAY_NAMES[planet.name] ?? planet.name;
                     return (
                       <div>
-                        <div className="flex items-center justify-between gap-3 pt-1">
+                        <div className="flex items-center justify-between gap-3 pt-2">
                           <p className="text-[21px] font-light leading-none" style={{ color: colors?.text ?? "#F8FAFC" }}>
                             {displayName} in {planet.sign}
                           </p>
@@ -1299,93 +1338,86 @@ export default function BirthChartPanel({
               </div>
             </section>
 
-            {/* ── CHART ACTIONS — separate premium destinations ── */}
-            <div className="order-3 flex w-[80%] self-center items-stretch gap-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenUpgradeChart) {
-                    onOpenUpgradeChart();
-                    return;
-                  }
-                  window.location.assign("/upgrade-chart");
-                }}
-                className="upgrade-chart-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
-                aria-label="Upgrade your chart"
-                style={outsideFocusStyle}
-              >
-                <span className="upgrade-chart-shimmer" aria-hidden="true" />
-                <span
-                  className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
-                  style={{
-                    border: "1px solid rgba(218,183,104,0.42)",
-                    background: "rgba(8,8,10,0.72)",
-                    boxShadow:
-                      "0 0 10px rgba(218,183,104,0.20), 0 0 20px rgba(193,151,67,0.12)",
-                  }}
-                  aria-hidden="true"
-                >
-                  <Maximize2
-                    className="h-3.5 w-3.5"
-                    style={{
-                      color: "rgba(238,207,133,0.96)",
-                      filter: "drop-shadow(0 0 5px rgba(218,183,104,0.35))",
+            {/* ── CHART ACTIONS — one connected premium control with diagonal split ── */}
+            <div className="order-3 flex w-full justify-center">
+              <div className="chart-actions-shell" style={outsideFocusStyle}>
+                <div className="chart-actions-inner">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenUpgradeChart) {
+                        onOpenUpgradeChart();
+                        return;
+                      }
+                      window.location.assign("/upgrade-chart");
                     }}
-                  />
-                </span>
-                <span
-                  className="relative z-10 ml-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em]"
-                  style={{
-                    color: "#F1D694",
-                    textShadow:
-                      "0 2px 10px rgba(0,0,0,0.95), 0 0 16px rgba(218,183,104,0.22)",
-                  }}
-                >
-                  Upgrade Chart
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenReadings) {
-                    onOpenReadings();
-                    return;
-                  }
-                  window.location.assign("/readings");
-                }}
-                className="your-readings-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
-                aria-label="Open your saved readings"
-                style={outsideFocusStyle}
-              >
-                <span className="your-readings-shimmer" aria-hidden="true" />
-                <span
-                  className="pointer-events-none absolute right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
-                  style={{
-                    border: "1px solid rgba(248,250,252,0.28)",
-                    background: "rgba(248,250,252,0.035)",
-                    boxShadow:
-                      "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
-                  }}
-                  aria-hidden="true"
-                >
-                  <Crown
-                    className="h-3.5 w-3.5"
-                    style={{
-                      color: "rgba(248,250,252,0.88)",
-                      filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
+                    className="chart-action-half"
+                    aria-label="Upgrade your chart"
+                  >
+                    <span
+                      className="chart-action-icon left-2.5"
+                      style={{
+                        border: "1px solid rgba(218,183,104,0.38)",
+                        background: "rgba(8,8,10,0.66)",
+                        boxShadow: "0 0 10px rgba(218,183,104,0.18)",
+                      }}
+                      aria-hidden="true"
+                    >
+                      <Maximize2
+                        className="h-3 w-3"
+                        style={{ color: "rgba(238,207,133,0.96)" }}
+                      />
+                    </span>
+                    <span
+                      className="chart-action-label ml-4"
+                      style={{
+                        color: "#F1D694",
+                        textShadow: "0 2px 10px rgba(0,0,0,0.95), 0 0 14px rgba(218,183,104,0.20)",
+                      }}
+                    >
+                      Upgrade Chart
+                    </span>
+                  </button>
+
+                  <span className="chart-actions-divider" aria-hidden="true" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenReadings) {
+                        onOpenReadings();
+                        return;
+                      }
+                      window.location.assign("/readings");
                     }}
-                  />
-                </span>
-                <span
-                  className="relative z-10 mr-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-100"
-                  style={{
-                    textShadow:
-                      "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
-                  }}
-                >
-                  Your Readings
-                </span>
-              </button>
+                    className="chart-action-half"
+                    aria-label="Open your saved readings"
+                  >
+                    <span
+                      className="chart-action-icon right-2.5"
+                      style={{
+                        border: "1px solid rgba(248,250,252,0.24)",
+                        background: "rgba(248,250,252,0.035)",
+                        boxShadow: "0 0 10px rgba(248,250,252,0.09)",
+                      }}
+                      aria-hidden="true"
+                    >
+                      <Crown
+                        className="h-3 w-3"
+                        style={{ color: "rgba(248,250,252,0.90)" }}
+                      />
+                    </span>
+                    <span
+                      className="chart-action-label mr-4 text-slate-100"
+                      style={{
+                        textShadow: "0 2px 10px rgba(0,0,0,0.92), 0 0 16px rgba(255,255,255,0.13)",
+                      }}
+                    >
+                      Your Readings
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
