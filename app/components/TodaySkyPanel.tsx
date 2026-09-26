@@ -23,7 +23,6 @@ import { loadChart } from "@/lib/chartStore";
  * This panel has NO overflow of its own — PagerContainer's wrapper
  * scrolls it. Keep it that way.
  */
-
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
@@ -67,11 +66,54 @@ const GLYPHS: Record<string, string> = {
   Sun: `☉${T}`, Moon: `☽${T}`, Mercury: `☿${T}`, Venus: `♀${T}`, Mars: `♂${T}`,
   Jupiter: `♃${T}`, Saturn: `♄${T}`, Uranus: `♅${T}`, Neptune: `♆${T}`,
   Pluto: `♇${T}`, "North Node": `☊${T}`, "South Node": `☋${T}`,
+  Chiron: `⚷${T}`, Vesta: `⚶${T}`, Juno: `⚵${T}`, Ceres: `⚳${T}`,
+  Pallas: `⚴${T}`, Lilith: `⚸${T}`,
   Ascendant: `↑${T}`,
 };
 
-const IMPORTANT_PLANETS = ["Moon", "Mercury", "Venus", "Mars", "North Node", "South Node"];
-const TRANSIT_ORDER = ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node", "South Node"];
+const IMPORTANT_PLANETS = ["Sun", "Moon", "Mercury", "Venus", "Mars"];
+const CORE_TRANSIT_ORDER = [
+  "Sun",
+  "Moon",
+  "Mercury",
+  "Venus",
+  "Mars",
+  "Jupiter",
+  "Saturn",
+  "Uranus",
+  "Neptune",
+  "Pluto",
+  "North Node",
+  "South Node",
+];
+const EXTRA_TRANSIT_ORDER = ["Chiron", "Lilith", "Ceres", "Pallas", "Juno", "Vesta"];
+const TRANSIT_ORDER = [...CORE_TRANSIT_ORDER, ...EXTRA_TRANSIT_ORDER];
+
+type Element = "Fire" | "Earth" | "Air" | "Water";
+
+const SIGN_ELEMENTS: Record<string, Element> = {
+  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
+  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
+  Gemini: "Air", Libra: "Air", Aquarius: "Air",
+  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
+};
+
+const ELEMENT_COLORS: Record<Element, { text: string; glow: string }> = {
+  Fire:  { text: "#FDBA74", glow: "rgba(239, 68, 68, 0.28)" },
+  Earth: { text: "#6EE7B7", glow: "rgba(16, 185, 129, 0.24)" },
+  Air:   { text: "#BAE6FD", glow: "rgba(125, 211, 252, 0.22)" },
+  Water: { text: "#93C5FD", glow: "rgba(59, 130, 246, 0.26)" },
+};
+
+function elementOf(sign?: string): Element | null {
+  if (!sign) return null;
+  return SIGN_ELEMENTS[sign] ?? null;
+}
+
+function transitRank(name: string): number {
+  const knownIndex = TRANSIT_ORDER.indexOf(name);
+  return knownIndex === -1 ? TRANSIT_ORDER.length + 100 : knownIndex;
+}
 
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
@@ -80,7 +122,6 @@ function ordinal(n: number): string {
 }
 
 /* ── Card chrome ───────────────────────────────────────────────────── */
-
 function SkyCard({
   icon: Icon,
   label,
@@ -111,7 +152,6 @@ function SkyCard({
 }
 
 /* ── SVG moon drawn from the real illumination percent ─────────────── */
-
 function MoonDisc({ illumination, waxing, size = 108 }: { illumination: number; waxing: boolean; size?: number }) {
   const f = Math.min(1, Math.max(0, illumination / 100));
   const r = 46;
@@ -119,7 +159,6 @@ function MoonDisc({ illumination, waxing, size = 108 }: { illumination: number; 
   const top = `${c} ${c - r}`;
   const bottom = `${c} ${c + r}`;
   const rx = Math.abs(1 - 2 * f) * r;
-
   const outerSweep = waxing ? 1 : 0;
   const terminatorSweep = f >= 0.5 ? (waxing ? 1 : 0) : (waxing ? 0 : 1);
   const litPath = `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
@@ -148,10 +187,8 @@ function MoonDisc({ illumination, waxing, size = 108 }: { illumination: number; 
 }
 
 /* ── Panel ──────────────────────────────────────────────────────────── */
-
 export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const shouldReduceMotion = useReducedMotion();
-
   const [transits, setTransits] = useState<TransitPlanet[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
@@ -159,7 +196,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
   useEffect(() => {
     let cancelled = false;
-
     const tryLoad = () => {
       const chart = loadChart();
       if (!chart?.chartData) return false; // not ready yet
@@ -171,8 +207,8 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       if (data.transits) {
         setTransits(
           [...data.transits].sort(
-            (a, b) => TRANSIT_ORDER.indexOf(a.name) - TRANSIT_ORDER.indexOf(b.name)
-          )
+          (a, b) => transitRank(a.name) - transitRank(b.name)
+        )
         );
       }
       if (data.moonPhase) setMoonPhase(data.moonPhase);
@@ -183,7 +219,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
     // Try immediately; if the chart isn't ready, retry briefly until it is.
     if (tryLoad()) return;
-
     let attempts = 0;
     const interval = setInterval(() => {
       attempts++;
@@ -192,7 +227,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
         if (attempts > 20) setIsLoading(false); // give up after ~5s, show empty state
       }
     }, 250);
-
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
@@ -213,15 +247,12 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const sunNow = useMemo(() => transits.find((p) => p.name === "Sun"), [transits]);
   const moonNow = useMemo(() => transits.find((p) => p.name === "Moon"), [transits]);
   const retrogrades = useMemo(() => transits.filter((p) => p.isRetrograde === true), [transits]);
-
   const hasProfection =
     !!profection &&
     typeof profection.profectionYear === "number" &&
     !!profection.timeLord &&
     !!profection.activatedSign;
-
   const waxing = moonPhase?.nextEventName === "Full Moon";
-
   const dateLine = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
@@ -255,6 +286,35 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
+      <style jsx>{`
+        @keyframes transitEscalator {
+          from { transform: translate3d(0, 0, 0); }
+          to { transform: translate3d(0, calc(var(--transit-count) * -52px), 0); }
+        }
+
+        .transit-viewport {
+          height: 260px;
+          overflow: hidden;
+          contain: layout paint;
+        }
+
+        .transit-track {
+          will-change: transform;
+          animation: transitEscalator calc(var(--transit-count) * 3s) linear infinite;
+        }
+
+        .transit-row {
+          height: 52px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .transit-track {
+            animation: none !important;
+            transform: none !important;
+          }
+        }
+      `}</style>
+
       {/* ── Starfield ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         {stars.map((star) => (
@@ -277,12 +337,12 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       </div>
 
       <div
-  className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
-  style={{
-    paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-    paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
-  }}
->
+        className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top) + 8px)",
+          paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+        }}
+      >
         {/* ── HERO — Sun + Moon, borderless, data-first ── */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
@@ -293,7 +353,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           <p className="text-center text-[10px] uppercase tracking-[0.24em] text-slate-500">
             {dateLine}
           </p>
-
           <div className="mt-4 flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-4">
               <div>
@@ -386,63 +445,129 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             </SkyCard>
           </div>
 
-          {/* ── FULL: Transits — last on the page ── */}
-          <SkyCard icon={Sparkles} label="Transits">
-            <div className="space-y-3">
-              {transits.map((planet, index) => {
-                const important = IMPORTANT_PLANETS.includes(planet.name);
-                const isRetrograde = planet.isRetrograde === true;
-                return (
-                  <div
-                    key={planet.name}
-                    className={cn(
-                      "flex items-center gap-3",
-                      index < transits.length - 1 && "border-b border-white/5 pb-3"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "w-8 text-center text-xl",
-                        important ? "text-amber-300/80" : "text-slate-500"
-                      )}
-                    >
-                      {GLYPHS[planet.name] ?? "•"}
-                    </span>
-                    <span
-                      className={cn(
-                        "w-24 text-[12px] font-medium uppercase tracking-wide",
-                        important ? "text-slate-300" : "text-slate-500"
-                      )}
-                    >
-                      {planet.name}
-                    </span>
-                    <span
-                      className={cn(
-                        "flex-1 text-[15px]",
-                        important ? "font-medium text-white" : "text-slate-300"
-                      )}
-                    >
-                      {planet.sign}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[13px] tabular-nums",
-                        important ? "text-amber-300/70" : "text-slate-400"
-                      )}
-                    >
-                      {planet.degree}
-                      {isRetrograde && <span className="ml-1 text-amber-300/80">℞</span>}
-                    </span>
-                  </div>
-                );
-              })}
-              {transits.length === 0 && (
-                <p className="py-3 text-center text-[12px] text-slate-500">
-                  Calculate your chart to see today's transits.
-                </p>
-              )}
+          {/* ── TRANSITS — birth-chart chrome + lightweight five-row escalator ── */}
+          <section className="standard-shadow overflow-hidden rounded-[18px] border border-white/10 bg-transparent">
+            {/* Same visual treatment as View My Chart; intentionally not interactive yet. */}
+            <div
+              className="flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200"
+              style={{
+                background:
+                  "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
+                WebkitBackdropFilter: "blur(14px)",
+                backdropFilter: "blur(14px)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -1px 0 rgba(255,255,255,0.025)",
+              }}
+            >
+              <span>Transits</span>
             </div>
-          </SkyCard>
+
+            {transits.length > 0 ? (
+              <div className="border-t border-white/[0.06] px-4">
+                <div className="transit-viewport">
+                  {shouldReduceMotion || transits.length <= 5 ? (
+                    <div>
+                      {transits.slice(0, 5).map((planet, index) => {
+                        const element = elementOf(planet.sign);
+                        const colors = element ? ELEMENT_COLORS[element] : null;
+                        const important = IMPORTANT_PLANETS.includes(planet.name);
+                        const isRetrograde = planet.isRetrograde === true;
+
+                        return (
+                          <div
+                            key={planet.name}
+                            className={cn(
+                              "transit-row flex items-center gap-3",
+                              index < Math.min(transits.length, 5) - 1 && "border-b border-white/5"
+                            )}
+                          >
+                            <span
+                              className="w-8 shrink-0 text-center text-xl"
+                              style={{
+                                color: colors?.text ?? (important ? "#FCD34D" : "#64748b"),
+                                textShadow: colors ? `0 0 10px ${colors.glow}` : "none",
+                              }}
+                            >
+                              {GLYPHS[planet.name] ?? "•"}
+                            </span>
+                            <span
+                              className={cn(
+                                "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide",
+                                important ? "text-slate-200" : "text-slate-400"
+                              )}
+                            >
+                              {planet.name}
+                            </span>
+                            <span
+                              className="min-w-0 flex-1 truncate text-[15px] font-medium"
+                              style={{ color: colors?.text ?? "#cbd5e1" }}
+                            >
+                              {planet.sign}
+                            </span>
+                            <span className="shrink-0 text-[13px] text-slate-400 tabular-nums">
+                              {planet.degree}
+                              {isRetrograde && <span className="ml-1 text-amber-300/80">℞</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div
+                      className="transit-track"
+                      style={{ "--transit-count": transits.length } as React.CSSProperties}
+                    >
+                      {[...transits, ...transits].map((planet, index) => {
+                        const element = elementOf(planet.sign);
+                        const colors = element ? ELEMENT_COLORS[element] : null;
+                        const important = IMPORTANT_PLANETS.includes(planet.name);
+                        const isRetrograde = planet.isRetrograde === true;
+
+                        return (
+                          <div
+                            key={`${planet.name}-${index}`}
+                            className="transit-row flex items-center gap-3 border-b border-white/5"
+                          >
+                            <span
+                              className="w-8 shrink-0 text-center text-xl"
+                              style={{
+                                color: colors?.text ?? (important ? "#FCD34D" : "#64748b"),
+                                textShadow: colors ? `0 0 10px ${colors.glow}` : "none",
+                              }}
+                            >
+                              {GLYPHS[planet.name] ?? "•"}
+                            </span>
+                            <span
+                              className={cn(
+                                "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide",
+                                important ? "text-slate-200" : "text-slate-400"
+                              )}
+                            >
+                              {planet.name}
+                            </span>
+                            <span
+                              className="min-w-0 flex-1 truncate text-[15px] font-medium"
+                              style={{ color: colors?.text ?? "#cbd5e1" }}
+                            >
+                              {planet.sign}
+                            </span>
+                            <span className="shrink-0 text-[13px] text-slate-400 tabular-nums">
+                              {planet.degree}
+                              {isRetrograde && <span className="ml-1 text-amber-300/80">℞</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="border-t border-white/[0.06] px-4 py-5 text-center text-[12px] text-slate-500">
+                Calculate your chart to see today&apos;s transits.
+              </p>
+            )}
+          </section>
 
           <p className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
             <ChevronLeft className="h-3 w-3" /> Your Birth Chart
