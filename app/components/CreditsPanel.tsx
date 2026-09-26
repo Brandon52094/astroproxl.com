@@ -16,7 +16,6 @@ import { PRICING, formatUsd } from "@/lib/paywallConfig";
 /* ─────────────────────────────────────────────
    Products
 ───────────────────────────────────────────── */
-
 type ProductId = "jxl" | "reading" | "replies";
 
 interface Product {
@@ -73,7 +72,6 @@ function plural(n: number, one: string, many?: string): string {
 /* ─────────────────────────────────────────────
    Shared visual language
 ───────────────────────────────────────────── */
-
 function PanelCard({
   icon: Icon,
   label,
@@ -163,14 +161,12 @@ export default function CreditsPanel({
     if (total <= 0) return;
     setLoading(true);
     setError("");
-
     try {
       const items = [
         ...(cart.jxl > 0 ? [{ id: "jxl", quantity: cart.jxl }] : []),
         ...(cart.reading > 0 ? [{ id: "reading", quantity: cart.reading }] : []),
         ...(cart.replies > 0 ? [{ id: "replies", quantity: cart.replies }] : []),
       ];
-
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -180,9 +176,7 @@ export default function CreditsPanel({
           returnUrl: `${window.location.origin}/reading/intake`,
         }),
       });
-
       const data = await res.json();
-
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -199,7 +193,6 @@ export default function CreditsPanel({
   const handleGetAccess = async () => {
     setLoading(true);
     setError("");
-
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
@@ -209,9 +202,7 @@ export default function CreditsPanel({
           returnUrl: `${window.location.origin}/reading/intake`,
         }),
       });
-
       const data = await res.json();
-
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -228,6 +219,25 @@ export default function CreditsPanel({
     ? "relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible font-sans text-slate-100"
     : "fixed inset-0 z-50 min-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
 
+  const astroPlusPremiumCss = `
+    @property --astro-plus-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+    .astro-plus-shell {
+      position: relative; isolation: isolate; border: 0; border-radius: 22px;
+      background: radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%), linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 22px rgba(203,164,78,0.12), 0 16px 38px rgba(0,0,0,0.46);
+    }
+    .astro-plus-shell::before, .astro-plus-shell::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; padding: 1.25px;
+      background: conic-gradient(from var(--astro-plus-angle), rgba(255,255,255,0.94) 0deg, rgba(255,255,255,0.74) 54deg, rgba(218,183,104,0.88) 112deg, rgba(255,239,195,0.82) 172deg, rgba(255,255,255,0.96) 226deg, rgba(193,151,67,0.86) 296deg, rgba(255,255,255,0.94) 360deg);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+      animation: astroPlusOrbit 8s linear infinite;
+    }
+    .astro-plus-shell::before { z-index: 0; opacity: 0.82; }
+    .astro-plus-shell::after { inset: -1px; z-index: -1; padding: 2px; opacity: 0.52; filter: blur(8px); }
+    @keyframes astroPlusOrbit { to { --astro-plus-angle: 360deg; } }
+    @media (prefers-reduced-motion: reduce) { .astro-plus-shell::before, .astro-plus-shell::after { animation: none !important; } }
+  `;
+
   return (
     <div
       className={rootClass}
@@ -235,6 +245,8 @@ export default function CreditsPanel({
         WebkitOverflowScrolling: "touch",
       }}
     >
+      <style>{astroPlusPremiumCss}</style>
+
       {!embedded && (
         <button
           type="button"
@@ -287,7 +299,6 @@ export default function CreditsPanel({
               >
                 Your Balance
               </div>
-
               <div className="grid grid-cols-3 divide-x divide-white/[0.06] border-t border-white/[0.06] px-2 py-3">
                 <div className="text-center">
                   <p className="text-[20px] font-light leading-none text-white tabular-nums">
@@ -297,7 +308,6 @@ export default function CreditsPanel({
                     {plural(balance.readings, "Reading")}
                   </p>
                 </div>
-
                 <div className="text-center">
                   <p className="text-[20px] font-light leading-none text-white tabular-nums">
                     {balance.jxl}
@@ -306,7 +316,6 @@ export default function CreditsPanel({
                     JXL
                   </p>
                 </div>
-
                 <div className="text-center">
                   <p className="text-[20px] font-light leading-none text-white tabular-nums">
                     {balance.replies}
@@ -321,52 +330,22 @@ export default function CreditsPanel({
 
           {/* ── ASTRO PLUS — white/gold premium treatment ── */}
           <div
-            className="standard-shadow relative overflow-hidden rounded-[22px] border p-4 backdrop-blur-sm"
-            style={{
-              borderColor: "rgba(255,255,255,0.38)",
-              background:
-                "radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%), linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97))",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 22px rgba(203,164,78,0.12), 0 16px 38px rgba(0,0,0,0.46)",
-            }}
+            className="astro-plus-shell standard-shadow relative overflow-hidden p-4 backdrop-blur-sm"
           >
-            <div
-              className="pointer-events-none absolute inset-x-10 top-0 h-px"
-              style={{
-                background:
-                  "linear-gradient(90deg, transparent, rgba(255,255,255,0.88), rgba(218,183,104,0.80), transparent)",
-              }}
-            />
-
-            <div className="flex items-start gap-3">
-              <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border"
-                style={{
-                  borderColor: "rgba(255,255,255,0.20)",
-                  background:
-                    "linear-gradient(145deg, rgba(255,255,255,0.08), rgba(203,164,78,0.08))",
-                  boxShadow:
-                    "0 0 18px rgba(203,164,78,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
-                }}
-              >
-                <Crown className="h-5 w-5 text-amber-200/90" strokeWidth={1.8} />
-              </div>
-
+            <div className="relative z-10 flex items-start gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">
-                  Astro Plus
-                </p>
-
+                <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">Astro Plus</p>
                 <div className="mt-1 flex items-end gap-1.5">
-                  <span className="text-[27px] font-light leading-none text-white tabular-nums">
-                    {formatUsd(PRICING.membership.price)}
-                  </span>
+                  <span className="text-[27px] font-light leading-none text-white tabular-nums">{formatUsd(PRICING.membership.price)}</span>
                   <span className="pb-0.5 text-[10px] text-slate-500">/ month</span>
                 </div>
-
-                <p className="mt-1 whitespace-nowrap text-[11px] leading-4 text-slate-400">
-                  Full access without counting individual readings.
-                </p>
+                <p className="mt-1 whitespace-nowrap text-[11px] leading-4 text-slate-400">Full access without counting individual readings.</p>
+              </div>
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/[0.035]"
+                style={{ boxShadow: "0 0 12px rgba(255,255,255,0.12), 0 0 24px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)" }}
+              >
+                <Crown className="h-5 w-5 text-white" strokeWidth={1.8} style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.55))" }} />
               </div>
             </div>
 
@@ -410,25 +389,10 @@ export default function CreditsPanel({
 
           {/* ── GET WHAT YOU NEED ── */}
           <div className="pt-2">
-            <div
-              className="mb-3 flex w-full items-center justify-center rounded-[18px] border border-white/10 px-4 py-[12px] text-[12px] font-medium uppercase tracking-[0.18em] text-slate-200"
-              style={{
-                background:
-                  "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
-                WebkitBackdropFilter: "blur(14px)",
-                backdropFilter: "blur(14px)",
-                boxShadow:
-                  "inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -1px 0 rgba(255,255,255,0.025)",
-              }}
-            >
-              Get What You Need
-            </div>
-
             <div className="space-y-2.5">
               {PRODUCTS.map((product) => {
                 const Icon = product.icon;
                 const quantity = cart[product.id];
-
                 return (
                   <div
                     key={product.id}
@@ -441,7 +405,6 @@ export default function CreditsPanel({
                           strokeWidth={2}
                         />
                       </div>
-
                       <div className="min-w-0 flex-1">
                         <p className="text-[14px] font-medium text-white">
                           {product.title}
@@ -450,7 +413,6 @@ export default function CreditsPanel({
                           {product.desc}
                         </p>
                       </div>
-
                       <div className="flex shrink-0 items-center gap-1.5">
                         <button
                           type="button"
@@ -461,11 +423,9 @@ export default function CreditsPanel({
                         >
                           <Minus size={14} />
                         </button>
-
                         <span className="w-5 text-center text-[13px] font-medium text-white tabular-nums">
                           {quantity}
                         </span>
-
                         <button
                           type="button"
                           aria-label={`Add ${product.title}`}
@@ -495,7 +455,6 @@ export default function CreditsPanel({
                   {formatUsd(total)}
                 </p>
               </div>
-
               <button
                 type="button"
                 onClick={handleCheckout}
@@ -505,7 +464,6 @@ export default function CreditsPanel({
                 {loading ? "One moment…" : "Checkout"}
               </button>
             </div>
-
             {error && (
               <p
                 role="alert"

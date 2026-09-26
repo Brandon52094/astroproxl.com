@@ -996,10 +996,7 @@ export default function BirthChartPanel({
               <button
                 type="button"
                 onClick={advanceContextCard}
-                className={cn(
-                  "standard-shadow order-1 w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] text-left backdrop-blur-sm",
-                  selectedContext ? "h-[252px] p-4" : "h-[200px] p-3.5"
-                )}
+                className="standard-shadow order-1 h-[200px] w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 text-left backdrop-blur-sm"
                 style={outsideFocusStyle}
                 aria-label="Cycle personal astrology context"
               >
@@ -1018,19 +1015,19 @@ export default function BirthChartPanel({
                     const displayName = DISPLAY_NAMES[planet.name] ?? planet.name;
                     return (
                       <div>
-                        <div className="flex items-center justify-between gap-3 pt-2">
-                          <p className="text-[21px] font-light leading-none" style={{ color: colors?.text ?? "#F8FAFC" }}>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[19px] font-light leading-tight" style={{ color: colors?.text ?? "#F8FAFC" }}>
                             {displayName} in {planet.sign}
                           </p>
                           <span
-                            className="mt-[2px] shrink-0 self-center text-[22px] leading-none"
+                            className="shrink-0 self-center text-[20px] leading-none"
                             style={{ color: colors?.text ?? "#94A3B8" }}
                           >
                             {GLYPHS[planet.name] ?? "✦"}
                           </span>
                         </div>
-                        <div className="my-3 h-px bg-white/[0.06]" />
-                        <p className="text-[14px] leading-[1.6] text-slate-300">
+                        <div className="my-2 h-px bg-white/[0.06]" />
+                        <p className="text-[13px] leading-[1.4] text-slate-300">
                           {[
                             POINT_MEANING[planet.name] ?? PLANET_MEANING[planet.name],
                             SIGN_MEANING[planet.sign],
