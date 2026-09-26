@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Compass, Crown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -174,6 +174,9 @@ export default function BirthChartPanel({
   const [dailyHoroscope, setDailyHoroscope] = useState<string | null>(null);
   const [horoscopeLoading, setHoroscopeLoading] = useState(false);
   const [horoscopeError, setHoroscopeError] = useState<string | null>(null);
+  // Slow rotating birth-chart viewport. Touch/hover pauses it so users can inspect.
+  const chartScrollRef = useRef<HTMLDivElement>(null);
+  const chartScrollPausedRef = useRef(false);
 
   useEffect(() => {
     const storageKey = `astroproxl:daily-horoscope:${localDayKey()}`;
@@ -280,6 +283,41 @@ export default function BirthChartPanel({
     const find = (n: string) => natal.find((p) => p.name === n);
     return { sun: find("Sun"), moon: find("Moon"), rising: find("Ascendant") };
   }, [natal]);
+
+  // Duplicate once for a seamless vertical loop.
+  const rotatingNatal = useMemo(
+    () => (natal.length ? [...natal, ...natal] : []),
+    [natal]
+  );
+
+  useEffect(() => {
+    if (!chartOpen || natal.length === 0 || shouldReduceMotion) return;
+
+    const viewport = chartScrollRef.current;
+    if (!viewport) return;
+
+    let raf = 0;
+    let last = performance.now();
+
+    const tick = (now: number) => {
+      const elapsed = Math.min(now - last, 40);
+      last = now;
+
+      if (!chartScrollPausedRef.current) {
+        viewport.scrollTop += (elapsed / 1000) * 12;
+
+        const loopPoint = viewport.scrollHeight / 2;
+        if (loopPoint > 0 && viewport.scrollTop >= loopPoint) {
+          viewport.scrollTop -= loopPoint;
+        }
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [chartOpen, natal.length, shouldReduceMotion]);
 
   // Element balance across all placements (planets + rising).
   const elementBalance = useMemo(() => {
@@ -605,10 +643,6 @@ export default function BirthChartPanel({
           className="mb-3"
           style={{ pointerEvents: identityFocusStyle.pointerEvents }}
         >
-          <h1 className="mb-3 text-center text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
-            Your Astrology
-          </h1>
-
           {hasChart ? (
             <div className="grid grid-cols-3 gap-[clamp(6px,2.5vw,10px)]">
               {(
@@ -665,7 +699,7 @@ export default function BirthChartPanel({
             {/* ── PERSONAL CONTEXT — Profection + Element Balance combined ── */}
             {(hasProfection || elementBalance.total > 0) && (
               <div
-                className="standard-shadow order-2 rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-sm"
+                className="standard-shadow order-1 rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-sm"
                 style={outsideFocusStyle}
               >
                 {hasProfection && (
@@ -753,11 +787,11 @@ export default function BirthChartPanel({
               </div>
             )}
 
-            {/* ── VIEW MY CHART — technical chart data lives behind one disclosure ── */}
+            {/* ── MY CHART — rotating placement viewport + technical detail ── */}
             <div
               data-birth-chart-focus
               className={cn(
-                "standard-shadow relative order-1 overflow-hidden rounded-[18px] border border-white/10 bg-transparent",
+                "standard-shadow relative order-2 overflow-hidden rounded-[18px] border border-white/10 bg-transparent",
                 chartOpen && "z-20 border-white/[0.14]"
               )}
             >
@@ -767,7 +801,7 @@ export default function BirthChartPanel({
                 aria-expanded={chartOpen}
                 className="chart-focus-surface flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200 transition-[color,filter,background] duration-500 hover:text-white"
               >
-                <span>{chartOpen ? "Close Chart" : "View My Chart"}</span>
+                <span>{chartOpen ? "Close Chart" : "My Chart"}</span>
               </button>
 
               <motion.div
@@ -796,126 +830,154 @@ export default function BirthChartPanel({
                         Tap Each Placement To Learn
                       </span>
                     </div>
-                    <div className="space-y-3">
-                      {natal.map((planet, index) => {
-                        const element = elementOf(planet.sign);
-                        const colors = element ? ELEMENT_COLORS[element] : null;
-                        const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
-                        const isOpen = openPlacement === planet.name;
-                        return (
-                          <div
-                            key={planet.name}
-                            className={cn(index < natal.length - 1 && "border-b border-white/5 pb-3")}
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setOpenPlacement((current) => current === planet.name ? null : planet.name)
-                              }
-                              aria-expanded={isOpen}
-                              className="flex w-full items-center gap-3 text-left"
+                    <div
+                      ref={chartScrollRef}
+                      className="h-[392px] overflow-y-auto overscroll-contain pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                      style={{
+                        WebkitOverflowScrolling: "touch",
+                        touchAction: "pan-y",
+                        maskImage:
+                          "linear-gradient(to bottom, transparent 0, black 18px, black calc(100% - 18px), transparent 100%)",
+                        WebkitMaskImage:
+                          "linear-gradient(to bottom, transparent 0, black 18px, black calc(100% - 18px), transparent 100%)",
+                      }}
+                      onPointerDown={() => {
+                        chartScrollPausedRef.current = true;
+                      }}
+                      onPointerUp={() => {
+                        chartScrollPausedRef.current = false;
+                      }}
+                      onPointerCancel={() => {
+                        chartScrollPausedRef.current = false;
+                      }}
+                      onPointerEnter={() => {
+                        chartScrollPausedRef.current = true;
+                      }}
+                      onPointerLeave={() => {
+                        chartScrollPausedRef.current = false;
+                      }}
+                    >
+                      <div className="divide-y divide-white/5">
+                        {rotatingNatal.map((planet, index) => {
+                          const element = elementOf(planet.sign);
+                          const colors = element ? ELEMENT_COLORS[element] : null;
+                          const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
+                          const isOpen = openPlacement === planet.name;
+                          return (
+                            <div
+                              key={`${planet.name}-${index}`}
+                              className="py-2.5"
                             >
-                              <span
-                                className="w-8 shrink-0 text-center text-xl transition-all"
-                                style={
-                                  colors
-                                    ? {
-                                        color: colors.text,
-                                        textShadow: isOpen ? `0 0 10px ${colors.glow}` : "none",
-                                      }
-                                    : { color: "#64748b" }
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenPlacement((current) => current === planet.name ? null : planet.name)
                                 }
+                                aria-expanded={isOpen}
+                                className="flex min-h-[38px] w-full items-center gap-3 text-left"
                               >
-                                {GLYPHS[planet.name] ?? "•"}
-                              </span>
-                              <span
-                                className={cn(
-                                  "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
-                                  isOpen ? "text-white" : "text-slate-300"
-                                )}
-                              >
-                                {displayName}
-                              </span>
-                              <span
-                                className={cn(
-                                  "min-w-0 flex-1 text-[15px] transition-colors",
-                                  isOpen ? "text-white" : "text-slate-300"
-                                )}
-                              >
-                                {planet.sign}
-                              </span>
-                              <span
-                                className={cn(
-                                  "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
-                                  isOpen ? "text-slate-300" : "text-slate-400"
-                                )}
-                              >
-                                {planet.degree}
-                                {planet.house ? (
-                                  <span className="ml-1 text-slate-500">· {ordinal(planet.house)}</span>
-                                ) : null}
-                              </span>
-                            </button>
-
-                            <motion.div
-                              initial={false}
-                              animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
-                              transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
-                              className="overflow-hidden"
-                            >
-                              <div className="pt-3 pl-1">
-                                <div
-                                  className="border-l pl-3"
-                                  style={{ borderColor: colors?.border ?? "rgba(255,255,255,0.10)" }}
+                                <span
+                                  className="w-8 shrink-0 text-center text-xl transition-all"
+                                  style={
+                                    colors
+                                      ? {
+                                          color: colors.text,
+                                          textShadow: isOpen ? `0 0 10px ${colors.glow}` : "none",
+                                        }
+                                      : { color: "#64748b" }
+                                  }
                                 >
-                                  <p
-                                    className="text-[10px] font-medium uppercase tracking-[0.16em]"
-                                    style={{ color: colors?.text ?? "#94A3B8" }}
+                                  {GLYPHS[planet.name] ?? "•"}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide transition-colors",
+                                    isOpen ? "text-white" : "text-slate-300"
+                                  )}
+                                >
+                                  {displayName}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "min-w-0 flex-1 text-[15px] transition-colors",
+                                    isOpen ? "text-white" : "text-slate-300"
+                                  )}
+                                >
+                                  {planet.sign}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "shrink-0 whitespace-nowrap text-[13px] tabular-nums transition-colors",
+                                    isOpen ? "text-slate-300" : "text-slate-400"
+                                  )}
+                                >
+                                  {planet.degree}
+                                  {planet.house ? (
+                                    <span className="ml-1 text-slate-500">· {ordinal(planet.house)}</span>
+                                  ) : null}
+                                </span>
+                              </button>
+
+                              <motion.div
+                                initial={false}
+                                animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
+                                transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
+                                className="overflow-hidden"
+                              >
+                                <div className="pt-3 pl-1">
+                                  <div
+                                    className="border-l pl-3"
+                                    style={{ borderColor: colors?.border ?? "rgba(255,255,255,0.10)" }}
                                   >
-                                    {planet.name === "Ascendant"
-                                      ? `${planet.sign} Rising`
-                                      : `${planet.name} in ${planet.sign}`}
-                                  </p>
-                                  {PLANET_MEANING[planet.name] && (
-                                    <div className="mt-2">
-                                      <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                        The Planet
-                                      </p>
-                                      <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                        {PLANET_MEANING[planet.name]}
-                                      </p>
-                                    </div>
-                                  )}
-                                  {SIGN_MEANING[planet.sign] && (
-                                    <div className="mt-3">
-                                      <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                        The Sign
-                                      </p>
-                                      <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                        {SIGN_MEANING[planet.sign]}
-                                      </p>
-                                    </div>
-                                  )}
-                                  {planet.house && HOUSE_MEANING[String(planet.house)] && (
-                                    <div className="mt-3">
-                                      <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                                        The {ordinal(planet.house)} House
-                                      </p>
-                                      <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                                        {HOUSE_MEANING[String(planet.house)]}
-                                      </p>
-                                    </div>
-                                  )}
+                                    <p
+                                      className="text-[10px] font-medium uppercase tracking-[0.16em]"
+                                      style={{ color: colors?.text ?? "#94A3B8" }}
+                                    >
+                                      {planet.name === "Ascendant"
+                                        ? `${planet.sign} Rising`
+                                        : `${planet.name} in ${planet.sign}`}
+                                    </p>
+                                    {PLANET_MEANING[planet.name] && (
+                                      <div className="mt-2">
+                                        <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                          The Planet
+                                        </p>
+                                        <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                          {PLANET_MEANING[planet.name]}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {SIGN_MEANING[planet.sign] && (
+                                      <div className="mt-3">
+                                        <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                          The Sign
+                                        </p>
+                                        <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                          {SIGN_MEANING[planet.sign]}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {planet.house && HOUSE_MEANING[String(planet.house)] && (
+                                      <div className="mt-3">
+                                        <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                                          The {ordinal(planet.house)} House
+                                        </p>
+                                        <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                                          {HOUSE_MEANING[String(planet.house)]}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            </motion.div>
-                          </div>
-                        );
-                      })}
+                              </motion.div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Major Aspects stay inside View My Chart. */}
+                  {/* Major Aspects stay inside My Chart. */}
                   {aspects.length > 0 && (
                     <div className="chart-focus-surface mt-1 border-t border-white/[0.09] px-4 pt-1">
                       <button
@@ -1032,13 +1094,13 @@ export default function BirthChartPanel({
                 }
                 window.location.assign("/readings");
               }}
-              className="your-readings-shell order-4 flex min-h-[68px] w-[78%] self-center items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
+              className="your-readings-shell order-3 flex min-h-[50px] w-[72%] self-center items-center justify-center px-5 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
               aria-label="Open your saved readings"
-              style={outsideFocusStyle}
+              data-birth-chart-focus
             >
               <span className="your-readings-shimmer" aria-hidden="true" />
               <span
-                className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+                className="pointer-events-none absolute right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
                 style={{
                   border: "1px solid rgba(248,250,252,0.28)",
                   background: "rgba(248,250,252,0.035)",
@@ -1056,7 +1118,7 @@ export default function BirthChartPanel({
                 />
               </span>
               <span
-                className="relative z-10 text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-100"
+                className="relative z-10 text-[13px] font-semibold uppercase tracking-[0.20em] text-slate-100"
                 style={{
                   textShadow:
                     "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
