@@ -1310,7 +1310,7 @@ function buildUpgradeChartPoints(
         "placement",
       sign: placement.sign,
       degree: placement.degree,
-      house: placement.house,
+      house: placement.house ?? "",
     });
   }
 
@@ -1337,16 +1337,25 @@ function buildUpgradeChartPoints(
       category: "point",
       sign: vertex.sign,
       degree: vertex.degree,
-      house: vertex.house,
+      house: vertex.house ?? String(getPlacidusHouse(raw.vertexLongitude, raw.houseCusps)),
     });
   }
+
+  // Read the three additional angles from the same raw Swiss Ephemeris
+  // longitudes used to build the normalized chart. NormalizedChart marks some
+  // angle properties as optional, so deriving them here keeps strict TypeScript
+  // happy without changing the actual astrology calculation.
+  const mcPosition = longitudeToSignDegree(raw.mcLongitude);
+  const icLongitude = normalizeLongitude(raw.mcLongitude + 180);
+  const icPosition = longitudeToSignDegree(icLongitude);
+  const dcLongitude = normalizeLongitude(raw.ascLongitude + 180);
+  const dcPosition = longitudeToSignDegree(dcLongitude);
 
   const anglePoints: Array<{
     id: string;
     name: string;
     sign: string;
     degree: string;
-    longitude: number;
     house: string;
     sourceName?: string;
   }> = [
@@ -1354,26 +1363,23 @@ function buildUpgradeChartPoints(
       id: "mc",
       name: "MC",
       sourceName: "Midheaven",
-      sign: chart.angles.mc.sign,
-      degree: chart.angles.mc.degree,
-      longitude: raw.mcLongitude,
+      sign: mcPosition.sign,
+      degree: mcPosition.degree,
       house: "10",
     },
     {
       id: "ic",
       name: "IC",
       sourceName: "Imum Coeli",
-      sign: chart.angles.ic.sign,
-      degree: chart.angles.ic.degree,
-      longitude: normalizeLongitude(raw.mcLongitude + 180),
+      sign: icPosition.sign,
+      degree: icPosition.degree,
       house: "4",
     },
     {
       id: "descendant",
       name: "Descendant",
-      sign: chart.angles.dc.sign,
-      degree: chart.angles.dc.degree,
-      longitude: normalizeLongitude(raw.ascLongitude + 180),
+      sign: dcPosition.sign,
+      degree: dcPosition.degree,
       house: "7",
     },
   ];

@@ -49,6 +49,16 @@ interface NatalPlacement {
   house?: number;
 }
 
+interface UpgradeChartPoint {
+  id: string;
+  name: string;
+  sourceName?: string;
+  category: "placement" | "angle" | "point";
+  sign: string;
+  degree: string;
+  house: string;
+}
+
 interface NatalAspect {
   type: string;
   planetA: string;
@@ -69,8 +79,10 @@ const T = "\uFE0E";
 const GLYPHS: Record<string, string> = {
   Sun: `☉${T}`, Moon: `☽${T}`, Mercury: `☿${T}`, Venus: `♀${T}`, Mars: `♂${T}`,
   Jupiter: `♃${T}`, Saturn: `♄${T}`, Uranus: `♅${T}`, Neptune: `♆${T}`,
-  Pluto: `♇${T}`, "North Node": `☊${T}`, "South Node": `☋${T}`,
-  Ascendant: `↑${T}`,
+  Pluto: `♇${T}`, Chiron: `⚷${T}`, Lilith: `⚸${T}`,
+  "North Node": `☊${T}`, "South Node": `☋${T}`,
+  Ascendant: `↑${T}`, Descendant: `↓${T}`,
+  MC: "MC", IC: "IC", Vertex: "Vx", "Part of Fortune": `⊗${T}`,
 };
 
 // Aspect sections, ordered most-harmonious → most-tense.
@@ -86,7 +98,36 @@ const ASPECT_META: Record<
   opposition:  { header: "Tension",     rank: 5, text: "#F87171", border: "rgba(239,68,68,0.50)",   glow: "rgba(239,68,68,0.20)" },
 };
 
-const NATAL_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
+const NATAL_ORDER = [
+  "Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars",
+  "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Chiron",
+  "North Node", "South Node", "Lilith", "Part of Fortune", "Vertex",
+  "MC", "IC", "Descendant",
+];
+
+// Keep element balance anchored to the original natal set. Counting angles and
+// calculated points would overweight whichever signs happen to contain them.
+const ELEMENT_BALANCE_ORDER = [
+  "Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars",
+  "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto",
+];
+
+const DISPLAY_NAMES: Record<string, string> = {
+  Ascendant: "Rising",
+  MC: "Midheaven",
+};
+
+const POINT_MEANING: Record<string, string> = {
+  Chiron: "Chiron describes a tender area of the chart where vulnerability can become insight, skill, and healing over time.",
+  "North Node": "The North Node points toward qualities and experiences that stretch you beyond familiar patterns and support long-term growth.",
+  "South Node": "The South Node describes familiar instincts, practiced patterns, and abilities that come easily but can become a default setting.",
+  Lilith: "Lilith highlights raw autonomy, boundaries, desire, and the parts of yourself that resist being controlled or made more acceptable for others.",
+  "Part of Fortune": "The Part of Fortune is a calculated point associated with ease, vitality, material flow, and circumstances that can support a sense of natural alignment.",
+  Vertex: "The Vertex is a calculated chart point often associated in modern astrology with consequential encounters, turning points, and experiences that arrive through other people.",
+  MC: "The Midheaven describes public direction, vocation, reputation, achievement, and the way your life becomes visible in the wider world.",
+  IC: "The IC describes roots, home, family foundations, private life, and the inner base you return to when the public world falls away.",
+  Descendant: "The Descendant describes one-to-one partnership, what you seek or meet through other people, and the qualities relationships call forward in you.",
+};
 
 /* ── The four elements ─────────────────────────────────────────────── */
 type Element = "Fire" | "Earth" | "Air" | "Water";
@@ -314,11 +355,21 @@ export default function BirthChartPanel({
       const data = chart.chartData as unknown as {
         profection?: ProfectionData;
         tropical?: { planets?: NatalPlacement[]; aspects?: NatalAspect[] };
+        upgradeChartPoints?: UpgradeChartPoint[];
       };
       if (data.profection) setProfection(data.profection);
       const planets = data.tropical?.planets ?? [];
+      const upgradePoints = data.upgradeChartPoints ?? [];
+      const chartPlacements: NatalPlacement[] = upgradePoints.length
+        ? upgradePoints.map((point) => ({
+            name: point.name,
+            sign: point.sign,
+            degree: point.degree,
+            house: point.house ? Number(point.house) : undefined,
+          }))
+        : planets.filter((p) => NATAL_ORDER.includes(p.name));
       setNatal(
-        planets
+        chartPlacements
           .filter((p) => NATAL_ORDER.includes(p.name))
           .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
       );
@@ -447,6 +498,7 @@ export default function BirthChartPanel({
   const elementBalance = useMemo(() => {
     const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
     natal.forEach((p) => {
+      if (!ELEMENT_BALANCE_ORDER.includes(p.name)) return;
       const el = elementOf(p.sign);
       if (el) counts[el] += 1;
     });
@@ -924,8 +976,7 @@ export default function BirthChartPanel({
                     if (!planet) return null;
                     const element = elementOf(planet.sign);
                     const colors = element ? ELEMENT_COLORS[element] : null;
-                    const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
-
+                    const displayName = DISPLAY_NAMES[planet.name] ?? planet.name;
                     return (
                       <div>
                         <div className="flex items-center justify-between gap-3 pt-1">
@@ -939,12 +990,10 @@ export default function BirthChartPanel({
                             {GLYPHS[planet.name] ?? "✦"}
                           </span>
                         </div>
-
                         <div className="my-3 h-px bg-white/[0.06]" />
-
                         <p className="text-[14px] leading-[1.6] text-slate-300">
                           {[
-                            PLANET_MEANING[planet.name],
+                            POINT_MEANING[planet.name] ?? PLANET_MEANING[planet.name],
                             SIGN_MEANING[planet.sign],
                             planet.house ? HOUSE_MEANING[String(planet.house)] : null,
                           ].filter(Boolean).join(" ")}
@@ -957,7 +1006,6 @@ export default function BirthChartPanel({
                     const meta = ASPECT_META[type];
                     const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
                     const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-
                     return (
                       <div>
                         <div className="flex items-start justify-between gap-3">
@@ -976,9 +1024,7 @@ export default function BirthChartPanel({
                             {meta?.header ?? "Aspect"}
                           </span>
                         </div>
-
                         <div className="my-2.5 h-px bg-white/[0.06]" />
-
                         <p className="text-[14px] leading-[1.6] text-slate-300">
                           This {asp.type.toLowerCase()} connects {nameA} and {nameB} with a {asp.orbDegrees}° orb.
                           {meta ? ` In this chart it is categorized as ${meta.header.toLowerCase()}.` : ""}
@@ -1028,7 +1074,6 @@ export default function BirthChartPanel({
                           {elementBalance.total > 0 && <div className="my-2.5 h-px bg-white/[0.06]" />}
                         </>
                       )}
-
                       {elementBalance.total > 0 && (
                         <div>
                           <div className="mb-1 text-center">
@@ -1107,7 +1152,6 @@ export default function BirthChartPanel({
                     : "Tap Each Aspect To Learn"}
                 </span>
               </div>
-
               <div
                 className="chart-viewport"
                 data-paused={chartPaused ? "true" : "false"}
@@ -1127,10 +1171,9 @@ export default function BirthChartPanel({
                     rotatingNatal.map((planet, index) => {
                       const element = elementOf(planet.sign);
                       const colors = element ? ELEMENT_COLORS[element] : null;
-                      const displayName = planet.name === "Ascendant" ? "Rising" : planet.name;
+                      const displayName = DISPLAY_NAMES[planet.name] ?? planet.name;
                       const isSelected = selectedContext?.kind === "placement" && selectedContext.planetName === planet.name;
                       const isDuplicate = index >= natal.length;
-
                       return (
                         <div key={`${planet.name}-${index}`} className="chart-row border-b border-white/5" aria-hidden={isDuplicate ? true : undefined}>
                           <button
@@ -1172,7 +1215,6 @@ export default function BirthChartPanel({
                       const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
                       const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
                       const isMajor = asp.orbDegrees <= STRONG_ORB;
-
                       return (
                         <div key={`${asp.planetA}-${asp.type}-${asp.planetB}-${sourceIndex}-${index}`} className="chart-row border-b border-white/5" aria-hidden={isDuplicate ? true : undefined}>
                           <button
@@ -1207,7 +1249,6 @@ export default function BirthChartPanel({
                   )}
                 </div>
               </div>
-
               <div className="mt-3 flex items-center justify-center gap-3">
                 <button
                   type="button"
@@ -1222,7 +1263,6 @@ export default function BirthChartPanel({
                 >
                   Birth Chart
                 </button>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -1243,7 +1283,6 @@ export default function BirthChartPanel({
                     className="block h-3 w-3 rounded-full bg-slate-200 shadow-[0_0_8px_rgba(255,255,255,0.22)]"
                   />
                 </button>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -1269,7 +1308,6 @@ export default function BirthChartPanel({
                     onOpenUpgradeChart();
                     return;
                   }
-
                   window.location.assign("/upgrade-chart");
                 }}
                 className="upgrade-chart-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
@@ -1295,7 +1333,6 @@ export default function BirthChartPanel({
                     }}
                   />
                 </span>
-
                 <span
                   className="relative z-10 ml-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em]"
                   style={{
@@ -1307,7 +1344,6 @@ export default function BirthChartPanel({
                   Upgrade Chart
                 </span>
               </button>
-
               <button
                 type="button"
                 onClick={() => {
@@ -1315,7 +1351,6 @@ export default function BirthChartPanel({
                     onOpenReadings();
                     return;
                   }
-
                   window.location.assign("/readings");
                 }}
                 className="your-readings-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
@@ -1341,7 +1376,6 @@ export default function BirthChartPanel({
                     }}
                   />
                 </span>
-
                 <span
                   className="relative z-10 mr-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-100"
                   style={{
