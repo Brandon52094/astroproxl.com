@@ -329,6 +329,25 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
     setTransitsPaused(false);
   };
 
+  // Temporary inspection focus while the user holds/drags Transits.
+  const transitBackgroundFocusStyle: React.CSSProperties = {
+    opacity: transitsPaused ? 0.42 : 1,
+    filter: transitsPaused
+      ? "grayscale(1) brightness(0.36) saturate(0)"
+      : "grayscale(0) brightness(1) saturate(1)",
+    transitionProperty: "opacity, filter",
+    transitionDuration: transitsPaused ? "520ms" : "420ms",
+    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+    pointerEvents: transitsPaused ? "none" : "auto",
+  };
+
+  const activeTransitFocusStyle: React.CSSProperties = {
+    position: "relative",
+    zIndex: transitsPaused ? 30 : 1,
+    transform: transitsPaused ? "scale(1.008)" : "scale(1)",
+    transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-full w-full min-w-0 max-w-full items-center justify-center bg-[#050816]">
@@ -345,6 +364,23 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
       }}
     >
       <style jsx>{`
+        .today-nebula {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 0;
+          background:
+            radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%),
+            radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%),
+            radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%);
+          animation: todayNebulaDrift 24s ease-in-out infinite alternate;
+        }
+
+        @keyframes todayNebulaDrift {
+          0% { transform: translate(0, 0) scale(1); opacity: 0.85; }
+          100% { transform: translate(-3%, 2%) scale(1.08); opacity: 1; }
+        }
+
         @keyframes transitEscalator {
           from { transform: translate3d(0, 0, 0); }
           to { transform: translate3d(0, calc(var(--transit-count) * -52px), 0); }
@@ -379,12 +415,15 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
         }
 
         @media (prefers-reduced-motion: reduce) {
+          .today-nebula { animation: none !important; }
           .transit-track {
             animation: none !important;
             transform: none !important;
           }
         }
       `}</style>
+
+      <div className="today-nebula" aria-hidden="true" />
 
       {/* ── Starfield ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -484,7 +523,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           className="space-y-3"
         >
           {/* ── ROW: Retrogrades | Time Lord ── */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3" style={transitBackgroundFocusStyle}>
             <SkyCard icon={RotateCcw} label="Retrogrades">
               <p className="text-[clamp(32px,9.7vw,38px)] font-extralight leading-none text-white tabular-nums">
                 {retrogrades.length}
@@ -502,7 +541,17 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                     {profection!.timeLord}
                   </p>
                   <p className="mt-4 text-[12px] leading-5 text-slate-400">
-                    {ordinal(profection!.profectionYear)} house year — {profection!.activatedSign} activated.
+                    {ordinal(profection!.profectionYear)} house year —{" "}
+                    <span
+                      className="font-medium"
+                      style={{
+                        color:
+                          ELEMENT_COLORS[elementOf(profection!.activatedSign) ?? "Fire"].text,
+                      }}
+                    >
+                      {profection!.activatedSign}
+                    </span>{" "}
+                    activated.
                   </p>
                 </>
               ) : (
@@ -517,7 +566,10 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           </div>
 
           {/* ── TRANSITS — birth-chart chrome + lightweight five-row escalator ── */}
-          <section className="standard-shadow overflow-hidden rounded-[18px] border border-white/10 bg-transparent">
+          <section
+            className="standard-shadow overflow-hidden rounded-[18px] border border-white/10 bg-transparent"
+            style={activeTransitFocusStyle}
+          >
             {/* Same visual treatment as View My Chart; intentionally not interactive yet. */}
             <div
               className="relative flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200"
@@ -650,7 +702,10 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             )}
           </section>
 
-          <p className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
+          <p
+            className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600"
+            style={transitBackgroundFocusStyle}
+          >
             <ChevronLeft className="h-3 w-3" /> Your Birth Chart
           </p>
         </motion.div>
