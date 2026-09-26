@@ -329,24 +329,11 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
     setTransitsPaused(false);
   };
 
-  // Temporary inspection focus while the user holds/drags Transits.
-  const transitBackgroundFocusStyle: React.CSSProperties = {
-    opacity: transitsPaused ? 0.42 : 1,
-    filter: transitsPaused
-      ? "grayscale(1) brightness(0.36) saturate(0)"
-      : "grayscale(0) brightness(1) saturate(1)",
-    transitionProperty: "opacity, filter",
-    transitionDuration: transitsPaused ? "520ms" : "420ms",
-    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
-    pointerEvents: transitsPaused ? "none" : "auto",
-  };
-
-  const activeTransitFocusStyle: React.CSSProperties = {
-    position: "relative",
-    zIndex: transitsPaused ? 30 : 1,
-    transform: transitsPaused ? "scale(1.008)" : "scale(1)",
-    transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
-  };
+  // Resolve the element color for the profection's activated sign up front.
+  // elementOf() can return null for unknown signs, so fall back to Fire's
+  // color rather than indexing ELEMENT_COLORS with a possibly-null key.
+  const profectionElement = elementOf(profection?.activatedSign) ?? "Fire";
+  const profectionSignColor = ELEMENT_COLORS[profectionElement].text;
 
   if (isLoading) {
     return (
@@ -523,7 +510,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           className="space-y-3"
         >
           {/* ── ROW: Retrogrades | Time Lord ── */}
-          <div className="grid grid-cols-2 gap-3" style={transitBackgroundFocusStyle}>
+          <div className="grid grid-cols-2 gap-3">
             <SkyCard icon={RotateCcw} label="Retrogrades">
               <p className="text-[clamp(32px,9.7vw,38px)] font-extralight leading-none text-white tabular-nums">
                 {retrogrades.length}
@@ -544,10 +531,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                     {ordinal(profection!.profectionYear)} house year —{" "}
                     <span
                       className="font-medium"
-                      style={{
-                        color:
-                          ELEMENT_COLORS[elementOf(profection!.activatedSign) ?? "Fire"].text,
-                      }}
+                      style={{ color: profectionSignColor }}
                     >
                       {profection!.activatedSign}
                     </span>{" "}
@@ -566,10 +550,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           </div>
 
           {/* ── TRANSITS — birth-chart chrome + lightweight five-row escalator ── */}
-          <section
-            className="standard-shadow overflow-hidden rounded-[18px] border border-white/10 bg-transparent"
-            style={activeTransitFocusStyle}
-          >
+          <section className="standard-shadow overflow-hidden rounded-[18px] border border-white/10 bg-transparent">
             {/* Same visual treatment as View My Chart; intentionally not interactive yet. */}
             <div
               className="relative flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200"
@@ -702,10 +683,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
             )}
           </section>
 
-          <p
-            className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600"
-            style={transitBackgroundFocusStyle}
-          >
+          <p className="flex items-center justify-center gap-1 pt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-600">
             <ChevronLeft className="h-3 w-3" /> Your Birth Chart
           </p>
         </motion.div>
