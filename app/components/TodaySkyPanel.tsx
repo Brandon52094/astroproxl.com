@@ -193,6 +193,17 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Lightweight interaction state for the transit escalator.
+  const [transitsPaused, setTransitsPaused] = useState(false);
+  const transitDragRef = React.useRef<{
+    pointerId: number | null;
+    startY: number;
+    startTime: number;
+  }>({
+    pointerId: null,
+    startY: 0,
+    startTime: 0,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -271,6 +282,53 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
     );
   };
 
+  const getTransitAnimation = () => {
+    if (typeof document === "undefined") return null;
+    const track = document.querySelector<HTMLElement>("[data-transit-track]");
+    return track?.getAnimations()[0] ?? null;
+  };
+
+  const beginTransitDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (transits.length <= 5) return;
+    const animation = getTransitAnimation();
+    const currentTime =
+      animation && typeof animation.currentTime === "number"
+        ? animation.currentTime
+        : 0;
+    transitDragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startTime: currentTime,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setTransitsPaused(true);
+  };
+
+  const moveTransitDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = transitDragRef.current;
+    if (drag.pointerId !== event.pointerId || transits.length <= 5) return;
+    const animation = getTransitAnimation();
+    if (!animation) return;
+    const rowHeight = 52;
+    const rowDurationMs = 3000;
+    const totalDuration = transits.length * rowDurationMs;
+    // Dragging upward advances the list; dragging downward rewinds it.
+    const deltaY = event.clientY - drag.startY;
+    let nextTime = drag.startTime - (deltaY / rowHeight) * rowDurationMs;
+    nextTime %= totalDuration;
+    if (nextTime < 0) nextTime += totalDuration;
+    animation.currentTime = nextTime;
+  };
+
+  const endTransitDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (transitDragRef.current.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    transitDragRef.current.pointerId = null;
+    setTransitsPaused(false);
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-full w-full min-w-0 max-w-full items-center justify-center bg-[#050816]">
@@ -296,11 +354,24 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           height: 260px;
           overflow: hidden;
           contain: layout paint;
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+          touch-action: none;
+          cursor: grab;
+        }
+
+        .transit-viewport[data-paused="true"] {
+          cursor: grabbing;
         }
 
         .transit-track {
           will-change: transform;
           animation: transitEscalator calc(var(--transit-count) * 3s) linear infinite;
+        }
+
+        .transit-track[data-paused="true"] {
+          animation-play-state: paused;
         }
 
         .transit-row {
@@ -449,7 +520,7 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
           <section className="standard-shadow overflow-hidden rounded-[18px] border border-white/10 bg-transparent">
             {/* Same visual treatment as View My Chart; intentionally not interactive yet. */}
             <div
-              className="flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200"
+              className="relative flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200"
               style={{
                 background:
                   "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
@@ -464,7 +535,15 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
             {transits.length > 0 ? (
               <div className="border-t border-white/[0.06] px-4">
-                <div className="transit-viewport">
+                <div
+                  className="transit-viewport"
+                  data-paused={transitsPaused}
+                  onPointerDown={beginTransitDrag}
+                  onPointerMove={moveTransitDrag}
+                  onPointerUp={endTransitDrag}
+                  onPointerCancel={endTransitDrag}
+                  onContextMenu={(event) => event.preventDefault()}
+                >
                   {shouldReduceMotion || transits.length <= 5 ? (
                     <div>
                       {transits.slice(0, 5).map((planet, index) => {
@@ -515,6 +594,8 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
                   ) : (
                     <div
                       className="transit-track"
+                      data-transit-track
+                      data-paused={transitsPaused}
                       style={{ "--transit-count": transits.length } as React.CSSProperties}
                     >
                       {[...transits, ...transits].map((planet, index) => {
