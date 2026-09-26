@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bookmark, ChevronDown, CalendarDays } from "lucide-react";
@@ -29,17 +29,19 @@ interface UserCredits {
 }
 
 /**
- * AstroProXL results — single scrolling page.
- * Sections stack top-to-bottom and reveal as they scroll into view.
- * Uses the existing chartStore and API contracts. No engine changes are required here.
+ * AstroProXL results — streamlined single scrolling reading.
+ * Matches the eight-part engine contract while preserving saved-reading compatibility,
+ * timing calendar, context cards, follow-ups, sources, and checkout behavior.
  */
 
 type ParsedSection =
-  | { kind: "prediction"; label: string; body: string }
-  | { kind: "currentState"; label: string; body: string }
-  | { kind: "whyNow"; label: string; body: string }
-  | { kind: "manifestation"; label: string; body: string }
-  | { kind: "prose"; label: string; body: string }
+  | { kind: "confirmation"; body: string }
+  | { kind: "focus"; body: string }
+  | { kind: "prediction"; body: string }
+  | { kind: "currentState"; body: string }
+  | { kind: "whyNow"; body: string }
+  | { kind: "next"; body: string }
+  | { kind: "prose"; body: string }
   | {
       kind: "window";
       date: string | null;
@@ -254,21 +256,24 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
   return <canvas ref={canvasRef} aria-hidden="true" className="results-starfield" />;
 }
 
-// Parse the existing engine's headings without requiring an engine change.
+// Parse the streamlined eight-part engine contract while remaining compatible with saved legacy readings.
 const HUMAN_HEADERS = [
+  "Confirmation",
   "The Prediction",
   "Where You Are Now",
+  "Why This Is Happening",
   "Why This Is Active Now",
   "Why This Is Active",
+  "What Happens Next",
   "How This Is Most Likely To Show Up",
   "Dated Windows",
   "Timing",
-  "The Read",
   "The Directive",
   "Your Move",
   "Bottom Line",
 ] as const;
 const DATE_LEAD_RE = /^\s*\[\[DATE:\s*([^\]]+)\]\]\s*[—–-]?\s*/i;
+const FOCUS_RE = /^\s*FOCUS\s*:\s*(.+)$/i;
 const DROP_RE = /^\s*DROP\s*:\s*/i;
 const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[^:\n]+)\s*:\s*/i;
 const LOCK_RE = /^\s*LOCK\s+IN\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[^:\n]+)\s*:\s*/i;
@@ -289,26 +294,29 @@ function splitHumanHeader(paragraph: string): { label: string | null; body: stri
     .replace(/^#{1,6}\s+/, "")
     .replace(/\*\*/g, "")
     .replace(/^Part\s*\d+\s*[:—–-]\s*/i, "");
+
   for (const header of HUMAN_HEADERS) {
     const match = cleaned.match(
       new RegExp(`^${header}(?:\\s*[:—–-]\\s*|\\s*\\n+|\\s*$)([\\s\\S]*)$`, "i"),
     );
     if (match) return { label: header, body: match[1].trim() };
   }
+
   return { label: null, body: paragraph.trim() };
 }
 
 function parseReadingSections(content: string): ParsedSection[] | null {
-  // Also accept headings separated by one newline, and Markdown headings.
   const normalized = content
     .replace(/\r\n?/g, "\n")
     .split("\n")
     .map((line) => (splitHumanHeader(line).label ? `\n${line}\n` : line))
     .join("\n");
+
   const paragraphs = normalized
     .split(/\n\s*\n/)
     .map((p) => p.trim())
     .filter(Boolean);
+
   const sections: ParsedSection[] = [];
   let phase: "opening" | "windows" | "directives" | "closing" = "opening";
   let activeLabel = "";
@@ -316,6 +324,7 @@ function parseReadingSections(content: string): ParsedSection[] | null {
 
   for (const paragraph of paragraphs) {
     const { label, body } = splitHumanHeader(paragraph);
+
     if (label) {
       sawHeader = true;
       activeLabel = label;
@@ -328,11 +337,38 @@ function parseReadingSections(content: string): ParsedSection[] | null {
               ? "directives"
               : "opening";
     }
+
     if (!body) continue;
+
     if (phase === "closing") {
       sections.push({ kind: "closing", body });
       continue;
     }
+
+    if (activeLabel === "Confirmation" || !activeLabel) {
+      const focusLine = body
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => FOCUS_RE.test(line));
+
+      if (focusLine) {
+        const focus = focusLine.match(FOCUS_RE);
+        const confirmationBody = body
+          .split("\n")
+          .filter((line) => !FOCUS_RE.test(line.trim()))
+          .join("\n")
+          .trim();
+
+        if (confirmationBody) {
+          sections.push({ kind: "confirmation", body: confirmationBody });
+        }
+        if (focus?.[1]) {
+          sections.push({ kind: "focus", body: focus[1].trim() });
+        }
+        continue;
+      }
+    }
+
     const execute = body.match(EXECUTE_RE);
     const lock = body.match(LOCK_RE);
     if (DROP_RE.test(body) || execute || lock) {
@@ -347,36 +383,72 @@ function parseReadingSections(content: string): ParsedSection[] | null {
       });
       continue;
     }
+
     if (phase === "directives") {
-      // A date-led directive is still a directive, not a timing card.
-      sections.push({
-        kind: "directive",
-        directive: "GENERAL",
-        label: "Directive",
-        date: null,
-        body,
-      });
+      const items = body
+        .split(/\n+/)
+        .map((item) => item.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, "").trim())
+        .filter(Boolean);
+
+      for (const item of items.length ? items : [body]) {
+        const date = item.match(DATE_LEAD_RE);
+        sections.push({
+          kind: "directive",
+          directive: "GENERAL",
+          label: "Your Move",
+          date: date?.[1].trim() ?? null,
+          body: date ? item.slice(date[0].length).trim() : item,
+        });
+      }
       continue;
     }
+
     if (phase === "windows" || (!activeLabel && DATE_LEAD_RE.test(body))) {
       phase = "windows";
-      const date = body.match(DATE_LEAD_RE);
-      const rest = date ? body.slice(date[0].length).trim() : body;
-      sections.push({ kind: "window", date: date?.[1].trim() ?? null, note: null, body: rest });
+      const lines = body
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      const markerLines = lines.filter((line) => DATE_LEAD_RE.test(line));
+      if (markerLines.length > 1) {
+        for (const line of markerLines) {
+          const date = line.match(DATE_LEAD_RE);
+          const rest = date ? line.slice(date[0].length).trim() : line;
+          sections.push({
+            kind: "window",
+            date: date?.[1].trim() ?? null,
+            note: null,
+            body: rest,
+          });
+        }
+      } else {
+        const date = body.match(DATE_LEAD_RE);
+        const rest = date ? body.slice(date[0].length).trim() : body;
+        sections.push({ kind: "window", date: date?.[1].trim() ?? null, note: null, body: rest });
+      }
       continue;
     }
-    const kind =
-      activeLabel === "Where You Are Now"
-        ? "currentState"
-        : activeLabel === "Why This Is Active" || activeLabel === "Why This Is Active Now"
-          ? "whyNow"
-          : activeLabel === "How This Is Most Likely To Show Up"
-            ? "manifestation"
-            : activeLabel === "The Prediction" || (!activeLabel && sections.length === 0)
-              ? "prediction"
-              : "prose";
-    sections.push({ kind, label: activeLabel, body });
+
+    const kind: ParsedSection["kind"] =
+      activeLabel === "Confirmation"
+        ? "confirmation"
+        : activeLabel === "Where You Are Now"
+          ? "currentState"
+          : activeLabel === "Why This Is Happening" ||
+              activeLabel === "Why This Is Active" ||
+              activeLabel === "Why This Is Active Now"
+            ? "whyNow"
+            : activeLabel === "What Happens Next" ||
+                activeLabel === "How This Is Most Likely To Show Up"
+              ? "next"
+              : activeLabel === "The Prediction" || (!activeLabel && sections.length === 0)
+                ? "prediction"
+                : "prose";
+
+    sections.push({ kind, body } as ParsedSection);
   }
+
   return sawHeader && sections.length ? sections : null;
 }
 
@@ -531,104 +603,6 @@ function useInView<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | 
 }
 
 // True while the element sits in the vertical center band of the viewport.
-function useCenterFocus<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, boolean] {
-  const ref = useRef<T>(null);
-  const [focused, setFocused] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(([entry]) => setFocused(entry.isIntersecting), {
-      rootMargin: "-42% 0px -42% 0px",
-      threshold: 0,
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, focused];
-}
-
-function useTyped(text: string, play: boolean, instant: boolean, speed: number): string {
-  // Date tokens arrive together so unfinished [[DATE: ...]] markup never flashes.
-  const units = useMemo(() => text.match(/\[\[DATE:\s*[^\]]+\]\]|[\s\S]/gi) ?? [], [text]);
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (instant) {
-      setCount(units.length);
-      return;
-    }
-    setCount(0);
-    if (!play) return;
-    let i = 0;
-    const timer = setInterval(() => {
-      setCount(++i);
-      if (i >= units.length) clearInterval(timer);
-    }, speed);
-    return () => clearInterval(timer);
-  }, [units, play, instant, speed]);
-  return instant ? text : units.slice(0, count).join("");
-}
-
-function HeroReveal({
-  label,
-  body,
-  active,
-  seen,
-  onSeen,
-  speed = 22,
-  titleDelay = 520,
-}: {
-  label: string;
-  body: string;
-  active: boolean;
-  seen: boolean;
-  onSeen: () => void;
-  speed?: number;
-  titleDelay?: number;
-}) {
-  const [phase, setPhase] = useState<"hidden" | "title" | "typing" | "done">("hidden");
-  useEffect(() => {
-    if (!active) {
-      setPhase("hidden");
-      return;
-    }
-    if (seen) {
-      setPhase("done");
-      return;
-    }
-    setPhase("title");
-    const timer = setTimeout(() => setPhase("typing"), titleDelay);
-    return () => clearTimeout(timer);
-  }, [active, seen, titleDelay]);
-  const typed = useTyped(body, phase === "typing", phase === "done", speed);
-  useEffect(() => {
-    if (phase === "typing" && typed.length === body.length) {
-      setPhase("done");
-      onSeen();
-    }
-  }, [phase, typed, body, onSeen]);
-  if (!active) return null;
-  const titleOn = phase !== "hidden";
-  return (
-    <div className="hero">
-      <div className="hero-head">
-        <span className="hero-glow" aria-hidden="true" />
-        <div className={`hero-title-wrap ${titleOn ? "shine" : ""}`}>
-          <h2 className={`hero-title ${titleOn ? "on" : ""}`}>{label}</h2>
-        </div>
-      </div>
-      <p className="hero-body" aria-hidden="true">
-        {renderWithDates(phase === "done" ? body : phase === "typing" ? typed : "")}
-        {phase === "typing" && <span className="caret" />}
-      </p>
-      <p className="sr-only">{extractPlainText(body)}</p>
-    </div>
-  );
-}
-
-function extractPlainText(text: string): string {
-  return text.replace(/\[\[DATE:\s*([^\]]+)\]\]/gi, "$1");
-}
-
 function FadeIn({
   active,
   delay = 0,
@@ -806,41 +780,30 @@ function DirectiveCard({ section }: { section: DirectiveSection }) {
   );
 }
 
-type PanelKind =
-  | "topic"
-  | "prediction"
-  | "context"
-  | "calendar"
-  | "timing"
-  | "prose"
-  | "directive"
-  | "closing";
-
-const PANEL_LABEL: Record<Exclude<PanelKind, "topic">, string> = {
-  prediction: "The Prediction",
-  context: "Context",
-  calendar: "Dated Windows",
-  timing: "Timing",
-  prose: "The Read",
-  directive: "Your Move",
-  closing: "Bottom Line",
-};
-
-// One scrolling section; reveals its contents when it enters the viewport.
-function FlowSection({
-  kind,
-  label,
-  children,
+function ReadingSection({
+  title,
+  body,
+  active,
 }: {
-  kind: PanelKind;
-  label: string;
-  children: (active: boolean) => React.ReactNode;
+  title: string;
+  body: string;
+  active: boolean;
 }) {
-  const [ref, inView] = useInView<HTMLElement>();
+  if (!body) return null;
   return (
-    <section ref={ref} data-panel={kind} className={`flow-section section-${kind}`} aria-label={label}>
-      {children(inView)}
-    </section>
+    <FadeIn active={active} className="reading-section-block">
+      <p className="reading-section-label">{title}</p>
+      <p className="reading-section-copy">{renderWithDates(body)}</p>
+    </FadeIn>
+  );
+}
+
+function FlowReveal({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  const [ref, active] = useInView<HTMLDivElement>();
+  return (
+    <div ref={ref} className={className}>
+      <FadeIn active={active}>{children}</FadeIn>
+    </div>
   );
 }
 
@@ -860,55 +823,46 @@ function ReadingDeck({
   const reduceMotion = useReducedMotion();
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [seenPrediction, setSeenPrediction] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const markPredictionSeen = useCallback(() => setSeenPrediction(true), []);
+  const [contextRef, contextActive] = useInView<HTMLDivElement>();
+  const [timingRef, timingActive] = useInView<HTMLDivElement>();
+  const [moveRef, moveActive] = useInView<HTMLDivElement>();
 
   const groups = useMemo(() => {
     const join = (kind: ParsedSection["kind"]) =>
       (sections ?? [])
-        .filter((s) => s.kind === kind)
-        .map((s) => s.body)
+        .filter((section) => section.kind === kind)
+        .map((section) => section.body)
         .join("\n\n");
-    const timing = (sections ?? []).filter((s): s is TimingSection => s.kind === "window");
+
+    const timing = (sections ?? []).filter((section): section is TimingSection => section.kind === "window");
     const directives = (sections ?? []).filter(
-      (s): s is DirectiveSection => s.kind === "directive",
+      (section): section is DirectiveSection => section.kind === "directive",
     );
     const windows = timing
-      .flatMap((s) => {
-        const window = s.date ? parseCalendarWindow(s.date) : null;
+      .flatMap((section) => {
+        const window = section.date ? parseCalendarWindow(section.date) : null;
         return window ? [window] : [];
       })
       .sort((a, b) => dayValue(a.start) - dayValue(b.start));
+
+    const fallbackProse = sections
+      ? sections.filter((section) => section.kind === "prose").map((section) => section.body)
+      : [content];
+
     return {
+      confirmation: join("confirmation"),
+      focus: join("focus"),
       prediction: join("prediction"),
       where: join("currentState"),
       why: join("whyNow"),
-      how: join("manifestation"),
-      prose: sections ? sections.filter((s) => s.kind === "prose").map((s) => s.body) : [content],
+      next: join("next"),
+      fallbackProse,
       timing,
       directives,
       windows,
     };
   }, [sections, content]);
-
-  const panels = useMemo<PanelKind[]>(() => {
-    const result: PanelKind[] = ["topic"];
-    if (groups.prediction) result.push("prediction");
-    if (groups.where || groups.why || groups.how) result.push("context");
-    if (groups.windows.length) result.push("calendar");
-    if (groups.timing.length) result.push("timing");
-    if (groups.prose.length) result.push("prose");
-    if (groups.directives.length) result.push("directive");
-    result.push("closing");
-    // Preserve the prototype order; omit empty stages until the engine supplies them.
-    return result;
-  }, [groups]);
-
-  const labelFor = useCallback(
-    (kind: PanelKind) => (kind === "topic" ? topic : PANEL_LABEL[kind]),
-    [topic],
-  );
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 80);
@@ -937,94 +891,116 @@ function ReadingDeck({
         }}
       >
         <ResultsStarfield reduceMotion={reduceMotion} />
-        {panels.map((kind) => (
-          <FlowSection key={kind} kind={kind} label={labelFor(kind)}>
-            {(active) => {
-              if (kind === "topic")
-                return (
-                  <div className={`career ${mounted ? "in" : ""}`}>
-                    <span className="career-mark" aria-hidden="true">
-                      ✦
-                    </span>
-                    <h1 className="career-word">{topic}</h1>
+
+        <main className="reading-flow">
+          <section className={`reading-hero ${mounted ? "in" : ""}`} aria-label="Reading overview">
+            <div className="hero-topic">
+              <span className="hero-mark" aria-hidden="true">✦</span>
+              <span>{topic}</span>
+            </div>
+
+            {groups.confirmation && (
+              <p className="confirmation-copy">{renderWithDates(groups.confirmation)}</p>
+            )}
+
+            <h1 className="focus-heading">
+              {groups.focus || "What the chart is showing now"}
+            </h1>
+
+            {groups.prediction && (
+              <div className="prediction-block">
+                <p className="reading-section-label">The Prediction</p>
+                <p className="prediction-copy">{renderWithDates(groups.prediction)}</p>
+              </div>
+            )}
+          </section>
+
+          <div className="reading-separator" aria-hidden="true" />
+
+          <section ref={contextRef} className="reading-main" aria-label="The reading">
+            <ReadingSection
+              title="Where You Are Now"
+              body={groups.where}
+              active={contextActive || reduceMotion}
+            />
+            {groups.where && groups.why && <div className="inner-separator" aria-hidden="true" />}
+            <ReadingSection
+              title="Why This Is Happening"
+              body={groups.why}
+              active={contextActive || reduceMotion}
+            />
+            {(groups.where || groups.why) && groups.next && (
+              <div className="inner-separator" aria-hidden="true" />
+            )}
+            <ReadingSection
+              title="What Happens Next"
+              body={groups.next}
+              active={contextActive || reduceMotion}
+            />
+
+            {!groups.where && !groups.why && !groups.next && groups.fallbackProse.length > 0 && (
+              <FadeIn active={contextActive || reduceMotion} className="reading-section-block">
+                {groups.fallbackProse.map((body, index) => (
+                  <p key={index} className="reading-section-copy">{renderWithDates(body)}</p>
+                ))}
+              </FadeIn>
+            )}
+          </section>
+
+          {(groups.windows.length > 0 || groups.timing.length > 0) && (
+            <>
+              <div className="reading-separator" aria-hidden="true" />
+              <section ref={timingRef} className="timing-block" aria-label="Timing">
+                <FlowReveal className="section-heading-wrap">
+                  <p className="reading-section-label centered">Timing</p>
+                </FlowReveal>
+
+                {groups.windows.length > 0 && (
+                  <div className="calendar-wrap">
+                    <Calendar
+                      windows={groups.windows}
+                      active={timingActive || reduceMotion}
+                      reduceMotion={reduceMotion}
+                    />
                   </div>
-                );
-              if (kind === "prediction")
-                return (
-                  <HeroReveal
-                    label="The Prediction"
-                    body={groups.prediction}
-                    active={active}
-                    seen={seenPrediction || reduceMotion}
-                    onSeen={markPredictionSeen}
-                  />
-                );
-              if (kind === "context")
-                return (
-                  <div className="card">
-                    {groups.where && (
-                      <ZoneReveal label="Where" body={groups.where} active={active} delay={0} />
-                    )}
-                    {groups.why && (
-                      <ZoneReveal label="Why" body={groups.why} active={active} delay={200} />
-                    )}
-                    {groups.how && (
-                      <ZoneReveal label="How" body={groups.how} active={active} delay={400} />
-                    )}
+                )}
+
+                {groups.timing.length > 0 && (
+                  <FadeIn active={timingActive || reduceMotion} delay={120}>
+                    <div className="context-card-list">
+                      {groups.timing.map((section, index) => (
+                        <WindowCard key={index} section={section} />
+                      ))}
+                    </div>
+                  </FadeIn>
+                )}
+              </section>
+            </>
+          )}
+
+          {groups.directives.length > 0 && (
+            <>
+              <div className="reading-separator" aria-hidden="true" />
+              <section ref={moveRef} className="move-block" aria-label="Your Move">
+                <p className="reading-section-label centered">Your Move</p>
+                <FadeIn active={moveActive || reduceMotion} delay={80}>
+                  <div className="context-card-list">
+                    {groups.directives.map((section, index) => (
+                      <DirectiveCard key={index} section={section} />
+                    ))}
                   </div>
-                );
-              if (kind === "calendar")
-                return (
-                  <div className="cal-page">
-                    <p className="cal-page-heading">Dated Windows</p>
-                    <Calendar windows={groups.windows} active={active} reduceMotion={reduceMotion} />
-                  </div>
-                );
-              if (kind === "timing")
-                return (
-                  <div className="framed-page">
-                    <p className="page-eyebrow">Timing</p>
-                    <FadeIn active={active} delay={100}>
-                      <div className="zone-frame">
-                        {groups.timing.map((section, i) => (
-                          <WindowCard key={i} section={section} />
-                        ))}
-                      </div>
-                    </FadeIn>
-                  </div>
-                );
-              if (kind === "prose")
-                return (
-                  <div className="framed-page prose-page">
-                    <p className="page-eyebrow">The Read</p>
-                    <FadeIn active={active} delay={100}>
-                      <div className="prose-body">
-                        {groups.prose.map((body, i) => (
-                          <p key={i}>{renderWithDates(body)}</p>
-                        ))}
-                      </div>
-                    </FadeIn>
-                  </div>
-                );
-              if (kind === "directive")
-                return (
-                  <div className="framed-page">
-                    <p className="page-eyebrow">Your Move</p>
-                    <FadeIn active={active} delay={100}>
-                      <div className="zone-frame">
-                        {groups.directives.map((section, i) => (
-                          <DirectiveCard key={i} section={section} />
-                        ))}
-                      </div>
-                    </FadeIn>
-                  </div>
-                );
-              // closing
-              return <div className="closing-page">{children}</div>;
-            }}
-          </FlowSection>
-        ))}
+                </FadeIn>
+              </section>
+            </>
+          )}
+
+          <div className="reading-separator" aria-hidden="true" />
+          <section className="reading-ending" aria-label="Reading conclusion">
+            {children}
+          </section>
+        </main>
       </div>
+
       <div className={`scroll-cue ${scrolled ? "" : "show"}`} aria-hidden="true">
         <span>scroll</span>
         <ChevronDown className="cue-chev" />
@@ -1059,10 +1035,6 @@ export default function ReadingResultsPage() {
 
   const followupEndRef = useRef<HTMLDivElement | null>(null);
   const hasMarkedComplete = useRef(false);
-
-  // When the Bottom Line sits in the center of the screen, everything after it
-  // blurs back so the closing line becomes the sole focus.
-  const [bottomLineRef, bottomFocused] = useCenterFocus<HTMLDivElement>();
 
   const readingKey = useMemo(() => {
     const p = reading?.pages?.[0];
@@ -1242,7 +1214,7 @@ export default function ReadingResultsPage() {
     fetchCredits();
   }, [followups.length, creditsRefresh]);
 
-  // The parser accepts the existing engine output and the new The Read heading.
+  // Parse the current eight-part reading contract; legacy headings remain supported for saved readings.
 
   const page = reading?.pages?.[0] ?? null;
 
@@ -1488,10 +1460,7 @@ export default function ReadingResultsPage() {
         checkoutOpen={!!clientSecret}
       >
         {closingSections.length > 0 && (
-          <div
-            className={`bottom-line-wrap ${bottomFocused ? "is-focused" : ""}`}
-            ref={bottomLineRef}
-          >
+          <div className="bottom-line-wrap">
             <p className="bottom-line-label">Bottom Line</p>
 
             {closingSections.map((section, i) => (
@@ -1502,8 +1471,7 @@ export default function ReadingResultsPage() {
           </div>
         )}
 
-        {/* Everything below the Bottom Line recedes while the closing line is centered. */}
-        <div className={`post-closing ${bottomFocused ? "is-dimmed" : ""}`}>
+        <div className="post-closing">
           {/* ── Astrological Sources ── */}
           {page.sources && page.sources.length > 0 && (
             <div className="sources-wrap">
@@ -1566,7 +1534,7 @@ export default function ReadingResultsPage() {
             <div className="mb-4 flex items-center gap-3">
               <div className="h-px flex-1 bg-white/[0.07]" />
               <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">
-                Going Deeper
+                Ask About This Reading
               </span>
               <div className="h-px flex-1 bg-white/[0.07]" />
             </div>
@@ -2183,6 +2151,141 @@ const css = `
     white-space: pre-wrap;
   }
 
+  /* ── Streamlined continuous reading layout ── */
+  .reading-results .reading-flow {
+    position: relative;
+    z-index: 2;
+    width: min(100%, 38rem);
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 54px) 24px calc(env(safe-area-inset-bottom) + 72px);
+  }
+  .reading-results .reading-hero {
+    min-height: 76vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 1s ease, transform 1s ease;
+  }
+  .reading-results .reading-hero.in { opacity: 1; transform: none; }
+  .reading-results .hero-topic {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 26px;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(94,234,212,0.88);
+  }
+  .reading-results .hero-mark {
+    color: rgba(94,234,212,0.62);
+    text-shadow: 0 0 16px rgba(94,234,212,0.36);
+  }
+  .reading-results .confirmation-copy {
+    max-width: 31rem;
+    margin: 0 auto 18px;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: 16px;
+    line-height: 1.72;
+    color: #bdc9d9;
+    white-space: pre-wrap;
+  }
+  .reading-results .focus-heading {
+    max-width: 34rem;
+    margin: 0 auto;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(34px, 9vw, 56px);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+    color: #ffffff;
+    text-wrap: balance;
+    text-shadow: 0 0 34px rgba(94,234,212,0.12);
+  }
+  .reading-results .prediction-block {
+    max-width: 32rem;
+    margin: 38px auto 0;
+    padding-top: 26px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .reading-results .prediction-copy {
+    margin: 10px 0 0;
+    font-family: Georgia, serif;
+    font-size: 18px;
+    line-height: 1.72;
+    color: #e6edf6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .reading-results .reading-separator {
+    width: 100%;
+    height: 1px;
+    margin: 44px 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  }
+  .reading-results .inner-separator {
+    width: 100%;
+    height: 1px;
+    margin: 27px 0;
+    background: rgba(255,255,255,0.07);
+  }
+  .reading-results .reading-main,
+  .reading-results .timing-block,
+  .reading-results .move-block,
+  .reading-results .reading-ending {
+    width: 100%;
+    max-width: 34rem;
+    margin: 0 auto;
+  }
+  .reading-results .reading-section-block { width: 100%; }
+  .reading-results .reading-section-label {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(94,234,212,0.9);
+  }
+  .reading-results .reading-section-label.centered { text-align: center; }
+  .reading-results .reading-section-copy {
+    margin: 10px 0 0;
+    font-family: Georgia, serif;
+    font-size: 16px;
+    line-height: 1.72;
+    color: #d4deeb;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .reading-results .section-heading-wrap { margin-bottom: 22px; }
+  .reading-results .calendar-wrap {
+    width: 100%;
+    max-width: 22rem;
+    margin: 0 auto 24px;
+  }
+  .reading-results .context-card-list {
+    width: 100%;
+    max-width: 32rem;
+    margin: 0 auto;
+  }
+  .reading-results .act-card {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 16px 17px;
+    background: rgba(8,12,31,0.36);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    backdrop-filter: blur(5px);
+  }
+  .reading-results .act-card + .act-card { margin-top: 10px; }
+  .reading-results .reading-ending { padding-bottom: 8px; }
+
   /* ── Bottom Line — the closing focal point ── */
   .reading-results .bottom-line-wrap {
     position: relative;
@@ -2190,7 +2293,6 @@ const css = `
     text-align: center;
     transition: transform 0.7s ease, opacity 0.7s ease;
   }
-  .reading-results .bottom-line-wrap.is-focused { transform: scale(1.03); }
   .reading-results .bottom-line-wrap::before {
     content: "";
     position: absolute;
@@ -2222,14 +2324,8 @@ const css = `
     text-shadow: 0 0 24px rgba(226, 232, 240, 0.08);
   }
 
-  /* When the Bottom Line is centered, the rest recedes into soft focus. */
   .reading-results .post-closing {
-    transition: filter 0.55s ease, opacity 0.55s ease;
-  }
-  .reading-results .post-closing.is-dimmed {
-    filter: blur(7px);
-    opacity: 0.28;
-    pointer-events: none;
+    transition: opacity 0.3s ease;
   }
 
   .reading-results .sources-wrap {
@@ -2447,8 +2543,6 @@ const css = `
       animation: none !important;
       transition: none !important;
     }
-    .reading-results .bottom-line-wrap.is-focused { transform: none; }
-    .reading-results .post-closing.is-dimmed { filter: none; }
   }
 
 `;

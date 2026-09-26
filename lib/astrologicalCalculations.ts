@@ -373,18 +373,145 @@ export function calculateMidpoints(
 }
 
 /**
- * DISABLED — A true Lunar Return requires solving for the exact future time
- * when the transiting Moon returns to the natal Moon longitude.
+ * Calculate the next exact Lunar Return.
  *
- * Do not approximate this as currentDate + 27 days.
- * Re-enable only after an ephemeris-based return solver is implemented.
+ * A Lunar Return occurs when the transiting Moon returns to the
+ * exact tropical longitude of the natal Moon.
+ *
+ * This uses Swiss Ephemeris and solves for the actual future
+ * conjunction rather than approximating with +27 days.
  */
 export function calculateLunarReturn(
-  _moonSign: string,
-  _moonDegree: string,
-  _currentDate: Date
+  natalMoonSign: string,
+  natalMoonDegree: string,
+  currentDate: Date
 ): LunarReturn | undefined {
-  return undefined;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const swisseph = require("swisseph");
+
+  const natalMoonLongitude = getAbsoluteDegree(
+    natalMoonSign,
+    natalMoonDegree
+  );
+
+  const jdNow =
+    2440587.5 + currentDate.getTime() / 86400000;
+
+  const moonNow = swisseph.swe_calc_ut(
+    jdNow,
+    swisseph.SE_MOON,
+    4 | 256
+  );
+
+  if (
+    moonNow.rflag < 0 ||
+    moonNow.error ||
+    !Number.isFinite(moonNow.longitude) ||
+    !Number.isFinite(moonNow.longitudeSpeed)
+  ) {
+    return undefined;
+  }
+
+  const currentLongitude =
+    ((moonNow.longitude % 360) + 360) % 360;
+
+  const targetLongitude =
+    ((natalMoonLongitude % 360) + 360) % 360;
+
+  // Distance the Moon must travel forward to reach natal Moon.
+  let forwardDistance =
+    (targetLongitude - currentLongitude + 360) % 360;
+
+  // If the Moon is essentially on the natal position right now,
+  // find the NEXT Lunar Return rather than returning the current one.
+  if (forwardDistance < 0.01) {
+    forwardDistance += 360;
+  }
+
+  const initialSpeed =
+    Math.abs(moonNow.longitudeSpeed) > 0.0001
+      ? moonNow.longitudeSpeed
+      : 13.176;
+
+  // First estimate from actual current lunar speed.
+  let jd =
+    jdNow + forwardDistance / initialSpeed;
+
+  // Newton refinement to exact conjunction.
+  for (let i = 0; i < 15; i++) {
+    const result = swisseph.swe_calc_ut(
+      jd,
+      swisseph.SE_MOON,
+      4 | 256
+    );
+
+    if (
+      result.rflag < 0 ||
+      result.error ||
+      !Number.isFinite(result.longitude) ||
+      !Number.isFinite(result.longitudeSpeed) ||
+      Math.abs(result.longitudeSpeed) < 0.0001
+    ) {
+      return undefined;
+    }
+
+    let error =
+      ((result.longitude - targetLongitude + 540) % 360) - 180;
+
+    if (Math.abs(error) < 0.000001) {
+      break;
+    }
+
+    // degrees / degrees-per-day = days
+    let correction = error / result.longitudeSpeed;
+
+    // Guard against a wild Newton jump.
+    correction = Math.max(-2, Math.min(2, correction));
+
+    jd -= correction;
+  }
+
+  const finalResult = swisseph.swe_calc_ut(
+    jd,
+    swisseph.SE_MOON,
+    4 | 256
+  );
+
+  if (
+    finalResult.rflag < 0 ||
+    finalResult.error
+  ) {
+    return undefined;
+  }
+
+  const finalOrb = angularDistance(
+    finalResult.longitude,
+    targetLongitude
+  );
+
+  // Require a genuinely exact result.
+  if (finalOrb > 0.01 || jd <= jdNow) {
+    return undefined;
+  }
+
+  const returnDate = new Date(
+    (jd - 2440587.5) * 86400000
+  );
+
+  const moonPosition = getSignAndDegree(
+    finalResult.longitude
+  );
+
+  const daysUntil =
+    (returnDate.getTime() - currentDate.getTime()) /
+    86400000;
+
+  return {
+    date: returnDate.toISOString(),
+    moonSign: moonPosition.sign,
+    moonDegree: `${moonPosition.degree.toFixed(2)}°`,
+    daysUntil: Math.round(daysUntil * 100) / 100,
+  };
 }
 
 export function calculateEclipseActivation(

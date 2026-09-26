@@ -30,6 +30,15 @@ import { FORWARD_WINDOW_DAYS } from "@/lib/reading/engine";
  *
  *   4. transitsToAngles[].exactDate
  *      — calculator-computed exact angle contacts
+ *
+ *   5. lunarReturn.date
+ *      — exact ephemeris-solved Lunar Return
+ *
+ *   6. solarReturn.sunReturnDate
+ *      — exact ephemeris-solved Solar Return
+ *
+ *   7. eclipseActivations[].eclipseDate
+ *      — chart-activating eclipses supplied by the ephemeris
  */
 
 /** Minimal shape this module needs — a subset of JxlAskBody. */
@@ -58,6 +67,21 @@ interface DateProvenanceInput {
     isApplying?: boolean;
     exactDate?: string | null;
     exactJulianDay?: number | null;
+  }> | null;
+
+  lunarReturn?: {
+    date?: string | null;
+    daysUntil?: number | null;
+  } | null;
+
+  solarReturn?: {
+    sunReturnDate?: string | null;
+  } | null;
+
+  eclipseActivations?: Array<{
+    eclipseDate?: string | null;
+    eclipseType?: string;
+    activatedPlanet?: string;
   }> | null;
 }
 
@@ -184,6 +208,51 @@ function minDayDiff(a: ParsedDate, b: ParsedDate): number {
 }
 
 /**
+ * Does this supplied date fall inside the engine's forward-reading window?
+ *
+ * Prefers a numeric `daysUntil` when the caller already computed one — it's
+ * the same number the engine uses to decide what to include in the reading.
+ * Otherwise falls back to parsing the raw date and comparing against today's
+ * UTC midnight.
+ *
+ * The window is inclusive on both ends: today (daysUntil = 0) through
+ * FORWARD_WINDOW_DAYS.
+ */
+function isWithinForwardWindow(
+  raw: string | null | undefined,
+  daysUntil?: number | null
+): boolean {
+  if (!raw) return false;
+
+  if (typeof daysUntil === "number" && Number.isFinite(daysUntil)) {
+    return daysUntil >= 0 && daysUntil <= FORWARD_WINDOW_DAYS;
+  }
+
+  const parsed = parseLooseDate(raw);
+  if (!parsed) return false;
+
+  const now = new Date();
+
+  const todayUTC = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
+
+  const year = parsed.year ?? now.getUTCFullYear();
+
+  const anchorUTC = Date.UTC(
+    year,
+    parsed.month - 1,
+    parsed.day
+  );
+
+  const gap = (anchorUTC - todayUTC) / MS_PER_DAY;
+
+  return gap >= 0 && gap <= FORWARD_WINDOW_DAYS;
+}
+
+/**
  * Collect every date the model is ALLOWED to anchor to, tagged by source.
  * Stations without a natal hit are excluded — per THE DATE RULE they are not a
  * valid anchor.
@@ -216,37 +285,7 @@ export function buildValidDateIndex(
   for (const a of aspects) {
     if (!a?.exactDate) continue;
 
-    let withinWindow = false;
-
-    if (a.daysUntilExact != null) {
-      withinWindow = a.daysUntilExact >= 0 && a.daysUntilExact <= FORWARD_WINDOW_DAYS;
-    } else {
-      const parsed = parseLooseDate(a.exactDate);
-
-      if (parsed) {
-        const now = new Date();
-
-        const todayUTC = Date.UTC(
-          now.getUTCFullYear(),
-          now.getUTCMonth(),
-          now.getUTCDate()
-        );
-
-        const year = parsed.year ?? now.getUTCFullYear();
-
-        const anchorUTC = Date.UTC(
-          year,
-          parsed.month - 1,
-          parsed.day
-        );
-
-        const gap = (anchorUTC - todayUTC) / MS_PER_DAY;
-
-        withinWindow = gap >= 0 && gap <= FORWARD_WINDOW_DAYS;
-      }
-    }
-
-    if (withinWindow) {
+    if (isWithinForwardWindow(a.exactDate, a.daysUntilExact)) {
       add(a.exactDate, `aspect:${a.transitPlanet ?? "?"}-${a.natalPlanet ?? "?"}`);
     }
   }
@@ -265,6 +304,56 @@ export function buildValidDateIndex(
     }
 
     add(t.exactDate, `angle:${t.transitPlanet ?? "?"}-${t.angle ?? "?"}`);
+  }
+
+  // Source 5 — exact Lunar Return.
+  //
+  // Lunar Return is ephemeris-calculated from the transiting Moon
+  // returning to the user's exact natal Moon longitude.
+  if (
+    body.lunarReturn?.date &&
+    isWithinForwardWindow(
+      body.lunarReturn.date,
+      body.lunarReturn.daysUntil
+    )
+  ) {
+    add(
+      body.lunarReturn.date,
+      "lunarReturn"
+    );
+  }
+
+  // Source 6 — exact Solar Return.
+  //
+  // Only expose it as a dated prediction anchor when it falls inside
+  // the same forward-reading window used elsewhere.
+  if (
+    body.solarReturn?.sunReturnDate &&
+    isWithinForwardWindow(
+      body.solarReturn.sunReturnDate
+    )
+  ) {
+    add(
+      body.solarReturn.sunReturnDate,
+      "solarReturn"
+    );
+  }
+
+  // Source 7 — eclipse activations.
+  //
+  // Eclipse dates come from supplied astronomical eclipse data and are
+  // only admitted when they activate the user's chart and fall inside
+  // the current reading horizon.
+  for (const eclipse of body.eclipseActivations ?? []) {
+    if (
+      eclipse?.eclipseDate &&
+      isWithinForwardWindow(eclipse.eclipseDate)
+    ) {
+      add(
+        eclipse.eclipseDate,
+        `eclipse:${eclipse.eclipseType ?? "?"}-${eclipse.activatedPlanet ?? "?"}`
+      );
+    }
   }
 
   return { dates, unparseableSupplied };

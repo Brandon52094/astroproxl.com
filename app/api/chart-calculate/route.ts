@@ -1645,11 +1645,24 @@ export async function POST(req: NextRequest) {
       midpoints = calculateMidpoints(dignityPlanets, wholeSignHouseMap);
 
       // 6. Lunar Return
-      const transitMoon = transitRaw.planets.find((p) => p.name === "Moon");
-      if (transitMoon) {
-        const { sign: moonSign, degree: moonDegree } = longitudeToSignDegree(transitMoon.longitude);
-        lunarReturn = calculateLunarReturn(moonSign, moonDegree, now);
-      }
+// Target = natal Moon. Search forward for the next exact
+// conjunction of the transiting Moon to that natal longitude.
+const natalMoon = tropicalRaw.planets.find(
+  (p) => p.name === "Moon"
+);
+
+if (natalMoon) {
+  const {
+    sign: natalMoonSign,
+    degree: natalMoonDegree,
+  } = longitudeToSignDegree(natalMoon.longitude);
+
+  lunarReturn = calculateLunarReturn(
+    natalMoonSign,
+    natalMoonDegree,
+    now
+  );
+}
 
       // 7. Eclipse Activation
       const knownEclipses = getKnownEclipses(now);
