@@ -160,6 +160,38 @@ function ordinal(n: number): string {
 }
 
 type ChartViewMode = "birthchart" | "aspects";
+type SharedScrollClock = {
+  initialized: boolean;
+  offsetMs: number;
+  startedAt: number;
+};
+
+const SHARED_SCROLL_CLOCKS: Record<ChartViewMode, SharedScrollClock> = {
+  birthchart: { initialized: false, offsetMs: 0, startedAt: 0 },
+  aspects: { initialized: false, offsetMs: 0, startedAt: 0 },
+};
+
+function getSharedScrollTime(mode: ChartViewMode, durationMs: number): number {
+  if (durationMs <= 0) return 0;
+  const clock = SHARED_SCROLL_CLOCKS[mode];
+  const now = Date.now();
+
+  if (!clock.initialized) {
+    clock.initialized = true;
+    clock.offsetMs = 0;
+    clock.startedAt = now;
+    return 0;
+  }
+
+  return (clock.offsetMs + (now - clock.startedAt)) % durationMs;
+}
+
+function setSharedScrollTime(mode: ChartViewMode, currentTimeMs: number, durationMs: number) {
+  const clock = SHARED_SCROLL_CLOCKS[mode];
+  clock.initialized = true;
+  clock.offsetMs = durationMs > 0 ? ((currentTimeMs % durationMs) + durationMs) % durationMs : 0;
+  clock.startedAt = Date.now();
+}
 
 function localDayKey(): string {
   const now = new Date();
@@ -390,18 +422,36 @@ export default function BirthChartPanel({
 
   const getChartAnimation = () => chartTrackRef.current?.getAnimations()[0] ?? null;
 
+  useEffect(() => {
+    if (shouldReduceMotion || activeItemCount <= 6) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const animation = getChartAnimation();
+      if (!animation) return;
+      const duration = activeItemCount * 3000;
+      animation.currentTime = getSharedScrollTime(chartView, duration);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [chartView, activeItemCount, shouldReduceMotion]);
+
   const beginChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (activeItemCount <= 6) return;
+
     const animation = getChartAnimation();
+    const duration = activeItemCount * 3000;
     const currentTime =
       animation && typeof animation.currentTime === "number"
         ? animation.currentTime
-        : 0;
+        : getSharedScrollTime(chartView, duration);
+
     chartDragRef.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
       startTime: currentTime,
     };
+
+    setSharedScrollTime(chartView, currentTime, duration);
     event.currentTarget.setPointerCapture(event.pointerId);
     setChartPaused(true);
   };
@@ -409,23 +459,37 @@ export default function BirthChartPanel({
   const moveChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = chartDragRef.current;
     if (drag.pointerId !== event.pointerId || activeItemCount <= 6) return;
+
     const animation = getChartAnimation();
     if (!animation) return;
+
     const rowHeight = 52;
     const rowDurationMs = 3000;
     const totalDuration = activeItemCount * rowDurationMs;
+
     const deltaY = event.clientY - drag.startY;
     let nextTime = drag.startTime - (deltaY / rowHeight) * rowDurationMs;
+
     nextTime %= totalDuration;
     if (nextTime < 0) nextTime += totalDuration;
+
     animation.currentTime = nextTime;
+    setSharedScrollTime(chartView, nextTime, totalDuration);
   };
 
   const endChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (chartDragRef.current.pointerId !== event.pointerId) return;
+
+    const animation = getChartAnimation();
+    const totalDuration = activeItemCount * 3000;
+    if (animation && typeof animation.currentTime === "number") {
+      setSharedScrollTime(chartView, animation.currentTime, totalDuration);
+    }
+
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+
     chartDragRef.current.pointerId = null;
     setChartPaused(false);
   };
@@ -896,7 +960,7 @@ export default function BirthChartPanel({
               <button
                 type="button"
                 onClick={advanceContextCard}
-                className="standard-shadow order-1 h-[252px] w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] p-4 text-left backdrop-blur-sm"
+                className="standard-shadow order-1 h-[200px] w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 text-left backdrop-blur-sm"
                 style={outsideFocusStyle}
                 aria-label="Cycle personal astrology context"
               >
@@ -905,7 +969,7 @@ export default function BirthChartPanel({
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: "easeOut" }}
-                  className="h-full overflow-hidden"
+                  className="h-full overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
                   {selectedContext?.kind === "placement" ? (() => {
                     const planet = natal.find((item) => item.name === selectedContext.planetName);
@@ -915,7 +979,7 @@ export default function BirthChartPanel({
                     const displayName = DISPLAY_NAMES[planet.name] ?? planet.name;
                     return (
                       <div>
-                        <div className="flex items-center justify-between gap-3 pt-2">
+                        <div className="flex items-center justify-between gap-3 pt-1">
                           <p className="text-[21px] font-light leading-none" style={{ color: colors?.text ?? "#F8FAFC" }}>
                             {displayName} in {planet.sign}
                           </p>
@@ -1236,7 +1300,7 @@ export default function BirthChartPanel({
             </section>
 
             {/* ── CHART ACTIONS — separate premium destinations ── */}
-            <div className="order-3 flex w-full flex-col items-center gap-3">
+            <div className="order-3 flex w-[80%] self-center items-stretch gap-2.5">
               <button
                 type="button"
                 onClick={() => {
@@ -1246,13 +1310,13 @@ export default function BirthChartPanel({
                   }
                   window.location.assign("/upgrade-chart");
                 }}
-                className="upgrade-chart-shell flex min-h-[68px] w-[78%] items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
+                className="upgrade-chart-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
                 aria-label="Upgrade your chart"
                 style={outsideFocusStyle}
               >
                 <span className="upgrade-chart-shimmer" aria-hidden="true" />
                 <span
-                  className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+                  className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
                   style={{
                     border: "1px solid rgba(218,183,104,0.42)",
                     background: "rgba(8,8,10,0.72)",
@@ -1270,7 +1334,7 @@ export default function BirthChartPanel({
                   />
                 </span>
                 <span
-                  className="relative z-10 whitespace-nowrap text-[14px] font-semibold uppercase tracking-[0.22em]"
+                  className="relative z-10 ml-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em]"
                   style={{
                     color: "#F1D694",
                     textShadow:
@@ -1289,13 +1353,13 @@ export default function BirthChartPanel({
                   }
                   window.location.assign("/readings");
                 }}
-                className="your-readings-shell flex min-h-[68px] w-[78%] items-center justify-center px-6 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
+                className="your-readings-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
                 aria-label="Open your saved readings"
                 style={outsideFocusStyle}
               >
                 <span className="your-readings-shimmer" aria-hidden="true" />
                 <span
-                  className="pointer-events-none absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full"
+                  className="pointer-events-none absolute right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
                   style={{
                     border: "1px solid rgba(248,250,252,0.28)",
                     background: "rgba(248,250,252,0.035)",
@@ -1313,7 +1377,7 @@ export default function BirthChartPanel({
                   />
                 </span>
                 <span
-                  className="relative z-10 whitespace-nowrap text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-100"
+                  className="relative z-10 mr-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-100"
                   style={{
                     textShadow:
                       "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
