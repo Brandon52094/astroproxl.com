@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bookmark, ChevronDown, CalendarDays } from "lucide-react";
+import { Bookmark, ChevronDown, CalendarDays, Crown } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { loadReading, loadChart, clearIntake, type StoredReading } from "@/lib/chartStore";
@@ -895,17 +895,18 @@ function ReadingDeck({
         <main className="reading-flow">
           <section className={`reading-hero ${mounted ? "in" : ""}`} aria-label="Reading overview">
             <div className="hero-topic">
+              <span className="hero-topic-glow" aria-hidden="true" />
               <span className="hero-mark" aria-hidden="true">✦</span>
-              <span>{topic}</span>
+              <span className="hero-topic-text">{topic}</span>
             </div>
-
-            {groups.confirmation && (
-              <p className="confirmation-copy">{renderWithDates(groups.confirmation)}</p>
-            )}
 
             <h1 className="focus-heading">
               {groups.focus || "What the chart is showing now"}
             </h1>
+
+            {groups.confirmation && (
+              <p className="confirmation-copy">{renderWithDates(groups.confirmation)}</p>
+            )}
 
             {groups.prediction && (
               <div className="prediction-block">
@@ -1020,7 +1021,8 @@ export default function ReadingResultsPage() {
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [creditsRefresh, setCreditsRefresh] = useState(0);
   const [credits, setCredits] = useState<UserCredits | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewingSavedReading, setViewingSavedReading] = useState(false);
 
@@ -1225,25 +1227,68 @@ export default function ReadingResultsPage() {
 
   const closingSections = parsedSections?.filter((section) => section.kind === "closing") ?? [];
 
-  const handleSaveReading = async () => {
-    if (!reading || !page) return;
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      const result = await saveReadingLocally({
-        id: `reading-${readingKey}`,
-        savedAt: new Date().toISOString(),
-        topic: reading.topic || "Reading",
-        title: page.title || "Your Reading",
-        reading,
-        followups,
-      });
+  const handleDownloadReading = async () => {
+    if (!reading || !page || isDownloading) return;
 
-      router.push(result.status === "limit" ? "/readings?limit=1" : "/readings");
-    } catch {
-      setSaveError("This reading could not be saved on this device. Please try again.");
+    setIsDownloading(true);
+    setDownloaded(false);
+    setSaveError(null);
+
+    try {
+      // Keep the reading available in Your Readings without forcing a redirect.
+      try {
+        await saveReadingLocally({
+          id: `reading-${readingKey}`,
+          savedAt: new Date().toISOString(),
+          topic: reading.topic || "Reading",
+          title: page.title || "Your Reading",
+          reading,
+          followups,
+        });
+      } catch {
+        // A local archive failure should not block the actual file download.
+      }
+
+      const plain = page.content.replace(/\[\[DATE:\s*([^\]]+)\]\]/gi, "$1");
+      const topicLabel = (reading.topic || "reading").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const fileName = `astroproxl-${topicLabel || "reading"}-${dateStamp}.txt`;
+      const text = `${page.title || "Your Reading"}\n\n${plain}\n\n— AstroProXL`;
+      const file = new File([text], fileName, { type: "text/plain;charset=utf-8" });
+
+      // iPhone/iPad browsers are more reliable when a file can be handed to the
+      // native share sheet. Desktop browsers fall back to a direct file download.
+      const nav = navigator as Navigator & {
+        canShare?: (data?: ShareData) => boolean;
+      };
+
+      if (typeof navigator.share === "function" && nav.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: page.title || "Your AstroProXL Reading",
+          files: [file],
+        });
+      } else {
+        const url = URL.createObjectURL(file);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.rel = "noopener";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+
+        // Safari can cancel a download when the object URL is revoked immediately.
+        window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
+
+      setDownloaded(true);
+      window.setTimeout(() => setDownloaded(false), 2600);
+    } catch (error) {
+      // Cancelling the native share sheet is not a failed reading download state.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setSaveError("This reading could not be downloaded. Please try again.");
     } finally {
-      setIsSaving(false);
+      setIsDownloading(false);
     }
   };
 
@@ -1650,13 +1695,18 @@ export default function ReadingResultsPage() {
           ) : (
             <button
               type="button"
-              className="end-btn end-save"
-              onClick={handleSaveReading}
-              disabled={isSaving}
-              aria-label="Save reading to this device"
+              className="download-reading-shell"
+              onClick={handleDownloadReading}
+              disabled={isDownloading}
+              aria-label="Download this reading"
             >
-              <Bookmark className="end-btn-icon" aria-hidden="true" />
-              {isSaving ? "Saving…" : "Save Reading"}
+              <span className="download-reading-shimmer" aria-hidden="true" />
+              <span className="download-reading-crown" aria-hidden="true">
+                <Crown className="h-3.5 w-3.5" />
+              </span>
+              <span className="download-reading-label">
+                {isDownloading ? "Preparing…" : downloaded ? "Downloaded" : "Download Reading"}
+              </span>
             </button>
           )}
           <button type="button" className="end-btn end-done" onClick={handleDone}>
@@ -2170,48 +2220,101 @@ const css = `
   }
   .reading-results .reading-hero.in { opacity: 1; transform: none; }
   .reading-results .hero-topic {
-    display: flex;
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    margin-bottom: 26px;
+    align-self: center;
+    gap: 10px;
+    margin-bottom: 30px;
+    padding: 5px 10px;
+    overflow: hidden;
     font-family: ui-sans-serif, system-ui;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.22em;
+    font-size: clamp(18px, 5.2vw, 24px);
+    font-weight: 800;
+    letter-spacing: 0.28em;
     text-transform: uppercase;
-    color: rgba(94,234,212,0.88);
+    color: #78f2df;
+    text-shadow:
+      0 0 14px rgba(94,234,212,0.42),
+      0 0 34px rgba(94,234,212,0.20);
+  }
+  .reading-results .hero-topic-text,
+  .reading-results .hero-mark {
+    position: relative;
+    z-index: 2;
   }
   .reading-results .hero-mark {
-    color: rgba(94,234,212,0.62);
-    text-shadow: 0 0 16px rgba(94,234,212,0.36);
+    color: rgba(94,234,212,0.82);
+    font-size: 14px;
+    text-shadow: 0 0 18px rgba(94,234,212,0.55);
   }
-  .reading-results .confirmation-copy {
-    max-width: 31rem;
-    margin: 0 auto 18px;
-    text-align: center;
-    font-family: Georgia, serif;
-    font-size: 16px;
-    line-height: 1.72;
-    color: #bdc9d9;
-    white-space: pre-wrap;
+  .reading-results .hero-topic-glow {
+    position: absolute;
+    z-index: 1;
+    top: -25%;
+    bottom: -25%;
+    left: -38%;
+    width: 34%;
+    transform: skewX(-18deg);
+    background: linear-gradient(
+      105deg,
+      transparent 0%,
+      rgba(255,255,255,0.02) 32%,
+      rgba(182,255,245,0.34) 50%,
+      rgba(255,255,255,0.04) 68%,
+      transparent 100%
+    );
+    filter: blur(2px);
+    animation: reading-topicSweep 4.8s cubic-bezier(0.22,1,0.36,1) infinite;
+    pointer-events: none;
+  }
+  @keyframes reading-topicSweep {
+    0%, 18% { transform: translateX(0) skewX(-18deg); opacity: 0; }
+    26% { opacity: 1; }
+    62% { transform: translateX(430%) skewX(-18deg); opacity: 0.9; }
+    72%, 100% { transform: translateX(430%) skewX(-18deg); opacity: 0; }
   }
   .reading-results .focus-heading {
-    max-width: 34rem;
+    max-width: 33rem;
     margin: 0 auto;
     text-align: center;
     font-family: Georgia, serif;
-    font-weight: 600;
-    font-size: clamp(34px, 9vw, 56px);
-    line-height: 1.08;
-    letter-spacing: -0.025em;
+    font-weight: 650;
+    font-size: clamp(36px, 9.6vw, 58px);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
     color: #ffffff;
     text-wrap: balance;
-    text-shadow: 0 0 34px rgba(94,234,212,0.12);
+    text-shadow:
+      0 1px 0 rgba(255,255,255,0.08),
+      0 0 28px rgba(255,255,255,0.06),
+      0 0 50px rgba(94,234,212,0.10);
+  }
+  .reading-results .focus-heading::after {
+    content: "";
+    display: block;
+    width: 54px;
+    height: 1px;
+    margin: 24px auto 0;
+    background: linear-gradient(90deg, transparent, rgba(94,234,212,0.72), transparent);
+    box-shadow: 0 0 14px rgba(94,234,212,0.22);
+  }
+  .reading-results .confirmation-copy {
+    max-width: 31rem;
+    margin: 20px auto 0;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: clamp(16px, 4.35vw, 19px);
+    line-height: 1.68;
+    color: #c3cedd;
+    white-space: pre-wrap;
+    text-wrap: pretty;
   }
   .reading-results .prediction-block {
     max-width: 32rem;
-    margin: 38px auto 0;
+    margin: 42px auto 0;
     padding-top: 26px;
     border-top: 1px solid rgba(255,255,255,0.08);
   }
@@ -2496,6 +2599,140 @@ const css = `
     transition: opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   }
   .reading-results .end-btn-icon { width: 18px; height: 18px; }
+
+  @property --download-reading-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+  .reading-results .download-reading-shell {
+    position: relative;
+    isolation: isolate;
+    min-height: 58px;
+    width: 100%;
+    border: 0;
+    border-radius: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 54px 0 22px;
+    overflow: visible;
+    background:
+      radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%),
+      linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 0 22px rgba(203,164,78,0.12),
+      0 16px 38px rgba(0,0,0,0.46);
+    cursor: pointer;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .reading-results .download-reading-shell::before,
+  .reading-results .download-reading-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 1.25px;
+    background: conic-gradient(
+      from var(--download-reading-angle),
+      rgba(255,255,255,0.94) 0deg,
+      rgba(255,255,255,0.74) 54deg,
+      rgba(218,183,104,0.88) 112deg,
+      rgba(255,239,195,0.82) 172deg,
+      rgba(255,255,255,0.96) 226deg,
+      rgba(193,151,67,0.86) 296deg,
+      rgba(255,255,255,0.94) 360deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: downloadReadingOrbit 8s linear infinite;
+  }
+  .reading-results .download-reading-shell::before { z-index: 0; opacity: 0.82; }
+  .reading-results .download-reading-shell::after {
+    inset: -1px;
+    z-index: -1;
+    padding: 2px;
+    opacity: 0.52;
+    filter: blur(8px);
+  }
+  .reading-results .download-reading-shell:hover,
+  .reading-results .download-reading-shell:focus-visible {
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.11),
+      0 0 28px rgba(203,164,78,0.18),
+      0 18px 42px rgba(0,0,0,0.50);
+    outline: none;
+  }
+  .reading-results .download-reading-shell:active { transform: translateY(0); }
+  .reading-results .download-reading-shell:disabled { opacity: 0.55; cursor: default; }
+  .reading-results .download-reading-label {
+    position: relative;
+    z-index: 3;
+    white-space: nowrap;
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: #f8fafc;
+    text-shadow:
+      0 2px 10px rgba(0,0,0,0.92),
+      0 0 18px rgba(255,255,255,0.16),
+      0 0 24px rgba(218,183,105,0.16);
+  }
+  .reading-results .download-reading-crown {
+    position: absolute;
+    right: 13px;
+    top: 11px;
+    z-index: 4;
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(248,250,252,0.28);
+    background: rgba(248,250,252,0.035);
+    box-shadow: 0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06);
+    color: rgba(248,250,252,0.90);
+    filter: drop-shadow(0 0 5px rgba(255,255,255,0.20));
+  }
+  .reading-results .download-reading-shimmer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .reading-results .download-reading-shimmer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 45%;
+    background: linear-gradient(
+      105deg,
+      transparent 0%,
+      rgba(255,255,255,0.08) 45%,
+      rgba(255,255,255,0.17) 50%,
+      rgba(255,255,255,0.08) 55%,
+      transparent 100%
+    );
+    transform: translateX(-145%) skewX(-18deg);
+    animation: downloadReadingShimmer 2.75s cubic-bezier(0.22,1,0.36,1) 1 forwards;
+  }
+  @keyframes downloadReadingShimmer {
+    0% { transform: translateX(-145%) skewX(-18deg); }
+    100% { transform: translateX(245%) skewX(-18deg); }
+  }
+  @keyframes downloadReadingOrbit { to { --download-reading-angle: 360deg; } }
   .reading-results .end-save {
     border: 1px solid rgba(251,191,36,0.5);
     background: rgba(251,191,36,0.08);
@@ -2543,6 +2780,10 @@ const css = `
       animation: none !important;
       transition: none !important;
     }
+    .reading-results .download-reading-shell::before,
+    .reading-results .download-reading-shell::after,
+    .reading-results .download-reading-shimmer::after,
+    .reading-results .hero-topic-glow { animation: none !important; }
   }
 
 `;
