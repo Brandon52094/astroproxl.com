@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Compass, Crown } from "lucide-react";
+import { Compass, Crown, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadChart } from "@/lib/chartStore";
 import {
@@ -39,6 +39,7 @@ interface BirthChartPanelProps {
   dailyHoroscope?: string | null;
   onOpenHoroscope?: () => Promise<string | null | void> | string | null | void;
   onOpenReadings?: () => void;
+  onOpenUpgradeChart?: () => void;
 }
 
 interface NatalPlacement {
@@ -195,6 +196,7 @@ export default function BirthChartPanel({
   dailyHoroscope: dailyHoroscopeProp,
   onOpenHoroscope,
   onOpenReadings,
+  onOpenUpgradeChart,
 }: BirthChartPanelProps) {
   const shouldReduceMotion = useReducedMotion();
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
@@ -611,6 +613,48 @@ export default function BirthChartPanel({
         .your-readings-shell:active {
           transform: translateY(0);
         }
+        .chart-action-side {
+          position: relative;
+          z-index: 2;
+          display: flex;
+          min-width: 0;
+          height: 100%;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+          transition: background 180ms ease, opacity 180ms ease;
+        }
+        .chart-action-side:hover,
+        .chart-action-side:focus-visible {
+          background: rgba(255,255,255,0.035);
+          outline: none;
+        }
+        .chart-action-side:active {
+          background: rgba(255,255,255,0.055);
+        }
+        .chart-action-divider {
+          position: absolute;
+          left: 50%;
+          top: -10%;
+          z-index: 3;
+          width: 1px;
+          height: 120%;
+          transform: rotate(14deg);
+          transform-origin: center;
+          background: linear-gradient(
+            180deg,
+            transparent 0%,
+            rgba(255,255,255,0.30) 18%,
+            rgba(218,183,104,0.44) 50%,
+            rgba(255,255,255,0.26) 82%,
+            transparent 100%
+          );
+          box-shadow: 0 0 10px rgba(218,183,104,0.12);
+          pointer-events: none;
+        }
         @keyframes readingsShimmer {
           0% { transform: translateX(-145%) skewX(-18deg); }
           100% { transform: translateX(245%) skewX(-18deg); }
@@ -797,7 +841,7 @@ export default function BirthChartPanel({
                       <div>
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
                               Chart Context
                             </span>
                             <p className="mt-1 text-[21px] font-light leading-none" style={{ color: colors?.text ?? "#F8FAFC" }}>
@@ -811,7 +855,7 @@ export default function BirthChartPanel({
 
                         <div className="my-2.5 h-px bg-white/[0.06]" />
 
-                        <p className="text-[11px] leading-[1.55] text-slate-300">
+                        <p className="text-[14px] leading-[1.6] text-slate-300">
                           {[
                             PLANET_MEANING[planet.name],
                             SIGN_MEANING[planet.sign],
@@ -831,7 +875,7 @@ export default function BirthChartPanel({
                       <div>
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
                               Aspect Context
                             </span>
                             <p className="mt-1 text-[19px] font-light leading-tight text-white">
@@ -848,7 +892,7 @@ export default function BirthChartPanel({
 
                         <div className="my-2.5 h-px bg-white/[0.06]" />
 
-                        <p className="text-[11px] leading-[1.55] text-slate-300">
+                        <p className="text-[14px] leading-[1.6] text-slate-300">
                           This {asp.type.toLowerCase()} connects {nameA} and {nameB} with a {asp.orbDegrees}° orb.
                           {meta ? ` In this chart it is categorized as ${meta.header.toLowerCase()}.` : ""}
                         </p>
@@ -935,25 +979,27 @@ export default function BirthChartPanel({
                     </>
                   ) : contextMode === 1 ? (
                     <div className="flex h-full flex-col justify-center text-center">
-                      <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
                         Your Horoscope
                       </span>
                       {dailyHoroscope ? (
-                        <p className="mt-3 text-[12px] leading-[1.6] text-slate-200">{dailyHoroscope}</p>
+                        <p className="mx-auto mt-3 max-w-[355px] text-[15px] leading-[1.65] text-slate-200">{dailyHoroscope}</p>
                       ) : (
-                        <p className="mt-3 text-[12px] leading-5 text-slate-400">
+                        <p className="mx-auto mt-3 max-w-[355px] text-[14px] leading-6 text-slate-400">
                           {horoscopeLoading ? "Preparing today’s horoscope…" : horoscopeError ? "Tap again to retry today’s horoscope." : "Preparing your horoscope…"}
                         </p>
                       )}
                     </div>
                   ) : (
                     <div className="flex h-full flex-col justify-center text-center">
-                      <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
                         Personal Context
                       </span>
-                      <p className="mt-2 text-[20px] font-light text-white">Your chart, connected.</p>
-                      <p className="mx-auto mt-2 max-w-[315px] text-[11px] leading-[1.55] text-slate-400">
-                        Tap any placement or aspect below and its context will appear here without changing the size of the page.
+                      <p className="mt-2 text-[24px] font-light leading-tight text-white">
+                        Tap any placement below
+                      </p>
+                      <p className="mx-auto mt-3 max-w-[355px] text-[14px] leading-[1.6] text-slate-400">
+                        Coming soon: Tap “My Readings” to have a professional astrologer write a placement interpretation for you.
                       </p>
                     </div>
                   )}
@@ -1127,49 +1173,100 @@ export default function BirthChartPanel({
               </div>
             </section>
 
-            {/* ── YOUR READINGS — compact doorway to the saved-reading archive ── */}
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenReadings) {
-                  onOpenReadings();
-                  return;
-                }
-                window.location.assign("/readings");
-              }}
-              className="your-readings-shell order-3 flex min-h-[50px] w-[72%] self-center items-center justify-center px-5 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
-              aria-label="Open your saved readings"
+            {/* ── CONNECTED CHART ACTIONS — one premium capsule, two destinations ── */}
+            <div
+              className="your-readings-shell order-3 flex min-h-[50px] w-[80%] self-center overflow-hidden"
               style={outsideFocusStyle}
             >
               <span className="your-readings-shimmer" aria-hidden="true" />
-              <span
-                className="pointer-events-none absolute right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
-                style={{
-                  border: "1px solid rgba(248,250,252,0.28)",
-                  background: "rgba(248,250,252,0.035)",
-                  boxShadow:
-                    "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
+              <span className="chart-action-divider" aria-hidden="true" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenUpgradeChart) {
+                    onOpenUpgradeChart();
+                    return;
+                  }
+
+                  window.location.assign("/upgrade-chart");
                 }}
-                aria-hidden="true"
+                className="chart-action-side w-1/2 pl-10 pr-4 text-center"
+                aria-label="Upgrade your chart"
               >
-                <Crown
-                  className="h-3.5 w-3.5"
+                <span
+                  className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
                   style={{
-                    color: "rgba(248,250,252,0.88)",
-                    filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
+                    border: "1px solid rgba(248,250,252,0.28)",
+                    background: "rgba(248,250,252,0.035)",
+                    boxShadow:
+                      "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
                   }}
-                />
-              </span>
-              <span
-                className="relative z-10 text-[13px] font-semibold uppercase tracking-[0.20em] text-slate-100"
-                style={{
-                  textShadow:
-                    "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
+                  aria-hidden="true"
+                >
+                  <Maximize2
+                    className="h-3.5 w-3.5"
+                    style={{
+                      color: "rgba(248,250,252,0.88)",
+                      filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
+                    }}
+                  />
+                </span>
+
+                <span
+                  className="relative z-10 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-100"
+                  style={{
+                    textShadow:
+                      "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
+                  }}
+                >
+                  Upgrade Chart
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenReadings) {
+                    onOpenReadings();
+                    return;
+                  }
+
+                  window.location.assign("/readings");
                 }}
+                className="chart-action-side w-1/2 pl-4 pr-10 text-center"
+                aria-label="Open your saved readings"
               >
-                Your Readings
-              </span>
-            </button>
+                <span
+                  className="relative z-10 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-100"
+                  style={{
+                    textShadow:
+                      "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
+                  }}
+                >
+                  Your Readings
+                </span>
+
+                <span
+                  className="pointer-events-none absolute right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
+                  style={{
+                    border: "1px solid rgba(248,250,252,0.28)",
+                    background: "rgba(248,250,252,0.035)",
+                    boxShadow:
+                      "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
+                  }}
+                  aria-hidden="true"
+                >
+                  <Crown
+                    className="h-3.5 w-3.5"
+                    style={{
+                      color: "rgba(248,250,252,0.88)",
+                      filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
+                    }}
+                  />
+                </span>
+              </button>
+            </div>
           </motion.div>
         )}
       </div>
