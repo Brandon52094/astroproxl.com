@@ -370,7 +370,7 @@ export default function BirthChartPanel({
   const getChartAnimation = () => chartTrackRef.current?.getAnimations()[0] ?? null;
 
   useEffect(() => {
-    if (shouldReduceMotion || activeItemCount <= 5) return;
+    if (shouldReduceMotion || activeItemCount <= 7) return;
 
     const frame = window.requestAnimationFrame(() => {
       const animation = getChartAnimation();
@@ -383,7 +383,7 @@ export default function BirthChartPanel({
   }, [chartView, activeItemCount, shouldReduceMotion]);
 
   const beginChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (activeItemCount <= 5) return;
+    if (activeItemCount <= 7) return;
 
     const animation = getChartAnimation();
     const duration = activeItemCount * 3000;
@@ -405,7 +405,7 @@ export default function BirthChartPanel({
 
   const moveChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = chartDragRef.current;
-    if (drag.pointerId !== event.pointerId || activeItemCount <= 5) return;
+    if (drag.pointerId !== event.pointerId || activeItemCount <= 7) return;
 
     const animation = getChartAnimation();
     if (!animation) return;
@@ -649,7 +649,7 @@ export default function BirthChartPanel({
           to { transform: translate3d(0, calc(var(--chart-count) * -52px), 0); }
         }
         .chart-viewport {
-          height: 260px;
+          height: 364px;
           overflow: hidden;
           contain: layout paint;
           -webkit-user-select: none;
@@ -775,7 +775,7 @@ export default function BirthChartPanel({
               <button
                 type="button"
                 onClick={advanceContextCard}
-                className="standard-shadow order-1 h-[172px] w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 text-left backdrop-blur-sm"
+                className="standard-shadow order-1 h-[200px] w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 text-left backdrop-blur-sm"
                 style={outsideFocusStyle}
                 aria-label="Cycle personal astrology context"
               >
@@ -961,52 +961,18 @@ export default function BirthChartPanel({
               </button>
             )}
 
-            {/* ── CHART / ASPECTS — one continuous five-row surface ── */}
+            {/* ── CHART / ASPECTS — one continuous seven-row surface ── */}
             <section className="order-2 py-1" data-birth-chart-focus>
-              <div className="mb-2 flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChartView("birthchart");
-                    setSelectedContext(null);
-                  }}
-                  className={cn(
-                    "text-[10px] font-medium uppercase tracking-[0.16em] transition-colors",
-                    chartView === "birthchart" ? "text-slate-100" : "text-slate-600"
-                  )}
-                >
-                  Birth Chart
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChartView((current) => current === "birthchart" ? "aspects" : "birthchart");
-                    setSelectedContext(null);
-                  }}
-                  aria-label={`Switch to ${chartView === "birthchart" ? "My Aspects" : "Birth Chart"}`}
-                  className="relative h-[18px] w-[34px] rounded-full border border-white/10 bg-white/[0.035] p-[2px]"
-                >
-                  <motion.span
-                    animate={{ x: chartView === "birthchart" ? 0 : 16 }}
-                    transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: "easeOut" }}
-                    className="block h-3 w-3 rounded-full bg-slate-200 shadow-[0_0_8px_rgba(255,255,255,0.22)]"
-                  />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChartView("aspects");
-                    setSelectedContext(null);
-                  }}
-                  className={cn(
-                    "text-[10px] font-medium uppercase tracking-[0.16em] transition-colors",
-                    chartView === "aspects" ? "text-slate-100" : "text-slate-600"
-                  )}
-                >
-                  My Aspects
-                </button>
+              <div className="mb-2 flex items-center justify-center gap-2 text-center">
+                <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
+                  {chartView === "birthchart" ? "My Chart" : "My Aspects"}
+                </span>
+                <span className="text-[9px] text-slate-600">•</span>
+                <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                  {chartView === "birthchart"
+                    ? "Tap Each Placement To Learn"
+                    : "Tap Each Aspect To Learn"}
+                </span>
               </div>
 
               <div
@@ -1102,16 +1068,63 @@ export default function BirthChartPanel({
                       );
                     })
                   ) : (
-                    <div className="flex h-[260px] items-center justify-center text-[12px] text-slate-500">
+                    <div className="flex h-[364px] items-center justify-center text-[12px] text-slate-500">
                       No aspects available yet.
                     </div>
                   )}
                 </div>
               </div>
 
-              <p className="mt-2 text-center text-[8px] font-medium uppercase tracking-[0.16em] text-slate-600">
-                Tap any row to view its context above
-              </p>
+              <div className="mt-3 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartView("birthchart");
+                    setSelectedContext(null);
+                  }}
+                  className={cn(
+                    "text-[10px] font-medium uppercase tracking-[0.16em] transition-colors",
+                    chartView === "birthchart" ? "text-slate-100" : "text-slate-600"
+                  )}
+                >
+                  Birth Chart
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartView((current) =>
+                      current === "birthchart" ? "aspects" : "birthchart"
+                    );
+                    setSelectedContext(null);
+                  }}
+                  aria-label={`Switch to ${chartView === "birthchart" ? "My Aspects" : "Birth Chart"}`}
+                  className="relative h-[18px] w-[34px] rounded-full border border-white/10 bg-white/[0.035] p-[2px]"
+                >
+                  <motion.span
+                    animate={{ x: chartView === "birthchart" ? 0 : 16 }}
+                    transition={{
+                      duration: shouldReduceMotion ? 0 : 0.18,
+                      ease: "easeOut",
+                    }}
+                    className="block h-3 w-3 rounded-full bg-slate-200 shadow-[0_0_8px_rgba(255,255,255,0.22)]"
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartView("aspects");
+                    setSelectedContext(null);
+                  }}
+                  className={cn(
+                    "text-[10px] font-medium uppercase tracking-[0.16em] transition-colors",
+                    chartView === "aspects" ? "text-slate-100" : "text-slate-600"
+                  )}
+                >
+                  My Aspects
+                </button>
+              </div>
             </section>
 
             {/* ── YOUR READINGS — compact doorway to the saved-reading archive ── */}
