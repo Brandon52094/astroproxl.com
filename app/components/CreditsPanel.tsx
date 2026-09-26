@@ -222,20 +222,50 @@ export default function CreditsPanel({
   const astroPlusPremiumCss = `
     @property --astro-plus-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
     .astro-plus-shell {
-      position: relative; isolation: isolate; border: 0; border-radius: 22px;
-      background: radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%), linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 22px rgba(203,164,78,0.12), 0 16px 38px rgba(0,0,0,0.46);
-    }
-    .astro-plus-shell::before, .astro-plus-shell::after {
-      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; padding: 1.25px;
-      background: conic-gradient(from var(--astro-plus-angle), rgba(255,255,255,0.94) 0deg, rgba(255,255,255,0.74) 54deg, rgba(218,183,104,0.88) 112deg, rgba(255,239,195,0.82) 172deg, rgba(255,255,255,0.96) 226deg, rgba(193,151,67,0.86) 296deg, rgba(255,255,255,0.94) 360deg);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+      position: relative;
+      isolation: isolate;
+      border-radius: 22px;
+      padding: 1.25px;
+      background:
+        conic-gradient(
+          from var(--astro-plus-angle),
+          rgba(255,255,255,0.94) 0deg,
+          rgba(255,255,255,0.72) 52deg,
+          rgba(218,183,104,0.94) 116deg,
+          rgba(255,236,184,0.88) 178deg,
+          rgba(255,255,255,0.96) 232deg,
+          rgba(193,151,67,0.90) 300deg,
+          rgba(255,255,255,0.94) 360deg
+        );
+      box-shadow:
+        0 0 20px rgba(218,183,104,0.16),
+        0 14px 34px rgba(0,0,0,0.44);
       animation: astroPlusOrbit 8s linear infinite;
     }
-    .astro-plus-shell::before { z-index: 0; opacity: 0.82; }
-    .astro-plus-shell::after { inset: -1px; z-index: -1; padding: 2px; opacity: 0.52; filter: blur(8px); }
+    .astro-plus-shell::after {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      z-index: -1;
+      border-radius: inherit;
+      background: inherit;
+      opacity: 0.30;
+      filter: blur(8px);
+      pointer-events: none;
+    }
+    .astro-plus-inner {
+      position: relative;
+      z-index: 1;
+      overflow: hidden;
+      border-radius: 20.75px;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(218,183,104,0.08), transparent 42%),
+        radial-gradient(circle at 82% 0%, rgba(255,255,255,0.055), transparent 42%),
+        linear-gradient(145deg, rgba(10,10,14,0.99), rgba(4,7,16,0.99));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
     @keyframes astroPlusOrbit { to { --astro-plus-angle: 360deg; } }
-    @media (prefers-reduced-motion: reduce) { .astro-plus-shell::before, .astro-plus-shell::after { animation: none !important; } }
+    @media (prefers-reduced-motion: reduce) { .astro-plus-shell { animation: none !important; } }
   `;
 
   return (
@@ -329,65 +359,65 @@ export default function CreditsPanel({
           )}
 
           {/* ── ASTRO PLUS — white/gold premium treatment ── */}
-          <div
-            className="astro-plus-shell standard-shadow relative overflow-hidden p-4 backdrop-blur-sm"
-          >
-            <div className="relative z-10 flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">Astro Plus</p>
-                <div className="mt-1 flex items-end gap-1.5">
-                  <span className="text-[27px] font-light leading-none text-white tabular-nums">{formatUsd(PRICING.membership.price)}</span>
-                  <span className="pb-0.5 text-[10px] text-slate-500">/ month</span>
-                </div>
-                <p className="mt-1 whitespace-nowrap text-[11px] leading-4 text-slate-400">Full access without counting individual readings.</p>
-              </div>
-              <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/[0.035]"
-                style={{ boxShadow: "0 0 12px rgba(255,255,255,0.12), 0 0 24px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)" }}
-              >
-                <Crown className="h-5 w-5 text-white" strokeWidth={1.8} style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.55))" }} />
-              </div>
-            </div>
-
-            <div className="mt-4 border-t border-white/[0.06] pt-3">
-              <div className="grid grid-cols-1 gap-2">
-                {MEMBERSHIP_FEATURES.map((feature) => (
-                  <div key={feature} className="flex items-center gap-2.5">
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(218,183,104,0.90))",
-                        boxShadow: "0 0 8px rgba(218,183,104,0.28)",
-                      }}
-                    />
-                    <span className="text-[11px] leading-4 text-slate-300">
-                      {feature}
-                    </span>
+          <div className="astro-plus-shell standard-shadow">
+            <div className="astro-plus-inner p-4 backdrop-blur-sm">
+              <div className="relative z-10 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">Astro Plus</p>
+                  <div className="mt-1 flex items-end gap-1.5">
+                    <span className="text-[27px] font-light leading-none text-white tabular-nums">{formatUsd(PRICING.membership.price)}</span>
+                    <span className="pb-0.5 text-[10px] text-slate-500">/ month</span>
                   </div>
-                ))}
+                  <p className="mt-1 whitespace-nowrap text-[11px] leading-4 text-slate-400">Full access without counting individual readings.</p>
+                </div>
+                <div
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/[0.035]"
+                  style={{ boxShadow: "0 0 12px rgba(255,255,255,0.12), 0 0 24px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)" }}
+                >
+                  <Crown className="h-5 w-5 text-white" strokeWidth={1.8} style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.55))" }} />
+                </div>
               </div>
-            </div>
 
-            <button
-              type="button"
-              onClick={handleGetAccess}
-              disabled={loading}
-              className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl border text-[11px] font-medium uppercase tracking-[0.18em] transition disabled:cursor-default disabled:opacity-50"
-              style={{
-                borderColor: "rgba(255,255,255,0.28)",
-                background:
-                  "linear-gradient(145deg, rgba(255,255,255,0.08), rgba(203,164,78,0.08))",
-                color: "#F8FAFC",
-                boxShadow:
-                  "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 14px rgba(203,164,78,0.10)",
-              }}
-            >
-              {loading ? "Opening…" : "Subscribe"}
-            </button>
+              <div className="mt-4 border-t border-white/[0.06] pt-3">
+                <div className="grid grid-cols-1 gap-2">
+                  {MEMBERSHIP_FEATURES.map((feature) => (
+                    <div key={feature} className="flex items-center gap-2.5">
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(218,183,104,0.90))",
+                          boxShadow: "0 0 8px rgba(218,183,104,0.28)",
+                        }}
+                      />
+                      <span className="text-[11px] leading-4 text-slate-300">
+                        {feature}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGetAccess}
+                disabled={loading}
+                className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl border text-[11px] font-medium uppercase tracking-[0.18em] transition disabled:cursor-default disabled:opacity-50"
+                style={{
+                  borderColor: "rgba(255,255,255,0.28)",
+                  background:
+                    "linear-gradient(145deg, rgba(255,255,255,0.08), rgba(203,164,78,0.08))",
+                  color: "#F8FAFC",
+                  boxShadow:
+                    "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 14px rgba(203,164,78,0.10)",
+                }}
+              >
+                {loading ? "Opening…" : "Subscribe"}
+              </button>
+            </div>
           </div>
 
-          {/* ── GET WHAT YOU NEED ── */}
+          {/* ── INDIVIDUAL PURCHASE OPTIONS ── */}
           <div className="pt-2">
             <div className="space-y-2.5">
               {PRODUCTS.map((product) => {
