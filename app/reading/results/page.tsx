@@ -825,7 +825,6 @@ function ReadingDeck({
   const [scrolled, setScrolled] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [contextRef, contextActive] = useInView<HTMLDivElement>();
-  const [timingRef, timingActive] = useInView<HTMLDivElement>();
   const [moveRef, moveActive] = useInView<HTMLDivElement>();
 
   const groups = useMemo(() => {
@@ -839,13 +838,6 @@ function ReadingDeck({
     const directives = (sections ?? []).filter(
       (section): section is DirectiveSection => section.kind === "directive",
     );
-    const windows = timing
-      .flatMap((section) => {
-        const window = section.date ? parseCalendarWindow(section.date) : null;
-        return window ? [window] : [];
-      })
-      .sort((a, b) => dayValue(a.start) - dayValue(b.start));
-
     const fallbackProse = sections
       ? sections.filter((section) => section.kind === "prose").map((section) => section.body)
       : [content];
@@ -860,7 +852,6 @@ function ReadingDeck({
       fallbackProse,
       timing,
       directives,
-      windows,
     };
   }, [sections, content]);
 
@@ -918,66 +909,32 @@ function ReadingDeck({
 
           <div className="reading-separator" aria-hidden="true" />
 
-          <section ref={contextRef} className="reading-main" aria-label="The reading">
-            <ReadingSection
-              title="Where You Are Now"
-              body={groups.where}
-              active={contextActive || reduceMotion}
-            />
-            {groups.where && groups.why && <div className="inner-separator" aria-hidden="true" />}
-            <ReadingSection
-              title="Why This Is Happening"
-              body={groups.why}
-              active={contextActive || reduceMotion}
-            />
-            {(groups.where || groups.why) && groups.next && (
-              <div className="inner-separator" aria-hidden="true" />
-            )}
-            <ReadingSection
-              title="What Happens Next"
-              body={groups.next}
-              active={contextActive || reduceMotion}
-            />
-
-            {!groups.where && !groups.why && !groups.next && groups.fallbackProse.length > 0 && (
-              <FadeIn active={contextActive || reduceMotion} className="reading-section-block">
-                {groups.fallbackProse.map((body, index) => (
+          <section ref={contextRef} className="reading-main" aria-label="Reading context">
+            <p className="reading-section-label centered">Context</p>
+            <FadeIn active={contextActive || reduceMotion} className="reading-section-block">
+              {(groups.where || groups.why || groups.next) ? (
+                <p className="reading-section-copy combined-context-copy">
+                  {renderWithDates(
+                    [groups.where, groups.why, groups.next]
+                      .filter(Boolean)
+                      .join(" ")
+                  )}
+                </p>
+              ) : groups.fallbackProse.length > 0 ? (
+                groups.fallbackProse.map((body, index) => (
                   <p key={index} className="reading-section-copy">{renderWithDates(body)}</p>
-                ))}
-              </FadeIn>
-            )}
+                ))
+              ) : null}
+
+              {groups.timing.length > 0 && (
+                <div className="context-dated-windows">
+                  {groups.timing.map((section, index) => (
+                    <WindowCard key={index} section={section} />
+                  ))}
+                </div>
+              )}
+            </FadeIn>
           </section>
-
-          {(groups.windows.length > 0 || groups.timing.length > 0) && (
-            <>
-              <div className="reading-separator" aria-hidden="true" />
-              <section ref={timingRef} className="timing-block" aria-label="Timing">
-                <FlowReveal className="section-heading-wrap">
-                  <p className="reading-section-label centered">Timing</p>
-                </FlowReveal>
-
-                {groups.windows.length > 0 && (
-                  <div className="calendar-wrap">
-                    <Calendar
-                      windows={groups.windows}
-                      active={timingActive || reduceMotion}
-                      reduceMotion={reduceMotion}
-                    />
-                  </div>
-                )}
-
-                {groups.timing.length > 0 && (
-                  <FadeIn active={timingActive || reduceMotion} delay={120}>
-                    <div className="context-card-list">
-                      {groups.timing.map((section, index) => (
-                        <WindowCard key={index} section={section} />
-                      ))}
-                    </div>
-                  </FadeIn>
-                )}
-              </section>
-            </>
-          )}
 
           {groups.directives.length > 0 && (
             <>
@@ -985,9 +942,13 @@ function ReadingDeck({
               <section ref={moveRef} className="move-block" aria-label="Your Move">
                 <p className="reading-section-label centered">Your Move</p>
                 <FadeIn active={moveActive || reduceMotion} delay={80}>
-                  <div className="context-card-list">
+                  <div className="act-card merged-directive-card">
                     {groups.directives.map((section, index) => (
-                      <DirectiveCard key={index} section={section} />
+                      <p key={index} className="act-body merged-directive-line">
+                        {section.date && <span className="date-badge">{section.date}</span>}
+                        {section.date && " "}
+                        {renderWithDates(section.body)}
+                      </p>
                     ))}
                   </div>
                 </FadeIn>
@@ -1579,7 +1540,7 @@ export default function ReadingResultsPage() {
             <div className="mb-4 flex items-center gap-3">
               <div className="h-px flex-1 bg-white/[0.07]" />
               <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">
-                Ask About This Reading
+                Want More Context?
               </span>
               <div className="h-px flex-1 bg-white/[0.07]" />
             </div>
@@ -1641,8 +1602,8 @@ export default function ReadingResultsPage() {
               </div>
             ) : (
               <>
-                <p className="mb-2 px-1 text-[12px] text-slate-500">
-                  Don't overthink this. Just say what's on your mind.
+                <p className="mb-3 px-1 text-center text-[12px] text-slate-500">
+                  Ask a follow up if you'd like more context.
                 </p>
                 <textarea
                   className="followup-input"
@@ -1663,23 +1624,6 @@ export default function ReadingResultsPage() {
                   {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
                 </button>
 
-                {isSubscribed ? (
-                  <p className="mt-2 text-center text-[11px] text-slate-500">
-                    {freeRemainingClient > 0
-                      ? `${freeRemainingClient} free ${freeRemainingClient === 1 ? "reply" : "replies"} this reading`
-                      : "Half-price replies available"}
-                  </p>
-                ) : freeRemainingClient > 0 ? (
-                  <p className="mt-2 text-center text-[11px] text-slate-500">
-                    {freeRemainingClient} free {freeRemainingClient === 1 ? "reply" : "replies"}{" "}
-                    remaining
-                  </p>
-                ) : replyCreditsRemaining && replyCreditsRemaining > 0 ? (
-                  <p className="mt-2 text-center text-[11px] text-slate-500">
-                    {replyCreditsRemaining} {replyCreditsRemaining === 1 ? "reply" : "replies"}{" "}
-                    remaining
-                  </p>
-                ) : null}
               </>
             )}
           </section>
@@ -1713,9 +1657,6 @@ export default function ReadingResultsPage() {
             Done
           </button>
           {saveError && <p className="end-save-error" role="alert">{saveError}</p>}
-          {credits && !credits.isSubscribed && (
-            <p className="end-credits">{credits.credits} credits remaining</p>
-          )}
         </div>
       </ReadingDeck>
       {/* ── Embedded Stripe checkout modal ── */}
@@ -1811,7 +1752,7 @@ const css = `
     width: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    background: #000;
+    background: #010109;
     color: #e2e8f0;
     font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
     -webkit-tap-highlight-color: transparent;
@@ -1828,7 +1769,8 @@ const css = `
   .reading-results .scroll-content {
     position: relative;
     z-index: 1;
-    min-height: 100%;
+    min-height: 100dvh;
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
     background: linear-gradient(
       180deg,
       #17204a 0%,      /* 1 — astral blue */
@@ -2207,7 +2149,8 @@ const css = `
     z-index: 2;
     width: min(100%, 38rem);
     margin: 0 auto;
-    padding: calc(env(safe-area-inset-top) + 54px) 24px calc(env(safe-area-inset-bottom) + 72px);
+    min-height: 100dvh;
+    padding: calc(env(safe-area-inset-top) + 54px) 24px calc(env(safe-area-inset-bottom) + 112px);
   }
   .reading-results .reading-hero {
     min-height: 76vh;
@@ -2231,9 +2174,9 @@ const css = `
     padding: 5px 10px;
     overflow: hidden;
     font-family: ui-sans-serif, system-ui;
-    font-size: clamp(18px, 5.2vw, 24px);
-    font-weight: 800;
-    letter-spacing: 0.28em;
+    font-size: clamp(34px, 9vw, 48px);
+    font-weight: 850;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
     color: #78f2df;
     text-shadow:
@@ -2247,7 +2190,7 @@ const css = `
   }
   .reading-results .hero-mark {
     color: rgba(94,234,212,0.82);
-    font-size: 14px;
+    font-size: 18px;
     text-shadow: 0 0 18px rgba(94,234,212,0.55);
   }
   .reading-results .hero-topic-glow {
@@ -2282,8 +2225,8 @@ const css = `
     text-align: center;
     font-family: Georgia, serif;
     font-weight: 650;
-    font-size: clamp(36px, 9.6vw, 58px);
-    line-height: 1.02;
+    font-size: clamp(26px, 6.8vw, 38px);
+    line-height: 1.08;
     letter-spacing: -0.035em;
     color: #ffffff;
     text-wrap: balance;
@@ -2324,6 +2267,9 @@ const css = `
     font-size: 18px;
     line-height: 1.72;
     color: #e6edf6;
+    text-align: justify;
+    text-align-last: left;
+    hyphens: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -2364,19 +2310,26 @@ const css = `
     font-size: 16px;
     line-height: 1.72;
     color: #d4deeb;
+    text-align: justify;
+    text-align-last: left;
+    hyphens: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .reading-results .section-heading-wrap { margin-bottom: 22px; }
-  .reading-results .calendar-wrap {
-    width: 100%;
-    max-width: 22rem;
-    margin: 0 auto 24px;
-  }
   .reading-results .context-card-list {
     width: 100%;
     max-width: 32rem;
     margin: 0 auto;
+  }
+  .reading-results .combined-context-copy { margin-top: 14px; }
+  .reading-results .context-dated-windows { margin-top: 24px; }
+  .reading-results .merged-directive-card { margin-top: 16px; }
+  .reading-results .merged-directive-line { margin: 0; }
+  .reading-results .merged-directive-line + .merged-directive-line {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.06);
   }
   .reading-results .act-card {
     border: 1px solid rgba(255,255,255,0.08);
@@ -2615,7 +2568,7 @@ const css = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0 54px 0 22px;
+    padding: 0 56px;
     overflow: visible;
     background:
       radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%),
