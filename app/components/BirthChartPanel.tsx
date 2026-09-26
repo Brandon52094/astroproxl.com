@@ -372,7 +372,7 @@ export default function BirthChartPanel({
   const getChartAnimation = () => chartTrackRef.current?.getAnimations()[0] ?? null;
 
   useEffect(() => {
-    if (shouldReduceMotion || activeItemCount <= 7) return;
+    if (shouldReduceMotion || activeItemCount <= 6) return;
 
     const frame = window.requestAnimationFrame(() => {
       const animation = getChartAnimation();
@@ -385,7 +385,7 @@ export default function BirthChartPanel({
   }, [chartView, activeItemCount, shouldReduceMotion]);
 
   const beginChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (activeItemCount <= 7) return;
+    if (activeItemCount <= 6) return;
 
     const animation = getChartAnimation();
     const duration = activeItemCount * 3000;
@@ -407,7 +407,7 @@ export default function BirthChartPanel({
 
   const moveChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = chartDragRef.current;
-    if (drag.pointerId !== event.pointerId || activeItemCount <= 7) return;
+    if (drag.pointerId !== event.pointerId || activeItemCount <= 6) return;
 
     const animation = getChartAnimation();
     if (!animation) return;
@@ -613,6 +613,95 @@ export default function BirthChartPanel({
         .your-readings-shell:active {
           transform: translateY(0);
         }
+        .upgrade-chart-shell {
+          position: relative;
+          isolation: isolate;
+          border: 0;
+          border-radius: 22px;
+          background:
+            radial-gradient(circle at 50% -70%, rgba(218,183,104,0.10), transparent 68%),
+            linear-gradient(145deg, rgba(12,10,8,0.98), rgba(3,4,8,0.99));
+          box-shadow:
+            inset 0 1px 0 rgba(255,231,169,0.055),
+            0 0 24px rgba(203,164,78,0.16),
+            0 14px 34px rgba(0,0,0,0.46);
+          cursor: pointer;
+        }
+        .upgrade-chart-shell::before,
+        .upgrade-chart-shell::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          padding: 1.25px;
+          background:
+            conic-gradient(
+              from var(--readings-angle),
+              rgba(126,88,24,0.72) 0deg,
+              rgba(235,201,119,0.98) 62deg,
+              rgba(158,112,35,0.78) 128deg,
+              rgba(255,226,154,0.96) 188deg,
+              rgba(174,128,46,0.82) 252deg,
+              rgba(238,202,116,0.96) 316deg,
+              rgba(126,88,24,0.72) 360deg
+            );
+          -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          animation: readingsOrbit 8s linear infinite;
+        }
+        .upgrade-chart-shell::before {
+          z-index: 0;
+          opacity: 0.92;
+        }
+        .upgrade-chart-shell::after {
+          inset: -1px;
+          z-index: -1;
+          padding: 2px;
+          opacity: 0.72;
+          filter: blur(9px);
+        }
+        .upgrade-chart-shell:hover,
+        .upgrade-chart-shell:focus-visible {
+          transform: translateY(-1px);
+          box-shadow:
+            inset 0 1px 0 rgba(255,231,169,0.08),
+            0 0 30px rgba(203,164,78,0.24),
+            0 18px 42px rgba(0,0,0,0.50);
+          outline: none;
+        }
+        .upgrade-chart-shell:active {
+          transform: translateY(0);
+        }
+        .upgrade-chart-shimmer {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          overflow: hidden;
+          border-radius: inherit;
+          pointer-events: none;
+        }
+        .upgrade-chart-shimmer::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 45%;
+          background: linear-gradient(
+            105deg,
+            transparent 0%,
+            rgba(218,183,104,0.04) 43%,
+            rgba(255,226,154,0.15) 50%,
+            rgba(218,183,104,0.05) 57%,
+            transparent 100%
+          );
+          transform: translateX(-145%) skewX(-18deg);
+          animation: readingsShimmer 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+        }
         .chart-action-side {
           position: relative;
           z-index: 2;
@@ -693,7 +782,7 @@ export default function BirthChartPanel({
           to { transform: translate3d(0, calc(var(--chart-count) * -52px), 0); }
         }
         .chart-viewport {
-          height: 364px;
+          height: 312px;
           overflow: hidden;
           contain: layout paint;
           -webkit-user-select: none;
@@ -717,8 +806,8 @@ export default function BirthChartPanel({
         }
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
-          .your-readings-shell::before, .your-readings-shell::after { animation: none !important; }
-          .your-readings-shimmer::after { animation: none !important; opacity: 0; }
+          .your-readings-shell::before, .your-readings-shell::after, .upgrade-chart-shell::before, .upgrade-chart-shell::after { animation: none !important; }
+          .your-readings-shimmer::after, .upgrade-chart-shimmer::after { animation: none !important; opacity: 0; }
           .chart-track { animation: none !important; transform: none !important; }
         }
       `}</style>
@@ -839,21 +928,19 @@ export default function BirthChartPanel({
 
                     return (
                       <div>
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                              Chart Context
-                            </span>
-                            <p className="mt-1 text-[21px] font-light leading-none" style={{ color: colors?.text ?? "#F8FAFC" }}>
-                              {displayName} in {planet.sign}
-                            </p>
-                          </div>
-                          <span className="text-[22px]" style={{ color: colors?.text ?? "#94A3B8" }}>
+                        <div className="flex items-center justify-between gap-3 pt-1">
+                          <p className="text-[21px] font-light leading-none" style={{ color: colors?.text ?? "#F8FAFC" }}>
+                            {displayName} in {planet.sign}
+                          </p>
+                          <span
+                            className="mt-[2px] shrink-0 self-center text-[22px] leading-none"
+                            style={{ color: colors?.text ?? "#94A3B8" }}
+                          >
                             {GLYPHS[planet.name] ?? "✦"}
                           </span>
                         </div>
 
-                        <div className="my-2.5 h-px bg-white/[0.06]" />
+                        <div className="my-3 h-px bg-white/[0.06]" />
 
                         <p className="text-[14px] leading-[1.6] text-slate-300">
                           {[
@@ -999,7 +1086,7 @@ export default function BirthChartPanel({
                         Tap any placement below
                       </p>
                       <p className="mx-auto mt-3 max-w-[355px] text-[14px] leading-[1.6] text-slate-400">
-                        Coming soon: Tap “My Readings” to have a professional astrologer write a placement interpretation for you.
+                        Explore your chart one placement at a time.
                       </p>
                     </div>
                   )}
@@ -1007,7 +1094,7 @@ export default function BirthChartPanel({
               </button>
             )}
 
-            {/* ── CHART / ASPECTS — one continuous seven-row surface ── */}
+            {/* ── CHART / ASPECTS — one continuous six-row surface ── */}
             <section className="order-2 py-1" data-birth-chart-focus>
               <div className="mb-2 flex items-center justify-center gap-2 text-center">
                 <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
@@ -1114,7 +1201,7 @@ export default function BirthChartPanel({
                       );
                     })
                   ) : (
-                    <div className="flex h-[364px] items-center justify-center text-[12px] text-slate-500">
+                    <div className="flex h-[312px] items-center justify-center text-[12px] text-slate-500">
                       No aspects available yet.
                     </div>
                   )}
@@ -1173,14 +1260,8 @@ export default function BirthChartPanel({
               </div>
             </section>
 
-            {/* ── CONNECTED CHART ACTIONS — one premium capsule, two destinations ── */}
-            <div
-              className="your-readings-shell order-3 flex min-h-[50px] w-[80%] self-center overflow-hidden"
-              style={outsideFocusStyle}
-            >
-              <span className="your-readings-shimmer" aria-hidden="true" />
-              <span className="chart-action-divider" aria-hidden="true" />
-
+            {/* ── CHART ACTIONS — separate premium destinations ── */}
+            <div className="order-3 flex w-[80%] self-center items-stretch gap-2.5">
               <button
                 type="button"
                 onClick={() => {
@@ -1191,33 +1272,36 @@ export default function BirthChartPanel({
 
                   window.location.assign("/upgrade-chart");
                 }}
-                className="chart-action-side w-1/2 pl-10 pr-4 text-center"
+                className="upgrade-chart-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
                 aria-label="Upgrade your chart"
+                style={outsideFocusStyle}
               >
+                <span className="upgrade-chart-shimmer" aria-hidden="true" />
                 <span
                   className="pointer-events-none absolute left-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
                   style={{
-                    border: "1px solid rgba(248,250,252,0.28)",
-                    background: "rgba(248,250,252,0.035)",
+                    border: "1px solid rgba(218,183,104,0.42)",
+                    background: "rgba(8,8,10,0.72)",
                     boxShadow:
-                      "0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06)",
+                      "0 0 10px rgba(218,183,104,0.20), 0 0 20px rgba(193,151,67,0.12)",
                   }}
                   aria-hidden="true"
                 >
                   <Maximize2
                     className="h-3.5 w-3.5"
                     style={{
-                      color: "rgba(248,250,252,0.88)",
-                      filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
+                      color: "rgba(238,207,133,0.96)",
+                      filter: "drop-shadow(0 0 5px rgba(218,183,104,0.35))",
                     }}
                   />
                 </span>
 
                 <span
-                  className="relative z-10 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-100"
+                  className="relative z-10 ml-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em]"
                   style={{
+                    color: "#F1D694",
                     textShadow:
-                      "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
+                      "0 2px 10px rgba(0,0,0,0.95), 0 0 16px rgba(218,183,104,0.22)",
                   }}
                 >
                   Upgrade Chart
@@ -1234,19 +1318,11 @@ export default function BirthChartPanel({
 
                   window.location.assign("/readings");
                 }}
-                className="chart-action-side w-1/2 pl-4 pr-10 text-center"
+                className="your-readings-shell flex min-h-[50px] min-w-0 flex-1 items-center justify-center px-3 text-center transition-[transform,box-shadow,opacity,filter] duration-300"
                 aria-label="Open your saved readings"
+                style={outsideFocusStyle}
               >
-                <span
-                  className="relative z-10 whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-100"
-                  style={{
-                    textShadow:
-                      "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
-                  }}
-                >
-                  Your Readings
-                </span>
-
+                <span className="your-readings-shimmer" aria-hidden="true" />
                 <span
                   className="pointer-events-none absolute right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full"
                   style={{
@@ -1264,6 +1340,16 @@ export default function BirthChartPanel({
                       filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))",
                     }}
                   />
+                </span>
+
+                <span
+                  className="relative z-10 mr-5 whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-100"
+                  style={{
+                    textShadow:
+                      "0 2px 10px rgba(0,0,0,0.92), 0 0 18px rgba(255,255,255,0.16), 0 0 24px rgba(218,183,105,0.16)",
+                  }}
+                >
+                  Your Readings
                 </span>
               </button>
             </div>

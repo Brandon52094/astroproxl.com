@@ -120,6 +120,18 @@ export interface ExtendedPoints {
   arabicLots: ArabicLot[];
 }
 
+// Clean, UI-ready list for the Upgrade Chart experience.
+// Aspects stay separate and continue to use tropical.aspects.
+export interface UpgradeChartPoint {
+  id: string;
+  name: string;
+  sourceName?: string;
+  category: "placement" | "angle" | "point";
+  sign: string;
+  degree: string;
+  house: string;
+}
+
 export type TransitToAngleWithDate = TransitToAngle & {
   exactDate?: string;
   exactJulianDay?: number;
@@ -140,6 +152,7 @@ export interface ChartCalculateResponse {
   solarReturn?: SolarReturnData;
   moonPhase?: MoonPhaseData;
   extendedPoints?: ExtendedPoints;
+  upgradeChartPoints?: UpgradeChartPoint[];
 
   // ── NEW: Advanced calculations ──
   houseRulers?: HouseRuler[];
@@ -565,6 +578,7 @@ function calculatePlanets(
   planets: Array<{ name: string; longitude: number; isRetrograde: boolean; longitudeSpeed: number }>;
   ascLongitude: number;
   mcLongitude: number;
+  vertexLongitude: number;
   houseCusps: number[]; // Placidus house cusps for natal interpretation
   wholeSignCusps: number[]; // Whole Sign cusps for predictive calculations
 } {
@@ -596,6 +610,9 @@ function calculatePlanets(
   const houses = swisseph.swe_houses(jd, lat, lng, houseSystem);
   const ascLongitude = houses.ascendant;
   const mcLongitude = houses.mc;
+  // Swiss Ephemeris returns the Vertex with the same house calculation.
+  // Keep it as natal geometry only; do not add it to the predictive planet arrays.
+  const vertexLongitude = normalizeLongitude(houses.vertex);
   const houseCusps = houses.house;
 
   // Calculate Whole Sign houses (for predictive calculations)
@@ -616,7 +633,7 @@ function calculatePlanets(
       longitudeSpeed: result.longitudeSpeed,
     };
   });
-  return { planets, ascLongitude, mcLongitude, houseCusps, wholeSignCusps };
+  return { planets, ascLongitude, mcLongitude, vertexLongitude, houseCusps, wholeSignCusps };
 }
 
 function calculateAspects(planets: Array<{ name: string; longitude: number }>): NormalizedChart["aspects"] {
@@ -649,11 +666,12 @@ function buildNormalizedChart(
   birthDate: string, birthTime: string, birthPlace: string,
   lat: number, lng: number, timezone: string
 ): NormalizedChart {
-  const { planets, ascLongitude, mcLongitude, houseCusps } = raw;
+  const { planets, ascLongitude, mcLongitude, vertexLongitude, houseCusps } = raw;
   const ascDeg = longitudeToSignDegree(ascLongitude);
   const mcDeg = longitudeToSignDegree(mcLongitude);
   const icDeg = longitudeToSignDegree((mcLongitude + 180) % 360);
   const dcDeg = longitudeToSignDegree((ascLongitude + 180) % 360);
+  const vertexDeg = longitudeToSignDegree(vertexLongitude);
 
   // Use Placidus houses for natal interpretation
   const planetPlacements = planets.map(({ name, longitude, isRetrograde }) => {
@@ -676,6 +694,33 @@ function buildNormalizedChart(
     name: "Midheaven", sign: mcDeg.sign, degree: mcDeg.degree, house: "10",
     isAnaretic: isAnareticLongitude(mcLongitude),
   });
+
+  // Natal-only derived points. These are exposed to the Birth Chart / My Readings
+  // experience without changing transits, progressions, solar arcs, dignities, etc.
+  const northNode = planets.find((planet) => planet.name === "North Node");
+  if (northNode) {
+    const southNodeLongitude = normalizeLongitude(northNode.longitude + 180);
+    const southNodeDeg = longitudeToSignDegree(southNodeLongitude);
+
+    planetPlacements.push({
+      name: "South Node",
+      sign: southNodeDeg.sign,
+      degree: southNodeDeg.degree,
+      house: String(getPlacidusHouse(southNodeLongitude, houseCusps)),
+      isAnaretic: isAnareticLongitude(southNodeLongitude),
+    });
+  }
+
+  planetPlacements.push({
+    name: "Vertex",
+    sign: vertexDeg.sign,
+    degree: vertexDeg.degree,
+    house: String(getPlacidusHouse(vertexLongitude, houseCusps)),
+    isAnaretic: isAnareticLongitude(vertexLongitude),
+  });
+
+  // Keep the existing aspect engine unchanged. South Node and Vertex are available
+  // as natal placements, but they do not silently expand the predictive/aspect set.
   const aspects = calculateAspects(planets.map(({ name, longitude }) => ({ name, longitude })));
   return { birthDate, birthTime, birthPlace, timezone, coordinates: { lat, lng }, planets: planetPlacements, angles: { asc: ascDeg, mc: mcDeg, ic: icDeg, dc: dcDeg }, aspects };
 }
@@ -1224,6 +1269,131 @@ function calculateArabicLots(
 }
 
 // ============================================================
+// ── UPGRADE CHART CATALOG ──
+// ============================================================
+
+function buildUpgradeChartPoints(
+  chart: NormalizedChart,
+  raw: ReturnType<typeof calculatePlanets>,
+  extendedPoints?: ExtendedPoints
+): UpgradeChartPoint[] {
+  const requestedPlacementNames = [
+    "Sun",
+    "Moon",
+    "Ascendant",
+    "Mercury",
+    "Venus",
+    "Mars",
+    "Jupiter",
+    "Saturn",
+    "Uranus",
+    "Neptune",
+    "Pluto",
+    "Chiron",
+    "North Node",
+    "South Node",
+    "Lilith",
+  ];
+
+  const points: UpgradeChartPoint[] = [];
+
+  for (const name of requestedPlacementNames) {
+    const placement = chart.planets.find((planet) => planet.name === name);
+    if (!placement) continue;
+
+    points.push({
+      id: name.toLowerCase().replace(/\s+/g, "-"),
+      name,
+      category:
+        name === "Ascendant" ? "angle" :
+        ["South Node", "North Node", "Chiron", "Lilith", "Vertex"].includes(name) ? "point" :
+        "placement",
+      sign: placement.sign,
+      degree: placement.degree,
+      house: placement.house,
+    });
+  }
+
+  const fortune = extendedPoints?.arabicLots.find((lot) => lot.name === "Lot of Fortune");
+  if (fortune) {
+    // The existing Arabic-lot calculation remains untouched. The UI label uses
+    // the user's preferred name, Part of Fortune.
+    points.push({
+      id: "part-of-fortune",
+      name: "Part of Fortune",
+      sourceName: "Lot of Fortune",
+      category: "point",
+      sign: fortune.sign,
+      degree: fortune.degree,
+      house: String(fortune.house),
+    });
+  }
+
+  const vertex = chart.planets.find((planet) => planet.name === "Vertex");
+  if (vertex) {
+    points.push({
+      id: "vertex",
+      name: "Vertex",
+      category: "point",
+      sign: vertex.sign,
+      degree: vertex.degree,
+      house: vertex.house,
+    });
+  }
+
+  const anglePoints: Array<{
+    id: string;
+    name: string;
+    sign: string;
+    degree: string;
+    longitude: number;
+    house: string;
+    sourceName?: string;
+  }> = [
+    {
+      id: "mc",
+      name: "MC",
+      sourceName: "Midheaven",
+      sign: chart.angles.mc.sign,
+      degree: chart.angles.mc.degree,
+      longitude: raw.mcLongitude,
+      house: "10",
+    },
+    {
+      id: "ic",
+      name: "IC",
+      sourceName: "Imum Coeli",
+      sign: chart.angles.ic.sign,
+      degree: chart.angles.ic.degree,
+      longitude: normalizeLongitude(raw.mcLongitude + 180),
+      house: "4",
+    },
+    {
+      id: "descendant",
+      name: "Descendant",
+      sign: chart.angles.dc.sign,
+      degree: chart.angles.dc.degree,
+      longitude: normalizeLongitude(raw.ascLongitude + 180),
+      house: "7",
+    },
+  ];
+
+  for (const angle of anglePoints) {
+    points.push({
+      id: angle.id,
+      name: angle.name,
+      sourceName: angle.sourceName,
+      category: "angle",
+      sign: angle.sign,
+      degree: angle.degree,
+      house: angle.house,
+    });
+  }
+
+  return points;
+}
+
+// ============================================================
 // ── HELPERS FOR ADVANCED CALCULATIONS ──
 // ============================================================
 
@@ -1412,6 +1582,14 @@ export async function POST(req: NextRequest) {
       console.warn("[chart-calculate] Extended points calculation failed:", e);
     }
 
+    // Build the exact placement list used by Upgrade Chart. This is presentation
+    // data only; aspects remain separate and predictive calculations are unchanged.
+    const upgradeChartPoints = buildUpgradeChartPoints(
+      tropicalChart,
+      tropicalRaw,
+      extendedPoints
+    );
+
     // ============================================================
     // ── GENERATE ALL 9 ADVANCED CALCULATIONS ──
     // ============================================================
@@ -1502,6 +1680,7 @@ export async function POST(req: NextRequest) {
       solarReturn,
       moonPhase,
       extendedPoints,
+      upgradeChartPoints,
 
       // ── NEW: Advanced calculations ──
       houseRulers,
