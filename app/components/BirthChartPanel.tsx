@@ -276,20 +276,6 @@ export default function BirthChartPanel({
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  // Same star recipe as the other panels — continuous sky across swipes.
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 68 }).map((_, i) => ({
-        id: i,
-        left: `${(i * 37) % 100}%`,
-        top: `${(i * 19 + 13) % 100}%`,
-        size: i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5,
-        opacity: i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34,
-        delay: (i * 0.37) % 4,
-      })),
-    []
-  );
-
   const bigThree = useMemo(() => {
     const find = (n: string) => natal.find((p) => p.name === n);
     return { sun: find("Sun"), moon: find("Moon"), rising: find("Ascendant") };
@@ -378,9 +364,6 @@ export default function BirthChartPanel({
   return (
     <div
       className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden font-sans text-slate-100"
-      style={{
-        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
-      }}
     >
       <style jsx>{`
         @keyframes elementShine {
@@ -528,27 +511,6 @@ export default function BirthChartPanel({
         }
       `}</style>
 
-      {/* ── Starfield ── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {stars.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{ left: star.left, top: star.top, width: star.size, height: star.size, opacity: star.opacity }}
-            animate={
-              shouldReduceMotion
-                ? undefined
-                : { opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4], scale: [1, 1.6, 1] }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : { duration: 2.34 + (star.id % 5) * 0.54, repeat: Infinity, ease: "easeInOut", delay: star.delay }
-            }
-          />
-        ))}
-      </div>
-
       {/* Deepens the entire sky during chart focus without dimming the chart UI itself. */}
       <motion.div
         aria-hidden="true"
@@ -592,9 +554,9 @@ export default function BirthChartPanel({
           </div>
 
           {/* Attached daily horoscope body. */}
-<div
-  className="flex min-h-[84px] w-full items-center justify-center border-t border-white/[0.08] bg-transparent px-5 py-4 text-center"
->
+          <div
+            className="flex min-h-[84px] w-full items-center justify-center border-t border-white/[0.08] bg-transparent px-5 py-4 text-center"
+          >
             {dailyHoroscope ? (
               <p className="text-[13px] leading-[1.55] text-slate-200">
                 {dailyHoroscope}

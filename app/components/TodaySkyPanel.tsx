@@ -241,20 +241,6 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  // Same star recipe across all panels — continuous sky when you swipe.
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 68 }).map((_, i) => ({
-        id: i,
-        left: `${(i * 37) % 100}%`,
-        top: `${(i * 19 + 13) % 100}%`,
-        size: i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5,
-        opacity: i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34,
-        delay: (i * 0.37) % 4,
-      })),
-    []
-  );
-
   const sunNow = useMemo(() => transits.find((p) => p.name === "Sun"), [transits]);
   const moonNow = useMemo(() => transits.find((p) => p.name === "Moon"), [transits]);
   const retrogrades = useMemo(() => transits.filter((p) => p.isRetrograde === true), [transits]);
@@ -346,28 +332,8 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   return (
     <div
       className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden font-sans text-slate-100"
-      style={{
-        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
-      }}
     >
       <style jsx>{`
-        .today-nebula {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          z-index: 0;
-          background:
-            radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%),
-            radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%),
-            radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%);
-          animation: todayNebulaDrift 24s ease-in-out infinite alternate;
-        }
-
-        @keyframes todayNebulaDrift {
-          0% { transform: translate(0, 0) scale(1); opacity: 0.85; }
-          100% { transform: translate(-3%, 2%) scale(1.08); opacity: 1; }
-        }
-
         @keyframes transitEscalator {
           from { transform: translate3d(0, 0, 0); }
           to { transform: translate3d(0, calc(var(--transit-count) * -52px), 0); }
@@ -402,36 +368,12 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .today-nebula { animation: none !important; }
           .transit-track {
             animation: none !important;
             transform: none !important;
           }
         }
       `}</style>
-
-      <div className="today-nebula" aria-hidden="true" />
-
-      {/* ── Starfield ── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {stars.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{ left: star.left, top: star.top, width: star.size, height: star.size, opacity: star.opacity }}
-            animate={
-              shouldReduceMotion
-                ? undefined
-                : { opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4], scale: [1, 1.6, 1] }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : { duration: 2.34 + (star.id % 5) * 0.54, repeat: Infinity, ease: "easeInOut", delay: star.delay }
-            }
-          />
-        ))}
-      </div>
 
       <div
         className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"

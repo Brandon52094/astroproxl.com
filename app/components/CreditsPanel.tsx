@@ -112,7 +112,6 @@ export default function CreditsPanel({
   embedded?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
-
   const [cart, setCart] = useState<Record<ProductId, number>>({
     jxl: 0,
     reading: 0,
@@ -225,21 +224,6 @@ export default function CreditsPanel({
     }
   };
 
-  // Same star recipe as Today's Sky and Birth Chart so this page belongs to
-  // the same visual family instead of feeling like a separate storefront.
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 68 }).map((_, i) => ({
-        id: i,
-        left: `${(i * 37) % 100}%`,
-        top: `${(i * 19 + 13) % 100}%`,
-        size: i % 7 === 0 ? 3.5 : i % 5 === 0 ? 2.5 : 1.5,
-        opacity: i % 7 === 0 ? 0.72 : i % 5 === 0 ? 0.55 : 0.34,
-        delay: (i * 0.37) % 4,
-      })),
-    []
-  );
-
   const rootClass = embedded
     ? "relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible font-sans text-slate-100"
     : "fixed inset-0 z-50 min-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
@@ -248,52 +232,9 @@ export default function CreditsPanel({
     <div
       className={rootClass}
       style={{
-        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
         WebkitOverflowScrolling: "touch",
       }}
     >
-      {/* Continuous AstroPro sky */}
-      <div
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-        aria-hidden="true"
-      >
-        {stars.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{
-              left: star.left,
-              top: star.top,
-              width: star.size,
-              height: star.size,
-              opacity: star.opacity,
-            }}
-            animate={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    opacity: [
-                      star.opacity * 0.4,
-                      star.opacity * 1.6,
-                      star.opacity * 0.4,
-                    ],
-                    scale: [1, 1.6, 1],
-                  }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    duration: 2.34 + (star.id % 5) * 0.54,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: star.delay,
-                  }
-            }
-          />
-        ))}
-      </div>
-
       {!embedded && (
         <button
           type="button"
@@ -306,27 +247,21 @@ export default function CreditsPanel({
       )}
 
       <div
-  className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
-  style={{
-    paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-    paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
-  }}
->
+        className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top) + 8px)",
+          paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
+        }}
+      >
         {/* ── HERO ── */}
         <motion.header
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="mb-6 text-center"
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="mb-3 text-center"
         >
-          <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+          <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-300">
             Credits & Access
-          </p>
-          <h1 className="mt-1 text-[22px] font-light tracking-tight text-white">
-            Choose what fits
-          </h1>
-          <p className="mx-auto mt-2 max-w-[300px] text-[12px] leading-5 text-slate-400">
-            Subscribe for full access, or add only the readings and replies you need.
           </p>
         </motion.header>
 
@@ -334,85 +269,120 @@ export default function CreditsPanel({
           initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-          className="space-y-3"
+          className="space-y-2.5"
         >
-          {/* ── BALANCE — data-first like the sibling panels ── */}
+          {/* ── BALANCE — compact, matching View My Chart footprint ── */}
           {balance && (
-            <PanelCard icon={Sparkles} label="Your Balance">
-              <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
-                <div className="px-2 text-center">
-                  <p className="text-[26px] font-extralight leading-none text-white tabular-nums">
+            <section className="overflow-hidden rounded-[18px] border border-white/10 bg-transparent">
+              <div
+                className="flex w-full items-center justify-center px-4 py-[12px] text-[12px] font-medium uppercase tracking-[0.18em] text-slate-200"
+                style={{
+                  background:
+                    "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
+                  WebkitBackdropFilter: "blur(14px)",
+                  backdropFilter: "blur(14px)",
+                  boxShadow:
+                    "inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -1px 0 rgba(255,255,255,0.025)",
+                }}
+              >
+                Your Balance
+              </div>
+
+              <div className="grid grid-cols-3 divide-x divide-white/[0.06] border-t border-white/[0.06] px-2 py-3">
+                <div className="text-center">
+                  <p className="text-[20px] font-light leading-none text-white tabular-nums">
                     {balance.readings}
                   </p>
-                  <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                  <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
                     {plural(balance.readings, "Reading")}
                   </p>
                 </div>
-                <div className="px-2 text-center">
-                  <p className="text-[26px] font-extralight leading-none text-white tabular-nums">
+
+                <div className="text-center">
+                  <p className="text-[20px] font-light leading-none text-white tabular-nums">
                     {balance.jxl}
                   </p>
-                  <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                  <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
                     JXL
                   </p>
                 </div>
-                <div className="px-2 text-center">
-                  <p className="text-[26px] font-extralight leading-none text-white tabular-nums">
+
+                <div className="text-center">
+                  <p className="text-[20px] font-light leading-none text-white tabular-nums">
                     {balance.replies}
                   </p>
-                  <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-slate-500">
+                  <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
                     {plural(balance.replies, "Reply", "Replies")}
                   </p>
                 </div>
               </div>
-            </PanelCard>
+            </section>
           )}
 
-          {/* ── MEMBERSHIP — premium, but still in the same family ── */}
+          {/* ── ASTRO PLUS — white/gold premium treatment ── */}
           <div
-            className="standard-shadow relative overflow-hidden rounded-[24px] border bg-black/20 p-5 backdrop-blur-sm"
+            className="standard-shadow relative overflow-hidden rounded-[22px] border p-4 backdrop-blur-sm"
             style={{
-              borderColor: "rgba(251,191,36,0.42)",
+              borderColor: "rgba(255,255,255,0.38)",
+              background:
+                "radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%), linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97))",
               boxShadow:
-                "0 0 24px rgba(245,158,11,0.10), inset 0 0 18px rgba(245,158,11,0.05)",
+                "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 22px rgba(203,164,78,0.12), 0 16px 38px rgba(0,0,0,0.46)",
             }}
           >
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/50 to-transparent" />
+            <div
+              className="pointer-events-none absolute inset-x-10 top-0 h-px"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent, rgba(255,255,255,0.88), rgba(218,183,104,0.80), transparent)",
+              }}
+            />
 
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-3">
               <div
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-black/20"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border"
                 style={{
-                  borderColor: "rgba(251,191,36,0.48)",
+                  borderColor: "rgba(255,255,255,0.20)",
+                  background:
+                    "linear-gradient(145deg, rgba(255,255,255,0.08), rgba(203,164,78,0.08))",
                   boxShadow:
-                    "0 0 22px rgba(245,158,11,0.14), inset 0 0 14px rgba(245,158,11,0.08)",
+                    "0 0 18px rgba(203,164,78,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
                 }}
               >
-                <Crown className="h-6 w-6 text-amber-300/90" strokeWidth={1.8} />
+                <Crown className="h-5 w-5 text-amber-200/90" strokeWidth={1.8} />
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-amber-300/70">
-                  XL Membership
+                <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">
+                  Astro Plus
                 </p>
+
                 <div className="mt-1 flex items-end gap-1.5">
-                  <span className="text-[30px] font-light leading-none text-white tabular-nums">
+                  <span className="text-[27px] font-light leading-none text-white tabular-nums">
                     {formatUsd(PRICING.membership.price)}
                   </span>
-                  <span className="pb-0.5 text-[11px] text-slate-500">/ month</span>
+                  <span className="pb-0.5 text-[10px] text-slate-500">/ month</span>
                 </div>
-                <p className="mt-2 text-[12px] leading-5 text-slate-400">
-                  The simplest way to use AstroPro without counting individual readings.
+
+                <p className="mt-1 whitespace-nowrap text-[11px] leading-4 text-slate-400">
+                  Full access without counting individual readings.
                 </p>
               </div>
             </div>
 
-            <div className="mt-5 border-t border-white/[0.06] pt-4">
-              <div className="space-y-2.5">
+            <div className="mt-4 border-t border-white/[0.06] pt-3">
+              <div className="grid grid-cols-1 gap-2">
                 {MEMBERSHIP_FEATURES.map((feature) => (
-                  <div key={feature} className="flex items-start gap-2.5">
-                    <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-amber-300/70" />
-                    <span className="text-[12px] leading-5 text-slate-300">
+                  <div key={feature} className="flex items-center gap-2.5">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(218,183,104,0.90))",
+                        boxShadow: "0 0 8px rgba(218,183,104,0.28)",
+                      }}
+                    />
+                    <span className="text-[11px] leading-4 text-slate-300">
                       {feature}
                     </span>
                   </div>
@@ -424,19 +394,37 @@ export default function CreditsPanel({
               type="button"
               onClick={handleGetAccess}
               disabled={loading}
-              className="mt-5 flex h-12 w-full items-center justify-center rounded-2xl border border-amber-300/40 bg-amber-300/[0.07] text-[11px] font-medium uppercase tracking-[0.18em] text-amber-100 transition hover:bg-amber-300/[0.11] disabled:cursor-default disabled:opacity-50"
+              className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl border text-[11px] font-medium uppercase tracking-[0.18em] transition disabled:cursor-default disabled:opacity-50"
+              style={{
+                borderColor: "rgba(255,255,255,0.28)",
+                background:
+                  "linear-gradient(145deg, rgba(255,255,255,0.08), rgba(203,164,78,0.08))",
+                color: "#F8FAFC",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 14px rgba(203,164,78,0.10)",
+              }}
             >
               {loading ? "Opening…" : "Subscribe"}
             </button>
           </div>
 
-          {/* ── BUY AS YOU GO ── */}
-          <div className="pt-3">
-            <p className="mb-3 text-center text-[10px] uppercase tracking-[0.22em] text-slate-600">
-              Or buy as you go
-            </p>
+          {/* ── GET WHAT YOU NEED ── */}
+          <div className="pt-2">
+            <div
+              className="mb-3 flex w-full items-center justify-center rounded-[18px] border border-white/10 px-4 py-[12px] text-[12px] font-medium uppercase tracking-[0.18em] text-slate-200"
+              style={{
+                background:
+                  "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
+                WebkitBackdropFilter: "blur(14px)",
+                backdropFilter: "blur(14px)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -1px 0 rgba(255,255,255,0.025)",
+              }}
+            >
+              Get What You Need
+            </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {PRODUCTS.map((product) => {
                 const Icon = product.icon;
                 const quantity = cart[product.id];
@@ -444,10 +432,10 @@ export default function CreditsPanel({
                 return (
                   <div
                     key={product.id}
-                    className="standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm"
+                    className="standard-shadow rounded-[20px] border border-white/10 bg-white/[0.03] px-3.5 py-3 backdrop-blur-sm"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-black/20">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-black/20">
                         <Icon
                           className="h-4 w-4 text-slate-400"
                           strokeWidth={2}
@@ -455,41 +443,26 @@ export default function CreditsPanel({
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <p className="text-[15px] font-medium text-white">
+                        <p className="text-[14px] font-medium text-white">
                           {product.title}
                         </p>
-                        <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                        <p className="mt-0.5 truncate text-[10px] leading-4 text-slate-500">
                           {product.desc}
                         </p>
                       </div>
 
-                      <div className="text-right">
-                        <p className="text-[14px] font-medium text-slate-200 tabular-nums">
-                          {formatUsd(product.price)}
-                        </p>
-                        <p className="text-[9px] uppercase tracking-[0.14em] text-slate-600">
-                          each
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-3">
-                      <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                        Quantity
-                      </span>
-
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-1.5">
                         <button
                           type="button"
                           aria-label={`Remove ${product.title}`}
                           onClick={() => step(product.id, -1)}
                           disabled={quantity <= 0}
-                          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-25"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-slate-300 transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-25"
                         >
-                          <Minus size={15} />
+                          <Minus size={14} />
                         </button>
 
-                        <span className="w-7 text-center text-[14px] font-medium text-white tabular-nums">
+                        <span className="w-5 text-center text-[13px] font-medium text-white tabular-nums">
                           {quantity}
                         </span>
 
@@ -497,9 +470,9 @@ export default function CreditsPanel({
                           type="button"
                           aria-label={`Add ${product.title}`}
                           onClick={() => step(product.id, 1)}
-                          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:bg-white/[0.06]"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-slate-300 transition hover:bg-white/[0.06]"
                         >
-                          <Plus size={15} />
+                          <Plus size={14} />
                         </button>
                       </div>
                     </div>

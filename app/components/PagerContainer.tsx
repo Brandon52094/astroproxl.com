@@ -5,6 +5,7 @@ import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
 import CreditsPanel from "./CreditsPanel";
+import StarfieldBackground from "./StarfieldBackground";
 import { migrateChartV2 } from "@/lib/chartStore";
 
 // ── Simplified to match ReadingIntakeScreen ───────────────────────────────────
@@ -14,7 +15,7 @@ interface UserStatus {
   readingsCompleted: number;
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
-  canBypass: boolean; 
+  canBypass: boolean;
   pwaFreeReadingUsed?: boolean;
 }
 
@@ -28,7 +29,6 @@ interface UserStatus {
  * are disabled for one frame. To the user, every swipe still moves exactly one
  * page and the loop has no visible beginning or end.
  */
-
 const DIRECTION_LOCK_THRESHOLD = 12;
 const SWIPE_COMMIT_THRESHOLD = 70;
 const HORIZONTAL_DOMINANCE_RATIO = 1.4;
@@ -37,7 +37,6 @@ type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 export default function PagerContainer() {
   const totalPanels = 4;
-
   const [currentIndex, setCurrentIndex] = useState(0);
   const [slideOffset, setSlideOffset] = useState<-1 | 0 | 1>(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -84,6 +83,7 @@ export default function PagerContainer() {
         // silent
       }
     };
+
     fetchStatus();
   }, []);
 
@@ -129,8 +129,8 @@ export default function PagerContainer() {
   const completeSlide = useCallback(() => {
     const completedDirection = slideOffsetRef.current;
     if (completedDirection === 0 || handoffLockedRef.current) return;
-
     handoffLockedRef.current = true;
+
     if (handoffTimerRef.current) {
       clearTimeout(handoffTimerRef.current);
       handoffTimerRef.current = null;
@@ -144,10 +144,8 @@ export default function PagerContainer() {
 
   const startSlide = useCallback((direction: -1 | 1) => {
     if (slideOffsetRef.current !== 0 || handoffLockedRef.current) return;
-
     slideOffsetRef.current = direction;
     setSlideOffset(direction);
-
     // The CSS transition is 500ms. This is only a backstop if transitionend
     // does not arrive; the normal path still completes from transitionend.
     handoffTimerRef.current = setTimeout(() => {
@@ -200,7 +198,6 @@ export default function PagerContainer() {
     // Let taps on interactive opt-out elements (like the install teaser) through
     // to their own handlers instead of the swipe logic.
     if ((e.target as HTMLElement).closest?.('[data-no-swipe]')) return;
-
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     touchDeltaX.current = 0;
@@ -221,7 +218,6 @@ export default function PagerContainer() {
     }
 
     if (gestureAxis.current === "vertical") return;
-
     e.preventDefault();
     touchDeltaX.current = deltaX;
   };
@@ -300,7 +296,7 @@ export default function PagerContainer() {
   // can make overflow-x compute to `auto` on mobile browsers, which allows a
   // wide child to create a sideways scroll position inside a panel.
   const panelClass =
-    "h-full w-full min-w-full max-w-full min-w-0 flex-shrink-0 overflow-y-auto overflow-x-hidden overscroll-x-none";
+    "relative h-full w-full min-w-full max-w-full min-w-0 flex-shrink-0 overflow-y-auto overflow-x-hidden overscroll-x-none bg-transparent";
 
   // Mobile browsers can restore a horizontal scroll offset when returning to a
   // page. The pager itself is transform-driven, so document/panel scrollLeft
@@ -323,9 +319,32 @@ export default function PagerContainer() {
   }, []);
 
   return (
-    <div className="relative h-dvh w-full min-w-0 max-w-full overflow-hidden bg-[#040611]" ref={containerRef}>
+    <div
+      className="relative h-dvh w-full min-w-0 max-w-full overflow-hidden text-slate-100"
+      ref={containerRef}
+      style={{
+        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+      }}
+    >
+      {/* Persistent AstroProXL sky: this never enters the translating pager track. */}
       <div
-        className="h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+        aria-hidden="true"
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%), " +
+              "radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%), " +
+              "radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%)",
+          }}
+        />
+        <StarfieldBackground />
+      </div>
+
+      <div
+        className="relative z-10 h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

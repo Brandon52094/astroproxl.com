@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import StarfieldBackground from "./StarfieldBackground";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { cn } from "@/lib/utils";
@@ -98,7 +97,6 @@ const HERO_PALETTE: [string, string, string, string] = [
 // composition scales together to fit the live card.
 const HERO_CANVAS_WIDTH = 374;
 const HERO_HORIZONTAL_INSET = 20;
-
 
 interface UserStatus {
   credits: number;
@@ -355,7 +353,6 @@ export default function ReadingIntakeScreen({
       return;
     }
     if (heroWasActiveRef.current || shouldReduceMotion) return;
-
     heroWasActiveRef.current = true;
     setHeroSweepActive(false);
     const frame = window.requestAnimationFrame(() => setHeroSweepActive(true));
@@ -785,26 +782,11 @@ export default function ReadingIntakeScreen({
   return (
     <div
       className="no-scrollbar relative min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden text-slate-100"
-      style={{
-        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
-      }}
     >
       <style jsx>{`
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-
-        .nebula {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          z-index: 0;
-          background:
-            radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%),
-            radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%),
-            radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%);
-          opacity: 0.94;
-        }
 
         @keyframes heroShine {
           0% { transform: translateX(-140%) skewX(-18deg); }
@@ -1090,9 +1072,6 @@ export default function ReadingIntakeScreen({
           .ask-mic-halo { animation: none !important; }
         }
       `}</style>
-
-      <div className="nebula" aria-hidden="true" />
-      <StarfieldBackground />
 
       {/* Match the Birth Chart focus depth: selected readings sit against a
           near-black sky while the active card and controls remain above it. */}
@@ -1576,7 +1555,6 @@ export default function ReadingIntakeScreen({
             </button>
           </section>
           </div>
-
 
         </motion.div>
       </div>
