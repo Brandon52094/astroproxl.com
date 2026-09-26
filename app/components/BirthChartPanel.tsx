@@ -291,7 +291,7 @@ export default function BirthChartPanel({
   );
 
   useEffect(() => {
-    if (!chartOpen || natal.length === 0 || shouldReduceMotion) return;
+    if (natal.length === 0 || shouldReduceMotion) return;
 
     const viewport = chartScrollRef.current;
     if (!viewport) return;
@@ -317,7 +317,7 @@ export default function BirthChartPanel({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [chartOpen, natal.length, shouldReduceMotion]);
+  }, [natal.length, shouldReduceMotion]);
 
   // Element balance across all placements (planets + rising).
   const elementBalance = useMemo(() => {
@@ -787,41 +787,18 @@ export default function BirthChartPanel({
               </div>
             )}
 
-            {/* ── MY CHART — rotating placement viewport + technical detail ── */}
+            {/* ── MY CHART — always-visible rotating placement viewport ── */}
             <div
               data-birth-chart-focus
-              className={cn(
-                "standard-shadow relative order-2 overflow-hidden rounded-[18px] border border-white/10 bg-transparent",
-                chartOpen && "z-20 border-white/[0.14]"
-              )}
+              className="standard-shadow relative order-2 overflow-hidden rounded-[18px] border border-white/10 bg-transparent"
             >
-              <button
-                type="button"
-                onClick={() => setChartOpen((v) => !v)}
-                aria-expanded={chartOpen}
-                className="chart-focus-surface flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200 transition-[color,filter,background] duration-500 hover:text-white"
+              <div
+                className="chart-focus-surface flex w-full items-center justify-center px-4 py-[13px] text-[13px] font-medium uppercase tracking-[0.18em] text-slate-200"
               >
-                <span>{chartOpen ? "Close Chart" : "My Chart"}</span>
-              </button>
+                <span>My Chart</span>
+              </div>
 
-              <motion.div
-                initial={false}
-                animate={{ height: chartOpen ? "auto" : 0, opacity: chartOpen ? 1 : 0 }}
-                transition={
-                  shouldReduceMotion
-                    ? { duration: 0 }
-                    : chartOpen
-                      ? {
-                          height: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
-                          opacity: { duration: 0.2, delay: 0.04, ease: "easeOut" },
-                        }
-                      : {
-                          opacity: { duration: 0.1, ease: "easeOut" },
-                          height: { duration: 0.2, delay: 0.035, ease: [0.4, 0, 0.2, 1] },
-                        }
-                }
-                className={cn("overflow-hidden", chartOpen && "border-t border-white/[0.06]")}
-              >
+              <div className="border-t border-white/[0.06]">
                 <div className="pt-3">
                   <div className="px-4 pb-3">
                     {/* Full placements live directly inside the chart container. */}
@@ -848,12 +825,6 @@ export default function BirthChartPanel({
                         chartScrollPausedRef.current = false;
                       }}
                       onPointerCancel={() => {
-                        chartScrollPausedRef.current = false;
-                      }}
-                      onPointerEnter={() => {
-                        chartScrollPausedRef.current = true;
-                      }}
-                      onPointerLeave={() => {
                         chartScrollPausedRef.current = false;
                       }}
                     >
@@ -1081,7 +1052,7 @@ export default function BirthChartPanel({
                     </div>
                   )}
                 </div>
-              </motion.div>
+              </div>
             </div>
 
             {/* ── YOUR READINGS — compact doorway to the saved-reading archive ── */}
