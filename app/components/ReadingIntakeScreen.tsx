@@ -1505,34 +1505,25 @@ export default function ReadingIntakeScreen({
           transition: opacity 950ms cubic-bezier(0.22, 1, 0.36, 1);
         }
 
-        /* ── ASK ANYTHING — flagship showpiece ── */
-        @keyframes askPremiumPulse {
-          0%, 100% {
-            box-shadow:
-              0 0 0 1px rgba(34,211,238,0.14),
-              0 0 26px rgba(34,211,238,0.13),
-              0 0 54px rgba(99,102,241,0.08),
-              0 20px 42px rgba(0,0,0,0.82),
-              0 38px 78px rgba(0,0,0,0.46);
-          }
-          50% {
-            box-shadow:
-              0 0 0 1px rgba(168,85,247,0.16),
-              0 0 30px rgba(139,92,246,0.14),
-              0 0 58px rgba(34,211,238,0.08),
-              0 20px 42px rgba(0,0,0,0.82),
-              0 38px 78px rgba(0,0,0,0.46);
-          }
+        /* ── ASK ANYTHING — premium voice control, borrowing the Your Readings visual language ── */
+        @property --voice-angle {
+          syntax: "<angle>";
+          inherits: false;
+          initial-value: 0deg;
+        }
+
+        @keyframes voiceOrbit {
+          to { --voice-angle: 360deg; }
         }
 
         @keyframes askMicBreathe {
           0%, 100% {
             transform: scale(1);
-            box-shadow: 0 0 14px rgba(34,211,238,0.14), 0 0 24px rgba(139,92,246,0.07);
+            box-shadow: 0 0 12px rgba(218,183,104,0.12), 0 0 22px rgba(255,255,255,0.06);
           }
           50% {
-            transform: scale(1.045);
-            box-shadow: 0 0 20px rgba(34,211,238,0.22), 0 0 32px rgba(139,92,246,0.10);
+            transform: scale(1.035);
+            box-shadow: 0 0 18px rgba(218,183,104,0.18), 0 0 28px rgba(255,255,255,0.08);
           }
         }
 
@@ -1540,26 +1531,69 @@ export default function ReadingIntakeScreen({
           position: relative;
           overflow: hidden;
           isolation: isolate;
-          border: 1px solid transparent;
+          border: 0;
+          border-radius: 24px;
           background:
-            radial-gradient(circle at 16% 18%, rgba(34,211,238,0.085), transparent 34%) padding-box,
-            radial-gradient(circle at 84% 84%, rgba(139,92,246,0.11), transparent 42%) padding-box,
-            linear-gradient(145deg, rgba(10,14,32,0.985), rgba(5,8,20,0.985)) padding-box,
-            linear-gradient(118deg,
-              rgba(34,211,238,0.74) 0%,
-              rgba(99,102,241,0.74) 46%,
-              rgba(168,85,247,0.78) 100%) border-box;
-          animation: askPremiumPulse 5.2s ease-in-out infinite;
+            radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%),
+            linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.08),
+            0 0 22px rgba(203,164,78,0.12),
+            0 16px 38px rgba(0,0,0,0.46);
         }
 
+        .ask-premium::before,
         .ask-premium::after {
           content: "";
           position: absolute;
-          inset: 1px;
-          border-radius: 23px;
+          inset: 0;
+          border-radius: inherit;
           pointer-events: none;
-          background: linear-gradient(180deg, rgba(255,255,255,0.032), transparent 42%);
-          z-index: 1;
+          padding: 1.25px;
+          background:
+            conic-gradient(
+              from var(--voice-angle),
+              rgba(255,255,255,0.94) 0deg,
+              rgba(255,255,255,0.74) 54deg,
+              rgba(218,183,104,0.88) 112deg,
+              rgba(255,239,195,0.82) 172deg,
+              rgba(255,255,255,0.96) 226deg,
+              rgba(193,151,67,0.86) 296deg,
+              rgba(255,255,255,0.94) 360deg
+            );
+          -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          animation: voiceOrbit 8s linear infinite;
+        }
+
+        .ask-premium::before {
+          z-index: 0;
+          opacity: 0.82;
+        }
+
+        .ask-premium::after {
+          inset: -1px;
+          z-index: -1;
+          padding: 2px;
+          opacity: 0.52;
+          filter: blur(8px);
+        }
+
+        .ask-premium:hover,
+        .ask-premium:focus-visible {
+          transform: translateY(-1px);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.11),
+            0 0 28px rgba(203,164,78,0.18),
+            0 18px 42px rgba(0,0,0,0.50);
+          outline: none;
+        }
+
+        .ask-premium:active {
+          transform: translateY(0);
         }
 
         .ask-premium > * { position: relative; z-index: 2; }
@@ -1571,18 +1605,23 @@ export default function ReadingIntakeScreen({
           align-items: center;
           justify-content: center;
           border-radius: 9999px;
-          border: 1px solid transparent;
+          border: 1px solid rgba(255,255,255,0.22);
           background:
-            radial-gradient(circle, rgba(8,15,32,0.98), rgba(7,10,24,0.99)) padding-box,
-            linear-gradient(135deg, rgba(34,211,238,0.74), rgba(139,92,246,0.76)) border-box;
+            radial-gradient(circle at 50% 35%, rgba(255,255,255,0.055), transparent 56%),
+            linear-gradient(145deg, rgba(15,16,23,0.98), rgba(7,9,18,0.99));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.07),
+            0 0 14px rgba(218,183,104,0.12);
           animation: askMicBreathe 3.4s ease-in-out infinite;
         }
 
         .mic-ready-toggle {
-          position: relative;
+          position: absolute;
+          right: 2px;
+          top: 50%;
+          transform: translateY(-50%);
           width: 34px;
           height: 66px;
-          flex: 0 0 auto;
           border-radius: 9999px;
           border: 1px solid rgba(203,213,225,0.14);
           background:
@@ -1592,19 +1631,24 @@ export default function ReadingIntakeScreen({
             inset 0 1px 0 rgba(255,255,255,0.055),
             0 12px 28px rgba(0,0,0,0.38);
           transition:
-            opacity 420ms cubic-bezier(0.22,1,0.36,1),
+            opacity 520ms cubic-bezier(0.22,1,0.36,1),
             border-color 420ms cubic-bezier(0.22,1,0.36,1),
             box-shadow 420ms cubic-bezier(0.22,1,0.36,1),
             filter 420ms cubic-bezier(0.22,1,0.36,1);
         }
 
         .mic-ready-toggle[data-enabled="true"] {
-          opacity: 0.56;
-          border-color: rgba(165,180,252,0.24);
+          opacity: 0.10;
+          border-color: rgba(165,180,252,0.18);
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.06),
-            0 0 16px rgba(99,102,241,0.10),
-            0 12px 28px rgba(0,0,0,0.34);
+            inset 0 1px 0 rgba(255,255,255,0.04),
+            0 0 12px rgba(99,102,241,0.07),
+            0 10px 22px rgba(0,0,0,0.28);
+        }
+
+        .mic-ready-toggle[data-enabled="true"]:hover,
+        .mic-ready-toggle[data-enabled="true"]:focus-visible {
+          opacity: 0.42;
         }
 
         .mic-ready-knob {
@@ -1631,11 +1675,11 @@ export default function ReadingIntakeScreen({
 
         .mic-ready-toggle[data-enabled="true"] .mic-ready-knob {
           top: 7px;
-          background: linear-gradient(145deg, rgba(224,231,255,0.98), rgba(165,180,252,0.92));
+          background: linear-gradient(145deg, rgba(255,246,218,0.98), rgba(218,183,104,0.92));
           box-shadow:
             inset 0 1px 0 rgba(255,255,255,0.72),
-            0 0 0 1px rgba(199,210,254,0.16),
-            0 0 14px rgba(99,102,241,0.30),
+            0 0 0 1px rgba(255,239,195,0.14),
+            0 0 14px rgba(218,183,104,0.24),
             0 3px 9px rgba(0,0,0,0.42);
         }
 
@@ -1651,7 +1695,8 @@ export default function ReadingIntakeScreen({
 
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
-          .ask-premium,
+          .ask-premium::before,
+          .ask-premium::after,
           .ask-mic-halo { animation: none !important; }
           .mic-ready-toggle,
           .mic-ready-knob { transition: none !important; }
@@ -2214,16 +2259,16 @@ export default function ReadingIntakeScreen({
             </Button>
           </div>
 
-          {/* ── ASK ANYTHING — compact press / hold / speak control + mic readiness toggle ── */}
+          {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
-            <div className="flex items-center justify-center gap-3">
+            <div className="relative flex min-h-[96px] w-full items-center justify-center px-[44px]">
               <button
                 type="button"
                 onPointerDown={startAskHold}
                 onPointerUp={endAskHold}
                 onPointerCancel={endAskHold}
                 onContextMenu={(e) => e.preventDefault()}
-                className="ask-premium tap-fix relative flex h-[88px] w-[74%] touch-none items-center justify-center rounded-[24px] px-4 text-center transition-[transform,opacity,filter] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
+                className="ask-premium tap-fix relative h-[92px] w-[76%] max-w-[320px] touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                 aria-label="Press and hold to speak"
                 style={{
                   opacity: selectedArea && !askHolding ? 0.76 : 1,
@@ -2233,22 +2278,28 @@ export default function ReadingIntakeScreen({
                   transform: askHolding ? "scale(1.012)" : undefined,
                 }}
               >
-                <span className="relative z-10 grid w-full grid-cols-[1fr_56px_1fr] grid-rows-[auto_auto] items-center">
-                  <span className="justify-self-end pr-3 text-[16px] font-semibold uppercase tracking-[0.17em] text-slate-100/94">
-                    Press
-                  </span>
+                <span className="pointer-events-none absolute left-[11%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                  Press
+                </span>
 
-                  <span className="ask-mic-halo row-span-2 mx-auto">
-                    <Mic className="h-[20px] w-[20px]" style={{ color: "rgba(207,250,254,0.98)" }} />
+                <span className="pointer-events-none absolute left-1/2 top-[12px] -translate-x-1/2">
+                  <span className="ask-mic-halo">
+                    <Mic
+                      className="h-[20px] w-[20px]"
+                      style={{
+                        color: "rgba(248,250,252,0.96)",
+                        filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
+                      }}
+                    />
                   </span>
+                </span>
 
-                  <span className="justify-self-start pl-3 text-[16px] font-semibold uppercase tracking-[0.17em] text-slate-100/94">
-                    Hold
-                  </span>
+                <span className="pointer-events-none absolute right-[11%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                  Hold
+                </span>
 
-                  <span className="col-span-3 col-start-1 row-start-2 mt-1 justify-self-center text-[13px] font-medium uppercase tracking-[0.28em] text-slate-300/72">
-                    Speak
-                  </span>
+                <span className="pointer-events-none absolute bottom-[10px] left-1/2 -translate-x-1/2 text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
+                  Speak
                 </span>
 
                 <span
@@ -2267,16 +2318,6 @@ export default function ReadingIntakeScreen({
                 onClick={toggleMicrophone}
                 disabled={micConnecting}
                 style={{
-                  opacity: selectedArea && !askHolding
-                    ? micEnabled
-                      ? 0.38
-                      : 0.58
-                    : micEnabled
-                      ? 0.56
-                      : 1,
-                  filter: selectedArea && !askHolding
-                    ? "grayscale(0.45) brightness(0.68)"
-                    : "brightness(1)",
                   cursor: micConnecting ? "wait" : "pointer",
                 }}
               >
