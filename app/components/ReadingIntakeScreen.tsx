@@ -2294,23 +2294,26 @@ export default function ReadingIntakeScreen({
       </button>
 
       <button
-        type="button"
-        className="mic-ready-toggle tap-fix absolute left-[calc(100%+6px)] top-[8px]"
-        data-enabled={micEnabled ? "true" : "false"}
-        aria-pressed={micEnabled}
-        aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-        onClick={toggleMicrophone}
-        disabled={micConnecting}
-        style={{
-          cursor: micConnecting ? "wait" : "pointer",
-          opacity: micEnabled ? 0.18 : 0.74,
-          filter: micEnabled
-            ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-            : "brightness(0.92) saturate(0.82)",
-        }}
-      >
-        <span className="mic-ready-knob" />
-      </button>
+  type="button"
+  className="mic-ready-toggle tap-fix"
+  data-enabled={micEnabled ? "true" : "false"}
+  aria-pressed={micEnabled}
+  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+  onClick={toggleMicrophone}
+  disabled={micConnecting}
+  style={{
+    position: "absolute",
+    left: "calc(100% + 6px)",
+    top: "8px",
+    cursor: micConnecting ? "wait" : "pointer",
+    opacity: micEnabled ? 0.18 : 0.74,
+    filter: micEnabled
+      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+      : "brightness(0.92) saturate(0.82)",
+  }}
+>
+  <span className="mic-ready-knob" />
+</button>
     </div>
   </div>
 
