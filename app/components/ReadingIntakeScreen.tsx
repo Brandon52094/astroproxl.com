@@ -1616,10 +1616,7 @@ export default function ReadingIntakeScreen({
         }
 
         .mic-ready-toggle {
-          position: absolute;
-          right: 2px;
-          top: 50%;
-          transform: translateY(-50%);
+          position: relative;
           width: 34px;
           height: 66px;
           border-radius: 9999px;
@@ -1638,17 +1635,17 @@ export default function ReadingIntakeScreen({
         }
 
         .mic-ready-toggle[data-enabled="true"] {
-          opacity: 0.10;
-          border-color: rgba(165,180,252,0.18);
+          border-color: rgba(165,180,252,0.16);
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.04),
-            0 0 12px rgba(99,102,241,0.07),
-            0 10px 22px rgba(0,0,0,0.28);
+            inset 0 1px 0 rgba(255,255,255,0.035),
+            0 0 10px rgba(99,102,241,0.05),
+            0 10px 22px rgba(0,0,0,0.24);
         }
 
         .mic-ready-toggle[data-enabled="true"]:hover,
         .mic-ready-toggle[data-enabled="true"]:focus-visible {
-          opacity: 0.42;
+          opacity: 0.44 !important;
+          filter: brightness(0.9) saturate(0.65) !important;
         }
 
         .mic-ready-knob {
@@ -2261,14 +2258,14 @@ export default function ReadingIntakeScreen({
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
-            <div className="relative flex min-h-[96px] w-full items-center justify-center px-[44px]">
+            <div className="flex min-h-[96px] w-full items-center justify-center gap-[10px]">
               <button
                 type="button"
                 onPointerDown={startAskHold}
                 onPointerUp={endAskHold}
                 onPointerCancel={endAskHold}
                 onContextMenu={(e) => e.preventDefault()}
-                className="ask-premium tap-fix relative h-[92px] w-[76%] max-w-[320px] touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                className="ask-premium tap-fix relative h-[92px] w-[72%] max-w-[304px] touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                 aria-label="Press and hold to speak"
                 style={{
                   opacity: selectedArea && !askHolding ? 0.76 : 1,
@@ -2278,11 +2275,11 @@ export default function ReadingIntakeScreen({
                   transform: askHolding ? "scale(1.012)" : undefined,
                 }}
               >
-                <span className="pointer-events-none absolute left-[11%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                <span className="pointer-events-none absolute left-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
                   Press
                 </span>
 
-                <span className="pointer-events-none absolute left-1/2 top-[12px] -translate-x-1/2">
+                <span className="pointer-events-none absolute left-1/2 top-[9px] -translate-x-1/2">
                   <span className="ask-mic-halo">
                     <Mic
                       className="h-[20px] w-[20px]"
@@ -2294,11 +2291,11 @@ export default function ReadingIntakeScreen({
                   </span>
                 </span>
 
-                <span className="pointer-events-none absolute right-[11%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
                   Hold
                 </span>
 
-                <span className="pointer-events-none absolute bottom-[10px] left-1/2 -translate-x-1/2 text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
+                <span className="pointer-events-none absolute bottom-[8px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
                   Speak
                 </span>
 
@@ -2319,6 +2316,10 @@ export default function ReadingIntakeScreen({
                 disabled={micConnecting}
                 style={{
                   cursor: micConnecting ? "wait" : "pointer",
+                  opacity: micEnabled ? 0.18 : 0.74,
+                  filter: micEnabled
+                    ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+                    : "brightness(0.92) saturate(0.82)",
                 }}
               >
                 <span className="mic-ready-knob" />
