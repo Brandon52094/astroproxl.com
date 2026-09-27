@@ -2261,56 +2261,56 @@ export default function ReadingIntakeScreen({
   <div className="flex w-full items-center justify-center">
     <div className="relative h-[86px] w-[72%] max-w-[304px]">
       <button
-  type="button"
-  onPointerDown={startAskHold}
-  onPointerUp={endAskHold}
-  onPointerCancel={endAskHold}
-  onContextMenu={(e) => e.preventDefault()}
-  className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-  aria-label="Press and hold to speak"
-  style={{
-    opacity: selectedArea && !askHolding ? 0.76 : 1,
-    filter: selectedArea && !askHolding
-      ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-      : "brightness(1) saturate(1)",
-    transform: askHolding ? "scale(1.012)" : undefined,
-  }}
->
-  <span className="ask-mic-halo h-[48px] w-[48px]">
-    <Mic
-      className="h-[24px] w-[24px]"
-      style={{
-        color: "rgba(248,250,252,0.96)",
-        filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
-      }}
-    />
-  </span>
+        type="button"
+        onPointerDown={startAskHold}
+        onPointerUp={endAskHold}
+        onPointerCancel={endAskHold}
+        onContextMenu={(e) => e.preventDefault()}
+        className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+        aria-label="Press and hold to speak"
+        style={{
+          opacity: selectedArea && !askHolding ? 0.76 : 1,
+          filter: selectedArea && !askHolding
+            ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+            : "brightness(1) saturate(1)",
+          transform: askHolding ? "scale(1.012)" : undefined,
+        }}
+      >
+        <span className="ask-mic-halo h-[48px] w-[48px]">
+          <Mic
+            className="h-[24px] w-[24px]"
+            style={{
+              color: "rgba(248,250,252,0.96)",
+              filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
+            }}
+          />
+        </span>
 
-  <span
-    aria-hidden="true"
-    className="ask-focus-veil"
-    style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
-  />
-</button>
+        <span
+          aria-hidden="true"
+          className="ask-focus-veil"
+          style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+        />
+      </button>
 
       <button
-  type="button"
-  className="mic-ready-toggle tap-fix absolute left-[calc(100%+6px)] top-[8px]"
-  data-enabled={micEnabled ? "true" : "false"}
-  aria-pressed={micEnabled}
-  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-  onClick={toggleMicrophone}
-  disabled={micConnecting}
-  style={{
-    cursor: micConnecting ? "wait" : "pointer",
-    opacity: micEnabled ? 0.18 : 0.74,
-    filter: micEnabled
-      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-      : "brightness(0.92) saturate(0.82)",
-  }}
->
-  <span className="mic-ready-knob" />
-</button>
+        type="button"
+        className="mic-ready-toggle tap-fix absolute left-[calc(100%+6px)] top-[8px]"
+        data-enabled={micEnabled ? "true" : "false"}
+        aria-pressed={micEnabled}
+        aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+        onClick={toggleMicrophone}
+        disabled={micConnecting}
+        style={{
+          cursor: micConnecting ? "wait" : "pointer",
+          opacity: micEnabled ? 0.18 : 0.74,
+          filter: micEnabled
+            ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+            : "brightness(0.92) saturate(0.82)",
+        }}
+      >
+        <span className="mic-ready-knob" />
+      </button>
     </div>
   </div>
 
