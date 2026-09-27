@@ -2258,130 +2258,90 @@ export default function ReadingIntakeScreen({
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
-            <div className="flex w-full items-center justify-center">
-              <div className="relative h-[86px] w-[72%] max-w-[304px]">
-                <button
-                  type="button"
-                  onPointerDown={startAskHold}
-                  onPointerUp={endAskHold}
-                  onPointerCancel={endAskHold}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className="ask-premium tap-fix relative h-[86px] w-full touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-                  aria-label="Press and hold to speak"
-                  style={{
-                    opacity: selectedArea && !askHolding ? 0.76 : 1,
-                    filter: selectedArea && !askHolding
-                      ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-                      : "brightness(1) saturate(1)",
-                    transform: askHolding ? "scale(1.012)" : undefined,
-                  }}
-                >
-                  <span className="pointer-events-none absolute left-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
-                    Press
-                  </span>
+  <div className="flex w-full items-center justify-center">
+    <div className="relative h-[86px] w-[72%] max-w-[304px]">
+      <button
+        type="button"
+        onPointerDown={startAskHold}
+        onPointerUp={endAskHold}
+        onPointerCancel={endAskHold}
+        onContextMenu={(e) => e.preventDefault()}
+        className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-between gap-1 px-[14px] touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+        aria-label="Press and hold to speak"
+        style={{
+          opacity: selectedArea && !askHolding ? 0.76 : 1,
+          filter: selectedArea && !askHolding
+            ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+            : "brightness(1) saturate(1)",
+          transform: askHolding ? "scale(1.012)" : undefined,
+        }}
+      >
+        <span className="shrink-0 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-100/94">
+          Press
+        </span>
 
-                  <span className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-[7px]">
-                    <svg
-                      aria-hidden="true"
-                      width="34"
-                      height="34"
-                      viewBox="0 0 34 34"
-                      fill="none"
-                      className="shrink-0"
-                    >
-                      <path
-                        d="M25 8.5C20.5 13 20.5 21 25 25.5"
-                        stroke="rgba(248,250,252,0.96)"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M31 4.5C23.5 11.5 23.5 22.5 31 29.5"
-                        stroke="rgba(248,250,252,0.96)"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
+        <span className="flex shrink-0 items-center justify-center gap-[5px]">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 34 34" fill="none" className="shrink-0">
+            <path d="M25 8.5C20.5 13 20.5 21 25 25.5" stroke="rgba(248,250,252,0.96)" strokeWidth="2.2" strokeLinecap="round" />
+            <path d="M31 4.5C23.5 11.5 23.5 22.5 31 29.5" stroke="rgba(248,250,252,0.96)" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
 
-                    <span className="ask-mic-halo">
-                      <Mic
-                        className="h-[28px] w-[28px]"
-                        style={{
-                          color: "rgba(248,250,252,0.96)",
-                          filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
-                        }}
-                      />
-                    </span>
+          <span className="ask-mic-halo h-[36px] w-[36px]">
+            <Mic className="h-[18px] w-[18px]" style={{ color: "rgba(248,250,252,0.96)", filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))" }} />
+          </span>
 
-                    <svg
-                      aria-hidden="true"
-                      width="34"
-                      height="34"
-                      viewBox="0 0 34 34"
-                      fill="none"
-                      className="shrink-0"
-                    >
-                      <path
-                        d="M9 8.5C13.5 13 13.5 21 9 25.5"
-                        stroke="rgba(248,250,252,0.96)"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M3 4.5C10.5 11.5 10.5 22.5 3 29.5"
-                        stroke="rgba(248,250,252,0.96)"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </span>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 34 34" fill="none" className="shrink-0">
+            <path d="M9 8.5C13.5 13 13.5 21 9 25.5" stroke="rgba(248,250,252,0.96)" strokeWidth="2.2" strokeLinecap="round" />
+            <path d="M3 4.5C10.5 11.5 10.5 22.5 3 29.5" stroke="rgba(248,250,252,0.96)" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
+        </span>
 
-                  <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
-                    Hold
-                  </span>
+        <span className="shrink-0 text-[13px] font-semibold uppercase tracking-[0.14em] text-slate-100/94">
+          Hold
+        </span>
 
-                  <span className="pointer-events-none absolute bottom-[7px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
-                    Speak
-                  </span>
+        <span className="pointer-events-none absolute bottom-[7px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
+          Speak
+        </span>
 
-                  <span
-                    aria-hidden="true"
-                    className="ask-focus-veil"
-                    style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
-                  />
-                </button>
+        <span
+          aria-hidden="true"
+          className="ask-focus-veil"
+          style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+        />
+      </button>
 
-                <button
-                  type="button"
-                  className="mic-ready-toggle tap-fix absolute left-[calc(100%+6px)] top-1/2 -translate-y-1/2"
-                  data-enabled={micEnabled ? "true" : "false"}
-                  aria-pressed={micEnabled}
-                  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-                  onClick={toggleMicrophone}
-                  disabled={micConnecting}
-                  style={{
-                    cursor: micConnecting ? "wait" : "pointer",
-                    opacity: micEnabled ? 0.18 : 0.74,
-                    filter: micEnabled
-                      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-                      : "brightness(0.92) saturate(0.82)",
-                  }}
-                >
-                  <span className="mic-ready-knob" />
-                </button>
-              </div>
-            </div>
+      <button
+        type="button"
+        className="mic-ready-toggle tap-fix absolute left-[calc(100%+6px)] top-1/2 -translate-y-1/2"
+        data-enabled={micEnabled ? "true" : "false"}
+        aria-pressed={micEnabled}
+        aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+        onClick={toggleMicrophone}
+        disabled={micConnecting}
+        style={{
+          cursor: micConnecting ? "wait" : "pointer",
+          opacity: micEnabled ? 0.18 : 0.74,
+          filter: micEnabled
+            ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+            : "brightness(0.92) saturate(0.82)",
+        }}
+      >
+        <span className="mic-ready-knob" />
+      </button>
+    </div>
+  </div>
 
-            {askError && !askHolding ? (
-              <p className="mt-2 text-center text-[11px] text-slate-400/78">
-                {askError}
-              </p>
-            ) : (
-              <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
-                {micEnabled ? "Press · Hold · Speak" : "Turn on the microphone"}
-              </p>
-            )}
-          </section>
+  {askError && !askHolding ? (
+    <p className="mt-2 text-center text-[11px] text-slate-400/78">
+      {askError}
+    </p>
+  ) : (
+    <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
+      {micEnabled ? "Press · Hold · Speak" : "Turn on the microphone"}
+    </p>
+  )}
+</section>
           </div>
 
         </motion.div>
