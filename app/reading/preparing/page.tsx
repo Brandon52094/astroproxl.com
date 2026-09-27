@@ -145,7 +145,7 @@ function PreparingPageInner() {
       return;
     }
     if (searchParams.get("payment")) {
-      window\.history.replaceState({}, "", "/reading/preparing");
+      window.history.replaceState({}, "", "/reading/preparing");
     }
   }, [searchParams, router]);
   // ── 5. Generate reading with timing tracking ──
