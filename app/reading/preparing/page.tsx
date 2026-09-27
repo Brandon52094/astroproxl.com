@@ -1,11 +1,9 @@
 "use client";
-
 import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadChart, loadIntake, saveReading, saveChart, isChartFresh, isSkyFresh } from "@/lib/chartStore";
 import type { ReadingPage, StoredChart } from "@/lib/chartStore";
-
 const LOADING_MESSAGES = [
   "Reading your natal structure…",
   "Weighing the transits active around you now…",
@@ -22,7 +20,6 @@ const LOADING_MESSAGES = [
   "Identifying the central thread of your reading…",
   "Finalizing the interpretation…",
 ];
-
 /**
  * Recompute the chart's time-sensitive layers so the "current sky" matches the
  * moment the reading is generated. Re-sends the EXACT stored birth + location
@@ -40,9 +37,7 @@ async function refreshSky(chart: StoredChart): Promise<StoredChart> {
     typeof chart.lat === "number" && Number.isFinite(chart.lat) &&
     typeof chart.lng === "number" && Number.isFinite(chart.lng) &&
     !(chart.lat === 0 && chart.lng === 0);
-
   if (!inputsValid) return chart;
-
   try {
     const response = await fetch("/api/chart-calculate", {
       method: "POST",
@@ -59,16 +54,13 @@ async function refreshSky(chart: StoredChart): Promise<StoredChart> {
           : {}),
       }),
     });
-
     const data = await response.json();
     if (!response.ok || !data.success) return chart;
-
     const refreshed: StoredChart = {
       ...chart,
       chartData: data,
       savedAt: new Date().toISOString(),
     };
-
     // Persist so a retry / results reload sees the fresh sky too. saveChart
     // stamps its own savedAt; our object mirrors it for the in-memory return.
     saveChart({
@@ -84,28 +76,25 @@ async function refreshSky(chart: StoredChart): Promise<StoredChart> {
       currentTimezone: chart.currentTimezone ?? "",
       chartData: data,
     });
-
     return refreshed;
   } catch {
     return chart;
   }
 }
-
 function PreparingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [estimatedDuration, setEstimatedDuration] = useState<number>(88000); // ~88s baseline
+  const [estimatedDuration, setEstimatedDuration] = useState<number>(88000); // \\~88s baseline
   const hasStarted = useRef(false);
   const shouldReduceMotion = useReducedMotion();
-
   const stars = React.useMemo(
     () =>
       Array.from({ length: 28 }).map((_, i) => {
-        const left = `${(i * 37) % 100}%`;
-        const top = `${(i * 19 + 13) % 100}%`;
+        const left = \\`${(i * 37) % 100}%\\`;
+        const top = \\`${(i * 19 + 13) % 100}%\\`;
         const size = i % 7 === 0 ? 2 : 1;
         const opacity = i % 5 === 0 ? 0.72 : 0.34;
         const delay = (i * 0.37) % 4;
@@ -113,7 +102,6 @@ function PreparingPageInner() {
       }),
     []
   );
-
   // ── 1. Load rolling average duration on mount ──
   useEffect(() => {
     try {
@@ -130,20 +118,16 @@ function PreparingPageInner() {
       // Fallback to default
     }
   }, []);
-
   // ── 2. Smooth progress bar runner ──
   useEffect(() => {
     const startTime = Date.now();
-
     const progressInterval = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const percentage = Math.min(Math.floor((elapsed / estimatedDuration) * 95), 95);
       setProgress(percentage);
     }, 250);
-
     return () => clearInterval(progressInterval);
   }, [estimatedDuration]);
-
   // ── 3. Slower message rotation interval (7 seconds) ──
   useEffect(() => {
     const interval = setInterval(() => {
@@ -153,7 +137,6 @@ function PreparingPageInner() {
     }, 7000);
     return () => clearInterval(interval);
   }, []);
-
   // ── 4. Handle payment cancellation ──
   useEffect(() => {
     const paymentStatus = searchParams.get("payment");
@@ -161,127 +144,36 @@ function PreparingPageInner() {
       router.replace("/reading/intake");
       return;
     }
-
     if (searchParams.get("payment")) {
-      window.history.replaceState({}, "", "/reading/preparing");
+      window\.history.replaceState({}, "", "/reading/preparing");
     }
   }, [searchParams, router]);
-
   // ── 5. Generate reading with timing tracking ──
   useEffect(() => {
     if (hasStarted.current) return;
-
     const paymentStatus = searchParams.get("payment");
     if (paymentStatus === "cancelled") return;
-
     hasStarted.current = true;
-
     async function generateReading() {
       const startTime = Date.now();
-
       try {
         let chart = loadChart();
         const intake = loadIntake();
-
         if (!chart || !isChartFresh()) {
           router.push("/chart-data");
           return;
         }
-
-                if (!intake) {
+        if (!intake) {
           router.push("/reading/intake");
           return;
         }
-
-        // ── ASK ANYTHING branch ──
-        //
-        // The Ask Anything flow does not go through /api/readings. Its spoken
-        // question is an open-context astrology query, not a topic-scoped
-        // reading, and it is served by the JXL engine which infers the relevant
-        // life domain from the question itself rather than from a fixed topic.
-        if (intake.topic === "ask-anything") {
-          const response = await fetch("/api/jxl/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              question: intake.question,
-              // Natal chart is still sent so the ask-anything engine can
-              // reference placements when they are relevant to the question.
-              tropical: chart.chartData.tropical,
-              sidereal: chart.chartData.sidereal,
-              transits: chart.chartData.transits,
-              transitAspects: chart.chartData.transitAspects,
-              profection: chart.chartData.profection,
-              progressions: chart.chartData.progressions,
-              solarArcs: chart.chartData.solarArcs,
-              upcomingTrigger: chart.chartData.upcomingTrigger,
-              planetaryStations: chart.chartData.planetaryStations,
-              solarReturn: chart.chartData.solarReturn,
-              moonPhase: chart.chartData.moonPhase,
-              extendedPoints: chart.chartData.extendedPoints,
-              houseRulers: chart.chartData.houseRulers,
-              mutualReceptions: chart.chartData.mutualReceptions,
-              essentialDignities: chart.chartData.essentialDignities,
-              synodicCycles: chart.chartData.synodicCycles,
-              midpoints: chart.chartData.midpoints,
-              lunarReturn: chart.chartData.lunarReturn,
-              eclipseActivations: chart.chartData.eclipseActivations,
-              transitsToAngles: chart.chartData.transitsToAngles,
-              dispositorTree: chart.chartData.dispositorTree,
-              birthDate: chart.birthDate,
-              birthTime: chart.birthTime,
-              birthPlace: chart.birthPlace,
-            }),
-          });
-
-          const data = await response.json();
-
-          if (!response.ok || !data.reading) {
-            if (response.status === 403) {
-              router.replace("/reading/intake?openCredits=1");
-              return;
-            }
-            throw new Error(data.error ?? "Failed to generate Ask Anything response.");
-          }
-
-          const actualDuration = Date.now() - startTime;
-          try {
-            const historyJson = localStorage.getItem("reading_speed_history");
-            const history: number[] = historyJson ? JSON.parse(historyJson) : [];
-            const updatedHistory = [...history, actualDuration].slice(-3);
-            localStorage.setItem("reading_speed_history", JSON.stringify(updatedHistory));
-          } catch {
-            // Ignore storage errors
-          }
-
-          saveReading({
-            id: data.reading.id,
-            pages: data.reading.pages as ReadingPage[],
-            topic: "ask-anything",
-            question: intake.question,
-            generatedAt: new Date().toISOString(),
-          });
-
-          setProgress(100);
-          setTimeout(() => {
-            router.replace("/reading/results");
-          }, 400);
-
-          return;
-        }
-
-        // Sky-freshness gate (#1): the natal half is fine for 24h (isChartFresh),
-
-        // Sky-freshness gate (#1): the natal half is fine for 24h (isChartFresh),
-        // but the time-sensitive layers drift. If the sky is older than the
-        // tight window, recompute it so the prompt's "TODAY" and the transit /
-        // trigger / station / moon data refer to the same moment. On failure,
-        // refreshSky returns the cached chart and we proceed as before.
+        // Keep time-sensitive chart layers fresh for BOTH regular readings and Ask Anything.
         if (!isSkyFresh()) {
           chart = await refreshSky(chart);
         }
-
-        const response = await fetch("/api/readings", {
+        // All reading topics, including Ask Anything, use the shared reading engine.
+      // getTopic("ask-anything") resolves to the open-context Ask Anything config.
+      const response = await fetch("/api/readings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -290,20 +182,16 @@ function PreparingPageInner() {
             question: intake.question,
             timeframeType: intake.timeframeType,
             timeframeValue: intake.timeframeValue,
-
             // ── BIRTH DATA ──
             birthDate: chart.birthDate,
             birthTime: chart.birthTime,
             birthPlace: chart.birthPlace,
-
             // ── CORE CHART ──
             tropical: chart.chartData.tropical,
             sidereal: chart.chartData.sidereal,
-
             // ── CURRENT SKY ──
             transits: chart.chartData.transits,
             transitAspects: chart.chartData.transitAspects,
-
             // ── PRIMARY PREDICTIVE TECHNIQUES ──
             profection: chart.chartData.profection,
             progressions: chart.chartData.progressions,
@@ -311,11 +199,9 @@ function PreparingPageInner() {
             upcomingTrigger: chart.chartData.upcomingTrigger,
             planetaryStations: chart.chartData.planetaryStations,
             solarReturn: chart.chartData.solarReturn,
-
             // ── SHORT-TERM / SUPPORTING DATA ──
             moonPhase: chart.chartData.moonPhase,
             extendedPoints: chart.chartData.extendedPoints,
-
             // ── ADVANCED CALCULATIONS ──
             houseRulers: chart.chartData.houseRulers,
             mutualReceptions: chart.chartData.mutualReceptions,
@@ -328,9 +214,7 @@ function PreparingPageInner() {
             dispositorTree: chart.chartData.dispositorTree,
           }),
         });
-
         const data = await response.json();
-
         if (!response.ok || !data.reading) {
           if (response.status === 403) {
             router.replace("/reading/intake?openCredits=1");
@@ -338,7 +222,6 @@ function PreparingPageInner() {
           }
           throw new Error(data.error ?? "Failed to generate reading.");
         }
-
         // ── 6. Record actual duration ──
         const actualDuration = Date.now() - startTime;
         try {
@@ -349,7 +232,6 @@ function PreparingPageInner() {
         } catch {
           // Ignore storage errors
         }
-
         saveReading({
           id: data.reading.id,
           pages: data.reading.pages as ReadingPage[],
@@ -357,7 +239,6 @@ function PreparingPageInner() {
           question: intake.question,
           generatedAt: new Date().toISOString(),
         });
-
         setProgress(100);
         setTimeout(() => {
           router.replace("/reading/results");
@@ -368,12 +249,10 @@ function PreparingPageInner() {
         );
       }
     }
-
     generateReading();
   }, [router, searchParams]);
-
   return (
-    <div 
+    <div
       className="relative h-screen bg-[#050816] text-slate-100 flex items-center justify-center overflow-hidden"
       style={{
         paddingTop: "env(safe-area-inset-top)",
@@ -390,7 +269,6 @@ function PreparingPageInner() {
               "radial-gradient(circle at 50% 18%, rgba(94,234,212,0.10), transparent 34%), radial-gradient(circle at 85% 82%, rgba(251,191,36,0.07), transparent 28%), linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
           }}
         />
-
         <motion.div
           className="absolute left-1/2 top-[42%] h-[24rem] w-[24rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
           animate={
@@ -407,7 +285,6 @@ function PreparingPageInner() {
             background: "radial-gradient(circle, rgba(45,212,191,0.28), transparent 70%)",
           }}
         />
-
         {stars.map((star) => (
           <motion.span
             key={star.id}
@@ -440,7 +317,6 @@ function PreparingPageInner() {
           />
         ))}
       </div>
-
       <div className="relative z-10 mx-auto w-full max-w-md px-6 text-center">
         <AnimatePresence mode="wait">
           {error ? (
@@ -486,7 +362,6 @@ function PreparingPageInner() {
                   find the strongest development active for you now.
                 </p>
               </div>
-
               {/* Orb with live percentage */}
               <div className="relative mx-auto my-14 h-36 w-36">
                 <motion.div
@@ -509,11 +384,10 @@ function PreparingPageInner() {
                     className="text-[2rem] font-semibold tracking-tight text-white"
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
-                    {progress < 95 ? `${progress}%` : "…"}
+                    {progress < 95 ? \\`${progress}%\\` : "…"}
                   </span>
                 </div>
               </div>
-
               {/* Rotating status line */}
               <div className="mb-5 flex h-6 items-center justify-center">
                 <AnimatePresence mode="wait">
@@ -529,7 +403,6 @@ function PreparingPageInner() {
                   </motion.p>
                 </AnimatePresence>
               </div>
-
               {/* Info card */}
               <div className="w-full rounded-[20px] border border-white/10 bg-white/[0.03] px-5 py-4">
                 <p className="text-xs leading-6 text-slate-400">
@@ -548,11 +421,10 @@ function PreparingPageInner() {
     </div>
   );
 }
-
 export default function PreparingPage() {
   return (
     <Suspense fallback={
-      <div 
+      <div
         className="h-screen bg-[#050816] flex items-center justify-center"
         style={{
           paddingTop: "env(safe-area-inset-top)",
