@@ -2280,16 +2280,60 @@ export default function ReadingIntakeScreen({
                     Press
                   </span>
 
-                  <span className="pointer-events-none absolute left-1/2 top-[7px] -translate-x-1/2">
+                  <span className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-[7px]">
+                    <svg
+                      aria-hidden="true"
+                      width="34"
+                      height="34"
+                      viewBox="0 0 34 34"
+                      fill="none"
+                      className="shrink-0"
+                    >
+                      <path
+                        d="M25 8.5C20.5 13 20.5 21 25 25.5"
+                        stroke="rgba(248,250,252,0.96)"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M31 4.5C23.5 11.5 23.5 22.5 31 29.5"
+                        stroke="rgba(248,250,252,0.96)"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+
                     <span className="ask-mic-halo">
                       <Mic
-                        className="h-[20px] w-[20px]"
+                        className="h-[28px] w-[28px]"
                         style={{
                           color: "rgba(248,250,252,0.96)",
                           filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
                         }}
                       />
                     </span>
+
+                    <svg
+                      aria-hidden="true"
+                      width="34"
+                      height="34"
+                      viewBox="0 0 34 34"
+                      fill="none"
+                      className="shrink-0"
+                    >
+                      <path
+                        d="M9 8.5C13.5 13 13.5 21 9 25.5"
+                        stroke="rgba(248,250,252,0.96)"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M3 4.5C10.5 11.5 10.5 22.5 3 29.5"
+                        stroke="rgba(248,250,252,0.96)"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   </span>
 
                   <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
@@ -2309,7 +2353,7 @@ export default function ReadingIntakeScreen({
 
                 <button
                   type="button"
-                  className="mic-ready-toggle tap-fix absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2"
+                  className="mic-ready-toggle tap-fix absolute left-[calc(100%+6px)] top-1/2 -translate-y-1/2"
                   data-enabled={micEnabled ? "true" : "false"}
                   aria-pressed={micEnabled}
                   aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
