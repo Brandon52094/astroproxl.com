@@ -11,14 +11,14 @@ import type {
   EclipseActivation,
   DispositorResult,
 } from "@/lib/astrologicalCalculations";
-import type { TopicConfig } from "./topics/types";
+import type { TopicConfig, TopicId } from "./topics/types";
 
 // ============================================================
 // TYPES — kept compatible with the existing AstroPro route
 // ============================================================
 
 export interface ReadingRequestBody {
-  topic: "love" | "career" | "money" | "general";
+  topic: TopicId;
   question: string;
   birthDate: string;
   birthTime: string;
