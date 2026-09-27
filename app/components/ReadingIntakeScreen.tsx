@@ -1015,7 +1015,8 @@ export default function ReadingIntakeScreen({
       e.currentTarget.setPointerCapture?.(e.pointerId);
 
       if (!micEnabled) {
-        setAskError("Turn the microphone on first.");
+        // Caption below the button already says "Turn on the microphone" —
+        // no need to duplicate it as an error.
         return;
       }
 
@@ -2258,14 +2259,14 @@ export default function ReadingIntakeScreen({
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
             <div className="flex w-full items-center justify-center">
-              <div className="relative h-[92px] w-[72%] max-w-[304px]">
+              <div className="relative h-[86px] w-[72%] max-w-[304px]">
                 <button
                   type="button"
                   onPointerDown={startAskHold}
                   onPointerUp={endAskHold}
                   onPointerCancel={endAskHold}
                   onContextMenu={(e) => e.preventDefault()}
-                  className="ask-premium tap-fix relative h-[92px] w-full touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  className="ask-premium tap-fix relative h-[86px] w-full touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                   aria-label="Press and hold to speak"
                   style={{
                     opacity: selectedArea && !askHolding ? 0.76 : 1,
@@ -2279,7 +2280,7 @@ export default function ReadingIntakeScreen({
                     Press
                   </span>
 
-                  <span className="pointer-events-none absolute left-1/2 top-[9px] -translate-x-1/2">
+                  <span className="pointer-events-none absolute left-1/2 top-[7px] -translate-x-1/2">
                     <span className="ask-mic-halo">
                       <Mic
                         className="h-[20px] w-[20px]"
@@ -2295,7 +2296,7 @@ export default function ReadingIntakeScreen({
                     Hold
                   </span>
 
-                  <span className="pointer-events-none absolute bottom-[8px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
+                  <span className="pointer-events-none absolute bottom-[7px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
                     Speak
                   </span>
 
@@ -2308,7 +2309,7 @@ export default function ReadingIntakeScreen({
 
                 <button
                   type="button"
-                  className="mic-ready-toggle tap-fix absolute left-full top-1/2 ml-[10px] -translate-y-1/2"
+                  className="mic-ready-toggle tap-fix absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2"
                   data-enabled={micEnabled ? "true" : "false"}
                   aria-pressed={micEnabled}
                   aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
@@ -2317,7 +2318,8 @@ export default function ReadingIntakeScreen({
                   style={{
                     cursor: micConnecting ? "wait" : "pointer",
                     opacity: micEnabled ? 0.18 : 0.74,
-                    filter: micEnabled                      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+                    filter: micEnabled
+                      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
                       : "brightness(0.92) saturate(0.82)",
                   }}
                 >
@@ -2326,9 +2328,13 @@ export default function ReadingIntakeScreen({
               </div>
             </div>
 
-            {askError && !askHolding && (
+            {askError && !askHolding ? (
               <p className="mt-2 text-center text-[11px] text-slate-400/78">
                 {askError}
+              </p>
+            ) : (
+              <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
+                {micEnabled ? "Press · Hold · Speak" : "Turn on the microphone"}
               </p>
             )}
           </section>
