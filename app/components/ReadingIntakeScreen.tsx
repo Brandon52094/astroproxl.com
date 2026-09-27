@@ -451,6 +451,8 @@ export default function ReadingIntakeScreen({
   const previousSelectedAreaRef = useRef<string | null>(null);
 
   // Ask Anything live-listening state.
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [micConnecting, setMicConnecting] = useState(false);
   const [askHolding, setAskHolding] = useState(false);
   const askHoldingRef = useRef(false);
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -782,6 +784,18 @@ export default function ReadingIntakeScreen({
       audioCtxRef.current = null;
     }
 
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (canvas && ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }, []);
+
+  const disconnectMicrophone = useCallback(() => {
+    stopAskRecognition();
+    stopAskMeter();
+
     if (meterStreamRef.current) {
       meterStreamRef.current.getTracks().forEach((track) => {
         try {
@@ -791,30 +805,78 @@ export default function ReadingIntakeScreen({
       meterStreamRef.current = null;
     }
 
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (canvas && ctx) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    askHoldingRef.current = false;
+    setAskHolding(false);
+    setMicEnabled(false);
+    setMicConnecting(false);
+  }, [stopAskMeter, stopAskRecognition]);
+
+  const enableMicrophone = useCallback(async () => {
+    if (micEnabled || micConnecting) return;
+
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setAskError("Microphone access isn't available in this browser.");
+      return;
     }
-  }, []);
+
+    setMicConnecting(true);
+    setAskError(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      if (!stream.getAudioTracks().some((track) => track.readyState === "live")) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error("Microphone stream is not live.");
+      }
+
+      meterStreamRef.current?.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
+
+      meterStreamRef.current = stream;
+
+      stream.getAudioTracks().forEach((track) => {
+        track.onended = () => {
+          if (meterStreamRef.current === stream) {
+            meterStreamRef.current = null;
+            stopAskRecognition();
+            stopAskMeter();
+            askHoldingRef.current = false;
+            setAskHolding(false);
+            setMicEnabled(false);
+          }
+        };
+      });
+
+      setMicEnabled(true);
+    } catch {
+      setAskError("Microphone access was not enabled.");
+      setMicEnabled(false);
+    } finally {
+      setMicConnecting(false);
+    }
+  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecognition]);
+
+  const toggleMicrophone = useCallback(() => {
+    if (micEnabled) {
+      disconnectMicrophone();
+      return;
+    }
+    void enableMicrophone();
+  }, [disconnectMicrophone, enableMicrophone, micEnabled]);
 
   const startAskMeter = useCallback(async () => {
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    const stream = meterStreamRef.current;
+    if (!stream || !micEnabled) return;
 
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      return;
-    }
+    const hasLiveAudio = stream
+      .getAudioTracks()
+      .some((track) => track.readyState === "live" && track.enabled);
 
-    if (!askHoldingRef.current) {
-      stream.getTracks().forEach((track) => track.stop());
-      return;
-    }
-
-    meterStreamRef.current = stream;
+    if (!hasLiveAudio || !askHoldingRef.current) return;
 
     try {
       const AudioCtx =
@@ -946,12 +1008,18 @@ export default function ReadingIntakeScreen({
     } catch {
       stopAskMeter();
     }
-  }, [stopAskMeter]);
+  }, [micEnabled, stopAskMeter]);
 
   const startAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
       e.currentTarget.setPointerCapture?.(e.pointerId);
+
+      if (!micEnabled) {
+        setAskError("Turn the microphone on first.");
+        return;
+      }
+
       setAskError(null);
 
       const SR =
@@ -1017,7 +1085,7 @@ export default function ReadingIntakeScreen({
       triggerIntakeHaptic();
       void startAskMeter();
     },
-    [startAskMeter, stopAskMeter, stopAskRecognition]
+    [micEnabled, startAskMeter, stopAskMeter, stopAskRecognition]
   );
 
     const submitAskAnything = useCallback(
@@ -1079,12 +1147,25 @@ export default function ReadingIntakeScreen({
   }, [stopAskMeter, stopAskRecognition, submitAskAnything]);
 
   useEffect(() => {
-    return () => {
-      askHoldingRef.current = false;
-      stopAskRecognition();
-      stopAskMeter();
+    const shutMicDownForPageExit = () => {
+      if (document.visibilityState === "hidden") {
+        disconnectMicrophone();
+      }
     };
-  }, [stopAskMeter, stopAskRecognition]);
+
+    const handlePageHide = () => {
+      disconnectMicrophone();
+    };
+
+    document.addEventListener("visibilitychange", shutMicDownForPageExit);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      document.removeEventListener("visibilitychange", shutMicDownForPageExit);
+      window.removeEventListener("pagehide", handlePageHide);
+      disconnectMicrophone();
+    };
+  }, [disconnectMicrophone]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -1497,6 +1578,67 @@ export default function ReadingIntakeScreen({
           animation: askMicBreathe 3.4s ease-in-out infinite;
         }
 
+        .mic-ready-toggle {
+          position: relative;
+          width: 34px;
+          height: 66px;
+          flex: 0 0 auto;
+          border-radius: 9999px;
+          border: 1px solid rgba(203,213,225,0.14);
+          background:
+            radial-gradient(circle at 50% 12%, rgba(255,255,255,0.055), transparent 42%),
+            linear-gradient(180deg, rgba(15,19,34,0.94), rgba(5,8,19,0.98));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.055),
+            0 12px 28px rgba(0,0,0,0.38);
+          transition:
+            opacity 420ms cubic-bezier(0.22,1,0.36,1),
+            border-color 420ms cubic-bezier(0.22,1,0.36,1),
+            box-shadow 420ms cubic-bezier(0.22,1,0.36,1),
+            filter 420ms cubic-bezier(0.22,1,0.36,1);
+        }
+
+        .mic-ready-toggle[data-enabled="true"] {
+          opacity: 0.56;
+          border-color: rgba(165,180,252,0.24);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.06),
+            0 0 16px rgba(99,102,241,0.10),
+            0 12px 28px rgba(0,0,0,0.34);
+        }
+
+        .mic-ready-knob {
+          position: absolute;
+          left: 50%;
+          width: 20px;
+          height: 20px;
+          border-radius: 9999px;
+          transform: translateX(-50%);
+          background: linear-gradient(145deg, rgba(226,232,240,0.96), rgba(148,163,184,0.88));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.62),
+            0 0 0 1px rgba(255,255,255,0.08),
+            0 3px 9px rgba(0,0,0,0.46);
+          transition:
+            top 420ms cubic-bezier(0.22,1,0.36,1),
+            background 420ms cubic-bezier(0.22,1,0.36,1),
+            box-shadow 420ms cubic-bezier(0.22,1,0.36,1);
+        }
+
+        .mic-ready-toggle[data-enabled="false"] .mic-ready-knob {
+          top: 39px;
+        }
+
+        .mic-ready-toggle[data-enabled="true"] .mic-ready-knob {
+          top: 7px;
+          background: linear-gradient(145deg, rgba(224,231,255,0.98), rgba(165,180,252,0.92));
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.72),
+            0 0 0 1px rgba(199,210,254,0.16),
+            0 0 14px rgba(99,102,241,0.30),
+            0 3px 9px rgba(0,0,0,0.42);
+        }
+
         .ask-title {
           color: #f8fafc;
           text-shadow: 0 1px 14px rgba(34,211,238,0.10), 0 0 20px rgba(168,85,247,0.07);
@@ -1511,6 +1653,8 @@ export default function ReadingIntakeScreen({
           .hero-shine::after,
           .ask-premium,
           .ask-mic-halo { animation: none !important; }
+          .mic-ready-toggle,
+          .mic-ready-knob { transition: none !important; }
         }
       `}</style>
 
@@ -2070,47 +2214,75 @@ export default function ReadingIntakeScreen({
             </Button>
           </div>
 
-          {/* ── ASK ANYTHING — flagship premium feature, intentionally separate from readings ── */}
+          {/* ── ASK ANYTHING — compact press / hold / speak control + mic readiness toggle ── */}
           <section className="mt-3">
-            <button
-              type="button"
-              onPointerDown={startAskHold}
-              onPointerUp={endAskHold}
-              onPointerCancel={endAskHold}
-              onContextMenu={(e) => e.preventDefault()}
-              className="ask-premium tap-fix relative flex h-[108px] w-full touch-none items-center rounded-[24px] px-5 text-left transition-[transform,opacity,filter] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
-              aria-label="Press and hold Ask Anything to speak"
-              style={{
-                opacity: selectedArea && !askHolding ? 0.76 : 1,
-                filter: selectedArea && !askHolding
-                  ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-                  : "brightness(1) saturate(1)",
-                transform: askHolding ? "scale(1.012)" : undefined,
-              }}
-            >
-              <span className="ask-mic-halo mr-4 shrink-0">
-                <Mic className="h-[20px] w-[20px]" style={{ color: "rgba(207,250,254,0.98)" }} />
-              </span>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onPointerDown={startAskHold}
+                onPointerUp={endAskHold}
+                onPointerCancel={endAskHold}
+                onContextMenu={(e) => e.preventDefault()}
+                className="ask-premium tap-fix relative flex h-[88px] w-[74%] touch-none items-center justify-center rounded-[24px] px-4 text-center transition-[transform,opacity,filter] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
+                aria-label="Press and hold to speak"
+                style={{
+                  opacity: selectedArea && !askHolding ? 0.76 : 1,
+                  filter: selectedArea && !askHolding
+                    ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+                    : "brightness(1) saturate(1)",
+                  transform: askHolding ? "scale(1.012)" : undefined,
+                }}
+              >
+                <span className="relative z-10 grid w-full grid-cols-[1fr_56px_1fr] grid-rows-[auto_auto] items-center">
+                  <span className="justify-self-end pr-3 text-[16px] font-semibold uppercase tracking-[0.17em] text-slate-100/94">
+                    Press
+                  </span>
 
-              <span className="min-w-0">
-                <span className="ask-title block text-[20px] font-semibold leading-6 tracking-[-0.01em]">
-                  Ask Anything
-                </span>
-                <span className="ask-subtitle mt-1 block text-[11px] leading-4">
-                  Real-time astrological guidance on your current situation
-                </span>
-                <span className="mt-1.5 block text-[9.5px] font-semibold uppercase tracking-[0.13em] text-teal-200/85">
-                  Press &amp; hold · Speak what’s on your mind
-                </span>
-              </span>
+                  <span className="ask-mic-halo row-span-2 mx-auto">
+                    <Mic className="h-[20px] w-[20px]" style={{ color: "rgba(207,250,254,0.98)" }} />
+                  </span>
 
-              {/* During a reading selection, the entire Ask Anything card recedes together. */}
-              <span
-                aria-hidden="true"
-                className="ask-focus-veil"
-                style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
-              />
-            </button>
+                  <span className="justify-self-start pl-3 text-[16px] font-semibold uppercase tracking-[0.17em] text-slate-100/94">
+                    Hold
+                  </span>
+
+                  <span className="col-span-3 col-start-1 row-start-2 mt-1 justify-self-center text-[13px] font-medium uppercase tracking-[0.28em] text-slate-300/72">
+                    Speak
+                  </span>
+                </span>
+
+                <span
+                  aria-hidden="true"
+                  className="ask-focus-veil"
+                  style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+                />
+              </button>
+
+              <button
+                type="button"
+                className="mic-ready-toggle tap-fix"
+                data-enabled={micEnabled ? "true" : "false"}
+                aria-pressed={micEnabled}
+                aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+                onClick={toggleMicrophone}
+                disabled={micConnecting}
+                style={{
+                  opacity: selectedArea && !askHolding
+                    ? micEnabled
+                      ? 0.38
+                      : 0.58
+                    : micEnabled
+                      ? 0.56
+                      : 1,
+                  filter: selectedArea && !askHolding
+                    ? "grayscale(0.45) brightness(0.68)"
+                    : "brightness(1)",
+                  cursor: micConnecting ? "wait" : "pointer",
+                }}
+              >
+                <span className="mic-ready-knob" />
+              </button>
+            </div>
 
             {askError && !askHolding && (
               <p className="mt-2 text-center text-[11px] text-slate-400/78">
