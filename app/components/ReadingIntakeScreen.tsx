@@ -1302,8 +1302,8 @@ export default function ReadingIntakeScreen({
   }, [theme]);
 
   return (
-    <div
-      className="no-scrollbar relative min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden text-slate-100"
+      <div
+      className="no-scrollbar relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden text-slate-100"
     >
       <style jsx>{`
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

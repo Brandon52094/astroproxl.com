@@ -319,8 +319,8 @@ export default function PagerContainer() {
   }, []);
 
   return (
-    <div
-      className="relative h-dvh w-full min-w-0 max-w-full overflow-hidden text-slate-100"
+   <div
+      className="fixed inset-0 h-[100dvh] w-full min-w-0 max-w-full overflow-hidden text-slate-100"
       ref={containerRef}
       style={{
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
