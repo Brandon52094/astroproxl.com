@@ -200,11 +200,34 @@ const SIGN_ELEMENTS: Record<string, ElementName> = {
 };
 
 // Keep the intake hero aligned with the elemental language already used by BirthChartPanel.
-const HERO_ELEMENT_COLORS: Record<ElementName, { text: string; bar: string; glow: string }> = {
-  Earth: { text: "#6EE7B7", bar: "#34D399", glow: "rgba(16,185,129,0.30)" },
-  Fire:  { text: "#FDBA74", bar: "#F97316", glow: "rgba(239,68,68,0.32)" },
-  Water: { text: "#93C5FD", bar: "#60A5FA", glow: "rgba(59,130,246,0.30)" },
-  Air:   { text: "#BAE6FD", bar: "#7DD3FC", glow: "rgba(125,211,252,0.26)" },
+const HERO_ELEMENT_COLORS: Record<
+  ElementName,
+  { text: string; bar: string; glow: string; border: string }
+> = {
+  Earth: {
+    text: "#6EE7B7",
+    bar: "#34D399",
+    glow: "rgba(16,185,129,0.30)",
+    border: "rgba(52,211,153,0.65)",
+  },
+  Fire: {
+    text: "#FDBA74",
+    bar: "#F97316",
+    glow: "rgba(239,68,68,0.32)",
+    border: "rgba(249,115,22,0.75)",
+  },
+  Water: {
+    text: "#93C5FD",
+    bar: "#60A5FA",
+    glow: "rgba(59,130,246,0.30)",
+    border: "rgba(96,165,250,0.70)",
+  },
+  Air: {
+    text: "#BAE6FD",
+    bar: "#7DD3FC",
+    glow: "rgba(125,211,252,0.26)",
+    border: "rgba(186,230,253,0.60)",
+  },
 };
 
 const HERO_ELEMENT_ORDER: ElementName[] = ["Earth", "Fire", "Water", "Air"];
