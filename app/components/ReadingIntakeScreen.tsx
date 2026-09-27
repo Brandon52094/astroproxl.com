@@ -36,7 +36,6 @@ declare global {
   }
 }
 
-
 /* ── Lightweight live voice capture for the intake hero ──────────────── */
 interface IntakeSpeechRecognitionAlternative { readonly transcript: string }
 interface IntakeSpeechRecognitionResult {
@@ -432,7 +431,7 @@ export default function ReadingIntakeScreen({
   useEffect(() => {
     if (propUserStatus) setUserStatus(propUserStatus);
   }, [propUserStatus]);
-    const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
 
   // Chart-derived data for the fixed-size hero information system.
@@ -1088,7 +1087,7 @@ export default function ReadingIntakeScreen({
     [micEnabled, startAskMeter, stopAskMeter, stopAskRecognition]
   );
 
-    const submitAskAnything = useCallback(
+  const submitAskAnything = useCallback(
     (transcript: string) => {
       const spokenQuestion = transcript.trim();
 
@@ -2258,7 +2257,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
-            <div className="flex min-h-[96px] w-full items-center justify-center gap-[10px]">
+            <div className="relative flex min-h-[96px] w-full items-center justify-center">
               <button
                 type="button"
                 onPointerDown={startAskHold}
@@ -2308,7 +2307,7 @@ export default function ReadingIntakeScreen({
 
               <button
                 type="button"
-                className="mic-ready-toggle tap-fix"
+                className="mic-ready-toggle tap-fix absolute left-[calc(50%+152px+10px)] top-1/2 -translate-y-1/2"
                 data-enabled={micEnabled ? "true" : "false"}
                 aria-pressed={micEnabled}
                 aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
@@ -2336,8 +2335,6 @@ export default function ReadingIntakeScreen({
 
         </motion.div>
       </div>
-      
-            {/* ── Embedded Stripe checkout (portaled) ── */}
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
