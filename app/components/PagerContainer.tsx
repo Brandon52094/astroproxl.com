@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import BirthChartPanel from "./BirthChartPanel";
@@ -7,7 +6,6 @@ import TodaySkyPanel from "./TodaySkyPanel";
 import CreditsPanel from "./CreditsPanel";
 import StarfieldBackground from "./StarfieldBackground";
 import { migrateChartV2 } from "@/lib/chartStore";
-
 // ── Simplified to match ReadingIntakeScreen ───────────────────────────────────
 interface UserStatus {
   credits: number;
@@ -18,7 +16,6 @@ interface UserStatus {
   canBypass: boolean;
   pwaFreeReadingUsed?: boolean;
 }
-
 /**
  * PAGER — four real panels in a circular loop:
  *
@@ -32,9 +29,7 @@ interface UserStatus {
 const DIRECTION_LOCK_THRESHOLD = 12;
 const SWIPE_COMMIT_THRESHOLD = 70;
 const HORIZONTAL_DOMINANCE_RATIO = 1.4;
-
 type GestureAxis = "undecided" | "horizontal" | "vertical";
-
 export default function PagerContainer() {
   const totalPanels = 4;
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -46,12 +41,10 @@ export default function PagerContainer() {
   const slideOffsetRef = useRef<-1 | 0 | 1>(0);
   const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handoffLockedRef = useRef(false);
-
   const wrapPanelIndex = useCallback(
     (index: number) => (index + totalPanels) % totalPanels,
     [totalPanels]
   );
-
   // Keep the active panel in slot 1. Slot 0 is its real previous neighbor and
   // slots 2–3 are its real next neighbors. These are the same four components,
   // simply reordered after each swipe — there are no clones.
@@ -61,11 +54,9 @@ export default function PagerContainer() {
     wrapPanelIndex(currentIndex + 1),
     wrapPanelIndex(currentIndex + 2),
   ];
-
   // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
     migrateChartV2();
-
     const fetchStatus = async () => {
       try {
         const response = await fetch("/api/user/credits");
@@ -83,10 +74,8 @@ export default function PagerContainer() {
         // silent
       }
     };
-
     fetchStatus();
   }, []);
-
   // ── PWA install grant ──────────────────────────────────────────────────────
   // Fires only in standalone (installed) mode. Server guards double-claims, so
   // firing every load is safe. On grant, refetch status so the token shows now.
@@ -94,9 +83,7 @@ export default function PagerContainer() {
     const isStandalone =
       window.matchMedia?.("(display-mode: standalone)").matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-
     if (!isStandalone) return;
-
     fetch("/api/user/claim-pwa-reading", { method: "POST" })
       .then((r) => r.json())
       .then((d) => {
@@ -121,7 +108,6 @@ export default function PagerContainer() {
       })
       .catch(() => {});
   }, []);
-
   // Finish a swipe exactly once. Mobile browsers can occasionally miss a
   // transform transitionend while the four keyed panels are being reordered,
   // so every swipe also gets a small timeout fallback. This keeps the circular
@@ -130,18 +116,15 @@ export default function PagerContainer() {
     const completedDirection = slideOffsetRef.current;
     if (completedDirection === 0 || handoffLockedRef.current) return;
     handoffLockedRef.current = true;
-
     if (handoffTimerRef.current) {
       clearTimeout(handoffTimerRef.current);
       handoffTimerRef.current = null;
     }
-
     setSuppressTransition(true);
     setCurrentIndex((prev) => wrapPanelIndex(prev + completedDirection));
     slideOffsetRef.current = 0;
     setSlideOffset(0);
   }, [wrapPanelIndex]);
-
   const startSlide = useCallback((direction: -1 | 1) => {
     if (slideOffsetRef.current !== 0 || handoffLockedRef.current) return;
     slideOffsetRef.current = direction;
@@ -152,10 +135,8 @@ export default function PagerContainer() {
       completeSlide();
     }, 560);
   }, [completeSlide]);
-
   const goToNext = useCallback(() => startSlide(1), [startSlide]);
   const goToPrevious = useCallback(() => startSlide(-1), [startSlide]);
-
   // ── Circular handoff after each transition ──────────────────────────
   const handleTrackTransitionEnd = useCallback((event: React.TransitionEvent<HTMLDivElement>) => {
     // Ignore transitionend events bubbling up from animated children. Only the
@@ -163,10 +144,8 @@ export default function PagerContainer() {
     if (event.target !== event.currentTarget || event.propertyName !== "transform") return;
     completeSlide();
   }, [completeSlide]);
-
   useEffect(() => {
     if (!suppressTransition) return;
-
     // Two frames guarantees the no-transition snap back to the center slot is
     // actually painted before transitions are re-enabled. One frame can be
     // coalesced on Safari/Chrome during a keyed DOM reorder.
@@ -177,23 +156,19 @@ export default function PagerContainer() {
         setSuppressTransition(false);
       });
     });
-
     return () => {
       cancelAnimationFrame(raf1);
       if (raf2) cancelAnimationFrame(raf2);
     };
   }, [suppressTransition]);
-
   useEffect(() => () => {
     if (handoffTimerRef.current) clearTimeout(handoffTimerRef.current);
   }, []);
-
   // ── Direction-locked touch handlers ─────────────────────────────────
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const touchDeltaX = useRef(0);
   const gestureAxis = useRef<GestureAxis>("undecided");
-
   const handleTouchStart = (e: React.TouchEvent) => {
     // Let taps on interactive opt-out elements (like the install teaser) through
     // to their own handlers instead of the swipe logic.
@@ -204,11 +179,9 @@ export default function PagerContainer() {
     gestureAxis.current = "undecided";
     setIsDragging(true);
   };
-
   const handleTouchMove = (e: React.TouchEvent) => {
     const deltaX = e.touches[0].clientX - touchStartX.current;
     const deltaY = e.touches[0].clientY - touchStartY.current;
-
     if (gestureAxis.current === "undecided") {
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
@@ -216,12 +189,10 @@ export default function PagerContainer() {
       gestureAxis.current =
         absX > absY * HORIZONTAL_DOMINANCE_RATIO ? "horizontal" : "vertical";
     }
-
     if (gestureAxis.current === "vertical") return;
     e.preventDefault();
     touchDeltaX.current = deltaX;
   };
-
   const handleTouchEnd = () => {
     setIsDragging(false);
     if (gestureAxis.current === "horizontal") {
@@ -231,14 +202,12 @@ export default function PagerContainer() {
     gestureAxis.current = "undecided";
     touchDeltaX.current = 0;
   };
-
   // ── Mouse drag for desktop ───────────────────────────────────────────
   const mouseStartX = useRef(0);
   const mouseStartY = useRef(0);
   const mouseDeltaX = useRef(0);
   const mouseGestureAxis = useRef<GestureAxis>("undecided");
   const isMouseDown = useRef(false);
-
   const handleMouseDown = (e: React.MouseEvent) => {
     mouseStartX.current = e.clientX;
     mouseStartY.current = e.clientY;
@@ -247,12 +216,10 @@ export default function PagerContainer() {
     isMouseDown.current = true;
     setIsDragging(true);
   };
-
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isMouseDown.current) return;
     const deltaX = e.clientX - mouseStartX.current;
     const deltaY = e.clientY - mouseStartY.current;
-
     if (mouseGestureAxis.current === "undecided") {
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
@@ -260,11 +227,9 @@ export default function PagerContainer() {
       mouseGestureAxis.current =
         absX > absY * HORIZONTAL_DOMINANCE_RATIO ? "horizontal" : "vertical";
     }
-
     if (mouseGestureAxis.current === "vertical") return;
     mouseDeltaX.current = deltaX;
   };
-
   const handleMouseUp = () => {
     if (!isMouseDown.current) return;
     isMouseDown.current = false;
@@ -276,7 +241,6 @@ export default function PagerContainer() {
     mouseGestureAxis.current = "undecided";
     mouseDeltaX.current = 0;
   };
-
   // ── Keyboard support ─────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -289,15 +253,39 @@ export default function PagerContainer() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [goToNext, goToPrevious]);
-
   const noAnimation = isDragging || suppressTransition;
 
+  // Match the app shell to the real visible PWA viewport.
+  // Standalone iOS/Android can misreport 100dvh on first paint and
+  // correct it only after a user scroll/gesture. visualViewport avoids
+  // that "pull the page down before it fits" behavior.
+  useEffect(() => {
+    const root = document.documentElement;
+
+    const syncViewportHeight = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      root.style.setProperty("--app-viewport-height", `${Math.round(viewportHeight)}px`);
+    };
+
+    syncViewportHeight();
+
+    window.addEventListener("resize", syncViewportHeight);
+    window.addEventListener("orientationchange", syncViewportHeight);
+    window.addEventListener("pageshow", syncViewportHeight);
+    window.visualViewport?.addEventListener("resize", syncViewportHeight);
+
+    return () => {
+      window.removeEventListener("resize", syncViewportHeight);
+      window.removeEventListener("orientationchange", syncViewportHeight);
+      window.removeEventListener("pageshow", syncViewportHeight);
+      window.visualViewport?.removeEventListener("resize", syncViewportHeight);
+    };
+  }, []);
   // Keep every panel locked to the pager viewport. `overflow-y-auto` by itself
   // can make overflow-x compute to `auto` on mobile browsers, which allows a
   // wide child to create a sideways scroll position inside a panel.
   const panelClass =
     "relative h-full w-full min-w-full max-w-full min-w-0 flex-shrink-0 overflow-y-auto overflow-x-hidden overscroll-x-none bg-transparent";
-
   // Mobile browsers can restore a horizontal scroll offset when returning to a
   // page. The pager itself is transform-driven, so document/panel scrollLeft
   // should always be zero. This does not touch the pager transform animation.
@@ -312,17 +300,17 @@ export default function PagerContainer() {
           panel.scrollLeft = 0;
         });
     };
-
     normalizeHorizontalPosition();
     window.addEventListener("pageshow", normalizeHorizontalPosition);
     return () => window.removeEventListener("pageshow", normalizeHorizontalPosition);
   }, []);
-
   return (
    <div
-      className="fixed inset-0 h-[100dvh] w-full min-w-0 max-w-full overflow-hidden text-slate-100"
+      className="fixed inset-x-0 top-0 w-full min-w-0 max-w-full overflow-hidden text-slate-100"
       ref={containerRef}
       style={{
+        height: "var(--app-viewport-height, 100dvh)",
+        minHeight: "var(--app-viewport-height, 100dvh)",
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
       }}
     >
@@ -342,7 +330,6 @@ export default function PagerContainer() {
         />
         <StarfieldBackground />
       </div>
-
       <div
         className="relative z-10 h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
         onTouchStart={handleTouchStart}
