@@ -1,4 +1,9 @@
-export type TopicId = "love" | "money" | "career" | "general";
+export type TopicId =
+  | "love"
+  | "money"
+  | "career"
+  | "general"
+  | "ask-anything";
 
 export interface TopicConfig {
   id: TopicId;

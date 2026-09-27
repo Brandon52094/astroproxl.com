@@ -157,6 +157,7 @@ export async function handleReading(request: NextRequest) {
 
     // ── RESOLVE TOPIC ──
     const topic = getTopic(body.topic);
+    const isAskAnything = body.topic === "ask-anything";
 
     // ── BUILD PROMPT & DATE INDEX ──
     const prompt = buildReadingPrompt(readingBody, topic, validatedAspects);

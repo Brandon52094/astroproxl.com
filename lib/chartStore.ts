@@ -21,7 +21,7 @@ export interface StoredChart {
 }
 
 export interface StoredIntake {
-  topic: "love" | "career" | "money" | "general";
+ topic: "love" | "career" | "money" | "general" | "ask-anything";
   area: string;
   question: string;
   timeframeType: "date" | "month";

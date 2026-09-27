@@ -3,6 +3,7 @@ import { love } from "./love";
 import { money } from "./money";
 import { career } from "./career";
 import { whatsComing } from "./whatsComing";
+import { askAnything } from "./askAnything";
 
 // The "What's Coming" button sends topic "general" (see intake screen),
 // so the general slot points at the whatsComing config.
@@ -11,6 +12,7 @@ export const TOPICS: Record<TopicId, TopicConfig> = {
   money,
   career,
   general: whatsComing,
+  "ask-anything": askAnything,
 };
 
 /** Resolve a topic string to its config. Unknown topics fall back to general —

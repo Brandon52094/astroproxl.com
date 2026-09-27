@@ -188,10 +188,89 @@ function PreparingPageInner() {
           return;
         }
 
-        if (!intake) {
+                if (!intake) {
           router.push("/reading/intake");
           return;
         }
+
+        // ── ASK ANYTHING branch ──
+        //
+        // The Ask Anything flow does not go through /api/readings. Its spoken
+        // question is an open-context astrology query, not a topic-scoped
+        // reading, and it is served by the JXL engine which infers the relevant
+        // life domain from the question itself rather than from a fixed topic.
+        if (intake.topic === "ask-anything") {
+          const response = await fetch("/api/jxl/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: intake.question,
+              // Natal chart is still sent so the ask-anything engine can
+              // reference placements when they are relevant to the question.
+              tropical: chart.chartData.tropical,
+              sidereal: chart.chartData.sidereal,
+              transits: chart.chartData.transits,
+              transitAspects: chart.chartData.transitAspects,
+              profection: chart.chartData.profection,
+              progressions: chart.chartData.progressions,
+              solarArcs: chart.chartData.solarArcs,
+              upcomingTrigger: chart.chartData.upcomingTrigger,
+              planetaryStations: chart.chartData.planetaryStations,
+              solarReturn: chart.chartData.solarReturn,
+              moonPhase: chart.chartData.moonPhase,
+              extendedPoints: chart.chartData.extendedPoints,
+              houseRulers: chart.chartData.houseRulers,
+              mutualReceptions: chart.chartData.mutualReceptions,
+              essentialDignities: chart.chartData.essentialDignities,
+              synodicCycles: chart.chartData.synodicCycles,
+              midpoints: chart.chartData.midpoints,
+              lunarReturn: chart.chartData.lunarReturn,
+              eclipseActivations: chart.chartData.eclipseActivations,
+              transitsToAngles: chart.chartData.transitsToAngles,
+              dispositorTree: chart.chartData.dispositorTree,
+              birthDate: chart.birthDate,
+              birthTime: chart.birthTime,
+              birthPlace: chart.birthPlace,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.reading) {
+            if (response.status === 403) {
+              router.replace("/reading/intake?openCredits=1");
+              return;
+            }
+            throw new Error(data.error ?? "Failed to generate Ask Anything response.");
+          }
+
+          const actualDuration = Date.now() - startTime;
+          try {
+            const historyJson = localStorage.getItem("reading_speed_history");
+            const history: number[] = historyJson ? JSON.parse(historyJson) : [];
+            const updatedHistory = [...history, actualDuration].slice(-3);
+            localStorage.setItem("reading_speed_history", JSON.stringify(updatedHistory));
+          } catch {
+            // Ignore storage errors
+          }
+
+          saveReading({
+            id: data.reading.id,
+            pages: data.reading.pages as ReadingPage[],
+            topic: "ask-anything",
+            question: intake.question,
+            generatedAt: new Date().toISOString(),
+          });
+
+          setProgress(100);
+          setTimeout(() => {
+            router.replace("/reading/results");
+          }, 400);
+
+          return;
+        }
+
+        // Sky-freshness gate (#1): the natal half is fine for 24h (isChartFresh),
 
         // Sky-freshness gate (#1): the natal half is fine for 24h (isChartFresh),
         // but the time-sensitive layers drift. If the sky is older than the

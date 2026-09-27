@@ -9,7 +9,6 @@ import {
   Wallet,
   Mic,
   Crown,
-  ChevronLeft,
 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
@@ -26,7 +25,6 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
-import JxlPanel from "./JxlPanel";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -382,9 +380,7 @@ export default function ReadingIntakeScreen({
   useEffect(() => {
     if (propUserStatus) setUserStatus(propUserStatus);
   }, [propUserStatus]);
-  const [showJxl, setShowJxl] = useState(false);
-  const [pendingJxlQuestion, setPendingJxlQuestion] = useState<string | null>(null);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
+    const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
 
   // Chart-derived data for the fixed-size hero information system.
@@ -967,6 +963,33 @@ export default function ReadingIntakeScreen({
     [startAskMeter, stopAskMeter, stopAskRecognition]
   );
 
+    const submitAskAnything = useCallback(
+    (transcript: string) => {
+      const spokenQuestion = transcript.trim();
+
+      if (spokenQuestion.length < 2) {
+        setAskError("We didn't catch that. Hold the button and try again.");
+        return;
+      }
+
+      clearIntake();
+      clearReading();
+      localStorage.removeItem("dfp_followup_return");
+      localStorage.removeItem("dfp_followup_question");
+
+      saveIntake({
+        topic: "ask-anything",
+        area: "ask-anything",
+        question: spokenQuestion,
+        timeframeType: "month",
+        timeframeValue: "next-45-days",
+      });
+
+      router.push("/reading/preparing");
+    },
+    [router]
+  );
+
   const endAskHold = useCallback(() => {
     if (!askHoldingRef.current) return;
 
@@ -993,11 +1016,10 @@ export default function ReadingIntakeScreen({
       return;
     }
 
-    setPendingJxlQuestion(said);
     setLiveTranscript("");
     transcriptRef.current = "";
-    setShowJxl(true);
-  }, [stopAskMeter, stopAskRecognition]);
+    submitAskAnything(said);
+  }, [stopAskMeter, stopAskRecognition, submitAskAnything]);
 
   useEffect(() => {
     return () => {
@@ -2005,43 +2027,8 @@ export default function ReadingIntakeScreen({
 
         </motion.div>
       </div>
-
-      {/* ── JXL overlay (portaled to body) ── */}
-      {showJxl && typeof document !== "undefined" &&
-        createPortal(
-          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
-            <button
-              type="button"
-              onClick={() => { setShowJxl(false); setPendingJxlQuestion(null); }}
-              style={{
-                position: "fixed",
-                top: "calc(12px + env(safe-area-inset-top))",
-                left: "16px",
-                zIndex: 100,
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                background: "rgba(5,8,22,0.6)",
-                border: "1px solid rgba(148,163,184,0.2)",
-                borderRadius: "999px",
-                padding: "6px 12px 6px 8px",
-                color: "#cbd5e1",
-                fontSize: "13px",
-                cursor: "pointer",
-                backdropFilter: "blur(8px)",
-              }}
-            >
-              <ChevronLeft size={16} />
-              Back
-            </button>
-            <JxlPanel
-              isActive={showJxl}
-              initialQuestion={pendingJxlQuestion}
-              onInitialQuestionConsumed={() => setPendingJxlQuestion(null)}
-            />
-          </div>,
-          document.body
-        )}
+      
+            {/* ── Embedded Stripe checkout (portaled) ── */}
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
