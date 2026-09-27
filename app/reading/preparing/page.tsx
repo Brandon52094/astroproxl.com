@@ -87,14 +87,14 @@ function PreparingPageInner() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [estimatedDuration, setEstimatedDuration] = useState<number>(88000); // \\~88s baseline
+  const [estimatedDuration, setEstimatedDuration] = useState<number>(88000); // ~88s baseline
   const hasStarted = useRef(false);
   const shouldReduceMotion = useReducedMotion();
   const stars = React.useMemo(
     () =>
       Array.from({ length: 28 }).map((_, i) => {
-        const left = \\`${(i * 37) % 100}%\\`;
-        const top = \\`${(i * 19 + 13) % 100}%\\`;
+        const left = `${(i * 37) % 100}%`;
+        const top = `${(i * 19 + 13) % 100}%`;
         const size = i % 7 === 0 ? 2 : 1;
         const opacity = i % 5 === 0 ? 0.72 : 0.34;
         const delay = (i * 0.37) % 4;
@@ -384,7 +384,7 @@ function PreparingPageInner() {
                     className="text-[2rem] font-semibold tracking-tight text-white"
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
-                    {progress < 95 ? \\`${progress}%\\` : "…"}
+                    {progress < 95 ? `${progress}%` : "…"}
                   </span>
                 </div>
               </div>
