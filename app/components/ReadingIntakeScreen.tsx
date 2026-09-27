@@ -2257,72 +2257,73 @@ export default function ReadingIntakeScreen({
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
-            <div className="relative flex min-h-[96px] w-full items-center justify-center">
-              <button
-                type="button"
-                onPointerDown={startAskHold}
-                onPointerUp={endAskHold}
-                onPointerCancel={endAskHold}
-                onContextMenu={(e) => e.preventDefault()}
-                className="ask-premium tap-fix relative h-[92px] w-[72%] max-w-[304px] touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-                aria-label="Press and hold to speak"
-                style={{
-                  opacity: selectedArea && !askHolding ? 0.76 : 1,
-                  filter: selectedArea && !askHolding
-                    ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-                    : "brightness(1) saturate(1)",
-                  transform: askHolding ? "scale(1.012)" : undefined,
-                }}
-              >
-                <span className="pointer-events-none absolute left-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
-                  Press
-                </span>
-
-                <span className="pointer-events-none absolute left-1/2 top-[9px] -translate-x-1/2">
-                  <span className="ask-mic-halo">
-                    <Mic
-                      className="h-[20px] w-[20px]"
-                      style={{
-                        color: "rgba(248,250,252,0.96)",
-                        filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
-                      }}
-                    />
+            <div className="flex w-full items-center justify-center">
+              <div className="relative h-[92px] w-[72%] max-w-[304px]">
+                <button
+                  type="button"
+                  onPointerDown={startAskHold}
+                  onPointerUp={endAskHold}
+                  onPointerCancel={endAskHold}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="ask-premium tap-fix relative h-[92px] w-full touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  aria-label="Press and hold to speak"
+                  style={{
+                    opacity: selectedArea && !askHolding ? 0.76 : 1,
+                    filter: selectedArea && !askHolding
+                      ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+                      : "brightness(1) saturate(1)",
+                    transform: askHolding ? "scale(1.012)" : undefined,
+                  }}
+                >
+                  <span className="pointer-events-none absolute left-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                    Press
                   </span>
-                </span>
 
-                <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
-                  Hold
-                </span>
+                  <span className="pointer-events-none absolute left-1/2 top-[9px] -translate-x-1/2">
+                    <span className="ask-mic-halo">
+                      <Mic
+                        className="h-[20px] w-[20px]"
+                        style={{
+                          color: "rgba(248,250,252,0.96)",
+                          filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
+                        }}
+                      />
+                    </span>
+                  </span>
 
-                <span className="pointer-events-none absolute bottom-[8px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
-                  Speak
-                </span>
+                  <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                    Hold
+                  </span>
 
-                <span
-                  aria-hidden="true"
-                  className="ask-focus-veil"
-                  style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
-                />
-              </button>
+                  <span className="pointer-events-none absolute bottom-[8px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
+                    Speak
+                  </span>
 
-              <button
-                type="button"
-                className="mic-ready-toggle tap-fix absolute left-[calc(50%+152px+10px)] top-1/2 -translate-y-1/2"
-                data-enabled={micEnabled ? "true" : "false"}
-                aria-pressed={micEnabled}
-                aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-                onClick={toggleMicrophone}
-                disabled={micConnecting}
-                style={{
-                  cursor: micConnecting ? "wait" : "pointer",
-                  opacity: micEnabled ? 0.18 : 0.74,
-                  filter: micEnabled
-                    ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-                    : "brightness(0.92) saturate(0.82)",
-                }}
-              >
-                <span className="mic-ready-knob" />
-              </button>
+                  <span
+                    aria-hidden="true"
+                    className="ask-focus-veil"
+                    style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  className="mic-ready-toggle tap-fix absolute left-full top-1/2 ml-[10px] -translate-y-1/2"
+                  data-enabled={micEnabled ? "true" : "false"}
+                  aria-pressed={micEnabled}
+                  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+                  onClick={toggleMicrophone}
+                  disabled={micConnecting}
+                  style={{
+                    cursor: micConnecting ? "wait" : "pointer",
+                    opacity: micEnabled ? 0.18 : 0.74,
+                    filter: micEnabled                      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+                      : "brightness(0.92) saturate(0.82)",
+                  }}
+                >
+                  <span className="mic-ready-knob" />
+                </button>
+              </div>
             </div>
 
             {askError && !askHolding && (
