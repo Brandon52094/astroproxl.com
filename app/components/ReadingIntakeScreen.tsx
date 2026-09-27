@@ -463,6 +463,9 @@ export default function ReadingIntakeScreen({
   // If a reading is selected but the user does not continue into context or Begin Reading,
   // gently return the interface to its neutral state.
   const selectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [selectionReleasing, setSelectionReleasing] = useState(false);
+
   const clearSelectionTimeout = useCallback(() => {
     if (selectionTimeoutRef.current) {
       clearTimeout(selectionTimeoutRef.current);
@@ -470,12 +473,35 @@ export default function ReadingIntakeScreen({
     }
   }, []);
 
+  const clearSelectionReleaseTimer = useCallback(() => {
+    if (selectionReleaseTimerRef.current) {
+      clearTimeout(selectionReleaseTimerRef.current);
+      selectionReleaseTimerRef.current = null;
+    }
+  }, []);
+
   const clearReadingFocus = useCallback(() => {
     clearSelectionTimeout();
-    setSelectedArea(null);
-    setQuestion("");
+    clearSelectionReleaseTimer();
+
+    if (!selectedArea) {
+      setQuestion("");
+      setContextFocused(false);
+      return;
+    }
+
+    // Release the visual focus first. The underlying selection is cleared only
+    // after the UI has had time to fade back to its neutral state.
+    setSelectionReleasing(true);
     setContextFocused(false);
-  }, [clearSelectionTimeout]);
+
+    selectionReleaseTimerRef.current = setTimeout(() => {
+      setSelectedArea(null);
+      setQuestion("");
+      setSelectionReleasing(false);
+      selectionReleaseTimerRef.current = null;
+    }, 420);
+  }, [clearSelectionTimeout, clearSelectionReleaseTimer, selectedArea]);
 
   const cycleHeroInfo = useCallback(() => {
     if (askHoldingRef.current) return;
@@ -1050,23 +1076,31 @@ export default function ReadingIntakeScreen({
 
   const selectArea = useCallback((id: string) => {
     clearSelectionTimeout();
+    clearSelectionReleaseTimer();
+    setSelectionReleasing(false);
     setSelectedArea(id);
     setQuestion("");
     const area = AREAS.find((a) => a.id === id);
     trackTtq("ViewContent", { content_id: id, content_name: area?.title });
 
     selectionTimeoutRef.current = setTimeout(() => {
-      setSelectedArea(null);
-      setQuestion("");
       selectionTimeoutRef.current = null;
+      setSelectionReleasing(true);
+      selectionReleaseTimerRef.current = setTimeout(() => {
+        setSelectedArea(null);
+        setQuestion("");
+        setSelectionReleasing(false);
+        selectionReleaseTimerRef.current = null;
+      }, 420);
     }, 8000);
-  }, [clearSelectionTimeout]);
+  }, [clearSelectionTimeout, clearSelectionReleaseTimer]);
 
   useEffect(() => {
     return () => {
       clearSelectionTimeout();
+      clearSelectionReleaseTimer();
     };
-  }, [clearSelectionTimeout]);
+  }, [clearSelectionTimeout, clearSelectionReleaseTimer]);
 
   const handleStartReading = async () => {
     if (!canSubmit || !selectedArea) return;
@@ -1162,6 +1196,10 @@ export default function ReadingIntakeScreen({
     const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
     return theme.areaColors[key];
   }, [theme]);
+
+  // Keep the selected data alive during the release animation while letting the
+  // visual focus fade out first. This prevents the timeout from jolting the UI.
+  const readingFocusActive = Boolean(selectedArea) && !selectionReleasing;
 
   return (
     <div
@@ -1463,9 +1501,9 @@ export default function ReadingIntakeScreen({
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-[5] bg-black"
         initial={false}
-        animate={{ opacity: selectedArea ? 0.78 : 0 }}
+        animate={{ opacity: readingFocusActive ? 0.48 : 0 }}
         transition={{
-          duration: shouldReduceMotion ? 0 : selectedArea ? 0.95 : 0.3,
+          duration: shouldReduceMotion ? 0 : readingFocusActive ? 0.72 : 0.42,
           ease: [0.22, 1, 0.36, 1],
         }}
       />
@@ -1500,14 +1538,14 @@ export default function ReadingIntakeScreen({
             onClick={() => onSwipeLeft?.()}
             className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: askHolding ? 0 : selectedArea ? 0.52 : 1,
+              opacity: askHolding ? 0 : readingFocusActive ? 0.72 : 1,
               filter: askHolding
                 ? "blur(4px) brightness(0.18)"
-                : selectedArea
-                  ? "grayscale(1) brightness(0.24) saturate(0)"
+                : readingFocusActive
+                  ? "grayscale(1) brightness(0.48) saturate(0)"
                   : "brightness(1) saturate(1)",
               pointerEvents: askHolding ? "none" : "auto",
-              transitionDuration: askHolding || selectedArea ? "700ms" : "350ms",
+              transitionDuration: askHolding || readingFocusActive || selectionReleasing ? "700ms" : "350ms",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
@@ -1517,7 +1555,7 @@ export default function ReadingIntakeScreen({
           {/* ── HERO — locked at exactly 236px for every state ── */}
           <section className="mb-[14px] pt-0">
             <div
-              className={`hero-glow-shell ${selectedArea && !askHolding ? "hero-glow-shell-focus" : ""}`}
+              className={`hero-glow-shell ${readingFocusActive && !askHolding ? "hero-glow-shell-focus" : ""}`}
               style={{
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
@@ -1533,13 +1571,13 @@ export default function ReadingIntakeScreen({
                 aria-label={askHolding ? "Ask Anything is listening" : "Tap to change hero information"}
                 style={{
                   cursor: askHolding ? "default" : "pointer",
-                  opacity: askHolding ? 1 : selectedArea ? 0.48 : 1,
+                  opacity: askHolding ? 1 : readingFocusActive ? 0.68 : 1,
                   filter: askHolding
                     ? "brightness(1) saturate(1)"
-                    : selectedArea
-                      ? "grayscale(1) brightness(0.30) saturate(0)"
+                    : readingFocusActive
+                      ? "grayscale(1) brightness(0.50) saturate(0)"
                       : "grayscale(0) brightness(1) saturate(1)",
-                  transitionDuration: askHolding || selectedArea ? "700ms" : "350ms",
+                  transitionDuration: askHolding || readingFocusActive || selectionReleasing ? "700ms" : "350ms",
                 }}
               >
                 {/* One master canvas: every hero uses the exact same 374 × 236 composition. */}
@@ -1801,22 +1839,22 @@ export default function ReadingIntakeScreen({
               pointerEvents: askHolding ? "none" : "auto",
             }}
           >
-            <AnimatePresence mode="sync" initial={false}>
-              <motion.p
-                key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
-                initial={{ opacity: 0, y: 2, filter: "blur(2px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -2, filter: "blur(2px)" }}
-                transition={{ duration: selectedAreaConfig ? 0.38 : 0.58, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
-                style={{
-                  textShadow:
-                    "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-                }}
-              >
-                {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
-              </motion.p>
-            </AnimatePresence>
+            <motion.p
+              initial={false}
+              animate={{
+                opacity: selectionReleasing ? 0 : 1,
+                y: selectionReleasing ? -2 : 0,
+                filter: selectionReleasing ? "blur(1.5px)" : "blur(0px)",
+              }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.32, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+              style={{
+                textShadow:
+                  "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
+              }}
+            >
+              {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
+            </motion.p>
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -1824,6 +1862,7 @@ export default function ReadingIntakeScreen({
             {AREAS.map((area) => {
               const Icon = area.icon;
               const isSelected = selectedArea === area.id;
+              const isVisuallySelected = isSelected && !selectionReleasing;
               const c = getAreaColors(area.id);
               return (
                 <button
@@ -1835,28 +1874,28 @@ export default function ReadingIntakeScreen({
                   aria-label={area.title}
                   className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                   style={{
-                    borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
-                    backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
-                    boxShadow: isSelected
+                    borderColor: isVisuallySelected ? c.border : "rgba(255,255,255,0.10)",
+                    backgroundColor: isVisuallySelected ? c.bg : "rgba(255,255,255,0.03)",
+                    boxShadow: isVisuallySelected
                       ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
-                    transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: askHolding ? 0 : selectedArea && !isSelected ? 0.58 : 1,
+                    transform: isVisuallySelected ? "translateY(-1px)" : "translateY(0px)",
+                    opacity: askHolding ? 0 : readingFocusActive && !isSelected ? 0.74 : 1,
                     filter: askHolding
                       ? "blur(4px) brightness(0.18)"
-                      : selectedArea && !isSelected
-                        ? "grayscale(1) brightness(0.24) saturate(0)"
+                      : readingFocusActive && !isSelected
+                        ? "grayscale(1) brightness(0.48) saturate(0)"
                         : "brightness(1) saturate(1)",
-                    transitionDuration: selectedArea || askHolding ? "700ms" : "350ms",
+                    transitionDuration: readingFocusActive || selectionReleasing || askHolding ? "700ms" : "350ms",
                   }}
                 >
                   {Icon ? (
                     <Icon
                       className="h-7 w-7 transition-[color,filter,transform] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                       style={{
-                        color: isSelected ? c.text : "rgba(203,213,225,0.68)",
-                        filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
-                        transform: isSelected ? "scale(1.035)" : "scale(1)",
+                        color: isVisuallySelected ? c.text : "rgba(203,213,225,0.68)",
+                        filter: isVisuallySelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
+                        transform: isVisuallySelected ? "scale(1.035)" : "scale(1)",
                       }}
                     />
                   ) : (
@@ -1864,9 +1903,9 @@ export default function ReadingIntakeScreen({
                       aria-hidden="true"
                       className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                       style={{
-                        color: isSelected ? c.text : "rgba(203,213,225,0.72)",
-                        filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
-                        transform: isSelected ? "scale(1.035)" : "scale(1)",
+                        color: isVisuallySelected ? c.text : "rgba(203,213,225,0.72)",
+                        filter: isVisuallySelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
+                        transform: isVisuallySelected ? "scale(1.035)" : "scale(1)",
                       }}
                     >
                       {area.marker}
@@ -1880,12 +1919,12 @@ export default function ReadingIntakeScreen({
           {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
           <div
             data-reading-context="true"
-            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
+            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${readingFocusActive ? "premium-context-active" : ""}`}
             style={{
               opacity: askHolding ? 0 : 1,
               filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
               pointerEvents: askHolding ? "none" : "auto",
-              transitionDuration: selectedArea || askHolding ? "700ms" : "350ms",
+              transitionDuration: readingFocusActive || selectionReleasing || askHolding ? "700ms" : "350ms",
             }}
           >
             <div
@@ -1919,9 +1958,14 @@ export default function ReadingIntakeScreen({
                   if (selectedArea) {
                     clearSelectionTimeout();
                     selectionTimeoutRef.current = setTimeout(() => {
-                      setSelectedArea(null);
-                      setQuestion("");
                       selectionTimeoutRef.current = null;
+                      setSelectionReleasing(true);
+                      selectionReleaseTimerRef.current = setTimeout(() => {
+                        setSelectedArea(null);
+                        setQuestion("");
+                        setSelectionReleasing(false);
+                        selectionReleaseTimerRef.current = null;
+                      }, 420);
                     }, 8000);
                   }
                 }}
@@ -1955,23 +1999,29 @@ export default function ReadingIntakeScreen({
               disabled={!canSubmit || isCreatingReading}
               className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-[20px] text-[14px] font-medium transition-all duration-500 ease-out hover:-translate-y-[1px] hover:opacity-95 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
               style={{
-                background: canSubmit && !isCreatingReading && beginReadingStyle
+                background: canSubmit && !isCreatingReading && !selectionReleasing && beginReadingStyle
                   ? beginReadingStyle.background
                   : "rgba(255,255,255,0.012)",
-                border: canSubmit && !isCreatingReading && beginReadingStyle
+                border: canSubmit && !isCreatingReading && !selectionReleasing && beginReadingStyle
                   ? `1px solid ${beginReadingStyle.border}`
                   : "1px solid rgba(203,213,225,0.16)",
-                color: canSubmit && !isCreatingReading && beginReadingStyle
+                color: canSubmit && !isCreatingReading && !selectionReleasing && beginReadingStyle
                   ? beginReadingStyle.text
                   : "rgba(203,213,225,0.34)",
-                opacity: canSubmit && !isCreatingReading ? 1 : 0.58,
-                transform: canSubmit && !isCreatingReading ? "scale(1)" : "scale(0.975)",
-                boxShadow: canSubmit && !isCreatingReading && beginReadingStyle
+                opacity: canSubmit && !isCreatingReading && !selectionReleasing ? 1 : 0.58,
+                transform: canSubmit && !isCreatingReading && !selectionReleasing ? "scale(1)" : "scale(0.975)",
+                boxShadow: canSubmit && !isCreatingReading && !selectionReleasing && beginReadingStyle
                   ? `0 0 0 1px ${beginReadingStyle.ring}, 0 0 18px 2px ${beginReadingStyle.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                   : "0 14px 28px rgba(0,0,0,0.56)",
               }}
             >
-              {buttonCopy}
+              <motion.span
+                initial={false}
+                animate={{ opacity: selectionReleasing ? 0 : 1 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {buttonCopy}
+              </motion.span>
             </Button>
           </div>
 
@@ -1986,9 +2036,9 @@ export default function ReadingIntakeScreen({
               className="ask-premium tap-fix relative flex h-[108px] w-full touch-none items-center rounded-[24px] px-5 text-left transition-[transform,opacity,filter] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
               aria-label="Press and hold Ask Anything to speak"
               style={{
-                opacity: selectedArea && !askHolding ? 0.62 : 1,
-                filter: selectedArea && !askHolding
-                  ? "grayscale(1) brightness(0.24) saturate(0)"
+                opacity: readingFocusActive && !askHolding ? 0.78 : 1,
+                filter: readingFocusActive && !askHolding
+                  ? "grayscale(1) brightness(0.50) saturate(0)"
                   : "brightness(1) saturate(1)",
                 transform: askHolding ? "scale(1.012)" : undefined,
               }}
@@ -2013,7 +2063,7 @@ export default function ReadingIntakeScreen({
               <span
                 aria-hidden="true"
                 className="ask-focus-veil"
-                style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+                style={{ opacity: readingFocusActive && !askHolding ? 0.28 : 0 }}
               />
             </button>
 
