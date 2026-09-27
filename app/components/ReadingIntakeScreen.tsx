@@ -9,7 +9,6 @@ import {
   Wallet,
   Mic,
   Crown,
-  ChevronLeft,
 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
@@ -26,7 +25,6 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
-import JxlPanel from "./JxlPanel";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -35,6 +33,58 @@ declare global {
     ttq?: {
       track: (event: string, params?: Record<string, unknown>) => void;
     };
+  }
+}
+
+
+/* ── Lightweight live voice capture for the intake hero ──────────────── */
+interface IntakeSpeechRecognitionAlternative { readonly transcript: string }
+interface IntakeSpeechRecognitionResult {
+  readonly isFinal: boolean;
+  readonly length: number;
+  [index: number]: IntakeSpeechRecognitionAlternative;
+}
+interface IntakeSpeechRecognitionResultList {
+  readonly length: number;
+  [index: number]: IntakeSpeechRecognitionResult;
+}
+interface IntakeSpeechRecognitionEvent extends Event {
+  readonly results: IntakeSpeechRecognitionResultList;
+}
+interface IntakeSpeechRecognitionErrorEvent extends Event {
+  readonly error: string;
+}
+interface IntakeSpeechRecognition extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((e: IntakeSpeechRecognitionEvent) => void) | null;
+  onerror: ((e: IntakeSpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+}
+
+const ASK_MIN_HOLD_MS = 450;
+
+const ASK_WAVE = {
+  sensitivity: 1.1,
+  idle: 0.16,
+  lines: 3,
+  speed: 1.8,
+  glow: 15,
+  thickness: 2.2,
+  colors: ["#22c55e", "#3b82f6", "#a855f7", "#ef4444", "#f59e0b"],
+};
+
+function triggerIntakeHaptic() {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(12);
+    }
+  } catch {
+    // Haptics are optional.
   }
 }
 
@@ -133,6 +183,13 @@ interface MoonPhaseData {
   moonDegree?: string;
 }
 
+interface ProfectionData {
+  age: number;
+  activatedHouse: number;
+  activatedSign: string;
+  timeLord?: string;
+}
+
 type ElementName = "Earth" | "Fire" | "Water" | "Air";
 
 const SIGN_ELEMENTS: Record<string, ElementName> = {
@@ -151,6 +208,35 @@ const HERO_ELEMENT_COLORS: Record<ElementName, { text: string; bar: string; glow
 };
 
 const HERO_ELEMENT_ORDER: ElementName[] = ["Earth", "Fire", "Water", "Air"];
+
+// Match the BirthChartPanel astrology-symbol treatment without importing its layout.
+const HERO_TEXT_VARIATION = "\uFE0E";
+const HERO_GLYPHS: Record<string, string> = {
+  Sun: `☉${HERO_TEXT_VARIATION}`,
+  Moon: `☽${HERO_TEXT_VARIATION}`,
+  Mercury: `☿${HERO_TEXT_VARIATION}`,
+  Venus: `♀${HERO_TEXT_VARIATION}`,
+  Mars: `♂${HERO_TEXT_VARIATION}`,
+  Jupiter: `♃${HERO_TEXT_VARIATION}`,
+  Saturn: `♄${HERO_TEXT_VARIATION}`,
+};
+
+function heroSignRuler(sign?: string): string {
+  if (!sign) return "Sun";
+  const rulers: Record<string, string> = {
+    Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
+    Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
+    Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
+  };
+  return rulers[sign] ?? "Sun";
+}
+
+function heroOrdinal(value?: number): string {
+  if (!value) return "—";
+  const s = ["th", "st", "nd", "rd"];
+  const v = value % 100;
+  return `${value}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
 
 function signAccentColor(sign: string): string {
   const element = SIGN_ELEMENTS[sign];
@@ -323,26 +409,37 @@ export default function ReadingIntakeScreen({
   useEffect(() => {
     if (propUserStatus) setUserStatus(propUserStatus);
   }, [propUserStatus]);
-  const [showJxl, setShowJxl] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
+    const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
 
-  // Chart-derived data for the hero information circles.
+  // Chart-derived data for the fixed-size hero information system.
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
-  // Four compact information slides share the same locked hero stage.
-  const [heroInfoMode, setHeroInfoMode] = useState<"personal" | "sky" | "mercury" | "elements">("personal");
-  const [heroInspecting, setHeroInspecting] = useState(false);
-  const [heroCycleReset, setHeroCycleReset] = useState(0);
+  const [profection, setProfection] = useState<ProfectionData | null>(null);
+
+  // The normal hero is user-controlled only: Brand → Quick Chart → Current Sky.
+  // Ask Anything temporarily replaces these with a fourth listening state.
+  const [heroInfoMode, setHeroInfoMode] = useState<"brand" | "quick" | "sky">("brand");
   const [heroCompositionScale, setHeroCompositionScale] = useState(1);
   const heroStageRef = useRef<HTMLDivElement | null>(null);
-  const heroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const heroHoldActivatedRef = useRef(false);
-  const suppressNextHeroTapRef = useRef(false);
   const [heroSweepActive, setHeroSweepActive] = useState(false);
   const heroWasActiveRef = useRef(false);
   const previousSelectedAreaRef = useRef<string | null>(null);
+
+  // Ask Anything live-listening state.
+  const [askHolding, setAskHolding] = useState(false);
+  const askHoldingRef = useRef(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [askError, setAskError] = useState<string | null>(null);
+  const recognitionRef = useRef<IntakeSpeechRecognition | null>(null);
+  const transcriptRef = useRef("");
+  const askHoldStartRef = useRef(0);
+  const meterStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const meterRafRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -409,44 +506,10 @@ export default function ReadingIntakeScreen({
     setContextFocused(false);
   }, [clearSelectionTimeout]);
 
-  const beginHeroHold = useCallback(() => {
-    if (heroHoldTimerRef.current) clearTimeout(heroHoldTimerRef.current);
-    heroHoldActivatedRef.current = false;
-    heroHoldTimerRef.current = setTimeout(() => {
-      heroHoldActivatedRef.current = true;
-      setHeroInspecting(true);
-      heroHoldTimerRef.current = null;
-    }, 420);
-  }, []);
-
-  const endHeroHold = useCallback(() => {
-    if (heroHoldTimerRef.current) {
-      clearTimeout(heroHoldTimerRef.current);
-      heroHoldTimerRef.current = null;
-    }
-    if (heroHoldActivatedRef.current) {
-      suppressNextHeroTapRef.current = true;
-      setHeroInspecting(false);
-      heroHoldActivatedRef.current = false;
-    }
-  }, []);
-
   const cycleHeroInfo = useCallback(() => {
-    if (suppressNextHeroTapRef.current) {
-      suppressNextHeroTapRef.current = false;
-      return;
-    }
-
-    const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
-      "personal",
-      "sky",
-      "mercury",
-      "elements",
-    ];
-
+    if (askHoldingRef.current) return;
+    const modes: Array<"brand" | "quick" | "sky"> = ["brand", "quick", "sky"];
     setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
-    // Give the newly selected slide a full viewing interval before auto-rotation resumes.
-    setHeroCycleReset((value) => value + 1);
   }, []);
 
   useEffect(() => {
@@ -536,6 +599,7 @@ export default function ReadingIntakeScreen({
       tropical?: { planets?: unknown; angles?: unknown };
       transits?: unknown;
       moonPhase?: MoonPhaseData;
+      profection?: ProfectionData;
     } | undefined;
 
     if (!data) return;
@@ -546,6 +610,7 @@ export default function ReadingIntakeScreen({
     ]);
     setTransits(normalizePlacements(data.transits));
     setMoonPhase(data.moonPhase ?? null);
+    setProfection(data.profection ?? null);
   }, [chartStatus]);
 
   const fetchInFlight = useRef(false);
@@ -605,7 +670,12 @@ export default function ReadingIntakeScreen({
     const mercury = find(transits, ["Mercury"]);
 
     const counts: Record<ElementName, number> = { Earth: 0, Fire: 0, Water: 0, Air: 0 };
+    const balanceBodies = new Set([
+      "Sun", "Moon", "Ascendant", "Rising", "ASC", "Mercury", "Venus", "Mars",
+      "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto",
+    ]);
     natal.forEach((placement) => {
+      if (!balanceBodies.has(placement.name)) return;
       const element = SIGN_ELEMENTS[placement.sign];
       if (element) counts[element] += 1;
     });
@@ -613,9 +683,9 @@ export default function ReadingIntakeScreen({
 
     return {
       personal: [
-        { role: "Sun", sign: natalSun?.sign ?? "—", degree: natalSun?.degree },
-        { role: "Moon", sign: natalMoon?.sign ?? "—", degree: natalMoon?.degree },
-        { role: "Rising", sign: natalRising?.sign ?? "—", degree: natalRising?.degree },
+        { role: "Sun", sign: natalSun?.sign ?? "—", degree: natalSun?.degree, house: natalSun?.house },
+        { role: "Moon", sign: natalMoon?.sign ?? "—", degree: natalMoon?.degree, house: natalMoon?.house },
+        { role: "Rising", sign: natalRising?.sign ?? "—", degree: natalRising?.degree, house: natalRising?.house },
       ],
       currentSun,
       currentMoon,
@@ -627,22 +697,371 @@ export default function ReadingIntakeScreen({
 
   const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
-  useEffect(() => {
-    // Keep the current slide still while a reading is focused or this panel is
-    // offscreen. The timer restarts from that same slide when focus returns.
-    if (heroInspecting || selectedArea || !isActive) return;
+  const visibleTranscript = useMemo(() => {
+    const words = liveTranscript.trim().split(/\s+/).filter(Boolean);
+    return words.slice(-28).join(" ");
+  }, [liveTranscript]);
 
-    const modes: Array<"personal" | "sky" | "mercury" | "elements"> = [
-      "personal",
-      "sky",
-      "mercury",
-      "elements",
-    ];
-    const id = window.setInterval(() => {
-      setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
-    }, 4800);
-    return () => window.clearInterval(id);
-  }, [heroInspecting, selectedArea, isActive, heroCycleReset]);
+  const skyNotice = useMemo(() => {
+    if (heroData.mercury?.isRetrograde) {
+      return {
+        title: "Mercury Retrograde",
+        detail: heroData.mercury.sign
+          ? `Mercury ℞ in ${heroData.mercury.sign}`
+          : "Mercury is currently retrograde",
+      };
+    }
+
+    if (moonPhase?.nextEventName && typeof moonPhase.daysUntilNextEvent === "number") {
+      return {
+        title: moonPhase.nextEventName,
+        detail:
+          moonPhase.daysUntilNextEvent === 0
+            ? "Exact today"
+            : `In ${moonPhase.daysUntilNextEvent} day${moonPhase.daysUntilNextEvent === 1 ? "" : "s"}`,
+      };
+    }
+
+    return {
+      title: "Current Sky",
+      detail: heroData.mercury?.sign
+        ? `Mercury direct in ${heroData.mercury.sign}`
+        : "Live planetary context",
+    };
+  }, [heroData.mercury, moonPhase]);
+
+  const stopAskRecognition = useCallback(() => {
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    try {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      rec.stop();
+    } catch {
+      // already stopped
+    }
+    recognitionRef.current = null;
+  }, []);
+
+  const stopAskMeter = useCallback(() => {
+    if (meterRafRef.current != null) {
+      cancelAnimationFrame(meterRafRef.current);
+      meterRafRef.current = null;
+    }
+    try {
+      analyserRef.current?.disconnect();
+    } catch {}
+    analyserRef.current = null;
+
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+
+    if (meterStreamRef.current) {
+      meterStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
+      meterStreamRef.current = null;
+    }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (canvas && ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }, []);
+
+  const startAskMeter = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      return;
+    }
+
+    if (!askHoldingRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+
+    meterStreamRef.current = stream;
+
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      audioCtxRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.78;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const freq = new Uint8Array(analyser.frequencyBinCount);
+      const canvas = canvasRef.current;
+      const c2d = canvas?.getContext("2d") ?? null;
+      let smooth = 0;
+      let time = 0;
+      let cw = 0;
+      let ch = 0;
+      let dpr = 1;
+
+      const fit = () => {
+        if (!canvas || !c2d) return;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const r = canvas.getBoundingClientRect();
+        cw = r.width;
+        ch = r.height;
+        canvas.width = Math.round(cw * dpr);
+        canvas.height = Math.round(ch * dpr);
+        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+
+      fit();
+
+      const draw = () => {
+        if (!askHoldingRef.current) return;
+        if (!cw || !ch) fit();
+
+        time += 0.016 * ASK_WAVE.speed;
+        analyser.getByteFrequencyData(freq);
+
+        let sum = 0;
+        let count = 0;
+        const lo = 2;
+        const hi = Math.max(lo + 1, Math.floor(freq.length * 0.5));
+        for (let i = lo; i < hi; i++) {
+          sum += freq[i];
+          count++;
+        }
+
+        const energy = count ? (sum / count) / 255 : 0;
+        smooth += (energy - smooth) * 0.18;
+
+        if (c2d && cw && ch) {
+          const cy = ch / 2;
+          c2d.clearRect(0, 0, cw, ch);
+
+          const grad = c2d.createLinearGradient(0, 0, cw, 0);
+          ASK_WAVE.colors.forEach((color, i) =>
+            grad.addColorStop(i / (ASK_WAVE.colors.length - 1), color)
+          );
+
+          c2d.lineCap = "round";
+          c2d.lineJoin = "round";
+          c2d.globalCompositeOperation = "lighter";
+
+          const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
+
+          for (let line = 0; line < ASK_WAVE.lines; line++) {
+            const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
+            const phase = time * (1 + lf * 0.45) + line * 0.7;
+            const lineAmp = amp * (1 - lf * 0.14);
+
+            c2d.beginPath();
+            for (let x = 0; x <= cw; x += 3) {
+              const tx = x / cw;
+              const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
+              const y =
+                cy +
+                env *
+                  lineAmp *
+                  (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
+                    Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
+              x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+            }
+
+            c2d.strokeStyle = grad;
+            c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
+            c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
+            c2d.shadowBlur = ASK_WAVE.glow;
+            c2d.shadowColor = "rgba(129,140,248,0.5)";
+            c2d.stroke();
+          }
+
+          const coreAmp =
+            (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
+          c2d.beginPath();
+          for (let x = 0; x <= cw; x += 2) {
+            const tx = x / cw;
+            const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
+            const y =
+              cy +
+              env *
+                coreAmp *
+                Math.sin(tx * Math.PI * 5 + time * 1.4) *
+                0.9;
+            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+          }
+
+          c2d.globalAlpha = 0.3 + smooth * 0.5;
+          c2d.strokeStyle = "rgba(255,255,255,0.92)";
+          c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
+          c2d.shadowBlur = ASK_WAVE.glow * 1.3;
+          c2d.shadowColor = "rgba(255,255,255,0.7)";
+          c2d.stroke();
+
+          c2d.globalCompositeOperation = "source-over";
+          c2d.globalAlpha = 1;
+          c2d.shadowBlur = 0;
+        }
+
+        meterRafRef.current = requestAnimationFrame(draw);
+      };
+
+      draw();
+    } catch {
+      stopAskMeter();
+    }
+  }, [stopAskMeter]);
+
+  const startAskHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      setAskError(null);
+
+      const SR =
+        (window as unknown as { SpeechRecognition?: new () => IntakeSpeechRecognition }).SpeechRecognition ||
+        (window as unknown as { webkitSpeechRecognition?: new () => IntakeSpeechRecognition })
+          .webkitSpeechRecognition;
+
+      if (!SR) {
+        setAskError("Voice input isn't available in this browser yet.");
+        return;
+      }
+
+      transcriptRef.current = "";
+      setLiveTranscript("");
+
+      const rec = new SR();
+      rec.lang = "en-US";
+      rec.interimResults = true;
+      rec.continuous = true;
+      recognitionRef.current = rec;
+
+      rec.onresult = (event: IntakeSpeechRecognitionEvent) => {
+        let finalText = "";
+        let interimText = "";
+
+        for (let i = 0; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) finalText += `${result[0].transcript} `;
+          else interimText += `${result[0].transcript} `;
+        }
+
+        const combined = `${finalText}${interimText}`.replace(/\s+/g, " ").trim();
+        transcriptRef.current = combined;
+        setLiveTranscript(combined);
+      };
+
+      rec.onerror = (event: IntakeSpeechRecognitionErrorEvent) => {
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setAskError("Microphone access is blocked. Allow microphone access and try again.");
+        } else {
+          setAskError("I couldn't hear that clearly. Try holding again.");
+        }
+        askHoldingRef.current = false;
+        setAskHolding(false);
+        stopAskRecognition();
+        stopAskMeter();
+      };
+
+      rec.onend = () => {
+        recognitionRef.current = null;
+      };
+
+      try {
+        rec.start();
+      } catch {
+        setAskError("Voice input couldn't start. Try again.");
+        return;
+      }
+
+      askHoldStartRef.current = Date.now();
+      askHoldingRef.current = true;
+      setAskHolding(true);
+      triggerIntakeHaptic();
+      void startAskMeter();
+    },
+    [startAskMeter, stopAskMeter, stopAskRecognition]
+  );
+
+    const submitAskAnything = useCallback(
+    (transcript: string) => {
+      const spokenQuestion = transcript.trim();
+
+      if (spokenQuestion.length < 2) {
+        setAskError("We didn't catch that. Hold the button and try again.");
+        return;
+      }
+
+      clearIntake();
+      clearReading();
+      localStorage.removeItem("dfp_followup_return");
+      localStorage.removeItem("dfp_followup_question");
+
+      saveIntake({
+        topic: "ask-anything",
+        area: "ask-anything",
+        question: spokenQuestion,
+        timeframeType: "month",
+        timeframeValue: "next-45-days",
+      });
+
+      router.push("/reading/preparing");
+    },
+    [router]
+  );
+
+  const endAskHold = useCallback(() => {
+    if (!askHoldingRef.current) return;
+
+    const elapsed = Date.now() - askHoldStartRef.current;
+    const said = transcriptRef.current.trim();
+
+    askHoldingRef.current = false;
+    setAskHolding(false);
+    triggerIntakeHaptic();
+    stopAskRecognition();
+    stopAskMeter();
+
+    if (elapsed < ASK_MIN_HOLD_MS) {
+      setLiveTranscript("");
+      transcriptRef.current = "";
+      setAskError("Press and hold while you speak.");
+      return;
+    }
+
+    if (said.length < 2) {
+      setLiveTranscript("");
+      transcriptRef.current = "";
+      setAskError("Didn't quite catch that. Hold and try again.");
+      return;
+    }
+
+    setLiveTranscript("");
+    transcriptRef.current = "";
+    submitAskAnything(said);
+  }, [stopAskMeter, stopAskRecognition, submitAskAnything]);
+
+  useEffect(() => {
+    return () => {
+      askHoldingRef.current = false;
+      stopAskRecognition();
+      stopAskMeter();
+    };
+  }, [stopAskMeter, stopAskRecognition]);
 
   const buttonCopy = useMemo(() => {
     if (chartStatus === "recalculating") return "Loading your chart…";
@@ -680,7 +1099,6 @@ export default function ReadingIntakeScreen({
   useEffect(() => {
     return () => {
       clearSelectionTimeout();
-      if (heroHoldTimerRef.current) clearTimeout(heroHoldTimerRef.current);
     };
   }, [clearSelectionTimeout]);
 
@@ -1079,7 +1497,7 @@ export default function ReadingIntakeScreen({
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-[5] bg-black"
         initial={false}
-        animate={{ opacity: selectedArea ? 0.78 : 0 }}
+        animate={{ opacity: selectedArea ? 0.48 : 0 }}
         transition={{
           duration: shouldReduceMotion ? 0 : selectedArea ? 0.95 : 0.3,
           ease: [0.22, 1, 0.36, 1],
@@ -1110,25 +1528,30 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── Swipe cue — integrated above hero ── */}
+          {/* ── Swipe cue — page navigation stays separate from hero navigation ── */}
           <button
             type="button"
             onClick={() => onSwipeLeft?.()}
             className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: selectedArea || heroInspecting ? 0.52 : 1,
-              filter: selectedArea || heroInspecting ? "grayscale(1) brightness(0.24) saturate(0)" : "brightness(1) saturate(1)",
-              transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
+              opacity: askHolding ? 0 : selectedArea ? 0.72 : 1,
+              filter: askHolding
+                ? "blur(4px) brightness(0.18)"
+                : selectedArea
+                  ? "grayscale(0.72) brightness(0.52) saturate(0.42)"
+                  : "brightness(1) saturate(1)",
+              pointerEvents: askHolding ? "none" : "auto",
+              transitionDuration: askHolding || selectedArea ? "700ms" : "350ms",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
             Swipe Left To Explore
           </button>
 
-          {/* ── HERO (animated color-cycling outline glow) ── */}
+          {/* ── HERO — locked at exactly 236px for every state ── */}
           <section className="mb-[14px] pt-0">
             <div
-              className={`hero-glow-shell ${selectedArea && !heroInspecting ? "hero-glow-shell-focus" : ""}`}
+              className={`hero-glow-shell ${selectedArea && !askHolding ? "hero-glow-shell-focus" : ""}`}
               style={{
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
@@ -1136,200 +1559,308 @@ export default function ReadingIntakeScreen({
                 "--hero-c4-color": `rgb(${heroPalette[3]})`,
               } as React.CSSProperties}
             >
-            <div
-              ref={heroStageRef}
-              className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] touch-none select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture?.(e.pointerId);
-                beginHeroHold();
-              }}
-              onPointerUp={endHeroHold}
-              onPointerCancel={endHeroHold}
-              onClick={cycleHeroInfo}
-              onContextMenu={(e) => e.preventDefault()}
-              aria-label="Tap to cycle hero information. Press and hold to pause."
-              style={{
-                opacity: heroInspecting ? 1 : selectedArea ? 0.48 : 1,
-                filter: heroInspecting
-                  ? "brightness(1) saturate(1)"
-                  : selectedArea
-                    ? "grayscale(1) brightness(0.30) saturate(0)"
-                    : "grayscale(0) brightness(1) saturate(1)",
-                transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
-                "--hero-c4": heroPalette[3],
-              } as React.CSSProperties}
-            >
-              {/* One master canvas: every informational element scales and moves together. */}
               <div
-                className="absolute left-1/2 top-1/2 z-10 h-[236px] w-[374px]"
+                ref={heroStageRef}
+                className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
+                onClick={askHolding ? undefined : cycleHeroInfo}
+                onContextMenu={(e) => e.preventDefault()}
+                aria-label={askHolding ? "Ask Anything is listening" : "Tap to change hero information"}
                 style={{
-                  transform: `translate(-50%, -50%) scale(${heroCompositionScale})`,
-                  transformOrigin: "center center",
+                  cursor: askHolding ? "default" : "pointer",
+                  opacity: askHolding ? 1 : selectedArea ? 0.68 : 1,
+                  filter: askHolding
+                    ? "brightness(1) saturate(1)"
+                    : selectedArea
+                      ? "grayscale(0.72) brightness(0.56) saturate(0.42)"
+                      : "grayscale(0) brightness(1) saturate(1)",
+                  transitionDuration: askHolding || selectedArea ? "700ms" : "350ms",
                 }}
               >
-                {/* Hero statement */}
-                <div className="absolute inset-x-0 top-[20px] px-[2px] text-left">
-                  <p
-                    className="mb-[1px] text-center text-[25px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
-                    style={{
-                      fontFamily:
-                        '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
-                      textShadow:
-                        "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
-                    }}
-                  >
-                    Personalized
-                  </p>
-
-                  <h1
-                    className="whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
-                    style={{
-                      transform: "scaleY(1.045)",
-                      transformOrigin: "left bottom",
-                      textShadow:
-                        "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
-                    }}
-                  >
-                    Astrological Predictions
-                  </h1>
-                </div>
-
-                {/* Product identity — supportive, not competing with the H1 */}
-                <p
-                  className="absolute inset-x-0 top-[96px] whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.24em] text-slate-300/52"
-                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
+                {/* One master canvas: every hero uses the exact same 374 × 236 composition. */}
+                <div
+                  className="absolute left-1/2 top-1/2 z-10 h-[236px] w-[374px]"
+                  style={{
+                    transform: `translate(-50%, -50%) scale(${heroCompositionScale})`,
+                    transformOrigin: "center center",
+                  }}
                 >
-                  <span className="text-indigo-200/72">AstroProXL</span>
-                  <span className="mx-2 text-slate-500/70">|</span>
-                  <span>The Astrology Engine</span>
-                </p>
-
-                {/* Four-slide information display: Birth Chart → Today → Mercury → Elements */}
-                <div className="absolute inset-x-0 top-[133px] h-[91px]">
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
-                      key={heroInfoMode}
-                      initial={{ opacity: 0, y: 4, filter: "blur(3px)" }}
+                      key={askHolding ? "listening" : heroInfoMode}
+                      initial={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: 5, filter: "blur(3px)" }
+                      }
                       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                      exit={{ opacity: 0, y: -3, filter: "blur(3px)" }}
-                      transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
-                      className="absolute inset-0 flex items-center justify-center"
+                      exit={
+                        shouldReduceMotion
+                          ? { opacity: 0 }
+                          : { opacity: 0, y: -4, filter: "blur(3px)" }
+                      }
+                      transition={{
+                        duration: shouldReduceMotion ? 0.12 : 0.34,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      className="absolute inset-0"
                     >
-                      {heroInfoMode === "personal" && (
-                        <div className="flex items-center justify-center gap-8">
-                          {heroData.personal.map((item) => (
-                            <div
-                              key={`personal-${item.role}`}
-                              className="flex h-[62px] w-[62px] flex-col items-center justify-center rounded-full border bg-white/[0.018] px-1"
+                      {askHolding ? (
+                        /* HERO 4 — live Ask Anything transcription */
+                        <div className="absolute inset-0 flex flex-col items-center justify-center px-[34px] pb-[10px] pt-[12px]">
+                          <div className="flex h-[112px] w-full items-end justify-center">
+                            <p
+                              className="w-full text-center text-[18px] font-medium leading-[1.34] tracking-[-0.015em] text-slate-100/92"
                               style={{
-                                borderColor: signAccentColor(item.sign),
-                                boxShadow: `inset 0 0 16px rgba(255,255,255,0.025), 0 0 18px ${signAccentGlow(item.sign)}`,
+                                textShadow:
+                                  "0 3px 14px rgba(0,0,0,0.92), 0 0 18px rgba(129,140,248,0.12)",
                               }}
                             >
-                              <span className="mb-[3px] text-[7px] font-semibold leading-none tabular-nums text-slate-300/72">
-                                {item.degree ?? "—"}
-                              </span>
-                              <span
-                                className="max-w-full truncate text-[10.5px] font-semibold leading-none"
-                                style={{
-                                  color: signAccentColor(item.sign),
-                                  textShadow: `0 0 9px ${signAccentGlow(item.sign)}`,
-                                }}
-                              >
-                                {item.sign}
-                              </span>
-                              <span className="mt-[4px] text-[6.5px] font-medium uppercase leading-none tracking-[0.14em] text-slate-400/70">
-                                {item.role}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {heroInfoMode === "sky" && (
-                        <div className="flex items-center justify-center gap-12">
-                          <div className="flex w-[78px] flex-col items-center">
-                            <div style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.20))" }}>
-                              <SunDisc size={62} />
-                            </div>
-                            <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
-                              {heroData.currentSun?.sign ?? "—"}
-                            </span>
-                            <span className="mt-[3px] text-[6.5px] font-medium uppercase tracking-[0.15em] text-slate-400/65">Sun</span>
+                              {visibleTranscript || "Listening…"}
+                            </p>
                           </div>
 
-                          <div className="flex w-[78px] flex-col items-center">
-                            <div style={{ filter: "drop-shadow(0 0 18px rgba(226,223,240,0.16))" }}>
-                              <MoonDisc
-                                illumination={moonPhase?.illuminationPercent ?? 50}
-                                waxing={moonWaxing}
-                                size={62}
-                              />
-                            </div>
-                            <span className="mt-1 text-[9px] font-semibold leading-none text-slate-100/90">
-                              {moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}
-                            </span>
-                            <span className="mt-[3px] text-[6.5px] font-medium uppercase tracking-[0.15em] text-slate-400/65">Moon</span>
-                          </div>
+                          <canvas
+                            ref={canvasRef}
+                            aria-hidden="true"
+                            className="mt-[8px] h-[72px] w-[300px] max-w-full"
+                          />
                         </div>
-                      )}
-
-                      {heroInfoMode === "mercury" && (
-                        <div className="flex flex-col items-center justify-center text-center">
-                          <span className="text-[9px] font-medium uppercase tracking-[0.28em] text-slate-400/68">Mercury</span>
-                          <span
-                            className="mt-1 text-[25px] font-semibold uppercase leading-none tracking-[-0.025em] text-white"
-                            style={{ textShadow: "0 5px 14px rgba(0,0,0,0.88), 0 0 18px rgba(148,163,184,0.12)" }}
+                      ) : heroInfoMode === "brand" ? (
+                        /* HERO 1 — centered brand statement, preserving the original AstroPro typography language */
+                        <div className="absolute inset-0 flex flex-col items-center justify-center px-[18px] pb-[18px] text-center">
+                          <p
+                            className="mb-[2px] text-[25px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
+                            style={{
+                              fontFamily: '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
+                              textShadow:
+                                "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
+                            }}
                           >
-                            {heroData.mercury?.isRetrograde ? "Retrograde ℞" : "Direct"}
-                          </span>
-                          <span className="mt-2 text-[8px] font-medium uppercase tracking-[0.17em] text-slate-400/62">
-                            {heroData.mercury?.sign ?? "Current status"}
-                          </span>
-                        </div>
-                      )}
+                            Personalized
+                          </p>
 
-                      {heroInfoMode === "elements" && (
-                        <div className="flex h-[84px] items-end justify-center gap-5">
-                          {HERO_ELEMENT_ORDER.map((element) => {
-                            const count = heroData.counts[element];
-                            const ratio = count / heroData.maxElementCount;
-                            const height = count === 0 ? 5 : 12 + ratio * 38;
-                            const colors = HERO_ELEMENT_COLORS[element];
-                            return (
-                              <div key={element} className="flex w-[38px] flex-col items-center justify-end">
-                                <div className="relative flex h-[52px] w-full items-end justify-center">
-                                  <motion.div
-                                    initial={{ height: 4, opacity: 0.4 }}
-                                    animate={{ height, opacity: 0.95 }}
-                                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                                    className="w-[5px] rounded-full"
-                                    style={{
-                                      backgroundColor: colors.bar,
-                                      boxShadow: `0 0 10px ${colors.glow}`,
-                                    }}
-                                  />
-                                  <span
-                                    className="absolute bottom-[-3px] h-[6px] w-[6px] rounded-full"
-                                    style={{ backgroundColor: colors.bar, boxShadow: `0 0 8px ${colors.glow}` }}
-                                  />
-                                </div>
+                          <h1
+                            className="whitespace-nowrap text-[36px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                            style={{
+                              transform: "scaleY(1.045)",
+                              transformOrigin: "center bottom",
+                              textShadow:
+                                "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
+                            }}
+                          >
+                            Astrological Predictions
+                          </h1>
+
+                          <span
+                            className="my-[12px] h-px w-[92px]"
+                            style={{
+                              background:
+                                "linear-gradient(90deg, transparent, rgba(203,213,225,0.42), transparent)",
+                            }}
+                            aria-hidden="true"
+                          />
+
+                          <p
+                            className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.24em] text-slate-300/52"
+                            style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
+                          >
+                            <span className="text-indigo-200/72">AstroProXL</span>
+                            <span className="mx-2 text-slate-500/70">|</span>
+                            <span>The Astrology Engine</span>
+                          </p>
+
+                          <motion.p
+                            initial={false}
+                            animate={
+                              shouldReduceMotion
+                                ? { opacity: 0.48 }
+                                : { opacity: [0.34, 0.68, 0.42] }
+                            }
+                            transition={
+                              shouldReduceMotion
+                                ? { duration: 0 }
+                                : { duration: 2.6, times: [0, 0.48, 1], ease: "easeInOut" }
+                            }
+                            className="absolute bottom-[10px] text-[8px] font-medium uppercase tracking-[0.18em] text-slate-400/55"
+                          >
+                            Tap for more
+                          </motion.p>
+                        </div>
+                      ) : heroInfoMode === "quick" ? (
+                        /* HERO 2 — user's Big Three above; elemental balance + profection below */
+                        <div className="absolute inset-0 px-[18px] py-[16px]">
+                          <div className="grid h-[102px] grid-cols-3 items-start gap-[10px]">
+                            {heroData.personal.map((item) => (
+                              <div key={`quick-${item.role}`} className="flex min-w-0 flex-col items-center text-center">
+                                <span className="text-[7px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">
+                                  {item.role}
+                                </span>
                                 <span
-                                  className="mt-[7px] text-[6.5px] font-semibold uppercase tracking-[0.10em]"
-                                  style={{ color: colors.text }}
+                                  className="mt-[7px] max-w-full truncate text-[16px] font-medium leading-none"
+                                  style={{
+                                    color: signAccentColor(item.sign),
+                                    textShadow: `0 0 12px ${signAccentGlow(item.sign)}`,
+                                  }}
                                 >
-                                  {element}
+                                  {item.sign}
+                                </span>
+                                <span className="mt-[6px] text-[9px] font-medium tabular-nums text-slate-300/76">
+                                  {item.degree ?? "—"}
+                                </span>
+                                <span className="mt-[3px] text-[7px] font-medium text-slate-500/76">
+                                  {item.house ? `${heroOrdinal(item.house)} House` : "—"}
                                 </span>
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
+
+                          <div className="relative mt-[4px] grid h-[96px] grid-cols-2 gap-[22px]">
+                            <div className="flex flex-col justify-center pr-[4px]">
+                              <p className="mb-[9px] text-left text-[7px] font-semibold uppercase tracking-[0.14em] text-slate-400/66">
+                                Elemental Balance
+                              </p>
+                              <div className="space-y-[7px]">
+                                {HERO_ELEMENT_ORDER.map((element) => {
+                                  const count = heroData.counts[element];
+                                  const ratio = count / heroData.maxElementCount;
+                                  const colors = HERO_ELEMENT_COLORS[element];
+                                  return (
+                                    <div key={element} className="flex items-center gap-[7px]">
+                                      <span
+                                        className="h-[6px] w-[6px] shrink-0 rounded-full"
+                                        style={{
+                                          backgroundColor: colors.bar,
+                                          boxShadow: `0 0 8px ${colors.glow}`,
+                                        }}
+                                        aria-hidden="true"
+                                      />
+                                      <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/[0.055]">
+                                        <motion.div
+                                          initial={false}
+                                          animate={{ width: `${Math.max(count ? 16 : 5, ratio * 100)}%` }}
+                                          transition={{
+                                            duration: shouldReduceMotion ? 0 : 0.45,
+                                            ease: [0.22, 1, 0.36, 1],
+                                          }}
+                                          className="h-full rounded-full"
+                                          style={{
+                                            backgroundColor: colors.bar,
+                                            boxShadow: `0 0 9px ${colors.glow}`,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <span
+                              className="absolute left-1/2 top-1/2 h-[66px] w-px -translate-x-1/2 -translate-y-1/2 bg-white/[0.07]"
+                              aria-hidden="true"
+                            />
+
+                            <div className="flex flex-col items-center justify-center pl-[4px] text-center">
+                              <p className="text-[7px] font-semibold uppercase tracking-[0.14em] text-slate-400/66">
+                                Profection Year
+                              </p>
+                              <div
+                                className="mt-[7px] flex h-[34px] w-[34px] items-center justify-center rounded-[11px] border bg-black/20"
+                                style={{
+                                  borderColor: profection?.activatedSign
+                                    ? HERO_ELEMENT_COLORS[SIGN_ELEMENTS[profection.activatedSign]]?.border ?? "rgba(255,255,255,0.10)"
+                                    : "rgba(255,255,255,0.10)",
+                                  boxShadow: profection?.activatedSign
+                                    ? `0 0 15px ${signAccentGlow(profection.activatedSign)}, inset 0 0 10px ${signAccentGlow(profection.activatedSign)}`
+                                    : "none",
+                                }}
+                              >
+                                <span
+                                  className="text-[17px]"
+                                  style={{ color: signAccentColor(profection?.activatedSign ?? "") }}
+                                >
+                                  {HERO_GLYPHS[heroSignRuler(profection?.activatedSign)] ?? "✦"}
+                                </span>
+                              </div>
+                              <span
+                                className="mt-[6px] max-w-full truncate text-[13px] font-medium leading-none"
+                                style={{
+                                  color: signAccentColor(profection?.activatedSign ?? ""),
+                                  textShadow: `0 0 10px ${signAccentGlow(profection?.activatedSign ?? "")}`,
+                                }}
+                              >
+                                {profection?.activatedSign ?? "—"}
+                              </span>
+                              <span className="mt-[4px] text-[7px] font-medium text-slate-400/72">
+                                {profection?.activatedHouse
+                                  ? `${heroOrdinal(profection.activatedHouse)} House Activated`
+                                  : "—"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* HERO 3 — clean Sun / Moon split with a short central separator and shared context below */
+                        <div className="absolute inset-0 px-[24px] py-[16px]">
+                          <div className="relative grid h-[176px] grid-cols-2 items-center">
+                            <div className="flex flex-col items-center justify-center pr-[20px] text-center">
+                              <span className="mb-[7px] text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-300/78">
+                                Sun
+                              </span>
+                              <div style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.20))" }}>
+                                <SunDisc size={64} />
+                              </div>
+                              <span className="mt-[8px] text-[15px] font-medium leading-none text-slate-100/94">
+                                {heroData.currentSun?.sign ?? "—"}
+                              </span>
+                              <span className="mt-[5px] text-[9px] font-medium tabular-nums text-slate-400/76">
+                                {heroData.currentSun?.degree ?? "—"}
+                              </span>
+                            </div>
+
+                            <span
+                              className="absolute left-1/2 top-1/2 h-[74px] w-px -translate-x-1/2 -translate-y-1/2"
+                              style={{
+                                background:
+                                  "linear-gradient(180deg, transparent, rgba(255,255,255,0.16), transparent)",
+                              }}
+                              aria-hidden="true"
+                            />
+
+                            <div className="flex flex-col items-center justify-center pl-[20px] text-center">
+                              <span className="mb-[7px] max-w-[120px] truncate text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-300/78">
+                                {moonPhase?.phaseName ?? "Moon"}
+                              </span>
+                              <div style={{ filter: "drop-shadow(0 0 18px rgba(226,223,240,0.16))" }}>
+                                <MoonDisc
+                                  illumination={moonPhase?.illuminationPercent ?? 50}
+                                  waxing={moonWaxing}
+                                  size={64}
+                                />
+                              </div>
+                              <span className="mt-[8px] text-[15px] font-medium leading-none text-slate-100/94">
+                                {moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}
+                              </span>
+                              <span className="mt-[5px] text-[9px] font-medium tabular-nums text-slate-400/76">
+                                {moonPhase?.moonDegree ?? heroData.currentMoon?.degree ?? "—"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="absolute inset-x-[34px] bottom-[12px] text-center">
+                            <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/78">
+                              {skyNotice.title}
+                            </span>
+                            <span className="ml-[7px] text-[8px] font-medium text-slate-400/72">
+                              {skyNotice.detail}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </motion.div>
                   </AnimatePresence>
                 </div>
               </div>
-            </div>
             </div>
           </section>
 
@@ -1338,26 +1869,20 @@ export default function ReadingIntakeScreen({
           <div
             className="relative mb-[14px] h-[26px] text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: heroInspecting ? 0.52 : 1,
-              filter: heroInspecting ? "brightness(0.34) saturate(0.55)" : "brightness(1) saturate(1)",
+              opacity: askHolding ? 0 : 1,
+              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
+              pointerEvents: askHolding ? "none" : "auto",
             }}
           >
-            <AnimatePresence mode="sync" initial={false}>
-              <motion.p
-                key={selectedAreaConfig ? `reading-title-${selectedAreaConfig.id}` : "select-reading"}
-                initial={{ opacity: 0, y: 2, filter: "blur(2px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -2, filter: "blur(2px)" }}
-                transition={{ duration: selectedAreaConfig ? 0.38 : 0.58, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
-                style={{
-                  textShadow:
-                    "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-                }}
-              >
-                {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
-              </motion.p>
-            </AnimatePresence>
+            <p
+              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+              style={{
+                textShadow:
+                  "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
+              }}
+            >
+              {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
+            </p>
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -1382,13 +1907,13 @@ export default function ReadingIntakeScreen({
                       ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: heroInspecting ? 0.52 : selectedArea && !isSelected ? 0.58 : 1,
-                    filter: heroInspecting
-                      ? "grayscale(1) brightness(0.24) saturate(0)"
+                    opacity: askHolding ? 0 : selectedArea && !isSelected ? 0.74 : 1,
+                    filter: askHolding
+                      ? "blur(4px) brightness(0.18)"
                       : selectedArea && !isSelected
-                        ? "grayscale(1) brightness(0.24) saturate(0)"
+                        ? "grayscale(0.70) brightness(0.54) saturate(0.45)"
                         : "brightness(1) saturate(1)",
-                    transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
+                    transitionDuration: selectedArea || askHolding ? "700ms" : "350ms",
                   }}
                 >
                   {Icon ? (
@@ -1423,9 +1948,10 @@ export default function ReadingIntakeScreen({
             data-reading-context="true"
             className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
             style={{
-              opacity: heroInspecting ? 0.52 : 1,
-              filter: heroInspecting ? "brightness(0.30) saturate(0.45)" : "brightness(1) saturate(1)",
-              transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
+              opacity: askHolding ? 0 : 1,
+              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
+              pointerEvents: askHolding ? "none" : "auto",
+              transitionDuration: selectedArea || askHolding ? "700ms" : "350ms",
             }}
           >
             <div
@@ -1481,9 +2007,10 @@ export default function ReadingIntakeScreen({
           <div
             className="mt-3 flex flex-col items-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: heroInspecting ? 0.48 : 1,
-              filter: heroInspecting ? "brightness(0.28) saturate(0.42)" : "brightness(1) saturate(1)",
-              transitionDuration: heroInspecting ? "950ms" : "350ms",
+              opacity: askHolding ? 0 : 1,
+              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
+              pointerEvents: askHolding ? "none" : "auto",
+              transitionDuration: askHolding ? "700ms" : "350ms",
             }}
           >
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
@@ -1492,11 +2019,9 @@ export default function ReadingIntakeScreen({
               data-begin-reading="true"
               onClick={handleStartReading}
               disabled={!canSubmit || isCreatingReading}
-              className="standard-shadow h-12 w-[calc(50%_-_6px)] rounded-[20px] text-[14px] font-medium transition-all duration-500 ease-out hover:-translate-y-[1px] hover:opacity-95 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+              className="standard-shadow relative h-12 w-[calc(50%_-_6px)] overflow-hidden rounded-[20px] text-[14px] font-medium transition-[border-color,color,opacity,transform,box-shadow] duration-500 ease-out hover:-translate-y-[1px] hover:opacity-95 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
               style={{
-                background: canSubmit && !isCreatingReading && beginReadingStyle
-                  ? beginReadingStyle.background
-                  : "rgba(255,255,255,0.012)",
+                background: "rgba(255,255,255,0.012)",
                 border: canSubmit && !isCreatingReading && beginReadingStyle
                   ? `1px solid ${beginReadingStyle.border}`
                   : "1px solid rgba(203,213,225,0.16)",
@@ -1510,7 +2035,15 @@ export default function ReadingIntakeScreen({
                   : "0 14px 28px rgba(0,0,0,0.56)",
               }}
             >
-              {buttonCopy}
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 transition-opacity duration-500 ease-out"
+                style={{
+                  background: beginReadingStyle?.background ?? "transparent",
+                  opacity: canSubmit && !isCreatingReading && beginReadingStyle ? 1 : 0,
+                }}
+              />
+              <span className="relative z-10">{buttonCopy}</span>
             </Button>
           </div>
 
@@ -1518,16 +2051,18 @@ export default function ReadingIntakeScreen({
           <section className="mt-3">
             <button
               type="button"
-              onClick={() => setShowJxl(true)}
-              className="ask-premium tap-fix relative flex h-[108px] w-full items-center rounded-[24px] px-5 text-left transition-[transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
+              onPointerDown={startAskHold}
+              onPointerUp={endAskHold}
+              onPointerCancel={endAskHold}
+              onContextMenu={(e) => e.preventDefault()}
+              className="ask-premium tap-fix relative flex h-[108px] w-full touch-none items-center rounded-[24px] px-5 text-left transition-[transform,opacity,filter] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0"
+              aria-label="Press and hold Ask Anything to speak"
               style={{
-                opacity: heroInspecting ? 0.48 : selectedArea ? 0.62 : 1,
-                filter: heroInspecting
-                  ? "grayscale(1) brightness(0.24) saturate(0)"
-                  : selectedArea
-                    ? "grayscale(1) brightness(0.24) saturate(0)"
-                    : "brightness(1) saturate(1)",
-                transitionDuration: selectedArea || heroInspecting ? "950ms" : "350ms",
+                opacity: selectedArea && !askHolding ? 0.76 : 1,
+                filter: selectedArea && !askHolding
+                  ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+                  : "brightness(1) saturate(1)",
+                transform: askHolding ? "scale(1.012)" : undefined,
               }}
             >
               <span className="ask-mic-halo mr-4 shrink-0">
@@ -1550,47 +2085,22 @@ export default function ReadingIntakeScreen({
               <span
                 aria-hidden="true"
                 className="ask-focus-veil"
-                style={{ opacity: heroInspecting ? 0.58 : selectedArea ? 0.48 : 0 }}
+                style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
               />
             </button>
+
+            {askError && !askHolding && (
+              <p className="mt-2 text-center text-[11px] text-slate-400/78">
+                {askError}
+              </p>
+            )}
           </section>
           </div>
 
         </motion.div>
       </div>
-
-      {/* ── JXL overlay (portaled to body) ── */}
-      {showJxl && typeof document !== "undefined" &&
-        createPortal(
-          <div style={{ position: "fixed", inset: 0, zIndex: 9999 }}>
-            <button
-              type="button"
-              onClick={() => setShowJxl(false)}
-              style={{
-                position: "fixed",
-                top: "calc(12px + env(safe-area-inset-top))",
-                left: "16px",
-                zIndex: 100,
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                background: "rgba(5,8,22,0.6)",
-                border: "1px solid rgba(148,163,184,0.2)",
-                borderRadius: "999px",
-                padding: "6px 12px 6px 8px",
-                color: "#cbd5e1",
-                fontSize: "13px",
-                cursor: "pointer",
-                backdropFilter: "blur(8px)",
-              }}
-            >
-              <ChevronLeft size={16} />
-              Back
-            </button>
-            <JxlPanel isActive={showJxl} />
-          </div>,
-          document.body
-        )}
+      
+            {/* ── Embedded Stripe checkout (portaled) ── */}
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
