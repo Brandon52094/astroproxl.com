@@ -8,7 +8,6 @@ export default function StarfieldBackground() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -32,6 +31,10 @@ export default function StarfieldBackground() {
       y: number;
       r: number;
     };
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const W = () => canvas.offsetWidth;
+    const H = () => canvas.offsetHeight;
 
     // Main depth field — fully static.
     const staticStars: Star[] = Array.from({ length: 52 }, () => ({
@@ -58,61 +61,14 @@ export default function StarfieldBackground() {
       r: Math.random() * 1.1 + 0.65,
     }));
 
-    let cssWidth = 0;
-    let cssHeight = 0;
-    let dpr = 1;
-
-    /**
-     * Keep the backing buffer matched to the canvas's *actual rendered size*.
-     *
-     * Standalone PWAs can correct the visual viewport after first paint without
-     * dispatching a normal window.resize event. ResizeObserver +
-     * visualViewport.resize handle the normal cases, and draw() also calls this
-     * as a final safety net so the canvas can never stay stale.
-     */
-    const syncCanvasSize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const nextWidth = Math.max(1, rect.width);
-      const nextHeight = Math.max(1, rect.height);
-      const nextDpr = Math.min(window.devicePixelRatio || 1, 1.5);
-
-      const targetWidth = Math.max(1, Math.round(nextWidth * nextDpr));
-      const targetHeight = Math.max(1, Math.round(nextHeight * nextDpr));
-
-      const sizeChanged =
-        canvas.width !== targetWidth ||
-        canvas.height !== targetHeight ||
-        cssWidth !== nextWidth ||
-        cssHeight !== nextHeight ||
-        dpr !== nextDpr;
-
-      cssWidth = nextWidth;
-      cssHeight = nextHeight;
-      dpr = nextDpr;
-
-      if (!sizeChanged) return;
-
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
+    const resize = () => {
+      canvas.width = Math.max(1, Math.round(W() * dpr));
+      canvas.height = Math.max(1, Math.round(H() * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
-    syncCanvasSize();
-
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => {
-            syncCanvasSize();
-          })
-        : null;
-
-    resizeObserver?.observe(canvas);
-
-    window.addEventListener("resize", syncCanvasSize);
-    window.addEventListener("orientationchange", syncCanvasSize);
-    window.addEventListener("pageshow", syncCanvasSize);
-    window.visualViewport?.addEventListener("resize", syncCanvasSize);
-    window.visualViewport?.addEventListener("scroll", syncCanvasSize);
+    resize();
+    window.addEventListener("resize", resize);
 
     let raf = 0;
     let running = true;
@@ -123,26 +79,25 @@ export default function StarfieldBackground() {
 
     const draw = (now: number) => {
       if (!running) return;
-
       raf = requestAnimationFrame(draw);
-
       if (now - lastFrame < frameInterval) return;
       lastFrame = now - ((now - lastFrame) % frameInterval);
 
-      // Final safety net: if the PWA viewport changed without any resize event,
-      // the very next rendered frame repairs the backing buffer.
-      syncCanvasSize();
-
-      const w = cssWidth;
-      const h = cssHeight;
-
+      const w = W();
+      const h = H();
       ctx.clearRect(0, 0, w, h);
 
       // ── Static stars ───────────────────────────────────────────────
       for (const star of staticStars) {
         ctx.fillStyle = `rgba(219,234,254,${star.a})`;
         ctx.beginPath();
-        ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
+        ctx.arc(
+          star.x * w,
+          star.y * h,
+          star.r,
+          0,
+          Math.PI * 2
+        );
         ctx.fill();
       }
 
@@ -174,7 +129,13 @@ export default function StarfieldBackground() {
       for (const star of con) {
         ctx.fillStyle = "rgba(191,219,254,0.72)";
         ctx.beginPath();
-        ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
+        ctx.arc(
+          star.x * w,
+          star.y * h,
+          star.r,
+          0,
+          Math.PI * 2
+        );
         ctx.fill();
       }
 
@@ -207,11 +168,9 @@ export default function StarfieldBackground() {
         cancelAnimationFrame(raf);
         return;
       }
-
       if (!running) {
         running = true;
         lastFrame = 0;
-        syncCanvasSize();
         raf = requestAnimationFrame(draw);
       }
     };
@@ -222,16 +181,11 @@ export default function StarfieldBackground() {
     return () => {
       running = false;
       cancelAnimationFrame(raf);
-
-      resizeObserver?.disconnect();
-
-      window.removeEventListener("resize", syncCanvasSize);
-      window.removeEventListener("orientationchange", syncCanvasSize);
-      window.removeEventListener("pageshow", syncCanvasSize);
-      window.visualViewport?.removeEventListener("resize", syncCanvasSize);
-      window.visualViewport?.removeEventListener("scroll", syncCanvasSize);
-
-      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("resize", resize);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibility
+      );
     };
   }, []);
 
