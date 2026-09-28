@@ -14,7 +14,6 @@ import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import {
   saveIntake,
@@ -36,36 +35,7 @@ declare global {
   }
 }
 
-
-/* ── Lightweight live voice capture for the intake hero ──────────────── */
-interface IntakeSpeechRecognitionAlternative { readonly transcript: string }
-interface IntakeSpeechRecognitionResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  [index: number]: IntakeSpeechRecognitionAlternative;
-}
-interface IntakeSpeechRecognitionResultList {
-  readonly length: number;
-  [index: number]: IntakeSpeechRecognitionResult;
-}
-interface IntakeSpeechRecognitionEvent extends Event {
-  readonly results: IntakeSpeechRecognitionResultList;
-}
-interface IntakeSpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-}
-interface IntakeSpeechRecognition extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((e: IntakeSpeechRecognitionEvent) => void) | null;
-  onerror: ((e: IntakeSpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-}
-
+/* ── Recorded voice capture for Ask Anything ────────────────────────── */
 const ASK_MIN_HOLD_MS = 450;
 
 const ASK_WAVE = {
@@ -102,34 +72,26 @@ const AREAS = [
   {
     id: "love",
     title: "Love",
-    description: "Relationships, romance, or emotional patterns",
     icon: Heart,
-    placeholder: "Ask something specific about love, timing, or where this connection is headed.",
     defaultQuestion: "What is coming for me in love over the next 30–45 days?",
   },
   {
     id: "money",
     title: "Money",
-    description: "Income, stability, opportunities, and financial timing",
     icon: Wallet,
-    placeholder: "Ask something specific about money, stability, or the opportunities opening next.",
     defaultQuestion: "What is coming for me with money over the next 30–45 days?",
   },
   {
     id: "career",
     title: "Career",
-    description: "Work, recognition, direction, and next steps",
     icon: Briefcase,
-    placeholder: "Ask something specific about work, momentum, or the direction your career is moving.",
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
   {
     id: "other",
     title: "What's Coming",
-    description: "What to expect in the next 30–45 days.",
     icon: null,
     marker: "30–45",
-    placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
 ];
@@ -151,11 +113,6 @@ const HERO_HORIZONTAL_INSET = 20;
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
-  readingsCompleted: number;
-  onCooldown: boolean;
-  cooldownExpiresAt: string | null;
-  canBypass: boolean;
-  pwaFreeReadingUsed?: boolean;
 }
 
 interface ReadingIntakeScreenProps {
@@ -171,7 +128,6 @@ interface Placement {
   sign: string;
   degree?: string;
   house?: number;
-  isRetrograde?: boolean;
 }
 
 interface MoonPhaseData {
@@ -181,13 +137,13 @@ interface MoonPhaseData {
   daysUntilNextEvent?: number;
   moonSign?: string;
   moonDegree?: string;
+  nextSignName?: string;
+  nextSignIngressAt?: string;
 }
 
 interface ProfectionData {
-  age: number;
   activatedHouse: number;
   activatedSign: string;
-  timeLord?: string;
 }
 
 type ElementName = "Earth" | "Fire" | "Water" | "Air";
@@ -271,112 +227,303 @@ function signAccentGlow(sign: string): string {
   return element ? HERO_ELEMENT_COLORS[element].glow : "rgba(148,163,184,0.12)";
 }
 
-function MoonDisc({ illumination, waxing, size = 58 }: { illumination: number; waxing: boolean; size?: number }) {
+function MoonDisc({
+  illumination,
+  waxing,
+  size = 58,
+}: {
+  illumination: number;
+  waxing: boolean;
+  size?: number;
+}) {
   const f = Math.min(1, Math.max(0, illumination / 100));
-  const r = 46;
+  const r = 42.5;
   const c = 50;
   const top = `${c} ${c - r}`;
   const bottom = `${c} ${c + r}`;
-  const rx = Math.abs(1 - 2 * f) * r;
+  const rx = Math.max(0.35, Math.abs(1 - 2 * f) * r);
   const outerSweep = waxing ? 1 : 0;
   const terminatorSweep = f >= 0.5 ? (waxing ? 1 : 0) : (waxing ? 0 : 1);
-  const litPath = `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
+
+  const litPath =
+    f > 0.995
+      ? `M ${c - r} ${c} A ${r} ${r} 0 1 0 ${c + r} ${c} A ${r} ${r} 0 1 0 ${c - r} ${c}`
+      : `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
 
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+      style={{ overflow: "visible" }}
+    >
       <defs>
-        <radialGradient id="intakeMoonLit" cx="38%" cy="34%" r="75%">
-          <stop offset="0%" stopColor="#F1EFF7" />
-          <stop offset="55%" stopColor="#C9C7D6" />
-          <stop offset="100%" stopColor="#9A98AC" />
+        <radialGradient id="apxlMoonSurface" cx="35%" cy="30%" r="78%">
+          <stop offset="0%" stopColor="#FAF9F6" />
+          <stop offset="34%" stopColor="#E8E6E2" />
+          <stop offset="66%" stopColor="#C6C4C4" />
+          <stop offset="88%" stopColor="#9B9DA5" />
+          <stop offset="100%" stopColor="#737986" />
         </radialGradient>
+
+        <radialGradient id="apxlMoonNight" cx="38%" cy="36%" r="74%">
+          <stop offset="0%" stopColor="#242A39" />
+          <stop offset="62%" stopColor="#121826" />
+          <stop offset="100%" stopColor="#070B12" />
+        </radialGradient>
+
+        <radialGradient id="apxlMoonAura" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(226,232,240,0.22)" />
+          <stop offset="48%" stopColor="rgba(148,163,184,0.08)" />
+          <stop offset="100%" stopColor="rgba(125,211,252,0)" />
+        </radialGradient>
+
+        <linearGradient id="apxlMoonLimb" x1="8%" y1="10%" x2="92%" y2="90%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.20)" />
+          <stop offset="44%" stopColor="rgba(255,255,255,0.02)" />
+          <stop offset="100%" stopColor="rgba(5,8,18,0.34)" />
+        </linearGradient>
+
+        <clipPath id="apxlMoonLitClip">
+          {f > 0.005 ? <path d={litPath} /> : null}
+        </clipPath>
+
+        <filter id="apxlMoonTexture" x="-18%" y="-18%" width="136%" height="136%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.042"
+            numOctaves="4"
+            seed="27"
+            result="noise"
+          />
+          <feColorMatrix
+            in="noise"
+            type="matrix"
+            values="
+              0.30 0 0 0 0.30
+              0 0.30 0 0 0.30
+              0 0 0.30 0 0.31
+              0 0 0 0.28 0
+            "
+            result="moonNoise"
+          />
+          <feBlend in="SourceGraphic" in2="moonNoise" mode="multiply" />
+        </filter>
       </defs>
-      <circle cx={c} cy={c} r={r} fill="#151A30" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      {f > 0.995 ? (
-        <circle cx={c} cy={c} r={r} fill="url(#intakeMoonLit)" />
-      ) : f > 0.005 ? (
-        <path d={litPath} fill="url(#intakeMoonLit)" />
+
+      <circle cx={c} cy={c} r="49" fill="url(#apxlMoonAura)" />
+
+      <circle cx={c} cy={c} r={r} fill="url(#apxlMoonNight)" />
+
+      {f > 0.005 ? (
+        <g clipPath="url(#apxlMoonLitClip)">
+          <circle
+            cx={c}
+            cy={c}
+            r={r}
+            fill="url(#apxlMoonSurface)"
+            filter="url(#apxlMoonTexture)"
+          />
+
+          {/* maria */}
+          <ellipse cx="34" cy="35" rx="11.5" ry="7.5" fill="rgba(60,62,69,0.19)" />
+          <ellipse cx="61" cy="41" rx="13.5" ry="9.5" fill="rgba(63,65,72,0.16)" />
+          <ellipse cx="49" cy="63" rx="14.5" ry="8" fill="rgba(67,69,75,0.13)" />
+          <ellipse cx="69" cy="65" rx="7" ry="5.5" fill="rgba(58,60,66,0.13)" />
+          <ellipse cx="31" cy="69" rx="6" ry="4" fill="rgba(75,77,83,0.11)" />
+
+          {/* crater field */}
+          <circle cx="27" cy="49" r="5.2" fill="rgba(70,72,78,0.16)" />
+          <circle cx="27" cy="48" r="3.1" fill="rgba(248,247,242,0.07)" />
+          <circle cx="58" cy="29" r="3.4" fill="rgba(68,70,77,0.15)" />
+          <circle cx="74" cy="52" r="4.4" fill="rgba(67,69,75,0.14)" />
+          <circle cx="43" cy="74" r="3.8" fill="rgba(65,67,73,0.13)" />
+          <circle cx="39" cy="25" r="2.4" fill="rgba(61,63,69,0.13)" />
+          <circle cx="54" cy="50" r="2.1" fill="rgba(76,78,84,0.10)" />
+          <circle cx="68" cy="31" r="1.8" fill="rgba(74,76,82,0.11)" />
+
+          <circle cx={c} cy={c} r={r} fill="url(#apxlMoonLimb)" />
+        </g>
       ) : null}
-      <circle cx="38" cy="40" r="7" fill="rgba(0,0,0,0.10)" />
-      <circle cx="60" cy="58" r="5" fill="rgba(0,0,0,0.09)" />
-      <circle cx="52" cy="30" r="3.5" fill="rgba(0,0,0,0.08)" />
-      <circle cx="42" cy="66" r="4" fill="rgba(0,0,0,0.08)" />
+
+      <circle
+        cx={c}
+        cy={c}
+        r={r}
+        fill="none"
+        stroke="rgba(255,255,255,0.18)"
+        strokeWidth="0.8"
+      />
     </svg>
   );
 }
 
 function SunDisc({ size = 58 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+      style={{ overflow: "visible" }}
+    >
       <defs>
-        <radialGradient id="intakeSunCore" cx="38%" cy="34%" r="72%">
-          <stop offset="0%" stopColor="#FFFCE8" />
-          <stop offset="48%" stopColor="#FDE68A" />
-          <stop offset="78%" stopColor="#F59E0B" />
-          <stop offset="100%" stopColor="#D97706" />
+        <radialGradient id="apxlSunSurface" cx="36%" cy="31%" r="72%">
+          <stop offset="0%" stopColor="#FFFEEB" />
+          <stop offset="15%" stopColor="#FFF3A2" />
+          <stop offset="38%" stopColor="#FFD95A" />
+          <stop offset="64%" stopColor="#FFAE1D" />
+          <stop offset="84%" stopColor="#F47A05" />
+          <stop offset="100%" stopColor="#C94D00" />
         </radialGradient>
-        <radialGradient id="intakeSunHalo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(253,230,138,0.34)" />
-          <stop offset="68%" stopColor="rgba(245,158,11,0.12)" />
-          <stop offset="100%" stopColor="rgba(245,158,11,0)" />
+
+        <radialGradient id="apxlSunAura" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(255,235,127,0.62)" />
+          <stop offset="36%" stopColor="rgba(255,188,50,0.30)" />
+          <stop offset="64%" stopColor="rgba(255,126,0,0.12)" />
+          <stop offset="100%" stopColor="rgba(255,110,0,0)" />
         </radialGradient>
+
+        <linearGradient id="apxlSunLimb" x1="10%" y1="8%" x2="92%" y2="92%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.26)" />
+          <stop offset="42%" stopColor="rgba(255,255,255,0.03)" />
+          <stop offset="100%" stopColor="rgba(145,49,0,0.26)" />
+        </linearGradient>
+
+        <filter id="apxlSunTexture" x="-18%" y="-18%" width="136%" height="136%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.06"
+            numOctaves="4"
+            seed="31"
+            result="solarNoise"
+          />
+          <feColorMatrix
+            in="solarNoise"
+            type="matrix"
+            values="
+              0.95 0 0 0 0.12
+              0 0.52 0 0 0.04
+              0 0 0.13 0 0
+              0 0 0 0.34 0
+            "
+            result="solarTexture"
+          />
+          <feBlend in="SourceGraphic" in2="solarTexture" mode="screen" />
+        </filter>
+
+        <filter id="apxlSunCorona" x="-70%" y="-70%" width="240%" height="240%">
+          <feGaussianBlur stdDeviation="2.2" />
+        </filter>
       </defs>
-      <circle cx="50" cy="50" r="49" fill="url(#intakeSunHalo)" />
-      <circle cx="50" cy="50" r="46" fill="url(#intakeSunCore)" stroke="rgba(255,248,214,0.45)" strokeWidth="1" />
-      <circle cx="40" cy="38" r="5.5" fill="rgba(255,255,255,0.12)" />
-      <circle cx="61" cy="58" r="4" fill="rgba(180,83,9,0.10)" />
-      <circle cx="56" cy="31" r="2.8" fill="rgba(255,255,255,0.10)" />
+
+      {/* Soft corona with no visible square or weather-icon rays */}
+      <circle cx="50" cy="50" r="49" fill="url(#apxlSunAura)" />
+
+      <g
+        fill="none"
+        stroke="#FFC53D"
+        strokeLinecap="round"
+        opacity="0.28"
+        filter="url(#apxlSunCorona)"
+      >
+        <path d="M50 3 C44 11 55 13 49 21" strokeWidth="2" />
+        <path d="M50 97 C44 89 55 87 49 79" strokeWidth="2" />
+        <path d="M3 50 C11 44 13 55 21 49" strokeWidth="2" />
+        <path d="M97 50 C89 44 87 55 79 49" strokeWidth="2" />
+        <path d="M16 17 C24 20 22 28 30 30" strokeWidth="1.5" />
+        <path d="M84 17 C76 20 78 28 70 30" strokeWidth="1.5" />
+        <path d="M16 83 C24 80 22 72 30 70" strokeWidth="1.5" />
+        <path d="M84 83 C76 80 78 72 70 70" strokeWidth="1.5" />
+      </g>
+
+      <circle
+        cx="50"
+        cy="50"
+        r="40.5"
+        fill="url(#apxlSunSurface)"
+        filter="url(#apxlSunTexture)"
+      />
+
+      {/* subtle solar granulation */}
+      <path
+        d="M19 47 C29 37 38 33 49 34 C62 34 73 38 81 47"
+        fill="none"
+        stroke="rgba(255,252,212,0.16)"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M22 62 C33 56 42 61 54 60 C66 59 73 53 79 55"
+        fill="none"
+        stroke="rgba(181,67,0,0.18)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M29 73 C40 68 51 72 67 67"
+        fill="none"
+        stroke="rgba(255,241,171,0.12)"
+        strokeWidth="1"
+        strokeLinecap="round"
+      />
+
+      {/* active regions */}
+      <ellipse cx="35" cy="38" rx="4.8" ry="3.1" fill="rgba(255,255,255,0.11)" />
+      <ellipse cx="62" cy="58" rx="4.2" ry="2.9" fill="rgba(167,58,0,0.11)" />
+      <ellipse cx="58" cy="28" rx="2.5" ry="1.8" fill="rgba(255,255,255,0.10)" />
+      <ellipse cx="42" cy="67" rx="2.3" ry="1.6" fill="rgba(180,65,0,0.09)" />
+
+      <circle cx="50" cy="50" r="40.5" fill="url(#apxlSunLimb)" />
+
+      <circle
+        cx="50"
+        cy="50"
+        r="40.8"
+        fill="none"
+        stroke="rgba(255,246,194,0.54)"
+        strokeWidth="0.9"
+      />
     </svg>
   );
 }
 
-type ThemeName = "cosmic";
-
 interface ThemeColors {
-  name: ThemeName;
   areaColors: {
-    love: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    money: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    career: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    other: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    love: { bg: string; border: string; glow: string; text: string };
+    money: { bg: string; border: string; glow: string; text: string };
+    career: { bg: string; border: string; glow: string; text: string };
+    other: { bg: string; border: string; glow: string; text: string };
   };
 }
 
-const THEMES: Record<ThemeName, ThemeColors> = {
+const THEMES: Record<"cosmic", ThemeColors> = {
   cosmic: {
-    name: "cosmic",
     areaColors: {
       love: {
         bg: "rgba(131, 24, 67, 0.18)",
         border: "rgba(251, 113, 133, 0.78)",
         glow: "rgba(244, 114, 182, 0.20)",
         text: "#FDA4AF",
-        iconBg: "rgba(131, 24, 67, 0.46)",
-        gradient: "linear-gradient(135deg, rgba(131,24,67,0.78) 0%, rgba(190,24,93,0.56) 38%, rgba(244,114,182,0.16) 100%)",
       },
       money: {
         bg: "rgba(20, 83, 45, 0.22)",
         border: "rgba(52, 211, 153, 0.74)",
         glow: "rgba(34, 197, 94, 0.22)",
         text: "#86EFAC",
-        iconBg: "rgba(20, 83, 45, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
       },
       career: {
         bg: "rgba(30, 58, 138, 0.22)",
         border: "rgba(147, 197, 253, 0.76)",
         glow: "rgba(59, 130, 246, 0.22)",
         text: "#93C5FD",
-        iconBg: "rgba(30, 58, 138, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
       },
       other: {
         bg: "rgba(49, 46, 129, 0.22)",
         border: "rgba(139, 92, 246, 0.76)",
         glow: "rgba(139, 92, 246, 0.22)",
         text: "#C4B5FD",
-        iconBg: "rgba(49, 46, 129, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
       },
     },
   },
@@ -432,7 +579,7 @@ export default function ReadingIntakeScreen({
   useEffect(() => {
     if (propUserStatus) setUserStatus(propUserStatus);
   }, [propUserStatus]);
-    const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const theme = THEMES.cosmic;
 
   // Chart-derived data for the fixed-size hero information system.
@@ -440,6 +587,10 @@ export default function ReadingIntakeScreen({
   const [transits, setTransits] = useState<Placement[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
+  const [heroCurrentPlace, setHeroCurrentPlace] = useState("");
+  const [heroCurrentTimezone, setHeroCurrentTimezone] = useState("");
+  const [heroHasGpsLocation, setHeroHasGpsLocation] = useState(false);
+  const [heroNow, setHeroNow] = useState(() => new Date());
 
   // The normal hero is user-controlled only: Brand → Quick Chart → Current Sky.
   // Ask Anything temporarily replaces these with a fourth listening state.
@@ -455,16 +606,19 @@ export default function ReadingIntakeScreen({
   const [micConnecting, setMicConnecting] = useState(false);
   const [askHolding, setAskHolding] = useState(false);
   const askHoldingRef = useRef(false);
-  const [liveTranscript, setLiveTranscript] = useState("");
   const [askError, setAskError] = useState<string | null>(null);
-  const recognitionRef = useRef<IntakeSpeechRecognition | null>(null);
-  const transcriptRef = useRef("");
+  const [isTranscribingAsk, setIsTranscribingAsk] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
   const askHoldStartRef = useRef(0);
+  const askPointerStartYRef = useRef(0);
+  const askCancelledRef = useRef(false);
   const meterStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterRafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const headerCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -596,7 +750,6 @@ export default function ReadingIntakeScreen({
             sign: item.sign,
             degree: typeof item.degree === "string" ? item.degree : undefined,
             house: typeof item.house === "number" ? item.house : undefined,
-            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
           }];
         });
       }
@@ -611,7 +764,6 @@ export default function ReadingIntakeScreen({
             sign: item.sign,
             degree: typeof item.degree === "string" ? item.degree : undefined,
             house: typeof item.house === "number" ? item.house : undefined,
-            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
           }];
         });
       }
@@ -620,6 +772,21 @@ export default function ReadingIntakeScreen({
     };
 
     const chart = loadChart();
+
+    const chartLocation = chart as unknown as {
+      currentPlace?: string;
+      currentTimezone?: string;
+      currentLat?: number;
+      currentLng?: number;
+    } | null;
+
+    setHeroCurrentPlace(chartLocation?.currentPlace ?? "");
+    setHeroCurrentTimezone(chartLocation?.currentTimezone ?? "");
+    setHeroHasGpsLocation(
+      typeof chartLocation?.currentLat === "number" &&
+      typeof chartLocation?.currentLng === "number"
+    );
+
     const data = chart?.chartData as unknown as {
       tropical?: { planets?: unknown; angles?: unknown };
       transits?: unknown;
@@ -648,11 +815,6 @@ export default function ReadingIntakeScreen({
       setUserStatus({
         credits: Number(data.credits ?? 0),
         isSubscribed: data.isSubscribed === true,
-        readingsCompleted: Number(data.readingsCompleted ?? 0),
-        onCooldown: data.onCooldown === true,
-        cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-        canBypass: data.canBypass === true,
-        pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
       });
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
@@ -692,7 +854,6 @@ export default function ReadingIntakeScreen({
     const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
     const currentSun = find(transits, ["Sun"]);
     const currentMoon = find(transits, ["Moon"]);
-    const mercury = find(transits, ["Mercury"]);
 
     const counts: Record<ElementName, number> = { Earth: 0, Fire: 0, Water: 0, Air: 0 };
     const balanceBodies = new Set([
@@ -714,59 +875,92 @@ export default function ReadingIntakeScreen({
       ],
       currentSun,
       currentMoon,
-      mercury,
       counts,
       maxElementCount,
     };
   }, [natal, transits]);
 
+  useEffect(() => {
+    const update = () => setHeroNow(new Date());
+    update();
+    const timer = window.setInterval(update, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const heroAsOf = useMemo(() => {
+    const timezone = heroCurrentTimezone || undefined;
+
+    const datePart = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: timezone,
+    }).format(heroNow);
+
+    const timePart = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: timezone,
+    })
+      .format(heroNow)
+      .replace(" AM", " am")
+      .replace(" PM", " pm");
+
+    const place = heroCurrentPlace ? ` in ${heroCurrentPlace}` : "";
+    const source = heroHasGpsLocation ? " (GPS)" : "";
+
+    return `As of ${datePart} at ${timePart}${place}${source}`;
+  }, [heroCurrentPlace, heroCurrentTimezone, heroHasGpsLocation, heroNow]);
+
   const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
-  const visibleTranscript = useMemo(() => {
-    const words = liveTranscript.trim().split(/\s+/).filter(Boolean);
-    return words.slice(-28).join(" ");
-  }, [liveTranscript]);
+  const moonIngressLine = useMemo(() => {
+    if (moonPhase?.nextSignName && moonPhase?.nextSignIngressAt) {
+      const raw = new Date(moonPhase.nextSignIngressAt);
+      if (!Number.isNaN(raw.getTime())) {
+        const timezone = heroCurrentTimezone || undefined;
+        const date = new Intl.DateTimeFormat("en-US", {
+          month: "numeric",
+          day: "numeric",
+          timeZone: timezone,
+        }).format(raw);
+        const time = new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: timezone,
+        })
+          .format(raw)
+          .replace(" AM", " am")
+          .replace(" PM", " pm");
 
-  const skyNotice = useMemo(() => {
-    if (heroData.mercury?.isRetrograde) {
-      return {
-        title: "Mercury Retrograde",
-        detail: heroData.mercury.sign
-          ? `Mercury ℞ in ${heroData.mercury.sign}`
-          : "Mercury is currently retrograde",
-      };
+        return `Enters ${moonPhase.nextSignName} ${date} at ${time}`;
+      }
+
+      return `Enters ${moonPhase.nextSignName} ${moonPhase.nextSignIngressAt}`;
     }
 
     if (moonPhase?.nextEventName && typeof moonPhase.daysUntilNextEvent === "number") {
-      return {
-        title: moonPhase.nextEventName,
-        detail:
-          moonPhase.daysUntilNextEvent === 0
-            ? "Exact today"
-            : `In ${moonPhase.daysUntilNextEvent} day${moonPhase.daysUntilNextEvent === 1 ? "" : "s"}`,
-      };
+      return moonPhase.daysUntilNextEvent === 0
+        ? `${moonPhase.nextEventName} exact today`
+        : `${moonPhase.nextEventName} in ${moonPhase.daysUntilNextEvent} day${moonPhase.daysUntilNextEvent === 1 ? "" : "s"}`;
     }
 
-    return {
-      title: "Current Sky",
-      detail: heroData.mercury?.sign
-        ? `Mercury direct in ${heroData.mercury.sign}`
-        : "Live planetary context",
-    };
-  }, [heroData.mercury, moonPhase]);
+    return "Live lunar timing";
+  }, [heroCurrentTimezone, moonPhase]);
 
-  const stopAskRecognition = useCallback(() => {
-    const rec = recognitionRef.current;
-    if (!rec) return;
+
+  const stopAskRecorder = useCallback((discard = false) => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+
+    if (discard) askCancelledRef.current = true;
+
     try {
-      rec.onresult = null;
-      rec.onerror = null;
-      rec.onend = null;
-      rec.stop();
+      if (recorder.state !== "inactive") recorder.stop();
     } catch {
       // already stopped
     }
-    recognitionRef.current = null;
   }, []);
 
   const stopAskMeter = useCallback(() => {
@@ -784,16 +978,17 @@ export default function ReadingIntakeScreen({
       audioCtxRef.current = null;
     }
 
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (canvas && ctx) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const canvas of [canvasRef.current, headerCanvasRef.current]) {
+      const ctx = canvas?.getContext("2d");
+      if (canvas && ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
     }
   }, []);
 
   const disconnectMicrophone = useCallback(() => {
-    stopAskRecognition();
+    stopAskRecorder(true);
     stopAskMeter();
 
     if (meterStreamRef.current) {
@@ -809,7 +1004,7 @@ export default function ReadingIntakeScreen({
     setAskHolding(false);
     setMicEnabled(false);
     setMicConnecting(false);
-  }, [stopAskMeter, stopAskRecognition]);
+  }, [stopAskMeter, stopAskRecorder]);
 
   const enableMicrophone = useCallback(async () => {
     if (micEnabled || micConnecting) return;
@@ -842,7 +1037,7 @@ export default function ReadingIntakeScreen({
         track.onended = () => {
           if (meterStreamRef.current === stream) {
             meterStreamRef.current = null;
-            stopAskRecognition();
+            stopAskRecorder(true);
             stopAskMeter();
             askHoldingRef.current = false;
             setAskHolding(false);
@@ -858,7 +1053,7 @@ export default function ReadingIntakeScreen({
     } finally {
       setMicConnecting(false);
     }
-  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecognition]);
+  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecorder]);
 
   const toggleMicrophone = useCallback(() => {
     if (micEnabled) {
@@ -893,30 +1088,98 @@ export default function ReadingIntakeScreen({
       analyserRef.current = analyser;
 
       const freq = new Uint8Array(analyser.frequencyBinCount);
-      const canvas = canvasRef.current;
-      const c2d = canvas?.getContext("2d") ?? null;
       let smooth = 0;
       let time = 0;
-      let cw = 0;
-      let ch = 0;
-      let dpr = 1;
 
-      const fit = () => {
-        if (!canvas || !c2d) return;
-        dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const drawWave = (canvas: HTMLCanvasElement | null) => {
+        if (!canvas) return;
+
+        const c2d = canvas.getContext("2d");
+        if (!c2d) return;
+
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const r = canvas.getBoundingClientRect();
-        cw = r.width;
-        ch = r.height;
-        canvas.width = Math.round(cw * dpr);
-        canvas.height = Math.round(ch * dpr);
-        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-      };
+        const cw = r.width;
+        const ch = r.height;
+        if (!cw || !ch) return;
 
-      fit();
+        const targetWidth = Math.round(cw * dpr);
+        const targetHeight = Math.round(ch * dpr);
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+        }
+
+        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+        c2d.clearRect(0, 0, cw, ch);
+
+        const cy = ch / 2;
+        const grad = c2d.createLinearGradient(0, 0, cw, 0);
+        ASK_WAVE.colors.forEach((color, i) =>
+          grad.addColorStop(i / (ASK_WAVE.colors.length - 1), color)
+        );
+
+        c2d.lineCap = "round";
+        c2d.lineJoin = "round";
+        c2d.globalCompositeOperation = "lighter";
+
+        const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
+
+        for (let line = 0; line < ASK_WAVE.lines; line++) {
+          const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
+          const phase = time * (1 + lf * 0.45) + line * 0.7;
+          const lineAmp = amp * (1 - lf * 0.14);
+
+          c2d.beginPath();
+          for (let x = 0; x <= cw; x += 3) {
+            const tx = x / cw;
+            const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
+            const y =
+              cy +
+              env *
+                lineAmp *
+                (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
+                  Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
+            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+          }
+
+          c2d.strokeStyle = grad;
+          c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
+          c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
+          c2d.shadowBlur = ASK_WAVE.glow;
+          c2d.shadowColor = "rgba(129,140,248,0.5)";
+          c2d.stroke();
+        }
+
+        const coreAmp =
+          (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
+        c2d.beginPath();
+        for (let x = 0; x <= cw; x += 2) {
+          const tx = x / cw;
+          const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
+          const y =
+            cy +
+            env *
+              coreAmp *
+              Math.sin(tx * Math.PI * 5 + time * 1.4) *
+              0.9;
+          x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+        }
+
+        c2d.globalAlpha = 0.3 + smooth * 0.5;
+        c2d.strokeStyle = "rgba(255,255,255,0.92)";
+        c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
+        c2d.shadowBlur = ASK_WAVE.glow * 1.3;
+        c2d.shadowColor = "rgba(255,255,255,0.7)";
+        c2d.stroke();
+
+        c2d.globalCompositeOperation = "source-over";
+        c2d.globalAlpha = 1;
+        c2d.shadowBlur = 0;
+      };
 
       const draw = () => {
         if (!askHoldingRef.current) return;
-        if (!cw || !ch) fit();
 
         time += 0.016 * ASK_WAVE.speed;
         analyser.getByteFrequencyData(freq);
@@ -933,73 +1196,8 @@ export default function ReadingIntakeScreen({
         const energy = count ? (sum / count) / 255 : 0;
         smooth += (energy - smooth) * 0.18;
 
-        if (c2d && cw && ch) {
-          const cy = ch / 2;
-          c2d.clearRect(0, 0, cw, ch);
-
-          const grad = c2d.createLinearGradient(0, 0, cw, 0);
-          ASK_WAVE.colors.forEach((color, i) =>
-            grad.addColorStop(i / (ASK_WAVE.colors.length - 1), color)
-          );
-
-          c2d.lineCap = "round";
-          c2d.lineJoin = "round";
-          c2d.globalCompositeOperation = "lighter";
-
-          const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
-
-          for (let line = 0; line < ASK_WAVE.lines; line++) {
-            const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
-            const phase = time * (1 + lf * 0.45) + line * 0.7;
-            const lineAmp = amp * (1 - lf * 0.14);
-
-            c2d.beginPath();
-            for (let x = 0; x <= cw; x += 3) {
-              const tx = x / cw;
-              const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
-              const y =
-                cy +
-                env *
-                  lineAmp *
-                  (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
-                    Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
-              x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
-            }
-
-            c2d.strokeStyle = grad;
-            c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
-            c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
-            c2d.shadowBlur = ASK_WAVE.glow;
-            c2d.shadowColor = "rgba(129,140,248,0.5)";
-            c2d.stroke();
-          }
-
-          const coreAmp =
-            (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
-          c2d.beginPath();
-          for (let x = 0; x <= cw; x += 2) {
-            const tx = x / cw;
-            const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
-            const y =
-              cy +
-              env *
-                coreAmp *
-                Math.sin(tx * Math.PI * 5 + time * 1.4) *
-                0.9;
-            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
-          }
-
-          c2d.globalAlpha = 0.3 + smooth * 0.5;
-          c2d.strokeStyle = "rgba(255,255,255,0.92)";
-          c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
-          c2d.shadowBlur = ASK_WAVE.glow * 1.3;
-          c2d.shadowColor = "rgba(255,255,255,0.7)";
-          c2d.stroke();
-
-          c2d.globalCompositeOperation = "source-over";
-          c2d.globalAlpha = 1;
-          c2d.shadowBlur = 0;
-        }
+        drawWave(canvasRef.current);
+        drawWave(headerCanvasRef.current);
 
         meterRafRef.current = requestAnimationFrame(draw);
       };
@@ -1010,85 +1208,7 @@ export default function ReadingIntakeScreen({
     }
   }, [micEnabled, stopAskMeter]);
 
-  const startAskHold = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      e.preventDefault();
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-
-      if (!micEnabled) {
-        setAskError("Turn the microphone on first.");
-        return;
-      }
-
-      setAskError(null);
-
-      const SR =
-        (window as unknown as { SpeechRecognition?: new () => IntakeSpeechRecognition }).SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition?: new () => IntakeSpeechRecognition })
-          .webkitSpeechRecognition;
-
-      if (!SR) {
-        setAskError("Voice input isn't available in this browser yet.");
-        return;
-      }
-
-      transcriptRef.current = "";
-      setLiveTranscript("");
-
-      const rec = new SR();
-      rec.lang = "en-US";
-      rec.interimResults = true;
-      rec.continuous = true;
-      recognitionRef.current = rec;
-
-      rec.onresult = (event: IntakeSpeechRecognitionEvent) => {
-        let finalText = "";
-        let interimText = "";
-
-        for (let i = 0; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) finalText += `${result[0].transcript} `;
-          else interimText += `${result[0].transcript} `;
-        }
-
-        const combined = `${finalText}${interimText}`.replace(/\s+/g, " ").trim();
-        transcriptRef.current = combined;
-        setLiveTranscript(combined);
-      };
-
-      rec.onerror = (event: IntakeSpeechRecognitionErrorEvent) => {
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          setAskError("Microphone access is blocked. Allow microphone access and try again.");
-        } else {
-          setAskError("I couldn't hear that clearly. Try holding again.");
-        }
-        askHoldingRef.current = false;
-        setAskHolding(false);
-        stopAskRecognition();
-        stopAskMeter();
-      };
-
-      rec.onend = () => {
-        recognitionRef.current = null;
-      };
-
-      try {
-        rec.start();
-      } catch {
-        setAskError("Voice input couldn't start. Try again.");
-        return;
-      }
-
-      askHoldStartRef.current = Date.now();
-      askHoldingRef.current = true;
-      setAskHolding(true);
-      triggerIntakeHaptic();
-      void startAskMeter();
-    },
-    [micEnabled, startAskMeter, stopAskMeter, stopAskRecognition]
-  );
-
-    const submitAskAnything = useCallback(
+  const submitAskAnything = useCallback(
     (transcript: string) => {
       const spokenQuestion = transcript.trim();
 
@@ -1115,36 +1235,184 @@ export default function ReadingIntakeScreen({
     [router]
   );
 
-  const endAskHold = useCallback(() => {
+  const transcribeAskAudio = useCallback(
+    async (blob: Blob) => {
+      if (blob.size === 0) {
+        setAskError("We didn't catch that. Hold the button and try again.");
+        return;
+      }
+
+      setIsTranscribingAsk(true);
+      setAskError(null);
+
+      try {
+        const form = new FormData();
+        form.append("audio", blob, "speech");
+
+        const response = await fetch("/api/jxl/transcribe", {
+          method: "POST",
+          body: form,
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || typeof data?.text !== "string" || !data.text.trim()) {
+          setAskError(data?.error || "Couldn't hear that clearly. Try again.");
+          return;
+        }
+
+        submitAskAnything(data.text);
+      } catch {
+        setAskError("Something went wrong with voice input. Try again.");
+      } finally {
+        setIsTranscribingAsk(false);
+      }
+    },
+    [submitAskAnything]
+  );
+
+  const startAskHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+
+      if (!micEnabled || isTranscribingAsk) return;
+
+      const stream = meterStreamRef.current;
+      if (!stream) {
+        setAskError("Microphone access isn't available right now.");
+        return;
+      }
+
+      if (typeof MediaRecorder === "undefined") {
+        setAskError("Voice recording isn't available in this browser yet.");
+        return;
+      }
+
+      setAskError(null);
+      askPointerStartYRef.current = e.clientY;
+      askCancelledRef.current = false;
+      audioChunksRef.current = [];
+
+      const preferredType = [
+        "audio/mp4",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+      ].find((type) => MediaRecorder.isTypeSupported(type));
+
+      let recorder: MediaRecorder;
+      try {
+        recorder = preferredType
+          ? new MediaRecorder(stream, { mimeType: preferredType })
+          : new MediaRecorder(stream);
+      } catch {
+        setAskError("Voice recording couldn't start. Try again.");
+        return;
+      }
+
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        askCancelledRef.current = true;
+        askHoldingRef.current = false;
+        setAskHolding(false);
+        stopAskMeter();
+        setAskError("Voice recording was interrupted. Try again.");
+      };
+
+      recorder.onstop = () => {
+        mediaRecorderRef.current = null;
+
+        const cancelled = askCancelledRef.current;
+        askCancelledRef.current = false;
+
+        const mimeType =
+          recorder.mimeType ||
+          (audioChunksRef.current[0] instanceof Blob
+            ? (audioChunksRef.current[0] as Blob).type
+            : "") ||
+          "audio/webm";
+
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+
+        if (cancelled) return;
+        void transcribeAskAudio(blob);
+      };
+
+      askHoldStartRef.current = Date.now();
+      askHoldingRef.current = true;
+      setAskHolding(true);
+      triggerIntakeHaptic();
+
+      try {
+        recorder.start(250);
+      } catch {
+        askHoldingRef.current = false;
+        setAskHolding(false);
+        mediaRecorderRef.current = null;
+        setAskError("Voice recording couldn't start. Try again.");
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          void startAskMeter();
+        });
+      });
+    },
+    [isTranscribingAsk, micEnabled, startAskMeter, stopAskMeter, transcribeAskAudio]
+  );
+
+  const cancelAskHold = useCallback(() => {
     if (!askHoldingRef.current) return;
 
+    askCancelledRef.current = true;
+    askHoldingRef.current = false;
+    setAskHolding(false);
+    setAskError(null);
+
+    stopAskMeter();
+    stopAskRecorder(true);
+    triggerIntakeHaptic();
+  }, [stopAskMeter, stopAskRecorder]);
+
+  const moveAskHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!askHoldingRef.current || askCancelledRef.current) return;
+
+      const upwardDistance = askPointerStartYRef.current - e.clientY;
+      if (upwardDistance >= 56) {
+        cancelAskHold();
+      }
+    },
+    [cancelAskHold]
+  );
+
+  const endAskHold = useCallback(() => {
+    if (askCancelledRef.current || !askHoldingRef.current) return;
+
     const elapsed = Date.now() - askHoldStartRef.current;
-    const said = transcriptRef.current.trim();
 
     askHoldingRef.current = false;
     setAskHolding(false);
     triggerIntakeHaptic();
-    stopAskRecognition();
     stopAskMeter();
 
     if (elapsed < ASK_MIN_HOLD_MS) {
-      setLiveTranscript("");
-      transcriptRef.current = "";
+      askCancelledRef.current = true;
+      stopAskRecorder(true);
       setAskError("Press and hold while you speak.");
       return;
     }
 
-    if (said.length < 2) {
-      setLiveTranscript("");
-      transcriptRef.current = "";
-      setAskError("Didn't quite catch that. Hold and try again.");
-      return;
-    }
-
-    setLiveTranscript("");
-    transcriptRef.current = "";
-    submitAskAnything(said);
-  }, [stopAskMeter, stopAskRecognition, submitAskAnything]);
+    stopAskRecorder(false);
+  }, [stopAskMeter, stopAskRecorder]);
 
   useEffect(() => {
     const shutMicDownForPageExit = () => {
@@ -1237,11 +1505,6 @@ export default function ReadingIntakeScreen({
           status = {
             credits: Number(d.credits ?? 0),
             isSubscribed: d.isSubscribed === true,
-            readingsCompleted: Number(d.readingsCompleted ?? 0),
-            onCooldown: d.onCooldown === true,
-            cooldownExpiresAt: d.cooldownExpiresAt ?? null,
-            canBypass: d.canBypass === true,
-            pwaFreeReadingUsed: d.pwaFreeReadingUsed === true,
           };
           setUserStatus(status);
         }
@@ -1302,8 +1565,8 @@ export default function ReadingIntakeScreen({
   }, [theme]);
 
   return (
-    <div
-      className="no-scrollbar relative min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden text-slate-100"
+      <div
+      className="no-scrollbar relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden text-slate-100"
     >
       <style jsx>{`
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -1530,6 +1793,9 @@ export default function ReadingIntakeScreen({
         .ask-premium {
           position: relative;
           overflow: hidden;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
           isolation: isolate;
           border: 0;
           border-radius: 24px;
@@ -1680,16 +1946,6 @@ export default function ReadingIntakeScreen({
             0 3px 9px rgba(0,0,0,0.42);
         }
 
-        .ask-title {
-          color: #f8fafc;
-          text-shadow: 0 1px 14px rgba(34,211,238,0.10), 0 0 20px rgba(168,85,247,0.07);
-        }
-
-        .ask-subtitle {
-          color: rgba(203,213,225,0.72);
-          text-shadow: 0 2px 8px rgba(0,0,0,0.82);
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
           .ask-premium::before,
@@ -1814,24 +2070,12 @@ export default function ReadingIntakeScreen({
                       className="absolute inset-0"
                     >
                       {askHolding ? (
-                        /* HERO 4 — live Ask Anything transcription */
-                        <div className="absolute inset-0 flex flex-col items-center justify-center px-[34px] pb-[10px] pt-[12px]">
-                          <div className="flex h-[112px] w-full items-end justify-center">
-                            <p
-                              className="w-full text-center text-[18px] font-medium leading-[1.34] tracking-[-0.015em] text-slate-100/92"
-                              style={{
-                                textShadow:
-                                  "0 3px 14px rgba(0,0,0,0.92), 0 0 18px rgba(129,140,248,0.12)",
-                              }}
-                            >
-                              {visibleTranscript || "Listening…"}
-                            </p>
-                          </div>
-
+                        /* HERO 4 — waveform-only listening state */
+                        <div className="absolute inset-0 flex items-center justify-center px-[30px]">
                           <canvas
                             ref={canvasRef}
                             aria-hidden="true"
-                            className="mt-[8px] h-[72px] w-[300px] max-w-full"
+                            className="h-[112px] w-[320px] max-w-full"
                           />
                         </div>
                       ) : heroInfoMode === "brand" ? (
@@ -2009,59 +2253,104 @@ export default function ReadingIntakeScreen({
                           </div>
                         </div>
                       ) : (
-                        /* HERO 3 — clean Sun / Moon split with a short central separator and shared context below */
-                        <div className="absolute inset-0 px-[24px] py-[16px]">
-                          <div className="relative grid h-[176px] grid-cols-2 items-center">
-                            <div className="flex flex-col items-center justify-center pr-[20px] text-center">
-                              <span className="mb-[7px] text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-300/78">
+                        /* HERO 3 — premium Current Sky: larger luminaries + richer lunar timing */
+                        <div className="absolute inset-0 px-[18px] pt-[24px] pb-[8px]">
+                          <div className="relative grid h-[154px] grid-cols-2">
+                            <div className="flex flex-col items-center justify-start pr-[14px] text-center">
+                              <span className="mb-[4px] text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-100/88">
                                 Sun
                               </span>
-                              <div style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.20))" }}>
-                                <SunDisc size={64} />
+
+                              <div
+                                className="flex h-[98px] items-center justify-center"
+                                style={{
+                                  filter:
+                                    "drop-shadow(0 0 14px rgba(255,189,46,0.24)) drop-shadow(0 0 28px rgba(245,158,11,0.12))",
+                                }}
+                              >
+                                <SunDisc size={96} />
                               </div>
-                              <span className="mt-[8px] text-[15px] font-medium leading-none text-slate-100/94">
+
+                              <span
+                                className="mt-[2px] text-[26px] font-semibold leading-none tracking-[-0.025em] text-white"
+                                style={{
+                                  fontFamily: 'Georgia, "Times New Roman", serif',
+                                  textShadow:
+                                    "0 4px 12px rgba(0,0,0,0.80), 0 0 18px rgba(253,230,138,0.10)",
+                                }}
+                              >
                                 {heroData.currentSun?.sign ?? "—"}
                               </span>
-                              <span className="mt-[5px] text-[9px] font-medium tabular-nums text-slate-400/76">
+
+                              <span className="mt-[5px] text-[13px] font-medium tabular-nums tracking-[0.025em] text-sky-100/80">
                                 {heroData.currentSun?.degree ?? "—"}
                               </span>
                             </div>
 
+                            {/* True center divider for the whole luminary field. */}
                             <span
-                              className="absolute left-1/2 top-1/2 h-[74px] w-px -translate-x-1/2 -translate-y-1/2"
+                              className="absolute left-1/2 top-1/2 h-[64px] w-px -translate-x-1/2 -translate-y-1/2"
                               style={{
                                 background:
-                                  "linear-gradient(180deg, transparent, rgba(255,255,255,0.16), transparent)",
+                                  "linear-gradient(180deg, transparent 0%, rgba(125,211,252,0.14) 16%, rgba(125,211,252,0.48) 50%, rgba(125,211,252,0.14) 84%, transparent 100%)",
+                                boxShadow: "0 0 8px rgba(34,211,238,0.10)",
                               }}
                               aria-hidden="true"
                             />
 
-                            <div className="flex flex-col items-center justify-center pl-[20px] text-center">
-                              <span className="mb-[7px] max-w-[120px] truncate text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-300/78">
+                            <div className="flex flex-col items-center justify-start pl-[14px] text-center">
+                              <span className="mb-[4px] max-w-[150px] truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-100/88">
                                 {moonPhase?.phaseName ?? "Moon"}
                               </span>
-                              <div style={{ filter: "drop-shadow(0 0 18px rgba(226,223,240,0.16))" }}>
+
+                              <div
+                                className="flex h-[98px] items-center justify-center"
+                                style={{
+                                  filter:
+                                    "drop-shadow(0 0 14px rgba(226,232,240,0.16)) drop-shadow(0 0 24px rgba(125,211,252,0.08))",
+                                }}
+                              >
                                 <MoonDisc
                                   illumination={moonPhase?.illuminationPercent ?? 50}
                                   waxing={moonWaxing}
-                                  size={64}
+                                  size={96}
                                 />
                               </div>
-                              <span className="mt-[8px] text-[15px] font-medium leading-none text-slate-100/94">
+
+                              <span
+                                className="mt-[2px] text-[26px] font-semibold leading-none tracking-[-0.025em] text-white"
+                                style={{
+                                  fontFamily: 'Georgia, "Times New Roman", serif',
+                                  textShadow:
+                                    "0 4px 12px rgba(0,0,0,0.80), 0 0 18px rgba(226,232,240,0.09)",
+                                }}
+                              >
                                 {moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}
                               </span>
-                              <span className="mt-[5px] text-[9px] font-medium tabular-nums text-slate-400/76">
+
+                              <span className="mt-[5px] text-[13px] font-medium tabular-nums tracking-[0.025em] text-sky-100/80">
                                 {moonPhase?.moonDegree ?? heroData.currentMoon?.degree ?? "—"}
                               </span>
                             </div>
                           </div>
 
-                          <div className="absolute inset-x-[34px] bottom-[12px] text-center">
-                            <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/78">
-                              {skyNotice.title}
+                          <div className="absolute inset-x-[22px] bottom-[9px] flex flex-col items-center text-center">
+                            <span
+                              className="mb-[6px] h-px w-[56px]"
+                              style={{
+                                background:
+                                  "linear-gradient(90deg, transparent, rgba(34,211,238,0.62), transparent)",
+                                boxShadow: "0 0 7px rgba(34,211,238,0.10)",
+                              }}
+                              aria-hidden="true"
+                            />
+
+                            <span className="max-w-full truncate text-[10px] font-medium leading-[1.3] tracking-[0.01em] text-slate-200/86">
+                              {heroAsOf}
                             </span>
-                            <span className="ml-[7px] text-[8px] font-medium text-slate-400/72">
-                              {skyNotice.detail}
+
+                            <span className="mt-[3px] max-w-full truncate text-[10px] font-medium leading-[1.3] tracking-[0.01em] text-sky-100/82">
+                              {moonIngressLine}
                             </span>
                           </div>
                         </div>
@@ -2076,22 +2365,27 @@ export default function ReadingIntakeScreen({
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
           <div
-            className="relative mb-[14px] h-[26px] text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{
-              opacity: askHolding ? 0 : 1,
-              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
-              pointerEvents: askHolding ? "none" : "auto",
-            }}
+            className="relative mb-[14px] h-[26px] overflow-hidden text-center"
+            aria-live="polite"
           >
             <p
-              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
               style={{
+                opacity: askHolding ? 0 : 1,
+                filter: askHolding ? "blur(4px)" : "blur(0px)",
                 textShadow:
                   "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
               }}
             >
               {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
             </p>
+
+            <canvas
+              ref={headerCanvasRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[22px] w-[180px] max-w-[68%] -translate-x-1/2 -translate-y-1/2 transition-opacity duration-300"
+              style={{ opacity: askHolding ? 1 : 0 }}
+            />
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -2258,86 +2552,85 @@ export default function ReadingIntakeScreen({
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
-            <div className="flex min-h-[96px] w-full items-center justify-center gap-[10px]">
-              <button
-                type="button"
-                onPointerDown={startAskHold}
-                onPointerUp={endAskHold}
-                onPointerCancel={endAskHold}
-                onContextMenu={(e) => e.preventDefault()}
-                className="ask-premium tap-fix relative h-[92px] w-[72%] max-w-[304px] touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-                aria-label="Press and hold to speak"
-                style={{
-                  opacity: selectedArea && !askHolding ? 0.76 : 1,
-                  filter: selectedArea && !askHolding
-                    ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-                    : "brightness(1) saturate(1)",
-                  transform: askHolding ? "scale(1.012)" : undefined,
-                }}
-              >
-                <span className="pointer-events-none absolute left-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
-                  Press
-                </span>
+  <div className="flex w-full items-center justify-center">
+    <div className="relative h-[86px] w-[72%] max-w-[304px]">
+      <button
+        type="button"
+        onPointerDown={startAskHold}
+        onPointerMove={moveAskHold}
+        onPointerUp={endAskHold}
+        onPointerCancel={endAskHold}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
+        onSelect={(e) => e.preventDefault()}
+        className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+        aria-label="Press and hold to speak. Swipe up to cancel."
+        style={{
+          opacity: selectedArea && !askHolding ? 0.76 : 1,
+          filter: selectedArea && !askHolding
+            ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+            : "brightness(1) saturate(1)",
+          transform: askHolding ? "scale(1.012)" : undefined,
+          WebkitUserSelect: "none",
+          userSelect: "none",
+          WebkitTouchCallout: "none",
+        }}
+      >
+        <span className="ask-mic-halo h-[48px] w-[48px]">
+          <Mic
+            className="h-[24px] w-[24px]"
+            style={{
+              color: "rgba(248,250,252,0.96)",
+              filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
+            }}
+          />
+        </span>
 
-                <span className="pointer-events-none absolute left-1/2 top-[9px] -translate-x-1/2">
-                  <span className="ask-mic-halo">
-                    <Mic
-                      className="h-[20px] w-[20px]"
-                      style={{
-                        color: "rgba(248,250,252,0.96)",
-                        filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
-                      }}
-                    />
-                  </span>
-                </span>
+        <span
+          aria-hidden="true"
+          className="ask-focus-veil"
+          style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+        />
+      </button>
 
-                <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
-                  Hold
-                </span>
+      <button
+  type="button"
+  className="mic-ready-toggle tap-fix"
+  data-enabled={micEnabled ? "true" : "false"}
+  aria-pressed={micEnabled}
+  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+  onClick={toggleMicrophone}
+  disabled={micConnecting || isTranscribingAsk}
+  style={{
+    position: "absolute",
+    left: "calc(100% + 6px)",
+    top: "8px",
+    cursor: micConnecting || isTranscribingAsk ? "wait" : "pointer",
+    opacity: micEnabled ? 0.18 : 0.74,
+    filter: micEnabled
+      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+      : "brightness(0.92) saturate(0.82)",
+  }}
+>
+  <span className="mic-ready-knob" />
+</button>
+    </div>
+  </div>
 
-                <span className="pointer-events-none absolute bottom-[8px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
-                  Speak
-                </span>
-
-                <span
-                  aria-hidden="true"
-                  className="ask-focus-veil"
-                  style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
-                />
-              </button>
-
-              <button
-                type="button"
-                className="mic-ready-toggle tap-fix"
-                data-enabled={micEnabled ? "true" : "false"}
-                aria-pressed={micEnabled}
-                aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-                onClick={toggleMicrophone}
-                disabled={micConnecting}
-                style={{
-                  cursor: micConnecting ? "wait" : "pointer",
-                  opacity: micEnabled ? 0.18 : 0.74,
-                  filter: micEnabled
-                    ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-                    : "brightness(0.92) saturate(0.82)",
-                }}
-              >
-                <span className="mic-ready-knob" />
-              </button>
-            </div>
-
-            {askError && !askHolding && (
-              <p className="mt-2 text-center text-[11px] text-slate-400/78">
-                {askError}
-              </p>
-            )}
-          </section>
+  {askError && !askHolding ? (
+    <p className="mt-2 text-center text-[11px] text-slate-400/78">
+      {askError}
+    </p>
+  ) : (
+    <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
+      {micEnabled ? "Press · Hold · Speak" : "Turn on the microphone"}
+    </p>
+  )}
+</section>
           </div>
 
         </motion.div>
       </div>
-      
-            {/* ── Embedded Stripe checkout (portaled) ── */}
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
