@@ -42,18 +42,13 @@ export default function RootLayout({
 }>) {
   return (
     <html
-  lang="en"
-  className={`${geistSans.variable} ${geistMono.variable} dark antialiased bg-[#040611]`}
->
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} dark antialiased bg-[#040611]`}
+    >
       <head>
-        {/* 
-          ✅ REMOVED: The duplicate viewport meta tag 
-          The viewport is now fully configured via the exported `viewport` object above.
-          No manual meta tag needed anymore.
-        */}
         <link rel="manifest" href="/manifest.webmanifest" />
       </head>
-            <body className="min-h-[100dvh] bg-[#040611] text-foreground">
+      <body className="min-h-[100dvh] bg-[#040611] text-foreground">
         {/* TikTok Pixel — loads after page becomes interactive, doesn't block render */}
         <Script id="tiktok-pixel" strategy="afterInteractive">
           {`
@@ -67,10 +62,6 @@ export default function RootLayout({
           `}
         </Script>
         <ClerkProvider>
-          {/* Added CSS Safe Area padding utilities to the main wrapper. 
-            This allows your deep dark [#040611] background to fill the whole screen (borders gone), 
-            but keeps the actual layout items perfectly within the safe boundaries.
-          */}
           <main className="min-h-[100dvh] w-full min-w-0 max-w-full bg-[#040611]">
             {children}
           </main>

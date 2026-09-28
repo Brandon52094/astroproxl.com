@@ -134,7 +134,6 @@ html {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    min-height: 100%;
     overflow-x: hidden;
     overscroll-behavior-x: none;
   }
@@ -157,7 +156,6 @@ html {
     @apply text-foreground;
     margin: 0;
     position: relative;
-    min-height: 100svh;
   }
 }
 
