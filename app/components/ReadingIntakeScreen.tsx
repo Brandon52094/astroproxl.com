@@ -14,7 +14,6 @@ import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import {
   saveIntake,
@@ -73,34 +72,26 @@ const AREAS = [
   {
     id: "love",
     title: "Love",
-    description: "Relationships, romance, or emotional patterns",
     icon: Heart,
-    placeholder: "Ask something specific about love, timing, or where this connection is headed.",
     defaultQuestion: "What is coming for me in love over the next 30–45 days?",
   },
   {
     id: "money",
     title: "Money",
-    description: "Income, stability, opportunities, and financial timing",
     icon: Wallet,
-    placeholder: "Ask something specific about money, stability, or the opportunities opening next.",
     defaultQuestion: "What is coming for me with money over the next 30–45 days?",
   },
   {
     id: "career",
     title: "Career",
-    description: "Work, recognition, direction, and next steps",
     icon: Briefcase,
-    placeholder: "Ask something specific about work, momentum, or the direction your career is moving.",
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
   {
     id: "other",
     title: "What's Coming",
-    description: "What to expect in the next 30–45 days.",
     icon: null,
     marker: "30–45",
-    placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
 ];
@@ -254,7 +245,7 @@ function MoonDisc({
   size?: number;
 }) {
   const f = Math.min(1, Math.max(0, illumination / 100));
-  const r = 45;
+  const r = 43;
   const c = 50;
   const top = `${c} ${c - r}`;
   const bottom = `${c} ${c + r}`;
@@ -275,88 +266,100 @@ function MoonDisc({
       style={{ overflow: "visible" }}
     >
       <defs>
-        <radialGradient id="intakeMoonBase" cx="38%" cy="30%" r="78%">
-          <stop offset="0%" stopColor="#F7F5F2" />
-          <stop offset="42%" stopColor="#D8D4CE" />
-          <stop offset="76%" stopColor="#ABA8A8" />
-          <stop offset="100%" stopColor="#747788" />
+        <radialGradient id="astroMoonSurface" cx="37%" cy="30%" r="76%">
+          <stop offset="0%" stopColor="#F6F5F2" />
+          <stop offset="36%" stopColor="#E2E0DD" />
+          <stop offset="68%" stopColor="#B9B8BA" />
+          <stop offset="88%" stopColor="#9296A1" />
+          <stop offset="100%" stopColor="#737A89" />
         </radialGradient>
 
-        <radialGradient id="intakeMoonShadow" cx="42%" cy="40%" r="74%">
-          <stop offset="0%" stopColor="#171C2C" />
-          <stop offset="72%" stopColor="#0D1221" />
-          <stop offset="100%" stopColor="#070B14" />
+        <radialGradient id="astroMoonDark" cx="40%" cy="38%" r="72%">
+          <stop offset="0%" stopColor="#202637" />
+          <stop offset="65%" stopColor="#111827" />
+          <stop offset="100%" stopColor="#070B13" />
         </radialGradient>
 
-        <linearGradient id="intakeMoonLimb" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
+        <radialGradient id="astroMoonHalo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(226,232,240,0.23)" />
+          <stop offset="56%" stopColor="rgba(148,163,184,0.09)" />
+          <stop offset="100%" stopColor="rgba(125,211,252,0)" />
+        </radialGradient>
+
+        <linearGradient id="astroMoonLimb" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.14)" />
           <stop offset="46%" stopColor="rgba(255,255,255,0)" />
-          <stop offset="100%" stopColor="rgba(1,5,15,0.32)" />
+          <stop offset="100%" stopColor="rgba(2,6,15,0.34)" />
         </linearGradient>
 
-        <clipPath id="intakeMoonLitClip">
+        <clipPath id="astroMoonLitClip">
           {f > 0.005 ? <path d={litPath} /> : null}
         </clipPath>
 
-        <filter id="intakeMoonTexture" x="-20%" y="-20%" width="140%" height="140%">
+        <filter id="astroMoonTexture" x="-18%" y="-18%" width="136%" height="136%">
           <feTurbulence
             type="fractalNoise"
-            baseFrequency="0.055"
+            baseFrequency="0.048"
             numOctaves="3"
-            seed="11"
+            seed="19"
             result="noise"
           />
           <feColorMatrix
             in="noise"
             type="matrix"
             values="
-              0.35 0 0 0 0.32
-              0 0.35 0 0 0.31
-              0 0 0.35 0 0.30
-              0 0 0 0.38 0
+              0.34 0 0 0 0.31
+              0 0.34 0 0 0.31
+              0 0 0.34 0 0.32
+              0 0 0 0.30 0
             "
-            result="softNoise"
+            result="surfaceNoise"
           />
-          <feBlend in="SourceGraphic" in2="softNoise" mode="multiply" />
+          <feBlend in="SourceGraphic" in2="surfaceNoise" mode="multiply" />
         </filter>
       </defs>
 
+      {/* Shared celestial halo language */}
+      <circle cx={c} cy={c} r="49" fill="url(#astroMoonHalo)" />
       <circle
         cx={c}
         cy={c}
-        r={r + 2.5}
-        fill="rgba(105,116,145,0.11)"
-        stroke="rgba(203,213,225,0.16)"
-        strokeWidth="0.8"
+        r="46.5"
+        fill="none"
+        stroke="rgba(186,230,253,0.10)"
+        strokeWidth="0.7"
       />
 
-      <circle cx={c} cy={c} r={r} fill="url(#intakeMoonShadow)" />
+      <circle cx={c} cy={c} r={r} fill="url(#astroMoonDark)" />
 
       {f > 0.005 ? (
-        <g clipPath="url(#intakeMoonLitClip)">
+        <g clipPath="url(#astroMoonLitClip)">
           <circle
             cx={c}
             cy={c}
             r={r}
-            fill="url(#intakeMoonBase)"
-            filter="url(#intakeMoonTexture)"
+            fill="url(#astroMoonSurface)"
+            filter="url(#astroMoonTexture)"
           />
 
-          {/* Broad maria */}
-          <ellipse cx="35" cy="36" rx="11" ry="8" fill="rgba(60,61,66,0.18)" />
-          <ellipse cx="61" cy="42" rx="13" ry="10" fill="rgba(61,62,68,0.15)" />
-          <ellipse cx="48" cy="63" rx="15" ry="9" fill="rgba(65,66,72,0.12)" />
-          <ellipse cx="68" cy="66" rx="8" ry="6" fill="rgba(54,55,62,0.12)" />
+          {/* Lunar maria */}
+          <ellipse cx="34" cy="36" rx="11.5" ry="8" fill="rgba(61,63,69,0.20)" />
+          <ellipse cx="61" cy="41" rx="13.5" ry="9.5" fill="rgba(62,64,70,0.17)" />
+          <ellipse cx="48" cy="63" rx="14.5" ry="8.5" fill="rgba(66,68,73,0.13)" />
+          <ellipse cx="69" cy="65" rx="7.8" ry="5.8" fill="rgba(57,59,65,0.13)" />
+          <ellipse cx="31" cy="70" rx="6.5" ry="4.2" fill="rgba(72,74,80,0.11)" />
 
-          {/* Craters */}
-          <circle cx="27" cy="50" r="5.2" fill="rgba(63,65,72,0.16)" />
-          <circle cx="27" cy="49" r="3.6" fill="rgba(240,239,235,0.08)" />
-          <circle cx="58" cy="29" r="3.4" fill="rgba(67,69,76,0.16)" />
-          <circle cx="74" cy="52" r="4.6" fill="rgba(66,68,74,0.14)" />
-          <circle cx="43" cy="75" r="4.1" fill="rgba(62,64,70,0.13)" />
-          <circle cx="38" cy="25" r="2.6" fill="rgba(59,61,66,0.13)" />
+          {/* Fine crater field */}
+          <circle cx="27" cy="49" r="5.2" fill="rgba(68,70,76,0.17)" />
+          <circle cx="27" cy="48" r="3.4" fill="rgba(248,247,242,0.07)" />
+          <circle cx="58" cy="29" r="3.6" fill="rgba(67,69,76,0.16)" />
+          <circle cx="74" cy="52" r="4.6" fill="rgba(67,69,75,0.15)" />
+          <circle cx="43" cy="75" r="4" fill="rgba(64,66,72,0.14)" />
+          <circle cx="39" cy="25" r="2.6" fill="rgba(60,62,68,0.14)" />
+          <circle cx="53" cy="50" r="2.2" fill="rgba(76,78,84,0.11)" />
+          <circle cx="69" cy="31" r="2" fill="rgba(72,74,80,0.12)" />
 
-          <circle cx={c} cy={c} r={r} fill="url(#intakeMoonLimb)" />
+          <circle cx={c} cy={c} r={r} fill="url(#astroMoonLimb)" />
         </g>
       ) : null}
 
@@ -365,7 +368,7 @@ function MoonDisc({
         cy={c}
         r={r}
         fill="none"
-        stroke="rgba(255,255,255,0.15)"
+        stroke="rgba(255,255,255,0.17)"
         strokeWidth="0.75"
       />
     </svg>
@@ -382,45 +385,52 @@ function SunDisc({ size = 58 }: { size?: number }) {
       style={{ overflow: "visible" }}
     >
       <defs>
-        <radialGradient id="intakeSunCore" cx="39%" cy="35%" r="68%">
-          <stop offset="0%" stopColor="#FFFDE8" />
-          <stop offset="22%" stopColor="#FFF4A8" />
-          <stop offset="52%" stopColor="#FFD238" />
-          <stop offset="79%" stopColor="#FF9D00" />
-          <stop offset="100%" stopColor="#E66B00" />
+        <radialGradient id="astroSunSurface" cx="38%" cy="33%" r="70%">
+          <stop offset="0%" stopColor="#FFFCE3" />
+          <stop offset="19%" stopColor="#FFF09A" />
+          <stop offset="46%" stopColor="#FFD444" />
+          <stop offset="72%" stopColor="#FFAA12" />
+          <stop offset="91%" stopColor="#F18405" />
+          <stop offset="100%" stopColor="#CF5E00" />
         </radialGradient>
 
-        <radialGradient id="intakeSunHalo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(255,221,92,0.56)" />
-          <stop offset="48%" stopColor="rgba(255,166,0,0.20)" />
-          <stop offset="78%" stopColor="rgba(255,125,0,0.07)" />
-          <stop offset="100%" stopColor="rgba(255,125,0,0)" />
+        <radialGradient id="astroSunHalo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(255,234,122,0.62)" />
+          <stop offset="40%" stopColor="rgba(255,188,50,0.29)" />
+          <stop offset="68%" stopColor="rgba(255,132,0,0.10)" />
+          <stop offset="100%" stopColor="rgba(255,112,0,0)" />
         </radialGradient>
 
-        <filter id="intakeSunTexture" x="-20%" y="-20%" width="140%" height="140%">
+        <linearGradient id="astroSunLimb" x1="16%" y1="8%" x2="86%" y2="92%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.24)" />
+          <stop offset="44%" stopColor="rgba(255,255,255,0.02)" />
+          <stop offset="100%" stopColor="rgba(145,51,0,0.22)" />
+        </linearGradient>
+
+        <filter id="astroSunTexture" x="-22%" y="-22%" width="144%" height="144%">
           <feTurbulence
             type="fractalNoise"
-            baseFrequency="0.085"
-            numOctaves="3"
-            seed="7"
-            result="noise"
-          />
-          <feColorMatrix
-            in="noise"
-            type="matrix"
-            values="
-              0.9 0 0 0 0.14
-              0 0.48 0 0 0.05
-              0 0 0.15 0 0
-              0 0 0 0.36 0
-            "
+            baseFrequency="0.075"
+            numOctaves="4"
+            seed="23"
             result="solarNoise"
           />
-          <feBlend in="SourceGraphic" in2="solarNoise" mode="screen" />
+          <feColorMatrix
+            in="solarNoise"
+            type="matrix"
+            values="
+              0.82 0 0 0 0.18
+              0 0.50 0 0 0.06
+              0 0 0.12 0 0
+              0 0 0 0.34 0
+            "
+            result="solarTexture"
+          />
+          <feBlend in="SourceGraphic" in2="solarTexture" mode="screen" />
         </filter>
 
-        <filter id="intakeSunGlow" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="2.8" result="blur" />
+        <filter id="astroSunSoftGlow" x="-45%" y="-45%" width="190%" height="190%">
+          <feGaussianBlur stdDeviation="1.7" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -428,61 +438,76 @@ function SunDisc({ size = 58 }: { size?: number }) {
         </filter>
       </defs>
 
-      <circle cx="50" cy="50" r="49" fill="url(#intakeSunHalo)" />
+      {/* Corona — intentionally restrained, not a weather-icon ray set */}
+      <circle cx="50" cy="50" r="49" fill="url(#astroSunHalo)" />
 
-      <g opacity="0.38" stroke="#FFB51F" fill="none" strokeLinecap="round">
-        <path d="M50 0 C47 8 53 10 50 16" />
-        <path d="M50 100 C47 92 53 90 50 84" />
-        <path d="M0 50 C8 47 10 53 16 50" />
-        <path d="M100 50 C92 47 90 53 84 50" />
-        <path d="M14 14 C19 21 24 19 27 25" />
-        <path d="M86 14 C81 21 76 19 73 25" />
-        <path d="M14 86 C19 79 24 81 27 75" />
-        <path d="M86 86 C81 79 76 81 73 75" />
+      <g
+        fill="none"
+        stroke="#FFC43D"
+        strokeLinecap="round"
+        opacity="0.44"
+        filter="url(#astroSunSoftGlow)"
+      >
+        <path d="M50 1 C46 8 54 11 50 18" strokeWidth="1.2" />
+        <path d="M50 99 C46 92 54 89 50 82" strokeWidth="1.2" />
+        <path d="M1 50 C8 46 11 54 18 50" strokeWidth="1.2" />
+        <path d="M99 50 C92 46 89 54 82 50" strokeWidth="1.2" />
+
+        <path d="M15 15 C20 20 22 25 27 28" strokeWidth="1" />
+        <path d="M85 15 C80 20 78 25 73 28" strokeWidth="1" />
+        <path d="M15 85 C20 80 22 75 27 72" strokeWidth="1" />
+        <path d="M85 85 C80 80 78 75 73 72" strokeWidth="1" />
+
+        <path d="M32 4 C34 11 39 12 39 19" strokeWidth="0.7" opacity="0.58" />
+        <path d="M68 4 C66 11 61 12 61 19" strokeWidth="0.7" opacity="0.58" />
+        <path d="M32 96 C34 89 39 88 39 81" strokeWidth="0.7" opacity="0.58" />
+        <path d="M68 96 C66 89 61 88 61 81" strokeWidth="0.7" opacity="0.58" />
       </g>
 
       <circle
         cx="50"
         cy="50"
-        r="43"
-        fill="url(#intakeSunCore)"
-        filter="url(#intakeSunGlow)"
+        r="40.8"
+        fill="url(#astroSunSurface)"
+        filter="url(#astroSunTexture)"
       />
 
-      <circle
-        cx="50"
-        cy="50"
-        r="41.5"
-        fill="url(#intakeSunCore)"
-        filter="url(#intakeSunTexture)"
-      />
-
+      {/* Organic surface bands and active regions */}
       <path
-        d="M19 52 C29 41 31 31 48 28 C65 25 77 33 82 48"
+        d="M17 49 C27 38 35 33 48 32 C62 31 75 36 83 46"
         fill="none"
-        stroke="rgba(255,255,255,0.15)"
+        stroke="rgba(255,252,210,0.16)"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M21 63 C34 55 43 62 54 61 C66 60 72 53 80 55"
+        fill="none"
+        stroke="rgba(185,73,0,0.18)"
         strokeWidth="1.6"
         strokeLinecap="round"
       />
       <path
-        d="M26 67 C39 58 54 68 74 58"
+        d="M29 75 C40 69 51 73 67 68"
         fill="none"
-        stroke="rgba(205,92,0,0.18)"
-        strokeWidth="2"
+        stroke="rgba(255,241,166,0.13)"
+        strokeWidth="1.1"
         strokeLinecap="round"
       />
 
-      <circle cx="38" cy="34" r="4" fill="rgba(255,255,255,0.14)" />
-      <circle cx="62" cy="59" r="3.6" fill="rgba(178,72,0,0.12)" />
-      <circle cx="58" cy="29" r="2.2" fill="rgba(255,255,255,0.11)" />
+      <ellipse cx="35" cy="38" rx="5.2" ry="3.4" fill="rgba(255,255,255,0.10)" />
+      <ellipse cx="62" cy="58" rx="4.4" ry="3.1" fill="rgba(168,61,0,0.11)" />
+      <ellipse cx="58" cy="28" rx="2.8" ry="2" fill="rgba(255,255,255,0.10)" />
+      <ellipse cx="42" cy="67" rx="2.5" ry="1.8" fill="rgba(181,68,0,0.09)" />
 
+      <circle cx="50" cy="50" r="40.8" fill="url(#astroSunLimb)" />
       <circle
         cx="50"
         cy="50"
-        r="42.5"
+        r="41.2"
         fill="none"
-        stroke="rgba(255,246,190,0.52)"
-        strokeWidth="0.9"
+        stroke="rgba(255,246,194,0.48)"
+        strokeWidth="0.85"
       />
     </svg>
   );
@@ -872,7 +897,6 @@ export default function ReadingIntakeScreen({
     const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
     const currentSun = find(transits, ["Sun"]);
     const currentMoon = find(transits, ["Moon"]);
-    const mercury = find(transits, ["Mercury"]);
 
     const counts: Record<ElementName, number> = { Earth: 0, Fire: 0, Water: 0, Air: 0 };
     const balanceBodies = new Set([
@@ -894,7 +918,6 @@ export default function ReadingIntakeScreen({
       ],
       currentSun,
       currentMoon,
-      mercury,
       counts,
       maxElementCount,
     };
@@ -968,34 +991,6 @@ export default function ReadingIntakeScreen({
 
     return "Live lunar timing";
   }, [heroCurrentTimezone, moonPhase]);
-
-  const skyNotice = useMemo(() => {
-    if (heroData.mercury?.isRetrograde) {
-      return {
-        title: "Mercury Retrograde",
-        detail: heroData.mercury.sign
-          ? `Mercury ℞ in ${heroData.mercury.sign}`
-          : "Mercury is currently retrograde",
-      };
-    }
-
-    if (moonPhase?.nextEventName && typeof moonPhase.daysUntilNextEvent === "number") {
-      return {
-        title: moonPhase.nextEventName,
-        detail:
-          moonPhase.daysUntilNextEvent === 0
-            ? "Exact today"
-            : `In ${moonPhase.daysUntilNextEvent} day${moonPhase.daysUntilNextEvent === 1 ? "" : "s"}`,
-      };
-    }
-
-    return {
-      title: "Current Sky",
-      detail: heroData.mercury?.sign
-        ? `Mercury direct in ${heroData.mercury.sign}`
-        : "Live planetary context",
-    };
-  }, [heroData.mercury, moonPhase]);
 
   const stopAskRecorder = useCallback((discard = false) => {
     const recorder = mediaRecorderRef.current;
@@ -1998,16 +1993,6 @@ export default function ReadingIntakeScreen({
             0 3px 9px rgba(0,0,0,0.42);
         }
 
-        .ask-title {
-          color: #f8fafc;
-          text-shadow: 0 1px 14px rgba(34,211,238,0.10), 0 0 20px rgba(168,85,247,0.07);
-        }
-
-        .ask-subtitle {
-          color: rgba(203,213,225,0.72);
-          text-shadow: 0 2px 8px rgba(0,0,0,0.82);
-        }
-
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
           .ask-premium::before,
@@ -2316,25 +2301,25 @@ export default function ReadingIntakeScreen({
                         </div>
                       ) : (
                         /* HERO 3 — premium Current Sky: larger luminaries + richer lunar timing */
-                        <div className="absolute inset-0 px-[18px] pt-[12px] pb-[8px]">
-                          <div className="relative grid h-[164px] grid-cols-2">
+                        <div className="absolute inset-0 px-[18px] pt-[22px] pb-[8px]">
+                          <div className="relative grid h-[160px] grid-cols-2">
                             <div className="flex flex-col items-center justify-start pr-[14px] text-center">
                               <span className="mb-[4px] text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-200/82">
                                 Sun
                               </span>
 
                               <div
-                                className="flex h-[86px] items-center justify-center"
+                                className="flex h-[92px] items-center justify-center"
                                 style={{
                                   filter:
                                     "drop-shadow(0 0 14px rgba(255,189,46,0.24)) drop-shadow(0 0 28px rgba(245,158,11,0.12))",
                                 }}
                               >
-                                <SunDisc size={84} />
+                                <SunDisc size={92} />
                               </div>
 
                               <span
-                                className="mt-[1px] text-[22px] font-semibold leading-none tracking-[-0.02em] text-white"
+                                className="mt-[2px] text-[24px] font-semibold leading-none tracking-[-0.025em] text-white"
                                 style={{
                                   fontFamily: 'Georgia, "Times New Roman", serif',
                                   textShadow:
@@ -2351,7 +2336,7 @@ export default function ReadingIntakeScreen({
 
                             {/* True center divider for the whole luminary field. */}
                             <span
-                              className="absolute bottom-[7px] left-1/2 top-[7px] w-px -translate-x-1/2"
+                              className="absolute bottom-[0px] left-1/2 top-[0px] w-px -translate-x-1/2"
                               style={{
                                 background:
                                   "linear-gradient(180deg, transparent 0%, rgba(125,211,252,0.10) 14%, rgba(125,211,252,0.42) 50%, rgba(125,211,252,0.10) 86%, transparent 100%)",
@@ -2366,7 +2351,7 @@ export default function ReadingIntakeScreen({
                               </span>
 
                               <div
-                                className="flex h-[86px] items-center justify-center"
+                                className="flex h-[92px] items-center justify-center"
                                 style={{
                                   filter:
                                     "drop-shadow(0 0 14px rgba(226,232,240,0.16)) drop-shadow(0 0 24px rgba(125,211,252,0.08))",
@@ -2375,12 +2360,12 @@ export default function ReadingIntakeScreen({
                                 <MoonDisc
                                   illumination={moonPhase?.illuminationPercent ?? 50}
                                   waxing={moonWaxing}
-                                  size={84}
+                                  size={92}
                                 />
                               </div>
 
                               <span
-                                className="mt-[1px] text-[22px] font-semibold leading-none tracking-[-0.02em] text-white"
+                                className="mt-[2px] text-[24px] font-semibold leading-none tracking-[-0.025em] text-white"
                                 style={{
                                   fontFamily: 'Georgia, "Times New Roman", serif',
                                   textShadow:
