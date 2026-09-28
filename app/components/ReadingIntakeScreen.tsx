@@ -237,13 +237,14 @@ function MoonDisc({
   size?: number;
 }) {
   const f = Math.min(1, Math.max(0, illumination / 100));
-  const r = 45;
+  const r = 42.5;
   const c = 50;
   const top = `${c} ${c - r}`;
   const bottom = `${c} ${c + r}`;
   const rx = Math.max(0.35, Math.abs(1 - 2 * f) * r);
   const outerSweep = waxing ? 1 : 0;
   const terminatorSweep = f >= 0.5 ? (waxing ? 1 : 0) : (waxing ? 0 : 1);
+
   const litPath =
     f > 0.995
       ? `M ${c - r} ${c} A ${r} ${r} 0 1 0 ${c + r} ${c} A ${r} ${r} 0 1 0 ${c - r} ${c}`
@@ -258,88 +259,91 @@ function MoonDisc({
       style={{ overflow: "visible" }}
     >
       <defs>
-        <radialGradient id="intakeMoonBase" cx="38%" cy="30%" r="78%">
-          <stop offset="0%" stopColor="#F7F5F2" />
-          <stop offset="42%" stopColor="#D8D4CE" />
-          <stop offset="76%" stopColor="#ABA8A8" />
-          <stop offset="100%" stopColor="#747788" />
+        <radialGradient id="apxlMoonSurface" cx="35%" cy="30%" r="78%">
+          <stop offset="0%" stopColor="#FAF9F6" />
+          <stop offset="34%" stopColor="#E8E6E2" />
+          <stop offset="66%" stopColor="#C6C4C4" />
+          <stop offset="88%" stopColor="#9B9DA5" />
+          <stop offset="100%" stopColor="#737986" />
         </radialGradient>
 
-        <radialGradient id="intakeMoonShadow" cx="42%" cy="40%" r="74%">
-          <stop offset="0%" stopColor="#171C2C" />
-          <stop offset="72%" stopColor="#0D1221" />
-          <stop offset="100%" stopColor="#070B14" />
+        <radialGradient id="apxlMoonNight" cx="38%" cy="36%" r="74%">
+          <stop offset="0%" stopColor="#242A39" />
+          <stop offset="62%" stopColor="#121826" />
+          <stop offset="100%" stopColor="#070B12" />
         </radialGradient>
 
-        <linearGradient id="intakeMoonLimb" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
-          <stop offset="46%" stopColor="rgba(255,255,255,0)" />
-          <stop offset="100%" stopColor="rgba(1,5,15,0.32)" />
+        <radialGradient id="apxlMoonAura" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(226,232,240,0.22)" />
+          <stop offset="48%" stopColor="rgba(148,163,184,0.08)" />
+          <stop offset="100%" stopColor="rgba(125,211,252,0)" />
+        </radialGradient>
+
+        <linearGradient id="apxlMoonLimb" x1="8%" y1="10%" x2="92%" y2="90%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.20)" />
+          <stop offset="44%" stopColor="rgba(255,255,255,0.02)" />
+          <stop offset="100%" stopColor="rgba(5,8,18,0.34)" />
         </linearGradient>
 
-        <clipPath id="intakeMoonLitClip">
+        <clipPath id="apxlMoonLitClip">
           {f > 0.005 ? <path d={litPath} /> : null}
         </clipPath>
 
-        <filter id="intakeMoonTexture" x="-20%" y="-20%" width="140%" height="140%">
+        <filter id="apxlMoonTexture" x="-18%" y="-18%" width="136%" height="136%">
           <feTurbulence
             type="fractalNoise"
-            baseFrequency="0.055"
-            numOctaves="3"
-            seed="11"
+            baseFrequency="0.042"
+            numOctaves="4"
+            seed="27"
             result="noise"
           />
           <feColorMatrix
             in="noise"
             type="matrix"
             values="
-              0.35 0 0 0 0.32
-              0 0.35 0 0 0.31
-              0 0 0.35 0 0.30
-              0 0 0 0.38 0
+              0.30 0 0 0 0.30
+              0 0.30 0 0 0.30
+              0 0 0.30 0 0.31
+              0 0 0 0.28 0
             "
-            result="softNoise"
+            result="moonNoise"
           />
-          <feBlend in="SourceGraphic" in2="softNoise" mode="multiply" />
+          <feBlend in="SourceGraphic" in2="moonNoise" mode="multiply" />
         </filter>
       </defs>
 
-      <circle
-        cx={c}
-        cy={c}
-        r={r + 2.5}
-        fill="rgba(105,116,145,0.11)"
-        stroke="rgba(203,213,225,0.16)"
-        strokeWidth="0.8"
-      />
+      <circle cx={c} cy={c} r="49" fill="url(#apxlMoonAura)" />
 
-      <circle cx={c} cy={c} r={r} fill="url(#intakeMoonShadow)" />
+      <circle cx={c} cy={c} r={r} fill="url(#apxlMoonNight)" />
 
       {f > 0.005 ? (
-        <g clipPath="url(#intakeMoonLitClip)">
+        <g clipPath="url(#apxlMoonLitClip)">
           <circle
             cx={c}
             cy={c}
             r={r}
-            fill="url(#intakeMoonBase)"
-            filter="url(#intakeMoonTexture)"
+            fill="url(#apxlMoonSurface)"
+            filter="url(#apxlMoonTexture)"
           />
 
-          {/* Broad maria */}
-          <ellipse cx="35" cy="36" rx="11" ry="8" fill="rgba(60,61,66,0.18)" />
-          <ellipse cx="61" cy="42" rx="13" ry="10" fill="rgba(61,62,68,0.15)" />
-          <ellipse cx="48" cy="63" rx="15" ry="9" fill="rgba(65,66,72,0.12)" />
-          <ellipse cx="68" cy="66" rx="8" ry="6" fill="rgba(54,55,62,0.12)" />
+          {/* maria */}
+          <ellipse cx="34" cy="35" rx="11.5" ry="7.5" fill="rgba(60,62,69,0.19)" />
+          <ellipse cx="61" cy="41" rx="13.5" ry="9.5" fill="rgba(63,65,72,0.16)" />
+          <ellipse cx="49" cy="63" rx="14.5" ry="8" fill="rgba(67,69,75,0.13)" />
+          <ellipse cx="69" cy="65" rx="7" ry="5.5" fill="rgba(58,60,66,0.13)" />
+          <ellipse cx="31" cy="69" rx="6" ry="4" fill="rgba(75,77,83,0.11)" />
 
-          {/* Craters */}
-          <circle cx="27" cy="50" r="5.2" fill="rgba(63,65,72,0.16)" />
-          <circle cx="27" cy="49" r="3.6" fill="rgba(240,239,235,0.08)" />
-          <circle cx="58" cy="29" r="3.4" fill="rgba(67,69,76,0.16)" />
-          <circle cx="74" cy="52" r="4.6" fill="rgba(66,68,74,0.14)" />
-          <circle cx="43" cy="75" r="4.1" fill="rgba(62,64,70,0.13)" />
-          <circle cx="38" cy="25" r="2.6" fill="rgba(59,61,66,0.13)" />
+          {/* crater field */}
+          <circle cx="27" cy="49" r="5.2" fill="rgba(70,72,78,0.16)" />
+          <circle cx="27" cy="48" r="3.1" fill="rgba(248,247,242,0.07)" />
+          <circle cx="58" cy="29" r="3.4" fill="rgba(68,70,77,0.15)" />
+          <circle cx="74" cy="52" r="4.4" fill="rgba(67,69,75,0.14)" />
+          <circle cx="43" cy="74" r="3.8" fill="rgba(65,67,73,0.13)" />
+          <circle cx="39" cy="25" r="2.4" fill="rgba(61,63,69,0.13)" />
+          <circle cx="54" cy="50" r="2.1" fill="rgba(76,78,84,0.10)" />
+          <circle cx="68" cy="31" r="1.8" fill="rgba(74,76,82,0.11)" />
 
-          <circle cx={c} cy={c} r={r} fill="url(#intakeMoonLimb)" />
+          <circle cx={c} cy={c} r={r} fill="url(#apxlMoonLimb)" />
         </g>
       ) : null}
 
@@ -348,8 +352,8 @@ function MoonDisc({
         cy={c}
         r={r}
         fill="none"
-        stroke="rgba(255,255,255,0.15)"
-        strokeWidth="0.75"
+        stroke="rgba(255,255,255,0.18)"
+        strokeWidth="0.8"
       />
     </svg>
   );
@@ -365,106 +369,120 @@ function SunDisc({ size = 58 }: { size?: number }) {
       style={{ overflow: "visible" }}
     >
       <defs>
-        <radialGradient id="intakeSunCore" cx="39%" cy="35%" r="68%">
-          <stop offset="0%" stopColor="#FFFDE8" />
-          <stop offset="22%" stopColor="#FFF4A8" />
-          <stop offset="52%" stopColor="#FFD238" />
-          <stop offset="79%" stopColor="#FF9D00" />
-          <stop offset="100%" stopColor="#E66B00" />
+        <radialGradient id="apxlSunSurface" cx="36%" cy="31%" r="72%">
+          <stop offset="0%" stopColor="#FFFEEB" />
+          <stop offset="15%" stopColor="#FFF3A2" />
+          <stop offset="38%" stopColor="#FFD95A" />
+          <stop offset="64%" stopColor="#FFAE1D" />
+          <stop offset="84%" stopColor="#F47A05" />
+          <stop offset="100%" stopColor="#C94D00" />
         </radialGradient>
 
-        <radialGradient id="intakeSunHalo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(255,221,92,0.56)" />
-          <stop offset="48%" stopColor="rgba(255,166,0,0.20)" />
-          <stop offset="78%" stopColor="rgba(255,125,0,0.07)" />
-          <stop offset="100%" stopColor="rgba(255,125,0,0)" />
+        <radialGradient id="apxlSunAura" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(255,235,127,0.62)" />
+          <stop offset="36%" stopColor="rgba(255,188,50,0.30)" />
+          <stop offset="64%" stopColor="rgba(255,126,0,0.12)" />
+          <stop offset="100%" stopColor="rgba(255,110,0,0)" />
         </radialGradient>
 
-        <filter id="intakeSunTexture" x="-20%" y="-20%" width="140%" height="140%">
+        <linearGradient id="apxlSunLimb" x1="10%" y1="8%" x2="92%" y2="92%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.26)" />
+          <stop offset="42%" stopColor="rgba(255,255,255,0.03)" />
+          <stop offset="100%" stopColor="rgba(145,49,0,0.26)" />
+        </linearGradient>
+
+        <filter id="apxlSunTexture" x="-18%" y="-18%" width="136%" height="136%">
           <feTurbulence
             type="fractalNoise"
-            baseFrequency="0.085"
-            numOctaves="3"
-            seed="7"
-            result="noise"
-          />
-          <feColorMatrix
-            in="noise"
-            type="matrix"
-            values="
-              0.9 0 0 0 0.14
-              0 0.48 0 0 0.05
-              0 0 0.15 0 0
-              0 0 0 0.36 0
-            "
+            baseFrequency="0.06"
+            numOctaves="4"
+            seed="31"
             result="solarNoise"
           />
-          <feBlend in="SourceGraphic" in2="solarNoise" mode="screen" />
+          <feColorMatrix
+            in="solarNoise"
+            type="matrix"
+            values="
+              0.95 0 0 0 0.12
+              0 0.52 0 0 0.04
+              0 0 0.13 0 0
+              0 0 0 0.34 0
+            "
+            result="solarTexture"
+          />
+          <feBlend in="SourceGraphic" in2="solarTexture" mode="screen" />
         </filter>
 
-        <filter id="intakeSunGlow" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="2.8" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
+        <filter id="apxlSunCorona" x="-70%" y="-70%" width="240%" height="240%">
+          <feGaussianBlur stdDeviation="2.2" />
         </filter>
       </defs>
 
-      <circle cx="50" cy="50" r="49" fill="url(#intakeSunHalo)" />
+      {/* Soft corona with no visible square or weather-icon rays */}
+      <circle cx="50" cy="50" r="49" fill="url(#apxlSunAura)" />
 
-      <g opacity="0.38" stroke="#FFB51F" fill="none" strokeLinecap="round">
-        <path d="M50 0 C47 8 53 10 50 16" />
-        <path d="M50 100 C47 92 53 90 50 84" />
-        <path d="M0 50 C8 47 10 53 16 50" />
-        <path d="M100 50 C92 47 90 53 84 50" />
-        <path d="M14 14 C19 21 24 19 27 25" />
-        <path d="M86 14 C81 21 76 19 73 25" />
-        <path d="M14 86 C19 79 24 81 27 75" />
-        <path d="M86 86 C81 79 76 81 73 75" />
+      <g
+        fill="none"
+        stroke="#FFC53D"
+        strokeLinecap="round"
+        opacity="0.28"
+        filter="url(#apxlSunCorona)"
+      >
+        <path d="M50 3 C44 11 55 13 49 21" strokeWidth="2" />
+        <path d="M50 97 C44 89 55 87 49 79" strokeWidth="2" />
+        <path d="M3 50 C11 44 13 55 21 49" strokeWidth="2" />
+        <path d="M97 50 C89 44 87 55 79 49" strokeWidth="2" />
+        <path d="M16 17 C24 20 22 28 30 30" strokeWidth="1.5" />
+        <path d="M84 17 C76 20 78 28 70 30" strokeWidth="1.5" />
+        <path d="M16 83 C24 80 22 72 30 70" strokeWidth="1.5" />
+        <path d="M84 83 C76 80 78 72 70 70" strokeWidth="1.5" />
       </g>
 
       <circle
         cx="50"
         cy="50"
-        r="43"
-        fill="url(#intakeSunCore)"
-        filter="url(#intakeSunGlow)"
+        r="40.5"
+        fill="url(#apxlSunSurface)"
+        filter="url(#apxlSunTexture)"
       />
+
+      {/* subtle solar granulation */}
+      <path
+        d="M19 47 C29 37 38 33 49 34 C62 34 73 38 81 47"
+        fill="none"
+        stroke="rgba(255,252,212,0.16)"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M22 62 C33 56 42 61 54 60 C66 59 73 53 79 55"
+        fill="none"
+        stroke="rgba(181,67,0,0.18)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M29 73 C40 68 51 72 67 67"
+        fill="none"
+        stroke="rgba(255,241,171,0.12)"
+        strokeWidth="1"
+        strokeLinecap="round"
+      />
+
+      {/* active regions */}
+      <ellipse cx="35" cy="38" rx="4.8" ry="3.1" fill="rgba(255,255,255,0.11)" />
+      <ellipse cx="62" cy="58" rx="4.2" ry="2.9" fill="rgba(167,58,0,0.11)" />
+      <ellipse cx="58" cy="28" rx="2.5" ry="1.8" fill="rgba(255,255,255,0.10)" />
+      <ellipse cx="42" cy="67" rx="2.3" ry="1.6" fill="rgba(180,65,0,0.09)" />
+
+      <circle cx="50" cy="50" r="40.5" fill="url(#apxlSunLimb)" />
 
       <circle
         cx="50"
         cy="50"
-        r="41.5"
-        fill="url(#intakeSunCore)"
-        filter="url(#intakeSunTexture)"
-      />
-
-      <path
-        d="M19 52 C29 41 31 31 48 28 C65 25 77 33 82 48"
+        r="40.8"
         fill="none"
-        stroke="rgba(255,255,255,0.15)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M26 67 C39 58 54 68 74 58"
-        fill="none"
-        stroke="rgba(205,92,0,0.18)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-
-      <circle cx="38" cy="34" r="4" fill="rgba(255,255,255,0.14)" />
-      <circle cx="62" cy="59" r="3.6" fill="rgba(178,72,0,0.12)" />
-      <circle cx="58" cy="29" r="2.2" fill="rgba(255,255,255,0.11)" />
-
-      <circle
-        cx="50"
-        cy="50"
-        r="42.5"
-        fill="none"
-        stroke="rgba(255,246,190,0.52)"
+        stroke="rgba(255,246,194,0.54)"
         strokeWidth="0.9"
       />
     </svg>
