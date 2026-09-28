@@ -130,14 +130,14 @@ html {
 
 @layer base {
   html,
-body {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  height: 100dvh;
-  overflow-x: hidden;
-  overscroll-behavior-x: none;
-}
+  body {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
 
   * {
     @apply border-border outline-ring/50;
@@ -145,6 +145,7 @@ body {
 
   html {
     @apply font-sans;
+    background-color: #050816;
   }
 
   html,
@@ -153,33 +154,32 @@ body {
   }
 
   body {
-  @apply text-foreground;
-  margin: 0;
-  position: relative;
-}
-
-  @layer utilities {
-  .standard-shadow {
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
+    @apply text-foreground;
+    margin: 0;
+    position: relative;
+    min-height: 100svh;
   }
-
-  .pt-safe {
-    padding-top: env(safe-area-inset-top, 0px);
-  }
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .px-safe {
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
-  }
-}
 }
 
 /* ── CUSTOM UTILITIES ──────────────────────────────────────────────── */
 
 @layer utilities {
   .standard-shadow {
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 36px 80px rgba(0, 0, 0, 0.56);
+    box-shadow:
+      0 18px 44px rgba(0, 0, 0, 0.72),
+      0 36px 80px rgba(0, 0, 0, 0.56);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .px-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 }
