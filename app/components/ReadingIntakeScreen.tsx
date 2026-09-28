@@ -36,35 +36,7 @@ declare global {
   }
 }
 
-/* ── Lightweight live voice capture for the intake hero ──────────────── */
-interface IntakeSpeechRecognitionAlternative { readonly transcript: string }
-interface IntakeSpeechRecognitionResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  [index: number]: IntakeSpeechRecognitionAlternative;
-}
-interface IntakeSpeechRecognitionResultList {
-  readonly length: number;
-  [index: number]: IntakeSpeechRecognitionResult;
-}
-interface IntakeSpeechRecognitionEvent extends Event {
-  readonly results: IntakeSpeechRecognitionResultList;
-}
-interface IntakeSpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-}
-interface IntakeSpeechRecognition extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((e: IntakeSpeechRecognitionEvent) => void) | null;
-  onerror: ((e: IntakeSpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-}
-
+/* ── Recorded voice capture for Ask Anything ────────────────────────── */
 const ASK_MIN_HOLD_MS = 450;
 
 const ASK_WAVE = {
@@ -454,10 +426,10 @@ export default function ReadingIntakeScreen({
   const [micConnecting, setMicConnecting] = useState(false);
   const [askHolding, setAskHolding] = useState(false);
   const askHoldingRef = useRef(false);
-  const [liveTranscript, setLiveTranscript] = useState("");
   const [askError, setAskError] = useState<string | null>(null);
-  const recognitionRef = useRef<IntakeSpeechRecognition | null>(null);
-  const transcriptRef = useRef("");
+  const [isTranscribingAsk, setIsTranscribingAsk] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
   const askHoldStartRef = useRef(0);
   const askPointerStartYRef = useRef(0);
   const askCancelledRef = useRef(false);
@@ -724,10 +696,6 @@ export default function ReadingIntakeScreen({
 
   const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
-  const visibleTranscript = useMemo(() => {
-    const words = liveTranscript.trim().split(/\s+/).filter(Boolean);
-    return words.slice(-28).join(" ");
-  }, [liveTranscript]);
 
   const skyNotice = useMemo(() => {
     if (heroData.mercury?.isRetrograde) {
@@ -757,18 +725,17 @@ export default function ReadingIntakeScreen({
     };
   }, [heroData.mercury, moonPhase]);
 
-  const stopAskRecognition = useCallback(() => {
-    const rec = recognitionRef.current;
-    if (!rec) return;
+  const stopAskRecorder = useCallback((discard = false) => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+
+    if (discard) askCancelledRef.current = true;
+
     try {
-      rec.onresult = null;
-      rec.onerror = null;
-      rec.onend = null;
-      rec.stop();
+      if (recorder.state !== "inactive") recorder.stop();
     } catch {
       // already stopped
     }
-    recognitionRef.current = null;
   }, []);
 
   const stopAskMeter = useCallback(() => {
@@ -796,7 +763,7 @@ export default function ReadingIntakeScreen({
   }, []);
 
   const disconnectMicrophone = useCallback(() => {
-    stopAskRecognition();
+    stopAskRecorder(true);
     stopAskMeter();
 
     if (meterStreamRef.current) {
@@ -812,7 +779,7 @@ export default function ReadingIntakeScreen({
     setAskHolding(false);
     setMicEnabled(false);
     setMicConnecting(false);
-  }, [stopAskMeter, stopAskRecognition]);
+  }, [stopAskMeter, stopAskRecorder]);
 
   const enableMicrophone = useCallback(async () => {
     if (micEnabled || micConnecting) return;
@@ -845,7 +812,7 @@ export default function ReadingIntakeScreen({
         track.onended = () => {
           if (meterStreamRef.current === stream) {
             meterStreamRef.current = null;
-            stopAskRecognition();
+            stopAskRecorder(true);
             stopAskMeter();
             askHoldingRef.current = false;
             setAskHolding(false);
@@ -861,7 +828,7 @@ export default function ReadingIntakeScreen({
     } finally {
       setMicConnecting(false);
     }
-  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecognition]);
+  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecorder]);
 
   const toggleMicrophone = useCallback(() => {
     if (micEnabled) {
@@ -896,30 +863,98 @@ export default function ReadingIntakeScreen({
       analyserRef.current = analyser;
 
       const freq = new Uint8Array(analyser.frequencyBinCount);
-      const canvas = canvasRef.current;
-      const c2d = canvas?.getContext("2d") ?? null;
       let smooth = 0;
       let time = 0;
-      let cw = 0;
-      let ch = 0;
-      let dpr = 1;
 
-      const fit = () => {
-        if (!canvas || !c2d) return;
-        dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const drawWave = (canvas: HTMLCanvasElement | null) => {
+        if (!canvas) return;
+
+        const c2d = canvas.getContext("2d");
+        if (!c2d) return;
+
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const r = canvas.getBoundingClientRect();
-        cw = r.width;
-        ch = r.height;
-        canvas.width = Math.round(cw * dpr);
-        canvas.height = Math.round(ch * dpr);
-        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-      };
+        const cw = r.width;
+        const ch = r.height;
+        if (!cw || !ch) return;
 
-      fit();
+        const targetWidth = Math.round(cw * dpr);
+        const targetHeight = Math.round(ch * dpr);
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+        }
+
+        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+        c2d.clearRect(0, 0, cw, ch);
+
+        const cy = ch / 2;
+        const grad = c2d.createLinearGradient(0, 0, cw, 0);
+        ASK_WAVE.colors.forEach((color, i) =>
+          grad.addColorStop(i / (ASK_WAVE.colors.length - 1), color)
+        );
+
+        c2d.lineCap = "round";
+        c2d.lineJoin = "round";
+        c2d.globalCompositeOperation = "lighter";
+
+        const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
+
+        for (let line = 0; line < ASK_WAVE.lines; line++) {
+          const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
+          const phase = time * (1 + lf * 0.45) + line * 0.7;
+          const lineAmp = amp * (1 - lf * 0.14);
+
+          c2d.beginPath();
+          for (let x = 0; x <= cw; x += 3) {
+            const tx = x / cw;
+            const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
+            const y =
+              cy +
+              env *
+                lineAmp *
+                (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
+                  Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
+            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+          }
+
+          c2d.strokeStyle = grad;
+          c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
+          c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
+          c2d.shadowBlur = ASK_WAVE.glow;
+          c2d.shadowColor = "rgba(129,140,248,0.5)";
+          c2d.stroke();
+        }
+
+        const coreAmp =
+          (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
+        c2d.beginPath();
+        for (let x = 0; x <= cw; x += 2) {
+          const tx = x / cw;
+          const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
+          const y =
+            cy +
+            env *
+              coreAmp *
+              Math.sin(tx * Math.PI * 5 + time * 1.4) *
+              0.9;
+          x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+        }
+
+        c2d.globalAlpha = 0.3 + smooth * 0.5;
+        c2d.strokeStyle = "rgba(255,255,255,0.92)";
+        c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
+        c2d.shadowBlur = ASK_WAVE.glow * 1.3;
+        c2d.shadowColor = "rgba(255,255,255,0.7)";
+        c2d.stroke();
+
+        c2d.globalCompositeOperation = "source-over";
+        c2d.globalAlpha = 1;
+        c2d.shadowBlur = 0;
+      };
 
       const draw = () => {
         if (!askHoldingRef.current) return;
-        if (!cw || !ch) fit();
 
         time += 0.016 * ASK_WAVE.speed;
         analyser.getByteFrequencyData(freq);
@@ -936,91 +971,8 @@ export default function ReadingIntakeScreen({
         const energy = count ? (sum / count) / 255 : 0;
         smooth += (energy - smooth) * 0.18;
 
-        if (c2d && cw && ch) {
-          const cy = ch / 2;
-          c2d.clearRect(0, 0, cw, ch);
-
-          const grad = c2d.createLinearGradient(0, 0, cw, 0);
-          ASK_WAVE.colors.forEach((color, i) =>
-            grad.addColorStop(i / (ASK_WAVE.colors.length - 1), color)
-          );
-
-          c2d.lineCap = "round";
-          c2d.lineJoin = "round";
-          c2d.globalCompositeOperation = "lighter";
-
-          const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
-
-          for (let line = 0; line < ASK_WAVE.lines; line++) {
-            const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
-            const phase = time * (1 + lf * 0.45) + line * 0.7;
-            const lineAmp = amp * (1 - lf * 0.14);
-
-            c2d.beginPath();
-            for (let x = 0; x <= cw; x += 3) {
-              const tx = x / cw;
-              const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
-              const y =
-                cy +
-                env *
-                  lineAmp *
-                  (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
-                    Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
-              x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
-            }
-
-            c2d.strokeStyle = grad;
-            c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
-            c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
-            c2d.shadowBlur = ASK_WAVE.glow;
-            c2d.shadowColor = "rgba(129,140,248,0.5)";
-            c2d.stroke();
-          }
-
-          const coreAmp =
-            (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
-          c2d.beginPath();
-          for (let x = 0; x <= cw; x += 2) {
-            const tx = x / cw;
-            const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
-            const y =
-              cy +
-              env *
-                coreAmp *
-                Math.sin(tx * Math.PI * 5 + time * 1.4) *
-                0.9;
-            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
-          }
-
-          c2d.globalAlpha = 0.3 + smooth * 0.5;
-          c2d.strokeStyle = "rgba(255,255,255,0.92)";
-          c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
-          c2d.shadowBlur = ASK_WAVE.glow * 1.3;
-          c2d.shadowColor = "rgba(255,255,255,0.7)";
-          c2d.stroke();
-
-          c2d.globalCompositeOperation = "source-over";
-          c2d.globalAlpha = 1;
-          c2d.shadowBlur = 0;
-
-          const headerCanvas = headerCanvasRef.current;
-          const headerCtx = headerCanvas?.getContext("2d") ?? null;
-          if (canvas && headerCanvas && headerCtx) {
-            const headerRect = headerCanvas.getBoundingClientRect();
-            const headerDpr = Math.min(window.devicePixelRatio || 1, 2);
-            const headerWidth = Math.max(1, Math.round(headerRect.width * headerDpr));
-            const headerHeight = Math.max(1, Math.round(headerRect.height * headerDpr));
-
-            if (headerCanvas.width !== headerWidth || headerCanvas.height !== headerHeight) {
-              headerCanvas.width = headerWidth;
-              headerCanvas.height = headerHeight;
-            }
-
-            headerCtx.setTransform(1, 0, 0, 1, 0, 0);
-            headerCtx.clearRect(0, 0, headerCanvas.width, headerCanvas.height);
-            headerCtx.drawImage(canvas, 0, 0, headerCanvas.width, headerCanvas.height);
-          }
-        }
+        drawWave(canvasRef.current);
+        drawWave(headerCanvasRef.current);
 
         meterRafRef.current = requestAnimationFrame(draw);
       };
@@ -1030,114 +982,6 @@ export default function ReadingIntakeScreen({
       stopAskMeter();
     }
   }, [micEnabled, stopAskMeter]);
-
-  const startAskHold = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      e.preventDefault();
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-
-      if (!micEnabled) {
-        // Caption below the button already says "Turn on the microphone" —
-        // no need to duplicate it as an error.
-        return;
-      }
-
-      setAskError(null);
-
-      const SR =
-        (window as unknown as { SpeechRecognition?: new () => IntakeSpeechRecognition }).SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition?: new () => IntakeSpeechRecognition })
-          .webkitSpeechRecognition;
-
-      if (!SR) {
-        setAskError("Voice input isn't available in this browser yet.");
-        return;
-      }
-
-      transcriptRef.current = "";
-      setLiveTranscript("");
-      askPointerStartYRef.current = e.clientY;
-      askCancelledRef.current = false;
-
-      const rec = new SR();
-      rec.lang = "en-US";
-      rec.interimResults = true;
-      rec.continuous = true;
-      recognitionRef.current = rec;
-
-      rec.onresult = (event: IntakeSpeechRecognitionEvent) => {
-        let finalText = "";
-        let interimText = "";
-
-        for (let i = 0; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) finalText += `${result[0].transcript} `;
-          else interimText += `${result[0].transcript} `;
-        }
-
-        const combined = `${finalText}${interimText}`.replace(/\s+/g, " ").trim();
-        transcriptRef.current = combined;
-        setLiveTranscript(combined);
-      };
-
-      rec.onerror = (event: IntakeSpeechRecognitionErrorEvent) => {
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          setAskError("Microphone access is blocked. Allow microphone access and try again.");
-        } else {
-          setAskError("I couldn't hear that clearly. Try holding again.");
-        }
-        askHoldingRef.current = false;
-        setAskHolding(false);
-        stopAskRecognition();
-        stopAskMeter();
-      };
-
-      rec.onend = () => {
-        recognitionRef.current = null;
-      };
-
-      try {
-        rec.start();
-      } catch {
-        setAskError("Voice input couldn't start. Try again.");
-        return;
-      }
-
-      askHoldStartRef.current = Date.now();
-      askHoldingRef.current = true;
-      setAskHolding(true);
-      triggerIntakeHaptic();
-      void startAskMeter();
-    },
-    [micEnabled, startAskMeter, stopAskMeter, stopAskRecognition]
-  );
-
-  const cancelAskHold = useCallback(() => {
-    if (!askHoldingRef.current) return;
-
-    askCancelledRef.current = true;
-    askHoldingRef.current = false;
-    setAskHolding(false);
-    setLiveTranscript("");
-    transcriptRef.current = "";
-    setAskError(null);
-
-    stopAskRecognition();
-    stopAskMeter();
-    triggerIntakeHaptic();
-  }, [stopAskMeter, stopAskRecognition]);
-
-  const moveAskHold = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (!askHoldingRef.current || askCancelledRef.current) return;
-
-      const upwardDistance = askPointerStartYRef.current - e.clientY;
-      if (upwardDistance >= 56) {
-        cancelAskHold();
-      }
-    },
-    [cancelAskHold]
-  );
 
   const submitAskAnything = useCallback(
     (transcript: string) => {
@@ -1166,41 +1010,184 @@ export default function ReadingIntakeScreen({
     [router]
   );
 
-  const endAskHold = useCallback(() => {
-    if (askCancelledRef.current) {
-      askCancelledRef.current = false;
-      return;
-    }
+  const transcribeAskAudio = useCallback(
+    async (blob: Blob) => {
+      if (blob.size === 0) {
+        setAskError("We didn't catch that. Hold the button and try again.");
+        return;
+      }
 
+      setIsTranscribingAsk(true);
+      setAskError(null);
+
+      try {
+        const form = new FormData();
+        form.append("audio", blob, "speech");
+
+        const response = await fetch("/api/jxl/transcribe", {
+          method: "POST",
+          body: form,
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || typeof data?.text !== "string" || !data.text.trim()) {
+          setAskError(data?.error || "Couldn't hear that clearly. Try again.");
+          return;
+        }
+
+        submitAskAnything(data.text);
+      } catch {
+        setAskError("Something went wrong with voice input. Try again.");
+      } finally {
+        setIsTranscribingAsk(false);
+      }
+    },
+    [submitAskAnything]
+  );
+
+  const startAskHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+
+      if (!micEnabled || isTranscribingAsk) return;
+
+      const stream = meterStreamRef.current;
+      if (!stream) {
+        setAskError("Microphone access isn't available right now.");
+        return;
+      }
+
+      if (typeof MediaRecorder === "undefined") {
+        setAskError("Voice recording isn't available in this browser yet.");
+        return;
+      }
+
+      setAskError(null);
+      askPointerStartYRef.current = e.clientY;
+      askCancelledRef.current = false;
+      audioChunksRef.current = [];
+
+      const preferredType = [
+        "audio/mp4",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+      ].find((type) => MediaRecorder.isTypeSupported(type));
+
+      let recorder: MediaRecorder;
+      try {
+        recorder = preferredType
+          ? new MediaRecorder(stream, { mimeType: preferredType })
+          : new MediaRecorder(stream);
+      } catch {
+        setAskError("Voice recording couldn't start. Try again.");
+        return;
+      }
+
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        askCancelledRef.current = true;
+        askHoldingRef.current = false;
+        setAskHolding(false);
+        stopAskMeter();
+        setAskError("Voice recording was interrupted. Try again.");
+      };
+
+      recorder.onstop = () => {
+        mediaRecorderRef.current = null;
+
+        const cancelled = askCancelledRef.current;
+        askCancelledRef.current = false;
+
+        const mimeType =
+          recorder.mimeType ||
+          (audioChunksRef.current[0] instanceof Blob
+            ? (audioChunksRef.current[0] as Blob).type
+            : "") ||
+          "audio/webm";
+
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+
+        if (cancelled) return;
+        void transcribeAskAudio(blob);
+      };
+
+      askHoldStartRef.current = Date.now();
+      askHoldingRef.current = true;
+      setAskHolding(true);
+      triggerIntakeHaptic();
+
+      try {
+        recorder.start(250);
+      } catch {
+        askHoldingRef.current = false;
+        setAskHolding(false);
+        mediaRecorderRef.current = null;
+        setAskError("Voice recording couldn't start. Try again.");
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          void startAskMeter();
+        });
+      });
+    },
+    [isTranscribingAsk, micEnabled, startAskMeter, stopAskMeter, transcribeAskAudio]
+  );
+
+  const cancelAskHold = useCallback(() => {
     if (!askHoldingRef.current) return;
 
+    askCancelledRef.current = true;
+    askHoldingRef.current = false;
+    setAskHolding(false);
+    setAskError(null);
+
+    stopAskMeter();
+    stopAskRecorder(true);
+    triggerIntakeHaptic();
+  }, [stopAskMeter, stopAskRecorder]);
+
+  const moveAskHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!askHoldingRef.current || askCancelledRef.current) return;
+
+      const upwardDistance = askPointerStartYRef.current - e.clientY;
+      if (upwardDistance >= 56) {
+        cancelAskHold();
+      }
+    },
+    [cancelAskHold]
+  );
+
+  const endAskHold = useCallback(() => {
+    if (askCancelledRef.current || !askHoldingRef.current) return;
+
     const elapsed = Date.now() - askHoldStartRef.current;
-    const said = transcriptRef.current.trim();
 
     askHoldingRef.current = false;
     setAskHolding(false);
     triggerIntakeHaptic();
-    stopAskRecognition();
     stopAskMeter();
 
     if (elapsed < ASK_MIN_HOLD_MS) {
-      setLiveTranscript("");
-      transcriptRef.current = "";
+      askCancelledRef.current = true;
+      stopAskRecorder(true);
       setAskError("Press and hold while you speak.");
       return;
     }
 
-    if (said.length < 2) {
-      setLiveTranscript("");
-      transcriptRef.current = "";
-      setAskError("Didn't quite catch that. Hold and try again.");
-      return;
-    }
-
-    setLiveTranscript("");
-    transcriptRef.current = "";
-    submitAskAnything(said);
-  }, [stopAskMeter, stopAskRecognition, submitAskAnything]);
+    stopAskRecorder(false);
+  }, [stopAskMeter, stopAskRecorder]);
 
   useEffect(() => {
     const shutMicDownForPageExit = () => {
@@ -1873,24 +1860,12 @@ export default function ReadingIntakeScreen({
                       className="absolute inset-0"
                     >
                       {askHolding ? (
-                        /* HERO 4 — live Ask Anything transcription */
-                        <div className="absolute inset-0 flex flex-col items-center justify-center px-[34px] pb-[10px] pt-[12px]">
-                          <div className="flex h-[112px] w-full items-end justify-center">
-                            <p
-                              className="w-full text-center text-[18px] font-medium leading-[1.34] tracking-[-0.015em] text-slate-100/92"
-                              style={{
-                                textShadow:
-                                  "0 3px 14px rgba(0,0,0,0.92), 0 0 18px rgba(129,140,248,0.12)",
-                              }}
-                            >
-                              {visibleTranscript || "Listening…"}
-                            </p>
-                          </div>
-
+                        /* HERO 4 — waveform-only listening state */
+                        <div className="absolute inset-0 flex items-center justify-center px-[30px]">
                           <canvas
                             ref={canvasRef}
                             aria-hidden="true"
-                            className="mt-[8px] h-[72px] w-[300px] max-w-full"
+                            className="h-[112px] w-[320px] max-w-full"
                           />
                         </div>
                       ) : heroInfoMode === "brand" ? (
@@ -2370,12 +2345,12 @@ export default function ReadingIntakeScreen({
   aria-pressed={micEnabled}
   aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
   onClick={toggleMicrophone}
-  disabled={micConnecting}
+  disabled={micConnecting || isTranscribingAsk}
   style={{
     position: "absolute",
     left: "calc(100% + 6px)",
     top: "8px",
-    cursor: micConnecting ? "wait" : "pointer",
+    cursor: micConnecting || isTranscribingAsk ? "wait" : "pointer",
     opacity: micEnabled ? 0.18 : 0.74,
     filter: micEnabled
       ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
