@@ -61,11 +61,15 @@ export default function StarfieldBackground() {
       r: Math.random() * 1.1 + 0.65,
     }));
 
-    const resize = () => {
+      const resize = () => {
       canvas.width = Math.max(1, Math.round(W() * dpr));
       canvas.height = Math.max(1, Math.round(H() * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
+
+    resize();
+    window.addEventListener("resize", resize);
+    window.visualViewport?.addEventListener("resize", resize);
 
     resize();
     window.addEventListener("resize", resize);
@@ -182,6 +186,7 @@ export default function StarfieldBackground() {
       running = false;
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
+      window.visualViewport?.removeEventListener("resize", resize);
       document.removeEventListener(
         "visibilitychange",
         handleVisibility

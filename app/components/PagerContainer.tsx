@@ -312,6 +312,59 @@ export default function PagerContainer() {
           panel.scrollLeft = 0;
         });
     };
+      // iOS Safari's `100dvh` at initial page load resolves to the URL-bar-visible
+  // height, but iOS then renders the page with a slightly larger visual area
+  // underneath the URL bar. That mismatch leaves a 40–80px strip of body
+  // background visible at the bottom until a scroll forces a re-measure. This
+  // effect sets the pager's height directly from `visualViewport.height`,
+  // which is the only number on iOS that matches what's actually drawn. It
+  // re-runs on viewport resize (URL bar show/hide, keyboard, rotation) and on
+  // the first frame after mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    let raf = 0;
+
+    const apply = () => {
+      const vv = window.visualViewport;
+      const h = vv?.height ?? window.innerHeight;
+      // Round to whole pixels to avoid sub-pixel accumulation in the fixed
+      // positioning context.
+      el.style.height = `${Math.round(h)}px`;
+    };
+
+    const scheduleApply = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        // A second frame after mount handles the initial-paint race where
+        // visualViewport hasn't reported the settled height yet.
+        raf = requestAnimationFrame(apply);
+      });
+    };
+
+    scheduleApply();
+
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", scheduleApply);
+      vv.addEventListener("scroll", apply);
+    }
+    window.addEventListener("resize", scheduleApply);
+    window.addEventListener("orientationchange", scheduleApply);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (vv) {
+        vv.removeEventListener("resize", scheduleApply);
+        vv.removeEventListener("scroll", apply);
+      }
+      window.removeEventListener("resize", scheduleApply);
+      window.removeEventListener("orientationchange", scheduleApply);
+      el.style.height = "";
+    };
+  }, []);
 
     normalizeHorizontalPosition();
     window.addEventListener("pageshow", normalizeHorizontalPosition);
