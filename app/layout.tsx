@@ -53,7 +53,7 @@ export default function RootLayout({
         */}
         <link rel="manifest" href="/manifest.webmanifest" />
       </head>
-      <body className="min-h-[100svh] overflow-hidden bg-[#040611] text-foreground">
+            <body className="min-h-[100dvh] bg-[#040611] text-foreground">
         {/* TikTok Pixel — loads after page becomes interactive, doesn't block render */}
         <Script id="tiktok-pixel" strategy="afterInteractive">
           {`
@@ -71,9 +71,9 @@ export default function RootLayout({
             This allows your deep dark [#040611] background to fill the whole screen (borders gone), 
             but keeps the actual layout items perfectly within the safe boundaries.
           */}
-          <main className="min-h-[100svh] w-full min-w-0 max-w-full overflow-hidden bg-[#040611]">
-  {children}
-</main>
+          <main className="min-h-[100dvh] w-full min-w-0 max-w-full bg-[#040611]">
+            {children}
+          </main>
         </ClerkProvider>
       </body>
     </html>
