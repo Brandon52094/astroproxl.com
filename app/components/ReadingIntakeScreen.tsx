@@ -459,11 +459,14 @@ export default function ReadingIntakeScreen({
   const recognitionRef = useRef<IntakeSpeechRecognition | null>(null);
   const transcriptRef = useRef("");
   const askHoldStartRef = useRef(0);
+  const askPointerStartYRef = useRef(0);
+  const askCancelledRef = useRef(false);
   const meterStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterRafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const headerCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -783,11 +786,12 @@ export default function ReadingIntakeScreen({
       audioCtxRef.current = null;
     }
 
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (canvas && ctx) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const canvas of [canvasRef.current, headerCanvasRef.current]) {
+      const ctx = canvas?.getContext("2d");
+      if (canvas && ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
     }
   }, []);
 
@@ -892,30 +896,97 @@ export default function ReadingIntakeScreen({
       analyserRef.current = analyser;
 
       const freq = new Uint8Array(analyser.frequencyBinCount);
-      const canvas = canvasRef.current;
-      const c2d = canvas?.getContext("2d") ?? null;
       let smooth = 0;
       let time = 0;
-      let cw = 0;
-      let ch = 0;
-      let dpr = 1;
 
-      const fit = () => {
-        if (!canvas || !c2d) return;
-        dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const drawWave = (canvas: HTMLCanvasElement | null) => {
+        if (!canvas) return;
+        const c2d = canvas.getContext("2d");
+        if (!c2d) return;
+
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const r = canvas.getBoundingClientRect();
-        cw = r.width;
-        ch = r.height;
-        canvas.width = Math.round(cw * dpr);
-        canvas.height = Math.round(ch * dpr);
-        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-      };
+        const cw = r.width;
+        const ch = r.height;
+        if (!cw || !ch) return;
 
-      fit();
+        const targetWidth = Math.round(cw * dpr);
+        const targetHeight = Math.round(ch * dpr);
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+        }
+
+        c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const cy = ch / 2;
+        c2d.clearRect(0, 0, cw, ch);
+
+        const grad = c2d.createLinearGradient(0, 0, cw, 0);
+        ASK_WAVE.colors.forEach((color, i) =>
+          grad.addColorStop(i / (ASK_WAVE.colors.length - 1), color)
+        );
+
+        c2d.lineCap = "round";
+        c2d.lineJoin = "round";
+        c2d.globalCompositeOperation = "lighter";
+
+        const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
+
+        for (let line = 0; line < ASK_WAVE.lines; line++) {
+          const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
+          const phase = time * (1 + lf * 0.45) + line * 0.7;
+          const lineAmp = amp * (1 - lf * 0.14);
+
+          c2d.beginPath();
+          for (let x = 0; x <= cw; x += 3) {
+            const tx = x / cw;
+            const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
+            const y =
+              cy +
+              env *
+                lineAmp *
+                (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
+                  Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
+            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+          }
+
+          c2d.strokeStyle = grad;
+          c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
+          c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
+          c2d.shadowBlur = ASK_WAVE.glow;
+          c2d.shadowColor = "rgba(129,140,248,0.5)";
+          c2d.stroke();
+        }
+
+        const coreAmp =
+          (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
+        c2d.beginPath();
+        for (let x = 0; x <= cw; x += 2) {
+          const tx = x / cw;
+          const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
+          const y =
+            cy +
+            env *
+              coreAmp *
+              Math.sin(tx * Math.PI * 5 + time * 1.4) *
+              0.9;
+          x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
+        }
+
+        c2d.globalAlpha = 0.3 + smooth * 0.5;
+        c2d.strokeStyle = "rgba(255,255,255,0.92)";
+        c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
+        c2d.shadowBlur = ASK_WAVE.glow * 1.3;
+        c2d.shadowColor = "rgba(255,255,255,0.7)";
+        c2d.stroke();
+
+        c2d.globalCompositeOperation = "source-over";
+        c2d.globalAlpha = 1;
+        c2d.shadowBlur = 0;
+      };
 
       const draw = () => {
         if (!askHoldingRef.current) return;
-        if (!cw || !ch) fit();
 
         time += 0.016 * ASK_WAVE.speed;
         analyser.getByteFrequencyData(freq);
@@ -932,73 +1003,8 @@ export default function ReadingIntakeScreen({
         const energy = count ? (sum / count) / 255 : 0;
         smooth += (energy - smooth) * 0.18;
 
-        if (c2d && cw && ch) {
-          const cy = ch / 2;
-          c2d.clearRect(0, 0, cw, ch);
-
-          const grad = c2d.createLinearGradient(0, 0, cw, 0);
-          ASK_WAVE.colors.forEach((color, i) =>
-            grad.addColorStop(i / (ASK_WAVE.colors.length - 1), color)
-          );
-
-          c2d.lineCap = "round";
-          c2d.lineJoin = "round";
-          c2d.globalCompositeOperation = "lighter";
-
-          const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
-
-          for (let line = 0; line < ASK_WAVE.lines; line++) {
-            const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
-            const phase = time * (1 + lf * 0.45) + line * 0.7;
-            const lineAmp = amp * (1 - lf * 0.14);
-
-            c2d.beginPath();
-            for (let x = 0; x <= cw; x += 3) {
-              const tx = x / cw;
-              const env = Math.pow(Math.sin(tx * Math.PI), 0.85);
-              const y =
-                cy +
-                env *
-                  lineAmp *
-                  (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
-                    Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
-              x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
-            }
-
-            c2d.strokeStyle = grad;
-            c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
-            c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
-            c2d.shadowBlur = ASK_WAVE.glow;
-            c2d.shadowColor = "rgba(129,140,248,0.5)";
-            c2d.stroke();
-          }
-
-          const coreAmp =
-            (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
-          c2d.beginPath();
-          for (let x = 0; x <= cw; x += 2) {
-            const tx = x / cw;
-            const env = Math.pow(Math.sin(tx * Math.PI), 0.9);
-            const y =
-              cy +
-              env *
-                coreAmp *
-                Math.sin(tx * Math.PI * 5 + time * 1.4) *
-                0.9;
-            x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
-          }
-
-          c2d.globalAlpha = 0.3 + smooth * 0.5;
-          c2d.strokeStyle = "rgba(255,255,255,0.92)";
-          c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
-          c2d.shadowBlur = ASK_WAVE.glow * 1.3;
-          c2d.shadowColor = "rgba(255,255,255,0.7)";
-          c2d.stroke();
-
-          c2d.globalCompositeOperation = "source-over";
-          c2d.globalAlpha = 1;
-          c2d.shadowBlur = 0;
-        }
+        drawWave(canvasRef.current);
+        drawWave(headerCanvasRef.current);
 
         meterRafRef.current = requestAnimationFrame(draw);
       };
@@ -1034,6 +1040,8 @@ export default function ReadingIntakeScreen({
 
       transcriptRef.current = "";
       setLiveTranscript("");
+      askPointerStartYRef.current = e.clientY;
+      askCancelledRef.current = false;
 
       const rec = new SR();
       rec.lang = "en-US";
@@ -1088,6 +1096,31 @@ export default function ReadingIntakeScreen({
     [micEnabled, startAskMeter, stopAskMeter, stopAskRecognition]
   );
 
+  const cancelAskHold = useCallback(() => {
+    if (!askHoldingRef.current) return;
+
+    askCancelledRef.current = true;
+    askHoldingRef.current = false;
+    setAskHolding(false);
+    setLiveTranscript("");
+    transcriptRef.current = "";
+    setAskError(null);
+
+    stopAskRecognition();
+    stopAskMeter();
+    triggerIntakeHaptic();
+  }, [stopAskMeter, stopAskRecognition]);
+
+  const moveAskHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!askHoldingRef.current || askCancelledRef.current) return;
+
+      const upwardDistance = askPointerStartYRef.current - e.clientY;
+      if (upwardDistance >= 56) cancelAskHold();
+    },
+    [cancelAskHold]
+  );
+
   const submitAskAnything = useCallback(
     (transcript: string) => {
       const spokenQuestion = transcript.trim();
@@ -1116,6 +1149,11 @@ export default function ReadingIntakeScreen({
   );
 
   const endAskHold = useCallback(() => {
+    if (askCancelledRef.current) {
+      askCancelledRef.current = false;
+      return;
+    }
+
     if (!askHoldingRef.current) return;
 
     const elapsed = Date.now() - askHoldStartRef.current;
@@ -2076,22 +2114,27 @@ export default function ReadingIntakeScreen({
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
           <div
-            className="relative mb-[14px] h-[26px] text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{
-              opacity: askHolding ? 0 : 1,
-              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
-              pointerEvents: askHolding ? "none" : "auto",
-            }}
+            className="relative mb-[14px] h-[26px] overflow-hidden text-center"
+            aria-live="polite"
           >
             <p
-              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
               style={{
+                opacity: askHolding ? 0 : 1,
+                filter: askHolding ? "blur(4px)" : "blur(0px)",
                 textShadow:
                   "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
               }}
             >
               {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
             </p>
+
+            <canvas
+              ref={headerCanvasRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[24px] w-[190px] max-w-[70%] -translate-x-1/2 -translate-y-1/2 transition-opacity duration-300"
+              style={{ opacity: askHolding ? 1 : 0 }}
+            />
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -2258,75 +2301,92 @@ export default function ReadingIntakeScreen({
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
           <section className="mt-3">
-  <div className="flex w-full items-center justify-center">
-    <div className="relative h-[86px] w-[72%] max-w-[304px]">
-      <button
-        type="button"
-        onPointerDown={startAskHold}
-        onPointerUp={endAskHold}
-        onPointerCancel={endAskHold}
-        onContextMenu={(e) => e.preventDefault()}
-        className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-        aria-label="Press and hold to speak"
-        style={{
-          opacity: selectedArea && !askHolding ? 0.76 : 1,
-          filter: selectedArea && !askHolding
-            ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-            : "brightness(1) saturate(1)",
-          transform: askHolding ? "scale(1.012)" : undefined,
-        }}
-      >
-        <span className="ask-mic-halo h-[48px] w-[48px]">
-          <Mic
-            className="h-[24px] w-[24px]"
-            style={{
-              color: "rgba(248,250,252,0.96)",
-              filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
-            }}
-          />
-        </span>
+            <div className="flex w-full items-center justify-center">
+              <div className="relative h-[86px] w-[72%] max-w-[304px]">
+                <button
+                  type="button"
+                  onPointerDown={startAskHold}
+                  onPointerMove={moveAskHold}
+                  onPointerUp={endAskHold}
+                  onPointerCancel={endAskHold}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onDragStart={(e) => e.preventDefault()}
+                  onSelect={(e) => e.preventDefault()}
+                  className="ask-premium tap-fix relative h-[86px] w-full touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  aria-label="Press and hold to speak. Swipe up to cancel."
+                  style={{
+                    opacity: selectedArea && !askHolding ? 0.76 : 1,
+                    filter: selectedArea && !askHolding
+                      ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+                      : "brightness(1) saturate(1)",
+                    transform: askHolding ? "scale(1.012)" : undefined,
+                    WebkitUserSelect: "none",
+                    userSelect: "none",
+                    WebkitTouchCallout: "none",
+                  }}
+                >
+                  <span className="pointer-events-none absolute left-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                    Press
+                  </span>
 
-        <span
-          aria-hidden="true"
-          className="ask-focus-veil"
-          style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
-        />
-      </button>
+                  <span className="pointer-events-none absolute left-1/2 top-[7px] -translate-x-1/2">
+                    <span className="ask-mic-halo">
+                      <Mic
+                        className="h-[20px] w-[20px]"
+                        style={{
+                          color: "rgba(248,250,252,0.96)",
+                          filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
+                        }}
+                      />
+                    </span>
+                  </span>
 
-      <button
-  type="button"
-  className="mic-ready-toggle tap-fix"
-  data-enabled={micEnabled ? "true" : "false"}
-  aria-pressed={micEnabled}
-  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-  onClick={toggleMicrophone}
-  disabled={micConnecting}
-  style={{
-    position: "absolute",
-    left: "calc(100% + 6px)",
-    top: "8px",
-    cursor: micConnecting ? "wait" : "pointer",
-    opacity: micEnabled ? 0.18 : 0.74,
-    filter: micEnabled
-      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-      : "brightness(0.92) saturate(0.82)",
-  }}
->
-  <span className="mic-ready-knob" />
-</button>
-    </div>
-  </div>
+                  <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-100/94">
+                    Hold
+                  </span>
 
-  {askError && !askHolding ? (
-    <p className="mt-2 text-center text-[11px] text-slate-400/78">
-      {askError}
-    </p>
-  ) : (
-    <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
-      {micEnabled ? "Press · Hold · Speak" : "Turn on the microphone"}
-    </p>
-  )}
-</section>
+                  <span className="pointer-events-none absolute bottom-[7px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.30em] text-slate-300/72">
+                    Speak
+                  </span>
+
+                  <span
+                    aria-hidden="true"
+                    className="ask-focus-veil"
+                    style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  className="mic-ready-toggle tap-fix absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2"
+                  data-enabled={micEnabled ? "true" : "false"}
+                  aria-pressed={micEnabled}
+                  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+                  onClick={toggleMicrophone}
+                  disabled={micConnecting}
+                  style={{
+                    cursor: micConnecting ? "wait" : "pointer",
+                    opacity: micEnabled ? 0.18 : 0.74,
+                    filter: micEnabled
+                      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+                      : "brightness(0.92) saturate(0.82)",
+                  }}
+                >
+                  <span className="mic-ready-knob" />
+                </button>
+              </div>
+            </div>
+
+            {askError && !askHolding ? (
+              <p className="mt-2 text-center text-[11px] text-slate-400/78">
+                {askError}
+              </p>
+            ) : (
+              <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
+                {micEnabled ? "Press · Hold · Speak" : "Turn on the microphone"}
+              </p>
+            )}
+          </section>
           </div>
 
         </motion.div>
