@@ -1005,7 +1005,7 @@ export default function ReadingIntakeScreen({
 
           const headerCanvas = headerCanvasRef.current;
           const headerCtx = headerCanvas?.getContext("2d") ?? null;
-          if (headerCanvas && headerCtx) {
+          if (canvas && headerCanvas && headerCtx) {
             const headerRect = headerCanvas.getBoundingClientRect();
             const headerDpr = Math.min(window.devicePixelRatio || 1, 2);
             const headerWidth = Math.max(1, Math.round(headerRect.width * headerDpr));
