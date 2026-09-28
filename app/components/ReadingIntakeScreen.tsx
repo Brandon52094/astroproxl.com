@@ -459,11 +459,14 @@ export default function ReadingIntakeScreen({
   const recognitionRef = useRef<IntakeSpeechRecognition | null>(null);
   const transcriptRef = useRef("");
   const askHoldStartRef = useRef(0);
+  const askPointerStartYRef = useRef(0);
+  const askCancelledRef = useRef(false);
   const meterStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterRafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const headerCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -783,11 +786,12 @@ export default function ReadingIntakeScreen({
       audioCtxRef.current = null;
     }
 
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (canvas && ctx) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const canvas of [canvasRef.current, headerCanvasRef.current]) {
+      const ctx = canvas?.getContext("2d");
+      if (canvas && ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
     }
   }, []);
 
@@ -998,6 +1002,24 @@ export default function ReadingIntakeScreen({
           c2d.globalCompositeOperation = "source-over";
           c2d.globalAlpha = 1;
           c2d.shadowBlur = 0;
+
+          const headerCanvas = headerCanvasRef.current;
+          const headerCtx = headerCanvas?.getContext("2d") ?? null;
+          if (headerCanvas && headerCtx) {
+            const headerRect = headerCanvas.getBoundingClientRect();
+            const headerDpr = Math.min(window.devicePixelRatio || 1, 2);
+            const headerWidth = Math.max(1, Math.round(headerRect.width * headerDpr));
+            const headerHeight = Math.max(1, Math.round(headerRect.height * headerDpr));
+
+            if (headerCanvas.width !== headerWidth || headerCanvas.height !== headerHeight) {
+              headerCanvas.width = headerWidth;
+              headerCanvas.height = headerHeight;
+            }
+
+            headerCtx.setTransform(1, 0, 0, 1, 0, 0);
+            headerCtx.clearRect(0, 0, headerCanvas.width, headerCanvas.height);
+            headerCtx.drawImage(canvas, 0, 0, headerCanvas.width, headerCanvas.height);
+          }
         }
 
         meterRafRef.current = requestAnimationFrame(draw);
@@ -1034,6 +1056,8 @@ export default function ReadingIntakeScreen({
 
       transcriptRef.current = "";
       setLiveTranscript("");
+      askPointerStartYRef.current = e.clientY;
+      askCancelledRef.current = false;
 
       const rec = new SR();
       rec.lang = "en-US";
@@ -1088,6 +1112,33 @@ export default function ReadingIntakeScreen({
     [micEnabled, startAskMeter, stopAskMeter, stopAskRecognition]
   );
 
+  const cancelAskHold = useCallback(() => {
+    if (!askHoldingRef.current) return;
+
+    askCancelledRef.current = true;
+    askHoldingRef.current = false;
+    setAskHolding(false);
+    setLiveTranscript("");
+    transcriptRef.current = "";
+    setAskError(null);
+
+    stopAskRecognition();
+    stopAskMeter();
+    triggerIntakeHaptic();
+  }, [stopAskMeter, stopAskRecognition]);
+
+  const moveAskHold = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!askHoldingRef.current || askCancelledRef.current) return;
+
+      const upwardDistance = askPointerStartYRef.current - e.clientY;
+      if (upwardDistance >= 56) {
+        cancelAskHold();
+      }
+    },
+    [cancelAskHold]
+  );
+
   const submitAskAnything = useCallback(
     (transcript: string) => {
       const spokenQuestion = transcript.trim();
@@ -1116,6 +1167,11 @@ export default function ReadingIntakeScreen({
   );
 
   const endAskHold = useCallback(() => {
+    if (askCancelledRef.current) {
+      askCancelledRef.current = false;
+      return;
+    }
+
     if (!askHoldingRef.current) return;
 
     const elapsed = Date.now() - askHoldStartRef.current;
@@ -1530,6 +1586,9 @@ export default function ReadingIntakeScreen({
         .ask-premium {
           position: relative;
           overflow: hidden;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
           isolation: isolate;
           border: 0;
           border-radius: 24px;
@@ -2076,22 +2135,27 @@ export default function ReadingIntakeScreen({
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
           <div
-            className="relative mb-[14px] h-[26px] text-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{
-              opacity: askHolding ? 0 : 1,
-              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
-              pointerEvents: askHolding ? "none" : "auto",
-            }}
+            className="relative mb-[14px] h-[26px] overflow-hidden text-center"
+            aria-live="polite"
           >
             <p
-              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
               style={{
+                opacity: askHolding ? 0 : 1,
+                filter: askHolding ? "blur(4px)" : "blur(0px)",
                 textShadow:
                   "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
               }}
             >
               {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
             </p>
+
+            <canvas
+              ref={headerCanvasRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[22px] w-[180px] max-w-[68%] -translate-x-1/2 -translate-y-1/2 transition-opacity duration-300"
+              style={{ opacity: askHolding ? 1 : 0 }}
+            />
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -2263,17 +2327,23 @@ export default function ReadingIntakeScreen({
       <button
         type="button"
         onPointerDown={startAskHold}
+        onPointerMove={moveAskHold}
         onPointerUp={endAskHold}
         onPointerCancel={endAskHold}
         onContextMenu={(e) => e.preventDefault()}
-        className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-        aria-label="Press and hold to speak"
+        onDragStart={(e) => e.preventDefault()}
+        onSelect={(e) => e.preventDefault()}
+        className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+        aria-label="Press and hold to speak. Swipe up to cancel."
         style={{
           opacity: selectedArea && !askHolding ? 0.76 : 1,
           filter: selectedArea && !askHolding
             ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
             : "brightness(1) saturate(1)",
           transform: askHolding ? "scale(1.012)" : undefined,
+          WebkitUserSelect: "none",
+          userSelect: "none",
+          WebkitTouchCallout: "none",
         }}
       >
         <span className="ask-mic-halo h-[48px] w-[48px]">
