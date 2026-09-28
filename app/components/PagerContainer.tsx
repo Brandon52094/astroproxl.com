@@ -312,7 +312,13 @@ export default function PagerContainer() {
           panel.scrollLeft = 0;
         });
     };
-      // iOS Safari's `100dvh` at initial page load resolves to the URL-bar-visible
+
+    normalizeHorizontalPosition();
+    window.addEventListener("pageshow", normalizeHorizontalPosition);
+    return () => window.removeEventListener("pageshow", normalizeHorizontalPosition);
+  }, []);
+
+  // iOS Safari's `100dvh` at initial page load resolves to the URL-bar-visible
   // height, but iOS then renders the page with a slightly larger visual area
   // underneath the URL bar. That mismatch leaves a 40–80px strip of body
   // background visible at the bottom until a scroll forces a re-measure. This
@@ -364,11 +370,6 @@ export default function PagerContainer() {
       window.removeEventListener("orientationchange", scheduleApply);
       el.style.height = "";
     };
-  }, []);
-
-    normalizeHorizontalPosition();
-    window.addEventListener("pageshow", normalizeHorizontalPosition);
-    return () => window.removeEventListener("pageshow", normalizeHorizontalPosition);
   }, []);
 
   return (
