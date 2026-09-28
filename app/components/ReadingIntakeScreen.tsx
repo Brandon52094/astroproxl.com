@@ -152,6 +152,8 @@ interface MoonPhaseData {
   daysUntilNextEvent?: number;
   moonSign?: string;
   moonDegree?: string;
+  nextSignName?: string;
+  nextSignIngressAt?: string;
 }
 
 interface ProfectionData {
@@ -242,61 +244,246 @@ function signAccentGlow(sign: string): string {
   return element ? HERO_ELEMENT_COLORS[element].glow : "rgba(148,163,184,0.12)";
 }
 
-function MoonDisc({ illumination, waxing, size = 58 }: { illumination: number; waxing: boolean; size?: number }) {
+function MoonDisc({
+  illumination,
+  waxing,
+  size = 58,
+}: {
+  illumination: number;
+  waxing: boolean;
+  size?: number;
+}) {
   const f = Math.min(1, Math.max(0, illumination / 100));
-  const r = 46;
+  const r = 45;
   const c = 50;
   const top = `${c} ${c - r}`;
   const bottom = `${c} ${c + r}`;
-  const rx = Math.abs(1 - 2 * f) * r;
+  const rx = Math.max(0.35, Math.abs(1 - 2 * f) * r);
   const outerSweep = waxing ? 1 : 0;
   const terminatorSweep = f >= 0.5 ? (waxing ? 1 : 0) : (waxing ? 0 : 1);
-  const litPath = `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
+  const litPath =
+    f > 0.995
+      ? `M ${c - r} ${c} A ${r} ${r} 0 1 0 ${c + r} ${c} A ${r} ${r} 0 1 0 ${c - r} ${c}`
+      : `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
 
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+      style={{ overflow: "visible" }}
+    >
       <defs>
-        <radialGradient id="intakeMoonLit" cx="38%" cy="34%" r="75%">
-          <stop offset="0%" stopColor="#F1EFF7" />
-          <stop offset="55%" stopColor="#C9C7D6" />
-          <stop offset="100%" stopColor="#9A98AC" />
+        <radialGradient id="intakeMoonBase" cx="38%" cy="30%" r="78%">
+          <stop offset="0%" stopColor="#F7F5F2" />
+          <stop offset="42%" stopColor="#D8D4CE" />
+          <stop offset="76%" stopColor="#ABA8A8" />
+          <stop offset="100%" stopColor="#747788" />
         </radialGradient>
+
+        <radialGradient id="intakeMoonShadow" cx="42%" cy="40%" r="74%">
+          <stop offset="0%" stopColor="#171C2C" />
+          <stop offset="72%" stopColor="#0D1221" />
+          <stop offset="100%" stopColor="#070B14" />
+        </radialGradient>
+
+        <linearGradient id="intakeMoonLimb" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
+          <stop offset="46%" stopColor="rgba(255,255,255,0)" />
+          <stop offset="100%" stopColor="rgba(1,5,15,0.32)" />
+        </linearGradient>
+
+        <clipPath id="intakeMoonLitClip">
+          {f > 0.005 ? <path d={litPath} /> : null}
+        </clipPath>
+
+        <filter id="intakeMoonTexture" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.055"
+            numOctaves="3"
+            seed="11"
+            result="noise"
+          />
+          <feColorMatrix
+            in="noise"
+            type="matrix"
+            values="
+              0.35 0 0 0 0.32
+              0 0.35 0 0 0.31
+              0 0 0.35 0 0.30
+              0 0 0 0.38 0
+            "
+            result="softNoise"
+          />
+          <feBlend in="SourceGraphic" in2="softNoise" mode="multiply" />
+        </filter>
       </defs>
-      <circle cx={c} cy={c} r={r} fill="#151A30" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      {f > 0.995 ? (
-        <circle cx={c} cy={c} r={r} fill="url(#intakeMoonLit)" />
-      ) : f > 0.005 ? (
-        <path d={litPath} fill="url(#intakeMoonLit)" />
+
+      <circle
+        cx={c}
+        cy={c}
+        r={r + 2.5}
+        fill="rgba(105,116,145,0.11)"
+        stroke="rgba(203,213,225,0.16)"
+        strokeWidth="0.8"
+      />
+
+      <circle cx={c} cy={c} r={r} fill="url(#intakeMoonShadow)" />
+
+      {f > 0.005 ? (
+        <g clipPath="url(#intakeMoonLitClip)">
+          <circle
+            cx={c}
+            cy={c}
+            r={r}
+            fill="url(#intakeMoonBase)"
+            filter="url(#intakeMoonTexture)"
+          />
+
+          {/* Broad maria */}
+          <ellipse cx="35" cy="36" rx="11" ry="8" fill="rgba(60,61,66,0.18)" />
+          <ellipse cx="61" cy="42" rx="13" ry="10" fill="rgba(61,62,68,0.15)" />
+          <ellipse cx="48" cy="63" rx="15" ry="9" fill="rgba(65,66,72,0.12)" />
+          <ellipse cx="68" cy="66" rx="8" ry="6" fill="rgba(54,55,62,0.12)" />
+
+          {/* Craters */}
+          <circle cx="27" cy="50" r="5.2" fill="rgba(63,65,72,0.16)" />
+          <circle cx="27" cy="49" r="3.6" fill="rgba(240,239,235,0.08)" />
+          <circle cx="58" cy="29" r="3.4" fill="rgba(67,69,76,0.16)" />
+          <circle cx="74" cy="52" r="4.6" fill="rgba(66,68,74,0.14)" />
+          <circle cx="43" cy="75" r="4.1" fill="rgba(62,64,70,0.13)" />
+          <circle cx="38" cy="25" r="2.6" fill="rgba(59,61,66,0.13)" />
+
+          <circle cx={c} cy={c} r={r} fill="url(#intakeMoonLimb)" />
+        </g>
       ) : null}
-      <circle cx="38" cy="40" r="7" fill="rgba(0,0,0,0.10)" />
-      <circle cx="60" cy="58" r="5" fill="rgba(0,0,0,0.09)" />
-      <circle cx="52" cy="30" r="3.5" fill="rgba(0,0,0,0.08)" />
-      <circle cx="42" cy="66" r="4" fill="rgba(0,0,0,0.08)" />
+
+      <circle
+        cx={c}
+        cy={c}
+        r={r}
+        fill="none"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="0.75"
+      />
     </svg>
   );
 }
 
 function SunDisc({ size = 58 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+      style={{ overflow: "visible" }}
+    >
       <defs>
-        <radialGradient id="intakeSunCore" cx="38%" cy="34%" r="72%">
-          <stop offset="0%" stopColor="#FFFCE8" />
-          <stop offset="48%" stopColor="#FDE68A" />
-          <stop offset="78%" stopColor="#F59E0B" />
-          <stop offset="100%" stopColor="#D97706" />
+        <radialGradient id="intakeSunCore" cx="39%" cy="35%" r="68%">
+          <stop offset="0%" stopColor="#FFFDE8" />
+          <stop offset="22%" stopColor="#FFF4A8" />
+          <stop offset="52%" stopColor="#FFD238" />
+          <stop offset="79%" stopColor="#FF9D00" />
+          <stop offset="100%" stopColor="#E66B00" />
         </radialGradient>
+
         <radialGradient id="intakeSunHalo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(253,230,138,0.34)" />
-          <stop offset="68%" stopColor="rgba(245,158,11,0.12)" />
-          <stop offset="100%" stopColor="rgba(245,158,11,0)" />
+          <stop offset="0%" stopColor="rgba(255,221,92,0.56)" />
+          <stop offset="48%" stopColor="rgba(255,166,0,0.20)" />
+          <stop offset="78%" stopColor="rgba(255,125,0,0.07)" />
+          <stop offset="100%" stopColor="rgba(255,125,0,0)" />
         </radialGradient>
+
+        <filter id="intakeSunTexture" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.085"
+            numOctaves="3"
+            seed="7"
+            result="noise"
+          />
+          <feColorMatrix
+            in="noise"
+            type="matrix"
+            values="
+              0.9 0 0 0 0.14
+              0 0.48 0 0 0.05
+              0 0 0.15 0 0
+              0 0 0 0.36 0
+            "
+            result="solarNoise"
+          />
+          <feBlend in="SourceGraphic" in2="solarNoise" mode="screen" />
+        </filter>
+
+        <filter id="intakeSunGlow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="2.8" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
+
       <circle cx="50" cy="50" r="49" fill="url(#intakeSunHalo)" />
-      <circle cx="50" cy="50" r="46" fill="url(#intakeSunCore)" stroke="rgba(255,248,214,0.45)" strokeWidth="1" />
-      <circle cx="40" cy="38" r="5.5" fill="rgba(255,255,255,0.12)" />
-      <circle cx="61" cy="58" r="4" fill="rgba(180,83,9,0.10)" />
-      <circle cx="56" cy="31" r="2.8" fill="rgba(255,255,255,0.10)" />
+
+      <g opacity="0.38" stroke="#FFB51F" fill="none" strokeLinecap="round">
+        <path d="M50 0 C47 8 53 10 50 16" />
+        <path d="M50 100 C47 92 53 90 50 84" />
+        <path d="M0 50 C8 47 10 53 16 50" />
+        <path d="M100 50 C92 47 90 53 84 50" />
+        <path d="M14 14 C19 21 24 19 27 25" />
+        <path d="M86 14 C81 21 76 19 73 25" />
+        <path d="M14 86 C19 79 24 81 27 75" />
+        <path d="M86 86 C81 79 76 81 73 75" />
+      </g>
+
+      <circle
+        cx="50"
+        cy="50"
+        r="43"
+        fill="url(#intakeSunCore)"
+        filter="url(#intakeSunGlow)"
+      />
+
+      <circle
+        cx="50"
+        cy="50"
+        r="41.5"
+        fill="url(#intakeSunCore)"
+        filter="url(#intakeSunTexture)"
+      />
+
+      <path
+        d="M19 52 C29 41 31 31 48 28 C65 25 77 33 82 48"
+        fill="none"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M26 67 C39 58 54 68 74 58"
+        fill="none"
+        stroke="rgba(205,92,0,0.18)"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+
+      <circle cx="38" cy="34" r="4" fill="rgba(255,255,255,0.14)" />
+      <circle cx="62" cy="59" r="3.6" fill="rgba(178,72,0,0.12)" />
+      <circle cx="58" cy="29" r="2.2" fill="rgba(255,255,255,0.11)" />
+
+      <circle
+        cx="50"
+        cy="50"
+        r="42.5"
+        fill="none"
+        stroke="rgba(255,246,190,0.52)"
+        strokeWidth="0.9"
+      />
     </svg>
   );
 }
@@ -411,6 +598,10 @@ export default function ReadingIntakeScreen({
   const [transits, setTransits] = useState<Placement[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
+  const [heroCurrentPlace, setHeroCurrentPlace] = useState("");
+  const [heroCurrentTimezone, setHeroCurrentTimezone] = useState("");
+  const [heroHasGpsLocation, setHeroHasGpsLocation] = useState(false);
+  const [heroNow, setHeroNow] = useState(() => new Date());
 
   // The normal hero is user-controlled only: Brand → Quick Chart → Current Sky.
   // Ask Anything temporarily replaces these with a fourth listening state.
@@ -594,6 +785,21 @@ export default function ReadingIntakeScreen({
     };
 
     const chart = loadChart();
+
+    const chartLocation = chart as unknown as {
+      currentPlace?: string;
+      currentTimezone?: string;
+      currentLat?: number;
+      currentLng?: number;
+    } | null;
+
+    setHeroCurrentPlace(chartLocation?.currentPlace ?? "");
+    setHeroCurrentTimezone(chartLocation?.currentTimezone ?? "");
+    setHeroHasGpsLocation(
+      typeof chartLocation?.currentLat === "number" &&
+      typeof chartLocation?.currentLng === "number"
+    );
+
     const data = chart?.chartData as unknown as {
       tropical?: { planets?: unknown; angles?: unknown };
       transits?: unknown;
@@ -694,8 +900,74 @@ export default function ReadingIntakeScreen({
     };
   }, [natal, transits]);
 
+  useEffect(() => {
+    const update = () => setHeroNow(new Date());
+    update();
+    const timer = window.setInterval(update, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const heroAsOf = useMemo(() => {
+    const timezone = heroCurrentTimezone || undefined;
+
+    const datePart = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: timezone,
+    }).format(heroNow);
+
+    const timePart = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: timezone,
+    })
+      .format(heroNow)
+      .replace(" AM", " am")
+      .replace(" PM", " pm");
+
+    const place = heroCurrentPlace ? ` in ${heroCurrentPlace}` : "";
+    const source = heroHasGpsLocation ? " (GPS)" : "";
+
+    return `As of ${datePart} at ${timePart}${place}${source}`;
+  }, [heroCurrentPlace, heroCurrentTimezone, heroHasGpsLocation, heroNow]);
+
   const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
+  const moonIngressLine = useMemo(() => {
+    if (moonPhase?.nextSignName && moonPhase?.nextSignIngressAt) {
+      const raw = new Date(moonPhase.nextSignIngressAt);
+      if (!Number.isNaN(raw.getTime())) {
+        const timezone = heroCurrentTimezone || undefined;
+        const date = new Intl.DateTimeFormat("en-US", {
+          month: "numeric",
+          day: "numeric",
+          timeZone: timezone,
+        }).format(raw);
+        const time = new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: timezone,
+        })
+          .format(raw)
+          .replace(" AM", " am")
+          .replace(" PM", " pm");
+
+        return `Enters ${moonPhase.nextSignName} ${date} at ${time}`;
+      }
+
+      return `Enters ${moonPhase.nextSignName} ${moonPhase.nextSignIngressAt}`;
+    }
+
+    if (moonPhase?.nextEventName && typeof moonPhase.daysUntilNextEvent === "number") {
+      return moonPhase.daysUntilNextEvent === 0
+        ? `${moonPhase.nextEventName} exact today`
+        : `${moonPhase.nextEventName} in ${moonPhase.daysUntilNextEvent} day${moonPhase.daysUntilNextEvent === 1 ? "" : "s"}`;
+    }
+
+    return "Live lunar timing";
+  }, [heroCurrentTimezone, moonPhase]);
 
   const skyNotice = useMemo(() => {
     if (heroData.mercury?.isRetrograde) {
@@ -2043,59 +2315,122 @@ export default function ReadingIntakeScreen({
                           </div>
                         </div>
                       ) : (
-                        /* HERO 3 — clean Sun / Moon split with a short central separator and shared context below */
-                        <div className="absolute inset-0 px-[24px] py-[16px]">
-                          <div className="relative grid h-[176px] grid-cols-2 items-center">
-                            <div className="flex flex-col items-center justify-center pr-[20px] text-center">
-                              <span className="mb-[7px] text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-300/78">
+                        /* HERO 3 — premium Current Sky: larger luminaries + richer lunar timing */
+                        <div className="absolute inset-0 px-[18px] pt-[12px] pb-[8px]">
+                          <div className="relative grid h-[164px] grid-cols-2">
+                            <div className="flex flex-col items-center justify-start pr-[14px] text-center">
+                              <span className="mb-[4px] text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-200/82">
                                 Sun
                               </span>
-                              <div style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.20))" }}>
-                                <SunDisc size={64} />
+
+                              <div
+                                className="flex h-[86px] items-center justify-center"
+                                style={{
+                                  filter:
+                                    "drop-shadow(0 0 14px rgba(255,189,46,0.24)) drop-shadow(0 0 28px rgba(245,158,11,0.12))",
+                                }}
+                              >
+                                <SunDisc size={84} />
                               </div>
-                              <span className="mt-[8px] text-[15px] font-medium leading-none text-slate-100/94">
+
+                              <span
+                                className="mt-[1px] text-[22px] font-semibold leading-none tracking-[-0.02em] text-white"
+                                style={{
+                                  fontFamily: 'Georgia, "Times New Roman", serif',
+                                  textShadow:
+                                    "0 4px 12px rgba(0,0,0,0.80), 0 0 18px rgba(253,230,138,0.10)",
+                                }}
+                              >
                                 {heroData.currentSun?.sign ?? "—"}
                               </span>
-                              <span className="mt-[5px] text-[9px] font-medium tabular-nums text-slate-400/76">
+
+                              <span className="mt-[4px] text-[11px] font-medium tabular-nums tracking-[0.02em] text-sky-200/72">
                                 {heroData.currentSun?.degree ?? "—"}
                               </span>
                             </div>
 
+                            {/* True center divider for the whole luminary field. */}
                             <span
-                              className="absolute left-1/2 top-1/2 h-[74px] w-px -translate-x-1/2 -translate-y-1/2"
+                              className="absolute bottom-[7px] left-1/2 top-[7px] w-px -translate-x-1/2"
                               style={{
                                 background:
-                                  "linear-gradient(180deg, transparent, rgba(255,255,255,0.16), transparent)",
+                                  "linear-gradient(180deg, transparent 0%, rgba(125,211,252,0.10) 14%, rgba(125,211,252,0.42) 50%, rgba(125,211,252,0.10) 86%, transparent 100%)",
+                                boxShadow: "0 0 8px rgba(34,211,238,0.12)",
                               }}
                               aria-hidden="true"
                             />
 
-                            <div className="flex flex-col items-center justify-center pl-[20px] text-center">
-                              <span className="mb-[7px] max-w-[120px] truncate text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-300/78">
+                            <div className="flex flex-col items-center justify-start pl-[14px] text-center">
+                              <span className="mb-[4px] max-w-[150px] truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-200/82">
                                 {moonPhase?.phaseName ?? "Moon"}
                               </span>
-                              <div style={{ filter: "drop-shadow(0 0 18px rgba(226,223,240,0.16))" }}>
+
+                              <div
+                                className="flex h-[86px] items-center justify-center"
+                                style={{
+                                  filter:
+                                    "drop-shadow(0 0 14px rgba(226,232,240,0.16)) drop-shadow(0 0 24px rgba(125,211,252,0.08))",
+                                }}
+                              >
                                 <MoonDisc
                                   illumination={moonPhase?.illuminationPercent ?? 50}
                                   waxing={moonWaxing}
-                                  size={64}
+                                  size={84}
                                 />
                               </div>
-                              <span className="mt-[8px] text-[15px] font-medium leading-none text-slate-100/94">
+
+                              <span
+                                className="mt-[1px] text-[22px] font-semibold leading-none tracking-[-0.02em] text-white"
+                                style={{
+                                  fontFamily: 'Georgia, "Times New Roman", serif',
+                                  textShadow:
+                                    "0 4px 12px rgba(0,0,0,0.80), 0 0 18px rgba(226,232,240,0.09)",
+                                }}
+                              >
                                 {moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}
                               </span>
-                              <span className="mt-[5px] text-[9px] font-medium tabular-nums text-slate-400/76">
+
+                              <span className="mt-[4px] text-[11px] font-medium tabular-nums tracking-[0.02em] text-sky-200/72">
                                 {moonPhase?.moonDegree ?? heroData.currentMoon?.degree ?? "—"}
                               </span>
                             </div>
                           </div>
 
-                          <div className="absolute inset-x-[34px] bottom-[12px] text-center">
-                            <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/78">
-                              {skyNotice.title}
+                          <div className="absolute inset-x-[16px] bottom-[8px] flex flex-col items-center text-center">
+                            <div className="mb-[4px] flex w-full items-center justify-center gap-[9px]">
+                              <span
+                                className="h-px flex-1"
+                                style={{
+                                  background:
+                                    "linear-gradient(90deg, transparent, rgba(34,211,238,0.46))",
+                                }}
+                                aria-hidden="true"
+                              />
+                              <span
+                                className="max-w-[210px] truncate text-[13px] font-medium leading-none tracking-[-0.01em] text-slate-100/94"
+                                style={{
+                                  fontFamily: 'Georgia, "Times New Roman", serif',
+                                  textShadow: "0 2px 10px rgba(0,0,0,0.76)",
+                                }}
+                              >
+                                Moon in {moonPhase?.moonSign ?? heroData.currentMoon?.sign ?? "—"}
+                              </span>
+                              <span
+                                className="h-px flex-1"
+                                style={{
+                                  background:
+                                    "linear-gradient(90deg, rgba(34,211,238,0.46), transparent)",
+                                }}
+                                aria-hidden="true"
+                              />
+                            </div>
+
+                            <span className="max-w-full truncate text-[8.5px] font-medium leading-[1.2] tracking-[0.01em] text-slate-300/78">
+                              {heroAsOf}
                             </span>
-                            <span className="ml-[7px] text-[8px] font-medium text-slate-400/72">
-                              {skyNotice.detail}
+
+                            <span className="mt-[3px] max-w-full truncate text-[8.5px] font-medium leading-[1.2] tracking-[0.01em] text-sky-100/76">
+                              {moonIngressLine}
                             </span>
                           </div>
                         </div>
