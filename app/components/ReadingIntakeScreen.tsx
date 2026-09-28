@@ -14,7 +14,6 @@ import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import {
   saveIntake,
@@ -73,34 +72,26 @@ const AREAS = [
   {
     id: "love",
     title: "Love",
-    description: "Relationships, romance, or emotional patterns",
     icon: Heart,
-    placeholder: "Ask something specific about love, timing, or where this connection is headed.",
     defaultQuestion: "What is coming for me in love over the next 30–45 days?",
   },
   {
     id: "money",
     title: "Money",
-    description: "Income, stability, opportunities, and financial timing",
     icon: Wallet,
-    placeholder: "Ask something specific about money, stability, or the opportunities opening next.",
     defaultQuestion: "What is coming for me with money over the next 30–45 days?",
   },
   {
     id: "career",
     title: "Career",
-    description: "Work, recognition, direction, and next steps",
     icon: Briefcase,
-    placeholder: "Ask something specific about work, momentum, or the direction your career is moving.",
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
   {
     id: "other",
     title: "What's Coming",
-    description: "What to expect in the next 30–45 days.",
     icon: null,
     marker: "30–45",
-    placeholder: "Ask about timing, what's approaching, or what you should be ready for in the weeks ahead.",
     defaultQuestion: "What is coming for me in the next 30–45 days?",
   },
 ];
@@ -122,11 +113,6 @@ const HERO_HORIZONTAL_INSET = 20;
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
-  readingsCompleted: number;
-  onCooldown: boolean;
-  cooldownExpiresAt: string | null;
-  canBypass: boolean;
-  pwaFreeReadingUsed?: boolean;
 }
 
 interface ReadingIntakeScreenProps {
@@ -142,7 +128,6 @@ interface Placement {
   sign: string;
   degree?: string;
   house?: number;
-  isRetrograde?: boolean;
 }
 
 interface MoonPhaseData {
@@ -157,10 +142,8 @@ interface MoonPhaseData {
 }
 
 interface ProfectionData {
-  age: number;
   activatedHouse: number;
   activatedSign: string;
-  timeLord?: string;
 }
 
 type ElementName = "Earth" | "Fire" | "Water" | "Air";
@@ -488,53 +471,41 @@ function SunDisc({ size = 58 }: { size?: number }) {
   );
 }
 
-type ThemeName = "cosmic";
-
 interface ThemeColors {
-  name: ThemeName;
   areaColors: {
-    love: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    money: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    career: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
-    other: { bg: string; border: string; glow: string; text: string; gradient: string; iconBg: string };
+    love: { bg: string; border: string; glow: string; text: string };
+    money: { bg: string; border: string; glow: string; text: string };
+    career: { bg: string; border: string; glow: string; text: string };
+    other: { bg: string; border: string; glow: string; text: string };
   };
 }
 
-const THEMES: Record<ThemeName, ThemeColors> = {
+const THEMES: Record<"cosmic", ThemeColors> = {
   cosmic: {
-    name: "cosmic",
     areaColors: {
       love: {
         bg: "rgba(131, 24, 67, 0.18)",
         border: "rgba(251, 113, 133, 0.78)",
         glow: "rgba(244, 114, 182, 0.20)",
         text: "#FDA4AF",
-        iconBg: "rgba(131, 24, 67, 0.46)",
-        gradient: "linear-gradient(135deg, rgba(131,24,67,0.78) 0%, rgba(190,24,93,0.56) 38%, rgba(244,114,182,0.16) 100%)",
       },
       money: {
         bg: "rgba(20, 83, 45, 0.22)",
         border: "rgba(52, 211, 153, 0.74)",
         glow: "rgba(34, 197, 94, 0.22)",
         text: "#86EFAC",
-        iconBg: "rgba(20, 83, 45, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(20,83,45,0.85) 0%, rgba(22,101,52,0.70) 32%, rgba(34,197,94,0.20) 100%)",
       },
       career: {
         bg: "rgba(30, 58, 138, 0.22)",
         border: "rgba(147, 197, 253, 0.76)",
         glow: "rgba(59, 130, 246, 0.22)",
         text: "#93C5FD",
-        iconBg: "rgba(30, 58, 138, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(30,58,138,0.85) 0%, rgba(37,99,235,0.70) 32%, rgba(59,130,246,0.20) 100%)",
       },
       other: {
         bg: "rgba(49, 46, 129, 0.22)",
         border: "rgba(139, 92, 246, 0.76)",
         glow: "rgba(139, 92, 246, 0.22)",
         text: "#C4B5FD",
-        iconBg: "rgba(49, 46, 129, 0.55)",
-        gradient: "linear-gradient(135deg, rgba(49,46,129,0.85) 0%, rgba(91,33,182,0.70) 32%, rgba(139,92,246,0.20) 100%)",
       },
     },
   },
@@ -761,7 +732,6 @@ export default function ReadingIntakeScreen({
             sign: item.sign,
             degree: typeof item.degree === "string" ? item.degree : undefined,
             house: typeof item.house === "number" ? item.house : undefined,
-            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
           }];
         });
       }
@@ -776,7 +746,6 @@ export default function ReadingIntakeScreen({
             sign: item.sign,
             degree: typeof item.degree === "string" ? item.degree : undefined,
             house: typeof item.house === "number" ? item.house : undefined,
-            isRetrograde: typeof item.isRetrograde === "boolean" ? item.isRetrograde : undefined,
           }];
         });
       }
@@ -828,11 +797,6 @@ export default function ReadingIntakeScreen({
       setUserStatus({
         credits: Number(data.credits ?? 0),
         isSubscribed: data.isSubscribed === true,
-        readingsCompleted: Number(data.readingsCompleted ?? 0),
-        onCooldown: data.onCooldown === true,
-        cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-        canBypass: data.canBypass === true,
-        pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
       });
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
@@ -872,7 +836,6 @@ export default function ReadingIntakeScreen({
     const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
     const currentSun = find(transits, ["Sun"]);
     const currentMoon = find(transits, ["Moon"]);
-    const mercury = find(transits, ["Mercury"]);
 
     const counts: Record<ElementName, number> = { Earth: 0, Fire: 0, Water: 0, Air: 0 };
     const balanceBodies = new Set([
@@ -894,7 +857,6 @@ export default function ReadingIntakeScreen({
       ],
       currentSun,
       currentMoon,
-      mercury,
       counts,
       maxElementCount,
     };
@@ -969,33 +931,6 @@ export default function ReadingIntakeScreen({
     return "Live lunar timing";
   }, [heroCurrentTimezone, moonPhase]);
 
-  const skyNotice = useMemo(() => {
-    if (heroData.mercury?.isRetrograde) {
-      return {
-        title: "Mercury Retrograde",
-        detail: heroData.mercury.sign
-          ? `Mercury ℞ in ${heroData.mercury.sign}`
-          : "Mercury is currently retrograde",
-      };
-    }
-
-    if (moonPhase?.nextEventName && typeof moonPhase.daysUntilNextEvent === "number") {
-      return {
-        title: moonPhase.nextEventName,
-        detail:
-          moonPhase.daysUntilNextEvent === 0
-            ? "Exact today"
-            : `In ${moonPhase.daysUntilNextEvent} day${moonPhase.daysUntilNextEvent === 1 ? "" : "s"}`,
-      };
-    }
-
-    return {
-      title: "Current Sky",
-      detail: heroData.mercury?.sign
-        ? `Mercury direct in ${heroData.mercury.sign}`
-        : "Live planetary context",
-    };
-  }, [heroData.mercury, moonPhase]);
 
   const stopAskRecorder = useCallback((discard = false) => {
     const recorder = mediaRecorderRef.current;
@@ -1552,11 +1487,6 @@ export default function ReadingIntakeScreen({
           status = {
             credits: Number(d.credits ?? 0),
             isSubscribed: d.isSubscribed === true,
-            readingsCompleted: Number(d.readingsCompleted ?? 0),
-            onCooldown: d.onCooldown === true,
-            cooldownExpiresAt: d.cooldownExpiresAt ?? null,
-            canBypass: d.canBypass === true,
-            pwaFreeReadingUsed: d.pwaFreeReadingUsed === true,
           };
           setUserStatus(status);
         }
@@ -1996,16 +1926,6 @@ export default function ReadingIntakeScreen({
             0 0 0 1px rgba(255,239,195,0.14),
             0 0 14px rgba(218,183,104,0.24),
             0 3px 9px rgba(0,0,0,0.42);
-        }
-
-        .ask-title {
-          color: #f8fafc;
-          text-shadow: 0 1px 14px rgba(34,211,238,0.10), 0 0 20px rgba(168,85,247,0.07);
-        }
-
-        .ask-subtitle {
-          color: rgba(203,213,225,0.72);
-          text-shadow: 0 2px 8px rgba(0,0,0,0.82);
         }
 
         @media (prefers-reduced-motion: reduce) {
