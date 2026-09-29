@@ -16,11 +16,11 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-t border-white/[0.07] pt-7 first:border-t-0 first:pt-0">
-      <p className="mb-1.5 text-[9px] uppercase tracking-[0.28em] text-[#7f96b7]">
+    <section className="border-t border-black/[0.08] pt-7 first:border-t-0 first:pt-0">
+      <p className="mb-1.5 text-[9px] uppercase tracking-[0.28em] text-[#777777]">
         {kicker}
       </p>
-      <h2 className="mb-3 font-serif text-[17px] font-medium tracking-[0.015em] text-[#eef2fa]">
+      <h2 className="mb-3 font-serif text-[17px] font-medium tracking-[0.015em] text-[#111111]">
         {title}
       </h2>
       <div className="space-y-3">{children}</div>
@@ -29,18 +29,11 @@ function Section({
 }
 
 function Lead({ children }: { children: React.ReactNode }) {
-  return <span className="font-medium text-slate-200">{children}</span>;
+  return <span className="font-medium text-[#111111]">{children}</span>;
 }
 
 export default function TermsPage() {
   const router = useRouter();
-  const stars = [
-    [7, 5, 1], [20, 13, 2], [39, 7, 1], [61, 16, 1], [83, 8, 2],
-    [94, 22, 1], [13, 31, 1], [31, 25, 1], [72, 34, 2], [88, 42, 1],
-    [4, 52, 2], [23, 59, 1], [48, 48, 1], [65, 62, 1], [97, 69, 2],
-    [15, 76, 1], [37, 84, 2], [58, 72, 1], [78, 89, 1], [91, 79, 1],
-    [6, 94, 1], [50, 97, 1],
-  ];
 
   const acceptAndContinue = () => {
     // This device record improves continuity. For a complete audit trail,
@@ -63,29 +56,11 @@ export default function TermsPage() {
 
   return (
     <main
-      className="relative min-h-[100dvh] overflow-y-auto overscroll-none bg-[#040611] text-slate-100"
+      className="relative min-h-[100dvh] overflow-y-auto overscroll-none bg-white text-[#222222]"
       style={{
         WebkitOverflowScrolling: "touch",
-        background:
-          "radial-gradient(circle at 50% -10%, rgba(44,73,116,0.22), transparent 34%), linear-gradient(180deg, #061120 0%, #050816 42%, #040611 100%)",
       }}
     >
-      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-        {stars.map(([left, top, size], index) => (
-          <span
-            key={`${left}-${top}`}
-            className="absolute rounded-full bg-white"
-            style={{
-              left: `${left}%`,
-              top: `${top}%`,
-              width: size,
-              height: size,
-              opacity: 0.18 + (index % 4) * 0.08,
-              boxShadow: size > 1 ? "0 0 7px rgba(255,255,255,0.32)" : undefined,
-            }}
-          />
-        ))}
-      </div>
       <div
         className="relative z-10 mx-auto w-full max-w-[460px] px-4 pt-4"
         style={{ paddingBottom: "calc(2.5rem + env(safe-area-inset-bottom))" }}
@@ -94,29 +69,29 @@ export default function TermsPage() {
           <button
             type="button"
             onClick={() => router.back()}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-black/[0.02] text-[#555555] transition hover:border-black/25 hover:text-black"
             aria-label="Go back"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </button>
-          <p className="font-serif text-[11px] uppercase tracking-[0.28em] text-[#aab8cf]">
+          <p className="font-serif text-[11px] uppercase tracking-[0.28em] text-[#555555]">
             Terms &amp; Conditions
           </p>
         </header>
 
-        <article className="overflow-hidden rounded-[30px] border border-[#8398b8]/25 bg-[#040813]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_24px_70px_rgba(0,0,0,0.52),0_0_38px_rgba(96,165,250,0.06)] backdrop-blur-xl">
-          <div className="border-b border-white/[0.07] bg-[radial-gradient(circle_at_50%_-30%,rgba(96,165,250,0.16),transparent_58%),linear-gradient(145deg,rgba(17,29,52,0.96),rgba(8,13,28,0.94))] px-6 pb-8 pt-9 text-center">
-            <p className="text-[9px] uppercase tracking-[0.34em] text-[#7f96b7]">
+        <article className="overflow-hidden rounded-[30px] border border-black/[0.09] bg-white shadow-[0_18px_55px_rgba(0,0,0,0.07)]">
+          <div className="border-b border-black/[0.08] bg-white px-6 pb-8 pt-9 text-center">
+            <p className="text-[9px] uppercase tracking-[0.34em] text-[#777777]">
               AstroProXL
             </p>
-            <p className="mt-3 font-serif text-[22px] tracking-[0.04em] text-[#f5f7fb]">
+            <p className="mt-3 font-serif text-[22px] tracking-[0.04em] text-[#111111]">
               The Astrology Engine
             </p>
-            <p className="mx-auto mt-3 max-w-[310px] font-serif text-[12px] uppercase leading-6 tracking-[0.18em] text-[#a9b8ce]">
+            <p className="mx-auto mt-3 max-w-[310px] font-serif text-[12px] uppercase leading-6 tracking-[0.18em] text-[#555555]">
               What&rsquo;s Coming. What&rsquo;s Changing.<br />What You Need to Know.
             </p>
-            <div className="mx-auto my-6 h-px w-14 bg-gradient-to-r from-transparent via-[#94a9c7]/70 to-transparent" />
-            <p className="mx-auto max-w-[350px] text-[13px] leading-6 text-[#b6c1d3]">
+            <div className="mx-auto my-6 h-px w-14 bg-gradient-to-r from-transparent via-black/35 to-transparent" />
+            <p className="mx-auto max-w-[350px] text-[13px] leading-6 text-[#444444]">
               AstroProXL was built for the moment when vague astrology is no longer
               enough. We calculate before we interpret, prioritize what matters,
               and turn a highly structured chart into guidance that feels direct,
@@ -124,8 +99,8 @@ export default function TermsPage() {
             </p>
           </div>
 
-          <div className="space-y-8 px-6 pb-8 pt-7 text-[13px] leading-[1.85] text-[#aeb9cb] sm:px-7">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-[#647694]">
+          <div className="space-y-8 px-6 pb-8 pt-7 text-[13px] leading-[1.85] text-[#444444] sm:px-7">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[#888888]">
             Last updated: September 29, 2026
           </p>
 
@@ -457,7 +432,7 @@ export default function TermsPage() {
               Questions about these Terms may be sent to{" "}
               <a
                 href="mailto:contactbrandonjohnson@gmail.com"
-                className="font-medium text-slate-100 underline decoration-white/30 underline-offset-4"
+                className="font-medium text-[#111111] underline decoration-black/25 underline-offset-4"
               >
                 contactbrandonjohnson@gmail.com
               </a>
@@ -466,15 +441,15 @@ export default function TermsPage() {
           </Section>
           </div>
 
-        <footer className="border-t border-white/[0.08] bg-[#07101f]/80 px-6 pb-7 pt-7">
-          <p className="mx-auto max-w-sm text-center text-[11px] leading-5 text-[#8696ae]">
+        <footer className="border-t border-black/[0.08] bg-[#fafafa] px-6 pb-7 pt-7">
+          <p className="mx-auto max-w-sm text-center text-[11px] leading-5 text-[#666666]">
             By selecting Agree &amp; Continue, you confirm that you are at least 18
             years old and agree to these Terms &amp; Conditions.
           </p>
           <button
             type="button"
             onClick={acceptAndContinue}
-            className="mt-4 inline-flex h-14 w-full items-center justify-center rounded-[18px] border border-[#8da5c8]/45 bg-[radial-gradient(circle_at_50%_-70%,rgba(255,255,255,0.16),transparent_65%),linear-gradient(145deg,rgba(18,31,54,0.98),rgba(7,12,25,0.98))] font-serif text-[13px] uppercase tracking-[0.18em] text-[#eef3fb] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_28px_rgba(96,165,250,0.13)] transition hover:border-[#b7c8df]/65 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_34px_rgba(96,165,250,0.19)] active:scale-[0.99]"
+            className="mt-4 inline-flex h-14 w-full items-center justify-center rounded-[18px] border border-black bg-black font-serif text-[13px] uppercase tracking-[0.18em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.16)] transition hover:bg-[#1b1b1b] active:scale-[0.99]"
           >
             Agree &amp; Continue →
           </button>
