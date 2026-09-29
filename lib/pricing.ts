@@ -4,9 +4,9 @@
 // All values are stored in cents.
 
 export const PRICES = {
-  astroPlusMonthly: 2099, // $20.99
-  generalReading: 499,    // $4.99
-  jxl: 699,               // $6.99
+  astroPlusMonthly: 899, // $8.99
+  generalReading: 299,    // $2.99
+  jxl: 425,               // $4.25
   replyEach: 100,         // $1.00 each
 } as const;
 
