@@ -2205,25 +2205,45 @@ const css = `
     border: 1px solid rgba(151,169,197,0.16);
     border-radius: 18px;
     padding: 16px 17px;
-    background: rgba(13,24,46,0.72);
+    background: transparent;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
-    backdrop-filter: blur(5px);
   }
   .reading-results .act-card + .act-card { margin-top: 10px; }
-  .reading-results .context-dated-windows .act-card:nth-child(even) {
-    background: rgba(24,20,50,0.72);
-    border-color: rgba(168,153,207,0.17);
-  }
-  .reading-results .context-dated-windows .act-card:nth-child(odd) {
-    background: rgba(13,27,50,0.78);
-    border-color: rgba(126,165,207,0.18);
-  }
   .reading-results .context-dated-windows {
     margin-top: 52px;
-    padding-top: 36px;
-    border-top: 1px solid rgba(255,255,255,0.08);
   }
-  .reading-results .dated-context-heading { margin-bottom: 24px; }
+  .reading-results .dated-context-heading { margin-bottom: 26px; }
+  .reading-results .context-dated-windows .act-card {
+    padding: 0;
+    overflow: hidden;
+    border-color: rgba(151,169,197,0.18);
+    background: transparent;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.035),
+      0 18px 50px rgba(0,0,0,0.12);
+  }
+  .reading-results .context-dated-windows .act-head {
+    min-height: 48px;
+    margin: 0;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background:
+      radial-gradient(circle at 18% 0%, rgba(96,165,250,0.13), transparent 44%),
+      linear-gradient(145deg, rgba(18,32,58,0.88), rgba(7,12,27,0.76));
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.055),
+      inset 0 -1px 0 rgba(255,255,255,0.025);
+  }
+  .reading-results .context-dated-windows .act-card:nth-of-type(even) .act-head {
+    background:
+      radial-gradient(circle at 18% 0%, rgba(129,140,248,0.12), transparent 44%),
+      linear-gradient(145deg, rgba(23,28,57,0.86), rgba(7,11,25,0.76));
+  }
+  .reading-results .context-dated-windows .act-body {
+    padding: 18px 18px 19px;
+  }
   .reading-results .context-dated-windows .act-head,
   .reading-results .merged-directive-card .act-head {
     justify-content: center;
@@ -2240,21 +2260,55 @@ const css = `
     margin-inline: auto;
     text-align: center;
   }
+  .reading-results .context-dated-windows .date-badge {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #d8e2f0;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+  }
+  .reading-results .move-block > .reading-section-label {
+    margin-bottom: 28px;
+  }
   .reading-results .merged-directive-card {
-    padding: 20px 19px;
+    padding: 0;
+    overflow: hidden;
     border-color: rgba(152,177,211,0.28);
-    background:
-      radial-gradient(circle at 50% -45%, rgba(147,197,253,0.12), transparent 58%),
-      linear-gradient(145deg, rgba(16,29,51,0.92), rgba(8,13,28,0.94));
+    background: transparent;
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.055),
-      0 14px 34px rgba(0,0,0,0.24),
+      0 14px 34px rgba(0,0,0,0.14),
       0 0 28px rgba(96,165,250,0.05);
   }
+  .reading-results .merged-directive-card .act-head {
+    min-height: 46px;
+    margin: 0;
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background:
+      radial-gradient(circle at 18% 0%, rgba(96,165,250,0.12), transparent 44%),
+      linear-gradient(145deg, rgba(18,31,56,0.86), rgba(7,12,27,0.74));
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      inset 0 -1px 0 rgba(255,255,255,0.025);
+  }
+  .reading-results .merged-directive-card .merged-directive-line:nth-child(even) .act-head {
+    background:
+      radial-gradient(circle at 18% 0%, rgba(129,140,248,0.11), transparent 44%),
+      linear-gradient(145deg, rgba(23,28,56,0.84), rgba(7,11,25,0.74));
+  }
+  .reading-results .merged-directive-card .act-body {
+    padding: 18px 18px 19px;
+  }
   .reading-results .merged-directive-line + .merged-directive-line {
-    margin-top: 17px;
-    padding-top: 17px;
-    border-top: 1px solid rgba(255,255,255,0.07);
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
   }
   .reading-results .merged-directive-card .act-label {
     width: 100%;
