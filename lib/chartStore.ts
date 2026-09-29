@@ -193,8 +193,9 @@ export function isSkyFresh(): boolean {
   const savedAt = new Date(chart.savedAt).getTime();
   if (!Number.isFinite(savedAt)) return false;
   const now = Date.now();
-  const sixHours = 6 * 60 * 60 * 1000;
-  return now - savedAt < sixHours;
+  const fifteenMinutes = 15 * 60 * 1000;
+
+return now - savedAt < fifteenMinutes;
 }
 
 /* ── V2 MIGRATION — silent, guarded, one-time ────────────────────────────
