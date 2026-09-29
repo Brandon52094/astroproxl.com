@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bookmark, ChevronDown, Crown } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { loadReading, loadChart, clearIntake, type StoredReading } from "@/lib/chartStore";
@@ -145,8 +145,10 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
     let nextShoot = 360;
 
     let raf = 0;
+    let running = !document.hidden;
 
     const frame = () => {
+      if (!running) return;
       const w = window.innerWidth;
       const h = window.innerHeight;
 
@@ -247,9 +249,18 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
 
     frame();
 
+    const handleVisibility = () => {
+      running = !document.hidden;
+      cancelAnimationFrame(raf);
+      if (running) frame();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
+      running = false;
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [reduceMotion]);
 
@@ -468,6 +479,185 @@ function renderWithDates(content: string): React.ReactNode {
 type TimingSection = Extract<ParsedSection, { kind: "window" }>;
 type DirectiveSection = Extract<ParsedSection, { kind: "directive" }>;
 
+type CalendarHighlight = {
+  year: number;
+  month: number;
+  day: number;
+  label: string;
+};
+
+const CALENDAR_MONTHS: Record<string, number> = {
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
+  may: 4,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11,
+};
+
+function extractCalendarHighlights(labels: string[]): CalendarHighlight[] {
+  const fallbackYear = new Date().getFullYear();
+  const monthPattern =
+    "January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec";
+  const pattern = new RegExp(
+    `\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*(?:-|–|—|to|through)\\s*(?:(?:(${monthPattern})\\.?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?))?(?:,?\\s+(\\d{4}))?`,
+    "gi",
+  );
+  const highlights: CalendarHighlight[] = [];
+
+  for (const label of labels.filter(Boolean)) {
+    for (const match of label.matchAll(pattern)) {
+      const startMonth = CALENDAR_MONTHS[match[1].toLowerCase().replace(".", "")];
+      const startDay = Number(match[2]);
+      const endMonth = match[3]
+        ? CALENDAR_MONTHS[match[3].toLowerCase().replace(".", "")]
+        : startMonth;
+      const endDay = match[4] ? Number(match[4]) : startDay;
+      const year = match[5] ? Number(match[5]) : fallbackYear;
+      const start = new Date(year, startMonth, startDay);
+      const end = new Date(year + (endMonth < startMonth ? 1 : 0), endMonth, endDay);
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) continue;
+
+      const cursor = new Date(start);
+      let guard = 0;
+      while (cursor <= end && guard < 62) {
+        highlights.push({
+          year: cursor.getFullYear(),
+          month: cursor.getMonth(),
+          day: cursor.getDate(),
+          label,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+        guard++;
+      }
+    }
+  }
+
+  return Array.from(
+    new Map(
+      highlights.map((highlight) => [
+        `${highlight.year}-${highlight.month}-${highlight.day}`,
+        highlight,
+      ]),
+    ).values(),
+  ).sort((a, b) =>
+    new Date(a.year, a.month, a.day).getTime() -
+    new Date(b.year, b.month, b.day).getTime(),
+  );
+}
+
+function ReadingCalendar({ labels }: { labels: string[] }) {
+  const highlights = useMemo(() => extractCalendarHighlights(labels), [labels]);
+  const months = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          highlights.map((highlight) => [
+            `${highlight.year}-${highlight.month}`,
+            { year: highlight.year, month: highlight.month },
+          ]),
+        ).values(),
+      ),
+    [highlights],
+  );
+  const [monthIndex, setMonthIndex] = useState(0);
+
+  useEffect(() => {
+    setMonthIndex((current) => Math.min(current, Math.max(0, months.length - 1)));
+  }, [months.length]);
+
+  if (!months.length) return null;
+
+  const activeMonth = months[monthIndex];
+  const firstWeekday = new Date(activeMonth.year, activeMonth.month, 1).getDay();
+  const daysInMonth = new Date(activeMonth.year, activeMonth.month + 1, 0).getDate();
+  const monthHighlights = new Map(
+    highlights
+      .filter(
+        (highlight) =>
+          highlight.year === activeMonth.year && highlight.month === activeMonth.month,
+      )
+      .map((highlight) => [highlight.day, highlight]),
+  );
+  const cells = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+  const title = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(activeMonth.year, activeMonth.month, 1));
+
+  return (
+    <section className="reading-calendar" aria-label="Reading calendar">
+      <p className="reading-section-label centered">Your Calendar</p>
+      <div className="calendar-surface">
+        <div className="calendar-header">
+          <button
+            type="button"
+            className="calendar-nav"
+            onClick={() => setMonthIndex((current) => Math.max(0, current - 1))}
+            disabled={monthIndex === 0}
+            aria-label="Previous month"
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+          <p className="calendar-title">{title}</p>
+          <button
+            type="button"
+            className="calendar-nav"
+            onClick={() =>
+              setMonthIndex((current) => Math.min(months.length - 1, current + 1))
+            }
+            disabled={monthIndex === months.length - 1}
+            aria-label="Next month"
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+        </div>
+        <div className="calendar-grid calendar-weekdays" aria-hidden="true">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+            <span key={`${day}-${index}`}>{day}</span>
+          ))}
+        </div>
+        <div className="calendar-grid">
+          {cells.map((day, index) => {
+            const highlight = day ? monthHighlights.get(day) : null;
+            return (
+              <div
+                key={`${day ?? 'empty'}-${index}`}
+                className={`calendar-day ${day ? '' : 'empty'} ${highlight ? 'highlighted' : ''}`}
+                aria-label={highlight ? `${title} ${day}: ${highlight.label}` : undefined}
+              >
+                {day && <span>{day}</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -533,24 +723,6 @@ function FadeIn({
   return <div className={`fade ${shown ? "on" : ""} ${className}`}>{children}</div>;
 }
 
-function ReadingSection({
-  title,
-  body,
-  active,
-}: {
-  title: string;
-  body: string;
-  active: boolean;
-}) {
-  if (!body) return null;
-  return (
-    <FadeIn active={active} className="reading-section-block">
-      <p className="reading-section-label">{title}</p>
-      <p className="reading-section-copy">{renderWithDates(body)}</p>
-    </FadeIn>
-  );
-}
-
 function ReadingDeck({
   topic,
   content,
@@ -597,6 +769,10 @@ function ReadingDeck({
       fallbackProse,
       timing,
       directives,
+      calendarLabels: [
+        ...timing.map((section) => section.date).filter((date): date is string => Boolean(date)),
+        ...directives.map((section) => section.date).filter((date): date is string => Boolean(date)),
+      ],
     };
   }, [sections, content]);
 
@@ -711,6 +887,13 @@ function ReadingDeck({
                   </div>
                 </FadeIn>
               </section>
+            </>
+          )}
+
+          {groups.calendarLabels.length > 0 && (
+            <>
+              <div className="reading-separator" aria-hidden="true" />
+              <ReadingCalendar labels={groups.calendarLabels} />
             </>
           )}
 
@@ -1347,33 +1530,35 @@ export default function ReadingResultsPage() {
           </section>
         </div>
 
-        {/* ── Save + Done ── */}
+        {/* ── Compact save + centered Done controls ── */}
         <div className="end-actions">
-          {viewingSavedReading ? (
-            <button type="button" className="end-btn end-save" onClick={() => router.push("/readings")}>
-              <Bookmark className="end-btn-icon" aria-hidden="true" />
-              Your Readings
-            </button>
-          ) : (
+          <div className="end-action-row">
             <button
               type="button"
-              className="download-reading-shell"
-              onClick={handleSaveReading}
-              disabled={isDownloading}
-              aria-label="Save this reading"
+              className={`end-save-icon ${downloaded ? "saved" : ""}`}
+              onClick={
+                viewingSavedReading
+                  ? () => router.push("/readings")
+                  : handleSaveReading
+              }
+              disabled={!viewingSavedReading && isDownloading}
+              aria-label={
+                viewingSavedReading
+                  ? "Open your saved readings"
+                  : downloaded
+                    ? "Reading saved"
+                    : "Save this reading"
+              }
             >
-              <span className="download-reading-shimmer" aria-hidden="true" />
-              <span className="download-reading-crown" aria-hidden="true">
-                <Crown className="h-3.5 w-3.5" />
-              </span>
-              <span className="download-reading-label">
-                {isDownloading ? "Saving…" : downloaded ? "Saved" : "Save Reading"}
-              </span>
+              <Bookmark aria-hidden="true" />
             </button>
-          )}
-          <button type="button" className="end-btn end-done" onClick={handleDone}>
-            Done
-          </button>
+            <button type="button" className="end-btn end-done" onClick={handleDone}>
+              Done
+            </button>
+          </div>
+          <p className={`save-status ${downloaded ? "show" : ""}`} aria-live="polite">
+            {isDownloading ? "Saving…" : downloaded ? "Saved to Your Readings" : ""}
+          </p>
           {saveError && <p className="end-save-error" role="alert">{saveError}</p>}
         </div>
       </ReadingDeck>
@@ -1488,19 +1673,19 @@ const css = `
     position: relative;
     z-index: 1;
     min-height: 100%;
-    background: linear-gradient(
-      180deg,
-      #17204a 0%,      /* 1 — astral blue */
-      #141b45 9%,
-      #10163f 22%,     /* 2 — deep indigo */
-      #12123a 36%,     /* 3 — indigo violet */
-      #0e0d30 50%,
-      #0a0924 63%,     /* 4 — deep space */
-      #070718 75%,
-      #040512 86%,     /* 5 — into the void */
-      #010109 95%,
-      #000000 100%
-    );
+    background:
+      radial-gradient(circle at 50% 0%, rgba(65,94,145,0.24), transparent 24%),
+      linear-gradient(
+        180deg,
+        #101d38 0%,
+        #0d1832 13%,
+        #0c142d 27%,
+        #0c1027 42%,
+        #090b20 58%,
+        #060817 73%,
+        #03040e 87%,
+        #000000 100%
+      );
   }
 
   .reading-results .results-starfield {
@@ -1694,7 +1879,7 @@ const css = `
   .reading-results .act-label {
     font-family: ui-sans-serif, system-ui;
     font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
-    text-transform: uppercase; color: #5eead4;
+    text-transform: uppercase; color: #9db2cf;
   }
   .reading-results .act-note { color: #94a3b8; font-size: 12px; }
   .reading-results .act-body {
@@ -1708,13 +1893,13 @@ const css = `
     display: inline-block;
     padding: 1px 10px;
     border-radius: 9999px;
-    background: linear-gradient(135deg, rgba(251,191,36,0.18), rgba(217,119,6,0.12));
-    border: 1px solid rgba(251,191,36,0.35);
-    color: #fbbf24;
+    background: linear-gradient(135deg, rgba(147,197,253,0.14), rgba(129,140,248,0.08));
+    border: 1px solid rgba(174,204,239,0.30);
+    color: #c9d8eb;
     font-family: ui-sans-serif, system-ui;
     font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
     text-transform: uppercase;
-    box-shadow: 0 0 18px rgba(251,191,36,0.12);
+    box-shadow: 0 0 18px rgba(96,165,250,0.08);
     vertical-align: baseline;
     max-width: 100%; white-space: normal; overflow-wrap: anywhere;
   }
@@ -1784,15 +1969,31 @@ const css = `
   .reading-results .reading-flow {
     position: relative;
     z-index: 2;
-    width: min(100%, 38rem);
-    margin: 0 auto;
-    padding: calc(env(safe-area-inset-top) + 54px) 24px calc(env(safe-area-inset-bottom) + 72px);
+    width: min(calc(100% - 24px), 38rem);
+    min-height: 100dvh;
+    margin: max(12px, env(safe-area-inset-top)) auto max(28px, env(safe-area-inset-bottom));
+    overflow: hidden;
+    border: 1px solid rgba(131,152,184,0.25);
+    border-radius: 30px;
+    background: rgba(4,8,19,0.88);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.055),
+      0 24px 70px rgba(0,0,0,0.52),
+      0 0 38px rgba(96,165,250,0.06);
+    backdrop-filter: blur(12px);
+    padding: 0 24px calc(env(safe-area-inset-bottom) + 72px);
   }
   .reading-results .reading-hero {
-    min-height: 76vh;
+    min-height: min(76vh, 690px);
     display: flex;
     flex-direction: column;
     justify-content: center;
+    margin: 0 -24px;
+    padding: calc(env(safe-area-inset-top) + 42px) 28px 58px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    background:
+      radial-gradient(circle at 50% -20%, rgba(96,165,250,0.16), transparent 58%),
+      linear-gradient(145deg, rgba(17,29,52,0.96), rgba(8,13,28,0.94));
     opacity: 0;
     transform: translateY(10px);
     transition: opacity 1s ease, transform 1s ease;
@@ -1806,18 +2007,18 @@ const css = `
     justify-content: center;
     align-self: center;
     gap: 10px;
-    margin-bottom: 30px;
+    margin-bottom: 26px;
     padding: 5px 10px;
     overflow: hidden;
-    font-family: ui-sans-serif, system-ui;
-    font-size: clamp(18px, 5.2vw, 24px);
-    font-weight: 800;
-    letter-spacing: 0.28em;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(30px, 8vw, 44px);
+    font-weight: 600;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: #78f2df;
+    color: #f5f7fb;
     text-shadow:
-      0 0 14px rgba(94,234,212,0.42),
-      0 0 34px rgba(94,234,212,0.20);
+      0 0 18px rgba(255,255,255,0.13),
+      0 0 38px rgba(96,165,250,0.12);
   }
   .reading-results .hero-topic-text,
   .reading-results .hero-mark {
@@ -1825,9 +2026,9 @@ const css = `
     z-index: 2;
   }
   .reading-results .hero-mark {
-    color: rgba(94,234,212,0.82);
+    color: rgba(201,214,233,0.82);
     font-size: 14px;
-    text-shadow: 0 0 18px rgba(94,234,212,0.55);
+    text-shadow: 0 0 18px rgba(191,219,254,0.42);
   }
   .reading-results .hero-topic-glow {
     position: absolute;
@@ -1841,12 +2042,12 @@ const css = `
       105deg,
       transparent 0%,
       rgba(255,255,255,0.02) 32%,
-      rgba(182,255,245,0.34) 50%,
+      rgba(219,234,254,0.30) 50%,
       rgba(255,255,255,0.04) 68%,
       transparent 100%
     );
     filter: blur(2px);
-    animation: reading-topicSweep 4.8s cubic-bezier(0.22,1,0.36,1) infinite;
+    animation: reading-topicSweep 2.9s cubic-bezier(0.22,1,0.36,1) 0.4s 1 forwards;
     pointer-events: none;
   }
   @keyframes reading-topicSweep {
@@ -1869,7 +2070,7 @@ const css = `
     text-shadow:
       0 1px 0 rgba(255,255,255,0.08),
       0 0 28px rgba(255,255,255,0.06),
-      0 0 50px rgba(94,234,212,0.10);
+      0 0 50px rgba(96,165,250,0.10);
   }
   .reading-results .focus-heading::after {
     content: "";
@@ -1877,8 +2078,8 @@ const css = `
     width: 54px;
     height: 1px;
     margin: 24px auto 0;
-    background: linear-gradient(90deg, transparent, rgba(94,234,212,0.72), transparent);
-    box-shadow: 0 0 14px rgba(94,234,212,0.22);
+    background: linear-gradient(90deg, transparent, rgba(148,169,199,0.72), transparent);
+    box-shadow: 0 0 14px rgba(96,165,250,0.16);
   }
   .reading-results .confirmation-copy {
     max-width: 31rem;
@@ -1887,7 +2088,7 @@ const css = `
     font-family: Georgia, serif;
     font-size: clamp(16px, 4.35vw, 19px);
     line-height: 1.68;
-    color: #c3cedd;
+    color: #b6c1d3;
     white-space: pre-wrap;
     text-wrap: pretty;
   }
@@ -1902,7 +2103,7 @@ const css = `
     font-family: Georgia, serif;
     font-size: 18px;
     line-height: 1.72;
-    color: #e6edf6;
+    color: #dbe4f0;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -1934,7 +2135,7 @@ const css = `
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: rgba(94,234,212,0.9);
+    color: #8fa4c2;
   }
   .reading-results .reading-section-label.centered { text-align: center; }
   .reading-results .reading-section-copy {
@@ -1958,21 +2159,126 @@ const css = `
     margin: 0 auto;
   }
   .reading-results .act-card {
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(151,169,197,0.16);
     border-radius: 18px;
     padding: 16px 17px;
-    background: rgba(8,12,31,0.36);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    background: rgba(13,24,46,0.72);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
     backdrop-filter: blur(5px);
   }
   .reading-results .act-card + .act-card { margin-top: 10px; }
+  .reading-results .context-dated-windows .act-card:nth-child(even) {
+    background: rgba(24,20,50,0.72);
+    border-color: rgba(168,153,207,0.17);
+  }
+  .reading-results .context-dated-windows .act-card:nth-child(odd) {
+    background: rgba(13,27,50,0.78);
+    border-color: rgba(126,165,207,0.18);
+  }
+  .reading-results .merged-directive-card {
+    padding: 20px 19px;
+    border-color: rgba(152,177,211,0.28);
+    background:
+      radial-gradient(circle at 50% -45%, rgba(147,197,253,0.12), transparent 58%),
+      linear-gradient(145deg, rgba(16,29,51,0.92), rgba(8,13,28,0.94));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.055),
+      0 14px 34px rgba(0,0,0,0.24),
+      0 0 28px rgba(96,165,250,0.05);
+  }
+  .reading-results .merged-directive-line + .merged-directive-line {
+    margin-top: 17px;
+    padding-top: 17px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+  }
+  .reading-results .merged-directive-card .act-label { color: #c5d4e8; }
+
+  /* ── Calendar summary — all explicit reading dates ── */
+  .reading-results .reading-calendar {
+    width: 100%;
+    max-width: 28rem;
+    margin: 0 auto;
+  }
+  .reading-results .calendar-surface {
+    margin-top: 17px;
+    padding: 20px 18px 19px;
+    border: 1px solid rgba(148,169,199,0.22);
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 50% -60%, rgba(148,197,255,0.13), transparent 58%),
+      linear-gradient(145deg, rgba(14,25,45,0.93), rgba(7,11,24,0.96));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.045),
+      0 18px 44px rgba(0,0,0,0.26);
+  }
+  .reading-results .calendar-header {
+    display: grid;
+    grid-template-columns: 34px 1fr 34px;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .reading-results .calendar-title {
+    margin: 0;
+    text-align: center;
+    font-family: Georgia, serif;
+    font-size: 17px;
+    color: #eef3fb;
+  }
+  .reading-results .calendar-nav {
+    width: 32px;
+    height: 32px;
+    border: 1px solid rgba(148,169,199,0.2);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.025);
+    color: #a9b8ce;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  .reading-results .calendar-nav:disabled { opacity: 0.18; cursor: default; }
+  .reading-results .calendar-nav svg { width: 15px; height: 15px; }
+  .reading-results .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .reading-results .calendar-weekdays {
+    margin-bottom: 6px;
+    color: #62738e;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: center;
+  }
+  .reading-results .calendar-day {
+    position: relative;
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    color: #9eabc0;
+    font-size: 12px;
+  }
+  .reading-results .calendar-day.empty { visibility: hidden; }
+  .reading-results .calendar-day.highlighted {
+    color: #f7f9fc;
+    border: 1px solid rgba(191,219,254,0.72);
+    background: rgba(147,197,253,0.09);
+    box-shadow:
+      inset 0 0 10px rgba(147,197,253,0.08),
+      0 0 14px rgba(147,197,253,0.16);
+  }
   .reading-results .reading-ending { padding-bottom: 8px; }
 
   /* ── Bottom Line — the closing focal point ── */
   .reading-results .bottom-line-wrap {
     position: relative;
-    padding: 40px 10px 34px;
+    margin: 0 -24px;
+    padding: 68px 30px 62px;
     text-align: center;
+    background:
+      radial-gradient(circle at 50% 45%, rgba(148,163,184,0.085), transparent 52%),
+      linear-gradient(180deg, rgba(2,5,12,0.12), rgba(0,0,0,0.46));
     transition: transform 0.7s ease, opacity 0.7s ease;
   }
   .reading-results .bottom-line-wrap::before {
@@ -1982,7 +2288,7 @@ const css = `
     left: 16%;
     right: 16%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.28), transparent);
+    background: linear-gradient(90deg, transparent, rgba(169,190,218,0.42), transparent);
   }
   .reading-results .bottom-line-label {
     margin: 0;
@@ -1991,14 +2297,14 @@ const css = `
     font-weight: 700;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: rgba(94, 234, 212, 0.9);
+    color: #9eafc7;
   }
   .reading-results .closing-line {
     max-width: 540px;
     margin: 15px auto 0;
     font-family: var(--font-display, Georgia, serif);
-    font-size: 18px;
-    line-height: 1.8;
+    font-size: clamp(19px, 5vw, 23px);
+    line-height: 1.72;
     color: #f8fafc;
     font-style: italic;
     text-align: center;
@@ -2179,149 +2485,49 @@ const css = `
   }
   .reading-results .end-btn-icon { width: 18px; height: 18px; }
 
-  @property --download-reading-angle {
-    syntax: "<angle>";
-    inherits: false;
-    initial-value: 0deg;
-  }
-  .reading-results .download-reading-shell {
-    position: relative;
-    isolation: isolate;
-    min-height: 58px;
-    width: 100%;
-    border: 0;
-    border-radius: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 54px 0 22px;
-    overflow: visible;
-    background:
-      radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%),
-      linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.08),
-      0 0 22px rgba(203,164,78,0.12),
-      0 16px 38px rgba(0,0,0,0.46);
-    cursor: pointer;
-    transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.2s ease;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .reading-results .download-reading-shell::before,
-  .reading-results .download-reading-shell::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    padding: 1.25px;
-    background: conic-gradient(
-      from var(--download-reading-angle),
-      rgba(255,255,255,0.94) 0deg,
-      rgba(255,255,255,0.74) 54deg,
-      rgba(218,183,104,0.88) 112deg,
-      rgba(255,239,195,0.82) 172deg,
-      rgba(255,255,255,0.96) 226deg,
-      rgba(193,151,67,0.86) 296deg,
-      rgba(255,255,255,0.94) 360deg
-    );
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: downloadReadingOrbit 8s linear infinite;
-  }
-  .reading-results .download-reading-shell::before { z-index: 0; opacity: 0.82; }
-  .reading-results .download-reading-shell::after {
-    inset: -1px;
-    z-index: -1;
-    padding: 2px;
-    opacity: 0.52;
-    filter: blur(8px);
-  }
-  .reading-results .download-reading-shell:hover,
-  .reading-results .download-reading-shell:focus-visible {
-    transform: translateY(-1px);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.11),
-      0 0 28px rgba(203,164,78,0.18),
-      0 18px 42px rgba(0,0,0,0.50);
-    outline: none;
-  }
-  .reading-results .download-reading-shell:active { transform: translateY(0); }
-  .reading-results .download-reading-shell:disabled { opacity: 0.55; cursor: default; }
-  .reading-results .download-reading-label {
-    position: relative;
-    z-index: 3;
-    white-space: nowrap;
-    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
-    font-size: 13px;
-    font-weight: 650;
-    letter-spacing: 0.20em;
-    text-transform: uppercase;
-    color: #f8fafc;
-    text-shadow:
-      0 2px 10px rgba(0,0,0,0.92),
-      0 0 18px rgba(255,255,255,0.16),
-      0 0 24px rgba(218,183,105,0.16);
-  }
-  .reading-results .download-reading-crown {
-    position: absolute;
-    right: 13px;
-    top: 11px;
-    z-index: 4;
-    width: 24px;
-    height: 24px;
-    border-radius: 9999px;
+  .reading-results .end-action-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(248,250,252,0.28);
-    background: rgba(248,250,252,0.035);
-    box-shadow: 0 0 10px rgba(248,250,252,0.10), 0 0 18px rgba(191,219,254,0.06);
-    color: rgba(248,250,252,0.90);
-    filter: drop-shadow(0 0 5px rgba(255,255,255,0.20));
+    gap: 10px;
   }
-  .reading-results .download-reading-shimmer {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    overflow: hidden;
-    border-radius: inherit;
-    pointer-events: none;
+  .reading-results .end-save-icon {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border: 1px solid rgba(141,165,200,0.42);
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(circle at 50% -60%, rgba(255,255,255,0.13), transparent 62%),
+      linear-gradient(145deg, rgba(18,31,54,0.98), rgba(7,12,25,0.98));
+    color: #dce6f3;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.07),
+      0 0 22px rgba(96,165,250,0.09);
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   }
-  .reading-results .download-reading-shimmer::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 45%;
-    background: linear-gradient(
-      105deg,
-      transparent 0%,
-      rgba(255,255,255,0.08) 45%,
-      rgba(255,255,255,0.17) 50%,
-      rgba(255,255,255,0.08) 55%,
-      transparent 100%
-    );
-    transform: translateX(-145%) skewX(-18deg);
-    animation: downloadReadingShimmer 2.75s cubic-bezier(0.22,1,0.36,1) 1 forwards;
+  .reading-results .end-save-icon svg { width: 19px; height: 19px; }
+  .reading-results .end-save-icon.saved svg { fill: currentColor; }
+  .reading-results .end-save-icon.saved {
+    border-color: rgba(191,219,254,0.68);
+    box-shadow: 0 0 28px rgba(147,197,253,0.18);
   }
-  @keyframes downloadReadingShimmer {
-    0% { transform: translateX(-145%) skewX(-18deg); }
-    100% { transform: translateX(245%) skewX(-18deg); }
+  .reading-results .end-save-icon:active { transform: scale(0.96); }
+  .reading-results .end-save-icon:disabled { opacity: 0.5; cursor: default; }
+  .reading-results .save-status {
+    min-height: 17px;
+    margin: 0;
+    color: #8799b2;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.25s ease;
   }
-  @keyframes downloadReadingOrbit { to { --download-reading-angle: 360deg; } }
-  .reading-results .end-save {
-    border: 1px solid rgba(251,191,36,0.5);
-    background: rgba(251,191,36,0.08);
-    color: #fbbf24;
-  }
-  .reading-results .end-save:hover {
-    border-color: rgba(251,191,36,0.8);
-    box-shadow: 0 0 24px rgba(251,191,36,0.18);
-  }
-  .reading-results .end-save:disabled { opacity: 0.5; cursor: default; }
+  .reading-results .save-status.show { opacity: 1; }
   .reading-results .end-save-error {
     margin: 2px 0 0;
     color: #fda4af;
@@ -2331,10 +2537,15 @@ const css = `
     text-align: center;
   }
   .reading-results .end-done {
-    border: none;
-    background: #5eead4;
-    color: #042f2e;
-    box-shadow: 0 0 30px rgba(94,234,212,0.28);
+    width: min(46vw, 172px);
+    border: 1px solid rgba(141,165,200,0.46);
+    background:
+      radial-gradient(circle at 50% -70%, rgba(255,255,255,0.14), transparent 65%),
+      linear-gradient(145deg, rgba(18,31,54,0.98), rgba(7,12,25,0.98));
+    color: #eef3fb;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 0 26px rgba(96,165,250,0.11);
   }
   .reading-results .end-credits {
     margin: 4px 0 0;
@@ -2359,9 +2570,6 @@ const css = `
       animation: none !important;
       transition: none !important;
     }
-    .reading-results .download-reading-shell::before,
-    .reading-results .download-reading-shell::after,
-    .reading-results .download-reading-shimmer::after,
     .reading-results .hero-topic-glow { animation: none !important; }
   }
 
