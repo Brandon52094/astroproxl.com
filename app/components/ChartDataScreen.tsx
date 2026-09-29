@@ -1,34 +1,13 @@
 "use client";
 
-import React, { useMemo, useState, useCallback, useEffect, useRef, Suspense } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  ArrowLeft,
-  ChevronDown,
-  AlertTriangle,
-  CheckCircle2,
-  Sparkles,
-  MapPin,
-  Calculator,
-} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { cn } from "@/lib/utils";
+
 import type { ChartCalculateResponse } from "@/app/api/chart-calculate/route";
-import { saveChart, loadChart } from "@/lib/chartStore";
+import { loadChart, saveChart } from "@/lib/chartStore";
 
-type SectionId = "birth" | "chart";
-
-// TikTok pixel global — declared here so TypeScript recognizes window.ttq
-declare global {
-  interface Window {
-    ttq?: {
-      track: (event: string, params?: Record<string, unknown>) => void;
-    };
-  }
-}
+type Step = "birthday" | "time" | "location" | "terms";
 
 type ResolvedPlace = {
   label: string;
@@ -37,77 +16,66 @@ type ResolvedPlace = {
   timezone: string;
 };
 
+declare global {
+  interface Window {
+    ttq?: {
+      track: (event: string, params?: Record<string, unknown>) => void;
+    };
+  }
+}
+
+const STEPS: Step[] = ["birthday", "time", "location", "terms"];
+
 function normalizeBirthDate(raw: string): string {
   const s = raw.trim();
-  const digits = s.replace(/[-\/\.]/g, "");
+  const digits = s.replace(/[-/.\s]/g, "");
+
   if (/^\d{8}$/.test(digits)) {
-    const firstFour = parseInt(digits.slice(0, 4));
+    const firstFour = Number(digits.slice(0, 4));
+
     if (firstFour >= 1900 && firstFour <= 2099) {
-      return digits.slice(4, 6) + "/" + digits.slice(6, 8) + "/" + digits.slice(0, 4);
+      return `${digits.slice(4, 6)}/${digits.slice(6, 8)}/${digits.slice(0, 4)}`;
     }
-    return digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4, 8);
+
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
   }
-  const mdyMatch = s.match(/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})$/);
-  if (mdyMatch) return mdyMatch[1].padStart(2, "0") + "/" + mdyMatch[2].padStart(2, "0") + "/" + mdyMatch[3];
-  const isoMatch = s.match(/^(\d{4})[-\/\.](\d{2})[-\/\.](\d{2})$/);
-  if (isoMatch) return isoMatch[2] + "/" + isoMatch[3] + "/" + isoMatch[1];
+
+  const mdy = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (mdy) {
+    return `${mdy[1].padStart(2, "0")}/${mdy[2].padStart(2, "0")}/${mdy[3]}`;
+  }
+
+  const iso = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (iso) {
+    return `${iso[2].padStart(2, "0")}/${iso[3].padStart(2, "0")}/${iso[1]}`;
+  }
+
   if (/^\d{6}$/.test(digits)) {
-    const yy = digits.slice(4, 6);
-    return digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + (parseInt(yy) > 30 ? "19" + yy : "20" + yy);
+    const yy = Number(digits.slice(4, 6));
+    const year = yy > 30 ? `19${digits.slice(4, 6)}` : `20${digits.slice(4, 6)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${year}`;
   }
+
   return s;
 }
 
-function Section({
-  id, title, subtitle, status, isOpen, onToggle, children,
-}: {
-  id: SectionId; title: string; subtitle: string; status: React.ReactNode;
-  isOpen: boolean; onToggle: (id: SectionId) => void; children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-[24px] border border-white/10 bg-white/[0.03]">
-      <button type="button" onClick={() => onToggle(id)} aria-expanded={isOpen}
-        className="w-full text-left transition hover:bg-white/[0.02]">
-        <div className="flex items-center gap-3 px-4 py-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[15px] font-semibold text-white">{title}</h2>
-              {status}
-            </div>
-            <p className="mt-1 pr-4 text-sm leading-5 text-slate-400">{subtitle}</p>
-          </div>
-          <div className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/20 text-slate-400 transition",
-            isOpen && "rotate-180"
-          )}>
-            <ChevronDown className="h-4 w-4" />
-          </div>
-        </div>
-      </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: "easeOut" }}
-            className="overflow-hidden">
-            <div className="border-t border-white/10 px-4 pb-4 pt-4">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </section>
-  );
-}
+function birthDateLooksValid(raw: string): boolean {
+  const normalized = normalizeBirthDate(raw);
+  const match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return false;
 
-function getStatus(type: "complete" | "missing" | "calculating", count?: number) {
-  if (type === "complete") return (
-    <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-200">Complete</span>
-  );
-  if (type === "calculating") return (
-    <span className="rounded-full border border-teal-300/20 bg-teal-300/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-100">Calculating…</span>
-  );
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+
+  if (year < 1900 || year > new Date().getFullYear()) return false;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+
+  const date = new Date(year, month - 1, day);
   return (
-    <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-amber-200">
-      {count ? `Missing ${count}` : "Missing"}
-    </span>
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
   );
 }
 
@@ -115,143 +83,112 @@ function ChartDataScreenContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const shouldReduceMotion = useReducedMotion();
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 28 }).map((_, i) => {
-        const left = `${(i * 41) % 100}%`;
-        const top = `${(i * 23 + 7) % 100}%`;
-        const size = i % 7 === 0 ? 3 : 1.6;
-        const opacity = i % 5 === 0 ? 0.85 : 0.4;
-        const delay = (i * 0.41) % 4;
-        return { left, top, size, opacity, delay, id: i };
-      }),
-    []
-  );
-  const [openSections, setOpenSections] = useState<SectionId[]>(["birth"]);
+
+  const [step, setStep] = useState<Step>("birthday");
   const [birthDate, setBirthDate] = useState("");
   const [birthTime, setBirthTime] = useState("");
   const [birthPlace, setBirthPlace] = useState("");
   const [resolvedPlace, setResolvedPlace] = useState<ResolvedPlace | null>(null);
-  const [geocodeLoading, setGeocodeLoading] = useState(false);
-  const [geocodeError, setGeocodeError] = useState<string | null>(null);
 
-  // ── Current location for Solar Return ─────────────────────────────────────
   const [currentPlace, setCurrentPlace] = useState("");
   const [resolvedCurrentPlace, setResolvedCurrentPlace] = useState<ResolvedPlace | null>(null);
-  const [currentGeocodeLoading, setCurrentGeocodeLoading] = useState(false);
 
-  const [chartData, setChartData] = useState<ChartCalculateResponse | null>(null);
-  const [calculating, setCalculating] = useState(false);
-  const [calcError, setCalcError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const previousCompletionRef = useRef({ birth: false, chart: false });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // ── Load saved chart on mount ────────────────────────────────────────────
+  const stepIndex = STEPS.indexOf(step);
+
   useEffect(() => {
     const saved = loadChart();
-    if (saved && !birthDate && !birthTime && !birthPlace) {
-      setBirthDate(saved.birthDate);
-      setBirthTime(saved.birthTime);
-      setBirthPlace(saved.birthPlace);
-      setResolvedPlace({ label: saved.birthPlace, lat: saved.lat, lon: saved.lng, timezone: saved.timezone });
-      if (saved.currentPlace) setCurrentPlace(saved.currentPlace);
-      if (saved.currentLat && saved.currentLng) {
-        setResolvedCurrentPlace({ label: saved.currentPlace ?? "", lat: saved.currentLat, lon: saved.currentLng, timezone: "" });
-      }
-      setChartData(saved.chartData);
-    }
-  }, []);
+    if (!saved) return;
 
-  // Pre-fill from saved chart when recalculate=true
-  useEffect(() => {
-    if (searchParams.get("recalculate") !== "true") return;
-    const existing = loadChart();
-    if (!existing) return;
-    // Pre-fill from the user's own saved chart — never a blank form.
-    if (existing.birthDate) setBirthDate(existing.birthDate);
-    if (existing.birthTime) setBirthTime(existing.birthTime);
-    if (existing.birthPlace) {
-      setBirthPlace(existing.birthPlace);
+    setBirthDate(saved.birthDate ?? "");
+    setBirthTime(saved.birthTime ?? "");
+    setBirthPlace(saved.birthPlace ?? "");
+
+    if (saved.birthPlace) {
       setResolvedPlace({
-        label: existing.birthPlace,
-        lat: existing.lat ?? 0,
-        lon: existing.lng ?? 0,
-        timezone: existing.timezone ?? "",
+        label: saved.birthPlace,
+        lat: saved.lat,
+        lon: saved.lng,
+        timezone: saved.timezone,
       });
     }
-    if (existing.currentPlace) {
-      setCurrentPlace(existing.currentPlace);
+
+    if (saved.currentPlace) {
+      setCurrentPlace(saved.currentPlace);
+    }
+
+    if (
+      typeof saved.currentLat === "number" &&
+      typeof saved.currentLng === "number"
+    ) {
       setResolvedCurrentPlace({
-        label: existing.currentPlace,
-        lat: existing.currentLat ?? 0,
-        lon: existing.currentLng ?? 0,
-        timezone: existing.currentTimezone ?? "",
+        label: saved.currentPlace ?? "",
+        lat: saved.currentLat,
+        lon: saved.currentLng,
+        timezone: saved.currentTimezone ?? "",
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  const toggleSection = useCallback((id: SectionId) => {
-    setOpenSections((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
-  }, []);
-
-  const geocodeBirthPlace = useCallback(async (query: string) => {
-    const trimmed = query.trim();
-    if (!trimmed) { setResolvedPlace(null); return; }
-    setGeocodeLoading(true);
-    setGeocodeError(null);
-    setResolvedPlace(null);
-    setChartData(null);
-    try {
-      const response = await fetch("/api/places/geocode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: trimmed }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data?.place) throw new Error(data?.error ?? "Couldn't verify that birth place.");
-      setResolvedPlace({ label: data.place.label, lat: data.place.lat, lon: data.place.lon, timezone: data.place.timezone ?? "UTC" });
-      setBirthPlace(data.place.label);
-    } catch (err) {
-      setGeocodeError(err instanceof Error ? err.message : "Couldn't verify that birth place.");
-    } finally {
-      setGeocodeLoading(false);
+    // A recalc intentionally begins from the first detail so the user can edit it.
+    if (searchParams.get("recalculate") === "true") {
+      setStep("birthday");
     }
-  }, []);
+  }, [searchParams]);
 
-  // Silently geocode current location — no error shown, just best effort
-  const geocodeCurrentPlace = useCallback(async (query: string) => {
-    const trimmed = query.trim();
-    if (!trimmed) { setResolvedCurrentPlace(null); return; }
-    setCurrentGeocodeLoading(true);
-    try {
-      const response = await fetch("/api/places/geocode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: trimmed }),
-      });
-      const data = await response.json();
-      if (response.ok && data?.place) {
-        setResolvedCurrentPlace({ label: data.place.label, lat: data.place.lat, lon: data.place.lon, timezone: data.place.timezone ?? "UTC" });
-        setCurrentPlace(data.place.label);
+  const resolvePlace = useCallback(
+    async (query: string, required: boolean): Promise<ResolvedPlace | null> => {
+      const trimmed = query.trim();
+      if (!trimmed) return null;
+
+      try {
+        const response = await fetch("/api/places/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: trimmed }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data?.place) {
+          if (required) throw new Error("Location not found.");
+          return null;
+        }
+
+        return {
+          label: data.place.label,
+          lat: data.place.lat,
+          lon: data.place.lon,
+          timezone: data.place.timezone ?? "UTC",
+        };
+      } catch (err) {
+        if (required) throw err;
+        return null;
       }
-    } catch {
-      // silent — current location is optional
-    } finally {
-      setCurrentGeocodeLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
-  const handleCalculateChart = useCallback(async () => {
-    if (!birthDate.trim() || !birthTime.trim() || !resolvedPlace) return;
-    setCalculating(true);
-    setCalcError(null);
-    setChartData(null);
+  const calculateAndContinue = useCallback(async () => {
+    if (!resolvedPlace) return;
 
-    const normalizedDate = normalizeBirthDate(birthDate.trim());
+    setBusy(true);
+    setError(null);
+
+    const normalizedDate = normalizeBirthDate(birthDate);
 
     try {
+      let current = resolvedCurrentPlace;
+
+      // Current location is optional. Resolve it quietly if the user typed one.
+      if (currentPlace.trim() && !current) {
+        current = await resolvePlace(currentPlace, false);
+        if (current) {
+          setResolvedCurrentPlace(current);
+          setCurrentPlace(current.label);
+        }
+      }
+
       const response = await fetch("/api/chart-calculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,28 +199,18 @@ function ChartDataScreenContent() {
           lat: resolvedPlace.lat,
           lng: resolvedPlace.lon,
           timezone: resolvedPlace.timezone,
-          // Pass current location for Solar Return if available
-          ...(resolvedCurrentPlace ? {
-            currentLat: resolvedCurrentPlace.lat,
-            currentLng: resolvedCurrentPlace.lon,
-          } : {}),
+          ...(current
+            ? {
+                currentLat: current.lat,
+                currentLng: current.lon,
+              }
+            : {}),
         }),
       });
-      const data: ChartCalculateResponse = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error ?? "Chart calculation failed.");
-      setChartData(data);
-      setBirthDate(normalizedDate);
 
-      // Fire TikTok CompleteRegistration once — this is the true "finished
-      // signing up and gave real data" moment, not just account creation.
-      try {
-        const alreadyFired = localStorage.getItem("ttq_registration_fired");
-        if (!alreadyFired && typeof window !== "undefined" && window.ttq) {
-          window.ttq.track("CompleteRegistration");
-          localStorage.setItem("ttq_registration_fired", "1");
-        }
-      } catch {
-        // silent — never let pixel tracking break the actual flow
+      const data: ChartCalculateResponse = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? "Chart calculation failed.");
       }
 
       saveChart({
@@ -293,11 +220,10 @@ function ChartDataScreenContent() {
         lat: resolvedPlace.lat,
         lng: resolvedPlace.lon,
         timezone: resolvedPlace.timezone,
-        // Store current location alongside birth location
-        currentLat: resolvedCurrentPlace?.lat,
-        currentLng: resolvedCurrentPlace?.lon,
-        currentPlace: resolvedCurrentPlace?.label ?? "",
-        currentTimezone: resolvedCurrentPlace?.timezone ?? "",
+        currentLat: current?.lat,
+        currentLng: current?.lon,
+        currentPlace: current?.label ?? "",
+        currentTimezone: current?.timezone ?? "",
         chartData: data,
       });
 
@@ -314,428 +240,280 @@ function ChartDataScreenContent() {
         }),
       });
 
-      setOpenSections((prev) => { const next = new Set(prev); next.add("chart"); return Array.from(next); });
+      try {
+        const alreadyFired = localStorage.getItem("ttq_registration_fired");
+        if (!alreadyFired && typeof window !== "undefined" && window.ttq) {
+          window.ttq.track("CompleteRegistration");
+          localStorage.setItem("ttq_registration_fired", "1");
+        }
+      } catch {
+        // Analytics must never interrupt onboarding.
+      }
+
+      router.push("/reading/intake");
     } catch (err) {
-      setCalcError(err instanceof Error ? err.message : "Chart calculation failed. Please try again.");
-    } finally {
-      setCalculating(false);
+      setError(err instanceof Error ? err.message : "Please try again.");
+      setBusy(false);
     }
-  }, [birthDate, birthTime, birthPlace, resolvedPlace, resolvedCurrentPlace]);
+  }, [
+    birthDate,
+    birthTime,
+    currentPlace,
+    resolvedCurrentPlace,
+    resolvedPlace,
+    resolvePlace,
+    router,
+  ]);
 
-  const birthMissing = useMemo(() => [birthDate, birthTime, birthPlace].filter((v) => !v.trim()).length, [birthDate, birthTime, birthPlace]);
-  const birthComplete = birthMissing === 0 && !!resolvedPlace;
-  const chartComplete = !!chartData;
-  const canContinue = birthComplete && chartComplete;
-  const canCalculate = birthComplete && agreedToTerms && !calculating;
+  const advance = useCallback(async () => {
+    if (busy) return;
+    setError(null);
 
-  useEffect(() => {
-    // Only auto-collapse the birth section once the CHART is complete —
-    // not just when birth fields are filled. The Calculate button and
-    // terms checkbox live inside the birth section, so collapsing it
-    // as soon as birth fields fill in hides them before the user can tap.
-    const justCompletedChart = chartComplete && !previousCompletionRef.current.chart;
-    if (justCompletedChart) {
-      setOpenSections((prev) => prev.filter((s) => s !== "birth"));
+    if (step === "birthday") {
+      if (!birthDateLooksValid(birthDate)) {
+        setError("Enter a valid birthday.");
+        return;
+      }
+
+      setBirthDate(normalizeBirthDate(birthDate));
+      setStep("time");
+      return;
     }
-    previousCompletionRef.current = { birth: birthComplete, chart: chartComplete };
-  }, [birthComplete, chartComplete]);
 
-  const tropicalPlanets = useMemo(() => {
-    if (!chartData) return [];
-    const order = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "North Node", "Midheaven"];
-    return chartData.tropical.planets.filter((p) => order.includes(p.name)).sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
-  }, [chartData]);
+    if (step === "time") {
+      if (!birthTime.trim()) {
+        setError("Enter your birth time.");
+        return;
+      }
 
-  const confirmationItems = useMemo(() => {
-    const sun = tropicalPlanets.find((p) => p.name === "Sun");
-    const moon = tropicalPlanets.find((p) => p.name === "Moon");
-    const asc = tropicalPlanets.find((p) => p.name === "Ascendant");
-    return [
-      { label: "Birth Date", value: birthDate.trim() || "—" },
-      { label: "Birth Time", value: birthTime.trim() || "—" },
-      { label: "Birth Place", value: resolvedPlace?.label || birthPlace.trim() || "—" },
-      { label: "Current Location", value: resolvedCurrentPlace?.label || "—" },
-      { label: "Sun", value: sun ? `${sun.sign} ${sun.degree}` : "—" },
-      { label: "Moon", value: moon ? `${moon.sign} ${moon.degree}` : "—" },
-      { label: "Rising", value: asc ? `${asc.sign} ${asc.degree}` : "—" },
-    ];
-  }, [birthDate, birthTime, birthPlace, resolvedPlace, resolvedCurrentPlace, tropicalPlanets]);
+      setStep("location");
+      return;
+    }
 
-  const handleContinue = useCallback(() => {
-    setSubmitError(null);
-    router.push("/reading/intake");
-  }, [router]);
+    if (step === "location") {
+      if (!birthPlace.trim()) {
+        setError("Enter your birth location.");
+        return;
+      }
+
+      setBusy(true);
+
+      try {
+        let birth = resolvedPlace;
+        if (!birth) {
+          birth = await resolvePlace(birthPlace, true);
+        }
+
+        if (!birth) {
+          setError("Location not found.");
+          return;
+        }
+
+        setResolvedPlace(birth);
+        setBirthPlace(birth.label);
+
+        if (currentPlace.trim()) {
+          const current = await resolvePlace(currentPlace, false);
+          if (current) {
+            setResolvedCurrentPlace(current);
+            setCurrentPlace(current.label);
+          }
+        }
+
+        setStep("terms");
+      } catch {
+        setResolvedPlace(null);
+        setError("Location not found.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    await calculateAndContinue();
+  }, [
+    birthDate,
+    birthPlace,
+    birthTime,
+    busy,
+    calculateAndContinue,
+    currentPlace,
+    resolvedPlace,
+    resolvePlace,
+    step,
+  ]);
+
+  const goBack = useCallback(() => {
+    if (busy) return;
+    setError(null);
+
+    if (stepIndex <= 0) {
+      router.back();
+      return;
+    }
+
+    setStep(STEPS[stepIndex - 1]);
+  }, [busy, router, stepIndex]);
+
+  const transition = useMemo(
+    () => ({ duration: shouldReduceMotion ? 0 : 0.18, ease: "easeOut" as const }),
+    [shouldReduceMotion]
+  );
+
+  const handleEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    void advance();
+  };
 
   return (
-    <div className="relative h-screen overflow-y-auto overscroll-none bg-[#050816] text-slate-100"
-      style={{ WebkitOverflowScrolling: "touch" }}>
-      <style jsx>{`
-        @keyframes driftGradient {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
-        }
+    <main className="relative min-h-[100dvh] overflow-hidden bg-white text-[#111111]">
+      <button
+        type="button"
+        onClick={goBack}
+        aria-label="Back"
+        className="absolute left-5 top-[max(1.25rem,env(safe-area-inset-top))] z-20 flex h-11 w-11 items-center justify-center text-[27px] font-light text-[#111111] transition-opacity hover:opacity-60"
+      >
+        ‹
+      </button>
 
-        .drift-bg {
-          position: absolute;
-          inset: -10%;
-          background: linear-gradient(
-            120deg,
-            #040611 0%,
-            #061120 25%,
-            #050816 50%,
-            #061120 75%,
-            #040611 100%
-          );
-          background-size: 200% 200%;
-          animation: driftGradient 26s ease-in-out infinite;
-        }
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-2xl items-center justify-center px-7 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(4.5rem,env(safe-area-inset-top))]">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.section
+            key={step}
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+            transition={transition}
+            className="flex w-full -translate-y-[4vh] flex-col items-center text-center"
+          >
+            {step === "birthday" && (
+              <>
+                <h1 className="text-[18px] font-medium tracking-[-0.01em] text-[#111111]">
+                  Birthday
+                </h1>
+                <input
+                  autoFocus
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="bday"
+                  value={birthDate}
+                  onChange={(event) => setBirthDate(event.target.value)}
+                  onKeyDown={handleEnter}
+                  placeholder="MM / DD / YYYY"
+                  aria-label="Birthday"
+                  className="mt-7 w-full bg-transparent text-center text-[clamp(34px,9vw,54px)] font-normal tracking-[-0.04em] text-[#111111] caret-[#0f766e] outline-none placeholder:text-[#B5B5B5]"
+                />
+              </>
+            )}
 
-        .drift-bg::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(circle at 30% 20%, rgba(45, 212, 191, 0.05), transparent 45%),
-            radial-gradient(circle at 75% 70%, rgba(251, 191, 36, 0.04), transparent 45%);
-          animation: driftGradient 26s ease-in-out infinite reverse;
-        }
+            {step === "time" && (
+              <>
+                <h1 className="text-[18px] font-medium tracking-[-0.01em] text-[#111111]">
+                  Birth time
+                </h1>
+                <input
+                  autoFocus
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  value={birthTime}
+                  onChange={(event) => setBirthTime(event.target.value)}
+                  onKeyDown={handleEnter}
+                  placeholder="2:22 AM"
+                  aria-label="Birth time"
+                  className="mt-7 w-full bg-transparent text-center text-[clamp(38px,10vw,58px)] font-normal tracking-[-0.04em] text-[#111111] caret-[#0f766e] outline-none placeholder:text-[#B5B5B5]"
+                />
+              </>
+            )}
 
-        .cosmic-grid {
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-          background-size: 36px 36px;
-          mask-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
-          opacity: 0.18;
-        }
+            {step === "location" && (
+              <>
+                <h1 className="text-[18px] font-medium tracking-[-0.01em] text-[#111111]">
+                  Birth location
+                </h1>
+                <input
+                  autoFocus
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  value={birthPlace}
+                  onChange={(event) => {
+                    setBirthPlace(event.target.value);
+                    setResolvedPlace(null);
+                  }}
+                  onKeyDown={handleEnter}
+                  placeholder="City"
+                  aria-label="Birth location"
+                  className="mt-7 w-full bg-transparent text-center text-[clamp(34px,8vw,52px)] font-normal tracking-[-0.04em] text-[#111111] caret-[#0f766e] outline-none placeholder:text-[#B5B5B5]"
+                />
 
-        .aurora-orb--violet {
-          position: absolute;
-          top: 8rem;
-          right: -4rem;
-          width: 14rem;
-          height: 14rem;
-          border-radius: 9999px;
-          filter: blur(60px);
-          background: radial-gradient(circle, rgba(129, 140, 248, 0.18) 0%, rgba(129, 140, 248, 0.06) 48%, transparent 74%);
-          will-change: transform, opacity;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .drift-bg,
-          .drift-bg::after {
-            animation: none !important;
-            opacity: 0.4 !important;
-          }
-        }
-      `}</style>
-
-      <div className="pointer-events-none fixed inset-0">
-        <div className="drift-bg" />
-        <div className="cosmic-grid" />
-        <motion.div
-          className="aurora-orb--violet"
-          animate={
-            shouldReduceMotion
-              ? undefined
-              : { y: [0, -8, 0], x: [0, -6, 0], opacity: [0.12, 0.2, 0.12] }
-          }
-          transition={
-            shouldReduceMotion
-              ? undefined
-              : { duration: 10, repeat: Infinity, ease: "easeInOut" }
-          }
-        />
-        {stars.map((star) => (
-          <motion.span
-            key={star.id}
-            className="absolute rounded-full bg-white"
-            style={{
-              left: star.left,
-              top: star.top,
-              width: star.size,
-              height: star.size,
-              opacity: star.opacity,
-            }}
-            animate={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    opacity: [star.opacity * 0.4, star.opacity * 1.6, star.opacity * 0.4],
-                    scale: [1, 1.6, 1],
-                  }
-            }
-            transition={
-              shouldReduceMotion
-                ? undefined
-                : {
-                    duration: 1.6 + (star.id % 5) * 0.35,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: star.delay,
-                  }
-            }
-          />
-        ))}
-      </div>
-
-      <div className="relative z-10 mx-auto w-full max-w-md px-4 pb-32 pt-8">
-        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }} className="flex flex-col">
-
-          <header className="mb-5 flex items-center justify-between py-2">
-            <button type="button" onClick={() => router.back()}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-slate-300 transition hover:border-teal-300/30 hover:text-white">
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <div className="text-center">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Direct Future Predictions</p>
-              <p className="mt-1 text-xs text-slate-400">Your Chart</p>
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[11px] font-medium text-slate-400">2/4</div>
-          </header>
-
-          <div className="mb-4 space-y-1">
-            <h1 className="text-[26px] font-semibold leading-tight text-white">Enter Your Birth Details</h1>
-            <p className="text-sm text-slate-400">MM/DD/YYYY, YYYY-MM-DD, or YYYYMMDD.</p>
-          </div>
-
-          <section className="space-y-3">
-            <Section id="birth" title="Birth Details"
-              subtitle="Enter your birth date, time, and place."
-              isOpen={openSections.includes("birth")} onToggle={toggleSection}
-              status={birthComplete ? getStatus("complete") : getStatus("missing", birthMissing)}>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="birth-date" className="text-sm font-medium text-slate-200">Birth Date</Label>
-                  <Input id="birth-date" type="text" inputMode="numeric" autoComplete="bday"
-                    value={birthDate} onChange={(e) => setBirthDate(e.target.value ?? "")}
-                    placeholder="00/00/0000 or 00000000"
-                    className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-teal-300" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="birth-time" className="text-sm font-medium text-slate-200">Birth Time</Label>
-                  <Input id="birth-time" type="text" autoComplete="off"
-                    value={birthTime} onChange={(e) => setBirthTime(e.target.value ?? "")}
-                    placeholder="0:00 AM or 00:00"
-                    className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-teal-300" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="birth-place" className="text-sm font-medium text-slate-200">Birth Place</Label>
-                  <div className="relative">
-                    <Input id="birth-place" type="text" autoComplete="off"
-                      value={birthPlace}
-                      onChange={(e) => { setBirthPlace(e.target.value ?? ""); setResolvedPlace(null); setGeocodeError(null); setChartData(null); }}
-                      onBlur={() => geocodeBirthPlace(birthPlace)}
-                      placeholder="City, state, country"
-                      className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-teal-300" />
-                    {geocodeLoading && (
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                        <span className="h-3 w-3 animate-pulse rounded-full bg-teal-300 block" />
-                      </div>
-                    )}
-                  </div>
-                  {geocodeError && <p className="text-[12px] text-amber-200">{geocodeError}</p>}
-                  {resolvedPlace && (
-                    <div className="flex items-center gap-2 text-[11px] text-teal-200">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span>Verified: {resolvedPlace.label}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Current Location — optional, for Solar Return ──────── */}
-                <div className="space-y-2">
-                  <Label htmlFor="current-place" className="text-sm font-medium text-slate-200">
-                    Current Location <span className="text-slate-500 font-normal">(optional)</span>
-                  </Label>
-                  <p className="text-[11px] text-slate-500">Used to cast your Solar Return chart for where you are now — gives a more accurate rising sign for this year.</p>
-                  <div className="relative">
-                    <Input id="current-place" type="text" autoComplete="off"
-                      value={currentPlace}
-                      onChange={(e) => { setCurrentPlace(e.target.value ?? ""); setResolvedCurrentPlace(null); }}
-                      onBlur={() => geocodeCurrentPlace(currentPlace)}
-                      placeholder="City, state, country"
-                      className="h-12 rounded-2xl border-white/10 bg-black/20 text-white placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-teal-300" />
-                    {currentGeocodeLoading && (
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                        <span className="h-3 w-3 animate-pulse rounded-full bg-teal-300 block" />
-                      </div>
-                    )}
-                  </div>
-                  {resolvedCurrentPlace && (
-                    <div className="flex items-center gap-2 text-[11px] text-teal-200">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span>Verified: {resolvedCurrentPlace.label}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Terms & Conditions agreement ─────────────────────── */}
-                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5">
+                <div className="mt-12 w-full">
+                  <p className="text-[13px] font-medium text-[#777777]">
+                    Current location <span className="font-normal text-[#AAAAAA]">optional</span>
+                  </p>
                   <input
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-black/40 accent-teal-300"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    value={currentPlace}
+                    onChange={(event) => {
+                      setCurrentPlace(event.target.value);
+                      setResolvedCurrentPlace(null);
+                    }}
+                    onKeyDown={handleEnter}
+                    placeholder="City"
+                    aria-label="Current location optional"
+                    className="mt-3 w-full bg-transparent text-center text-[24px] font-normal tracking-[-0.03em] text-[#111111] caret-[#0f766e] outline-none placeholder:text-[#C1C1C1]"
                   />
-                  <span className="text-[12px] leading-5 text-slate-400">
-                    I agree to the{" "}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        window.open("/terms", "_blank");
-                      }}
-                      className="text-teal-300 underline transition hover:text-teal-200"
-                    >
-                      Terms & Conditions
-                    </button>{" "}
-                    and understand them.
-                  </span>
-                </label>
-
-                <Button type="button" onClick={handleCalculateChart} disabled={!canCalculate}
-                  className={cn(
-                    "h-12 w-full rounded-2xl font-medium transition",
-                    canCalculate
-                      ? "border border-teal-200/30 bg-teal-300 text-slate-950 shadow-[0_10px_34px_rgba(45,212,191,0.32),0_0_0_1px_rgba(94,234,212,0.15)] hover:bg-teal-200 hover:shadow-[0_12px_38px_rgba(45,212,191,0.4),0_0_0_1px_rgba(94,234,212,0.2)] active:scale-[0.99]"
-                      : "border border-white/10 bg-slate-800 text-slate-400 shadow-none"
-                  )}>
-                  <span className="flex items-center justify-center gap-2">
-                    <Calculator className="h-4 w-4" />
-                    {calculating ? "Calculating…" : "Calculate Chart"}
-                  </span>
-                </Button>
-
-                {calculating && (
-                  <div className="flex items-center gap-2 rounded-full border border-teal-300/20 bg-teal-300/10 px-3 py-1.5 text-[11px] text-teal-100">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-teal-300" />
-                    Calculating your tropical and sidereal charts…
-                  </div>
-                )}
-
-                {calcError && (
-                  <div className="flex items-start gap-2 rounded-[18px] border border-rose-300/30 bg-rose-500/10 p-3 text-[12px] text-rose-100">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <p>{calcError}</p>
-                  </div>
-                )}
-              </div>
-            </Section>
-
-            <Section id="chart" title="Your Chart"
-              subtitle="Your Placements, sidereal timing, and current transits."
-              isOpen={openSections.includes("chart")} onToggle={toggleSection}
-              status={calculating ? getStatus("calculating") : chartComplete ? getStatus("complete") : getStatus("missing")}>
-              {chartData ? (
-                <div className="space-y-4">
-                  <div className="rounded-[20px] border border-teal-300/20 bg-teal-400/[0.06] p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-teal-300/20 bg-teal-300/10 text-teal-200">
-                        <Sparkles className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-teal-100">{chartData.profection.profectionYear}th House Profection Year</p>
-                        <p className="mt-1 text-xs leading-5 text-teal-100/70">
-                          Age {chartData.profection.age} · {chartData.profection.activatedSign} activated ·{" "}
-                          <span className="text-teal-200 font-medium">{chartData.profection.timeLord}</span> is your Time Lord
-                          {chartData.solarReturn && (
-                            <span className="text-teal-100/50"> · SR {chartData.solarReturn.ascendant.sign} rising</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-slate-400">Your Placements</p>
-                    <div className="space-y-1.5">
-                      {tropicalPlanets.map((planet) => (
-                        <div key={planet.name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5">
-                          <span className="text-[12px] font-medium text-slate-400">{planet.name}</span>
-                          <span className="text-sm text-slate-100">{planet.sign} {planet.degree}{planet.house ? ` · H${planet.house}` : ""}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-slate-400">Today's Current Transits</p>
-                    <div className="space-y-1.5">
-                      {chartData.transits.filter((p) => ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"].includes(p.name)).map((planet) => (
-                        <div key={planet.name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5">
-                          <span className="text-[12px] font-medium text-slate-400">{planet.name}</span>
-                          <span className="text-sm text-slate-100">{planet.sign} {planet.degree}{planet.isRetrograde ? " Rx" : ""}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
-              ) : (
-                <div className="py-6 text-center text-sm text-slate-500">
-                  Fill in your birth details and tap Calculate Chart to see your placements.
-                </div>
-              )}
-            </Section>
-          </section>
+              </>
+            )}
 
-          <section className="mt-4">
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-teal-200" />
-                <h3 className="text-sm font-semibold text-white">Confirm your main chart details</h3>
+            {step === "terms" && (
+              <div className="max-w-md">
+                <p className="text-[20px] leading-8 tracking-[-0.02em] text-[#333333]">
+                  By continuing, you agree to the{" "}
+                  <button
+                    type="button"
+                    onClick={() => window.open("/terms", "_blank")}
+                    className="underline decoration-[#999999] underline-offset-4 transition-opacity hover:opacity-60"
+                  >
+                    Terms
+                  </button>
+                  .
+                </p>
               </div>
-              <p className="mb-4 text-xs leading-5 text-slate-400">Review your core details before continuing to the reading.</p>
-              <div className="grid gap-2">
-                {confirmationItems.map((item) => (
-                  <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3">
-                    <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-400">{item.label}</span>
-                    <span className="max-w-[60%] truncate text-right text-sm text-slate-100">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        </motion.div>
-      </div>
+            )}
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#050816]/90 px-4 pb-5 pt-3 backdrop-blur-xl">
-        <div className="mx-auto w-full max-w-md">
-          {submitError && (
-            <div className="mb-3 flex items-start gap-2 rounded-2xl border border-rose-300/30 bg-rose-500/10 p-3 text-xs text-rose-100">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <p>{submitError}</p>
-            </div>
-          )}
-          <Button type="button" disabled={!canContinue} onClick={handleContinue}
-            className="h-14 w-full rounded-2xl border border-teal-200/30 bg-teal-300 text-slate-950 shadow-[0_10px_34px_rgba(45,212,191,0.32),0_0_0_1px_rgba(94,234,212,0.15)] transition hover:bg-teal-200 hover:shadow-[0_12px_38px_rgba(45,212,191,0.4),0_0_0_1px_rgba(94,234,212,0.2)] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none">
-            Continue
-          </Button>
-        </div>
+            {error && (
+              <p className="mt-7 text-[13px] font-medium text-[#A33A3A]" role="alert">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void advance()}
+              disabled={busy}
+              className="mt-12 min-h-11 px-4 text-[15px] font-medium tracking-[-0.01em] text-[#111111] transition-opacity hover:opacity-55 disabled:opacity-35"
+            >
+              {busy ? "…" : step === "terms" ? "Continue" : "Continue →"}
+            </button>
+          </motion.section>
+        </AnimatePresence>
       </div>
-    </div>
+    </main>
   );
 }
 
 export default function ChartDataScreen() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-[#050816]">
-        <div className="text-sm text-slate-400">Loading chart data...</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[100dvh] items-center justify-center bg-white text-[#111111]" />
+      }
+    >
       <ChartDataScreenContent />
     </Suspense>
   );
