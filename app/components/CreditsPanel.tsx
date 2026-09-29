@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -12,12 +11,11 @@ import {
   Minus,
 } from "lucide-react";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
-
 /* ─────────────────────────────────────────────
    Products
 ───────────────────────────────────────────── */
 type ProductId = "jxl" | "reading" | "replies";
-
+type MembershipTierId = "astro_plus" | "astro_plus_xl";
 interface Product {
   id: ProductId;
   title: string;
@@ -25,19 +23,18 @@ interface Product {
   price: number;
   icon: React.ElementType;
 }
-
 const PRODUCTS: Product[] = [
   {
     id: "jxl",
-    title: "JXL",
-    desc: `Premium ask-anything astrology · includes ${PRICING.jxl.includedReplies} replies`,
+    title: "JXL Private Session",
+    desc: `Private ask-anything astrology · includes ${PRICING.jxl.includedReplies} replies`,
     price: PRICING.jxl.price,
     icon: Sparkles,
   },
   {
     id: "reading",
-    title: "General Reading",
-    desc: "One focused reading · includes 1 reply",
+    title: "Signature Reading",
+    desc: "One personalized, focused reading · includes 1 reply",
     price: PRICING.reading.price,
     icon: BookOpen,
   },
@@ -49,59 +46,50 @@ const PRODUCTS: Product[] = [
     icon: MessageCircleMore,
   },
 ];
-
 interface Balance {
   readings: number;
   jxl: number;
   replies: number;
 }
-
-const MEMBERSHIP_FEATURES = [
-  "Unlimited Readings",
-  "Unlimited JXL",
-  "8 Replies Per Conversation",
-  "Members-Only Access",
-  "Readings Saved to Photos",
-  "Commission Eligibility · Coming Soon",
-];
-
+const MEMBERSHIP_TIERS: Record<
+  MembershipTierId,
+  {
+    name: string;
+    price: number;
+    tagline: string;
+    features: string[];
+  }
+> = {
+  astro_plus: {
+    name: "Astro Plus",
+    price: 999,
+    tagline: "A generous monthly rhythm for deeper guidance.",
+    features: [
+      "16 Signature Readings Monthly",
+      "12 JXL Private Sessions Monthly",
+      "Replies Included",
+      "16 Saved Reading Spaces",
+      "Gift 5 Readings Monthly",
+      "Add Context Access",
+    ],
+  },
+  astro_plus_xl: {
+    name: "Astro Plus XL",
+    price: 1899,
+    tagline: "The complete AstroProXL experience, without counting.",
+    features: [
+      "Unlimited Signature Readings",
+      "Unlimited JXL Private Sessions",
+      "Replies+ · Up To 8 Per Conversation",
+      "24 Saved Reading Spaces",
+      "Gift 10 Readings Monthly",
+      "Custom Themes · Commission Access Coming Soon",
+    ],
+  },
+};
 function plural(n: number, one: string, many?: string): string {
   return n === 1 ? one : many ?? `${one}s`;
 }
-
-/* ─────────────────────────────────────────────
-   Shared visual language
-───────────────────────────────────────────── */
-function PanelCard({
-  icon: Icon,
-  label,
-  children,
-  className = "",
-}: {
-  icon: React.ElementType;
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={[
-        "standard-shadow rounded-[24px] border border-white/10",
-        "bg-white/[0.03] p-4 backdrop-blur-sm",
-        className,
-      ].join(" ")}
-    >
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-          {label}
-        </span>
-      </div>
-      {children}
-    </div>
-  );
-}
-
 export default function CreditsPanel({
   onClose,
   embedded = false,
@@ -118,7 +106,16 @@ export default function CreditsPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [balance, setBalance] = useState<Balance | null>(null);
-
+  const [membershipTier, setMembershipTier] =
+    useState<MembershipTierId>("astro_plus");
+  const [pledgeAmount, setPledgeAmount] = useState("");
+  const activeMembership = MEMBERSHIP_TIERS[membershipTier];
+  const isXlMembership = membershipTier === "astro_plus_xl";
+  const pledgeAmountCents = useMemo(() => {
+    const normalized = pledgeAmount.replace(/[^0-9.]/g, "");
+    const amount = Number(normalized);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  }, [pledgeAmount]);
   /* Current balances */
   useEffect(() => {
     (async () => {
@@ -135,14 +132,12 @@ export default function CreditsPanel({
       }
     })();
   }, []);
-
   const step = useCallback((id: ProductId, amount: number) => {
     setCart((current) => ({
       ...current,
       [id]: Math.max(0, current[id] + amount),
     }));
   }, []);
-
   const total = useMemo(
     () =>
       cart.jxl * PRICING.jxl.price +
@@ -150,12 +145,10 @@ export default function CreditsPanel({
       cart.replies * PRICING.replies.priceEach,
     [cart]
   );
-
   const selectedItems = useMemo(
     () => Object.values(cart).reduce((sum, qty) => sum + qty, 0),
     [cart]
   );
-
   /* ── Credit checkout ── */
   const handleCheckout = async () => {
     if (total <= 0) return;
@@ -188,7 +181,6 @@ export default function CreditsPanel({
       setLoading(false);
     }
   };
-
   /* ── Membership checkout ── */
   const handleGetAccess = async () => {
     setLoading(true);
@@ -199,6 +191,7 @@ export default function CreditsPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "subscription",
+          membershipTier,
           returnUrl: `${window.location.origin}/reading/intake`,
         }),
       });
@@ -214,14 +207,43 @@ export default function CreditsPanel({
       setLoading(false);
     }
   };
-
+  /* ── One-time pledge checkout ── */
+  const handlePledge = async () => {
+    if (pledgeAmountCents < 100) {
+      setError("Enter a pledge of at least $1.00.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "pledge",
+          amountCents: pledgeAmountCents,
+          returnUrl: `${window.location.origin}/reading/intake`,
+        }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error ?? "Couldn't start your pledge. Try again.");
+      }
+    } catch {
+      setError("Couldn't reach checkout. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const rootClass = embedded
     ? "relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible font-sans text-slate-100"
     : "fixed inset-0 z-50 min-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
-
   const astroPlusPremiumCss = `
     @property --astro-plus-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-    .astro-plus-shell {
+  .astro-plus-shell,
+  .astro-plus-xl-shell {
       position: relative;
       isolation: isolate;
       border-radius: 22px;
@@ -242,7 +264,24 @@ export default function CreditsPanel({
         0 14px 34px rgba(0,0,0,0.44);
       animation: astroPlusOrbit 8s linear infinite;
     }
-    .astro-plus-shell::after {
+  .astro-plus-xl-shell {
+    background:
+      conic-gradient(
+        from var(--astro-plus-angle),
+        rgba(255,255,255,0.98) 0deg,
+        rgba(171,196,232,0.80) 72deg,
+        rgba(255,255,255,0.72) 136deg,
+        rgba(226,235,248,0.98) 210deg,
+        rgba(140,171,219,0.76) 292deg,
+        rgba(255,255,255,0.98) 360deg
+      );
+    box-shadow:
+      0 0 22px rgba(255,255,255,0.20),
+      0 0 38px rgba(140,171,219,0.10),
+      0 14px 34px rgba(0,0,0,0.44);
+  }
+  .astro-plus-shell::after,
+  .astro-plus-xl-shell::after {
       content: "";
       position: absolute;
       inset: -2px;
@@ -265,9 +304,11 @@ export default function CreditsPanel({
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
     }
     @keyframes astroPlusOrbit { to { --astro-plus-angle: 360deg; } }
-    @media (prefers-reduced-motion: reduce) { .astro-plus-shell { animation: none !important; } }
+  @media (prefers-reduced-motion: reduce) {
+    .astro-plus-shell,
+    .astro-plus-xl-shell { animation: none !important; }
+  }
   `;
-
   return (
     <div
       className={rootClass}
@@ -276,7 +317,6 @@ export default function CreditsPanel({
       }}
     >
       <style>{astroPlusPremiumCss}</style>
-
       {!embedded && (
         <button
           type="button"
@@ -287,7 +327,6 @@ export default function CreditsPanel({
           <ChevronLeft size={17} />
         </button>
       )}
-
       <div
         className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
         style={{
@@ -306,7 +345,6 @@ export default function CreditsPanel({
             Credits & Access
           </p>
         </motion.header>
-
         <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -357,18 +395,35 @@ export default function CreditsPanel({
               </div>
             </section>
           )}
-
-          {/* ── ASTRO PLUS — white/gold premium treatment ── */}
-          <div className="astro-plus-shell standard-shadow">
+          {/* ── MEMBERSHIP — selected with the compact toggle below ── */}
+          <div
+            className={`${
+              isXlMembership ? "astro-plus-xl-shell" : "astro-plus-shell"
+            } standard-shadow`}
+          >
             <div className="astro-plus-inner p-4 backdrop-blur-sm">
-              <div className="relative z-10 flex items-start gap-3">
+              <div
+                className={`relative z-10 flex items-start gap-3 ${
+                  isXlMembership ? "flex-row-reverse text-right" : ""
+                }`}
+              >
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">Astro Plus</p>
-                  <div className="mt-1 flex items-end gap-1.5">
-                    <span className="text-[27px] font-light leading-none text-white tabular-nums">{formatUsd(PRICING.membership.price)}</span>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">
+                    {activeMembership.name}
+                  </p>
+                  <div
+                    className={`mt-1 flex items-end gap-1.5 ${
+                      isXlMembership ? "justify-end" : ""
+                    }`}
+                  >
+                    <span className="text-[27px] font-light leading-none text-white tabular-nums">
+                      {formatUsd(activeMembership.price)}
+                    </span>
                     <span className="pb-0.5 text-[10px] text-slate-500">/ month</span>
                   </div>
-                  <p className="mt-1 whitespace-nowrap text-[11px] leading-4 text-slate-400">Full access without counting individual readings.</p>
+                  <p className="mt-1 text-[11px] leading-4 text-slate-400">
+                    {activeMembership.tagline}
+                  </p>
                 </div>
                 <div
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/[0.035]"
@@ -377,17 +432,24 @@ export default function CreditsPanel({
                   <Crown className="h-5 w-5 text-white" strokeWidth={1.8} style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.55))" }} />
                 </div>
               </div>
-
               <div className="mt-4 border-t border-white/[0.06] pt-3">
                 <div className="grid grid-cols-1 gap-2">
-                  {MEMBERSHIP_FEATURES.map((feature) => (
-                    <div key={feature} className="flex items-center gap-2.5">
+                  {activeMembership.features.map((feature) => (
+                    <div
+                      key={feature}
+                      className={`flex items-center gap-2.5 ${
+                        isXlMembership ? "flex-row-reverse text-right" : ""
+                      }`}
+                    >
                       <span
                         className="h-1.5 w-1.5 shrink-0 rounded-full"
                         style={{
-                          background:
-                            "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(218,183,104,0.90))",
-                          boxShadow: "0 0 8px rgba(218,183,104,0.28)",
+                          background: isXlMembership
+                            ? "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(171,196,232,0.88))"
+                            : "linear-gradient(135deg, rgba(255,255,255,0.95), rgba(218,183,104,0.90))",
+                          boxShadow: isXlMembership
+                            ? "0 0 8px rgba(220,234,255,0.34)"
+                            : "0 0 8px rgba(218,183,104,0.28)",
                         }}
                       />
                       <span className="text-[11px] leading-4 text-slate-300">
@@ -397,7 +459,6 @@ export default function CreditsPanel({
                   ))}
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={handleGetAccess}
@@ -406,17 +467,60 @@ export default function CreditsPanel({
                 style={{
                   borderColor: "rgba(255,255,255,0.28)",
                   background:
-                    "linear-gradient(145deg, rgba(255,255,255,0.08), rgba(203,164,78,0.08))",
+                    isXlMembership
+                      ? "linear-gradient(145deg, rgba(255,255,255,0.10), rgba(140,171,219,0.08))"
+                      : "linear-gradient(145deg, rgba(255,255,255,0.08), rgba(203,164,78,0.08))",
                   color: "#F8FAFC",
                   boxShadow:
-                    "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 14px rgba(203,164,78,0.10)",
+                    isXlMembership
+                      ? "inset 0 1px 0 rgba(255,255,255,0.10), 0 0 16px rgba(220,234,255,0.14)"
+                      : "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 14px rgba(203,164,78,0.10)",
                 }}
               >
                 {loading ? "Opening…" : "Subscribe"}
               </button>
             </div>
           </div>
-
+          {/* Small membership switch, intentionally outside both cards. */}
+          <div
+            role="radiogroup"
+            aria-label="Choose a membership"
+            className="mx-auto grid w-[76%] grid-cols-2 rounded-full border border-white/10 bg-black/35 p-1 backdrop-blur-md"
+          >
+            {(
+              [
+                ["astro_plus", "Astro Plus"],
+                ["astro_plus_xl", "Astro Plus XL"],
+              ] as const
+            ).map(([tier, label]) => {
+              const selected = membershipTier === tier;
+              return (
+                <button
+                  key={tier}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setMembershipTier(tier)}
+                  className="h-8 rounded-full text-[9px] font-medium uppercase tracking-[0.12em] transition"
+                  style={{
+                    color: selected ? "#F8FAFC" : "#64748B",
+                    background: selected
+                      ? tier === "astro_plus_xl"
+                        ? "linear-gradient(145deg, rgba(255,255,255,0.14), rgba(140,171,219,0.10))"
+                        : "linear-gradient(145deg, rgba(255,255,255,0.10), rgba(203,164,78,0.10))"
+                      : "transparent",
+                    boxShadow: selected
+                      ? tier === "astro_plus_xl"
+                        ? "0 0 12px rgba(220,234,255,0.12)"
+                        : "0 0 12px rgba(203,164,78,0.10)"
+                      : "none",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
           {/* ── INDIVIDUAL PURCHASE OPTIONS ── */}
           <div className="pt-2">
             <div className="space-y-2.5">
@@ -471,9 +575,46 @@ export default function CreditsPanel({
               })}
             </div>
           </div>
-
-          {/* ── CHECKOUT ── */}
-          <PanelCard icon={Sparkles} label="Checkout">
+          {/* ── PLEDGE — intentionally presented without a card ── */}
+          <section className="px-3 py-3 text-center">
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-200">
+              Pledge To AstroProXL
+            </p>
+            <p className="mx-auto mt-1 max-w-[290px] text-[10px] leading-4 text-slate-500">
+              Make a one-time pledge toward the continued growth of the
+              Astrology Engine.
+            </p>
+            <div className="mx-auto mt-3 flex max-w-[280px] items-center gap-2 border-b border-white/15 pb-2">
+              <span className="text-[19px] font-light text-slate-400">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                aria-label="Pledge amount in dollars"
+                value={pledgeAmount}
+                onChange={(event) => setPledgeAmount(event.target.value)}
+                placeholder="Enter amount"
+                className="min-w-0 flex-1 bg-transparent text-[16px] font-light text-white outline-none placeholder:text-slate-700"
+              />
+              <button
+                type="button"
+                onClick={handlePledge}
+                disabled={pledgeAmountCents < 100 || loading}
+                className="h-9 rounded-full border border-white/15 bg-white/[0.04] px-4 text-[9px] font-medium uppercase tracking-[0.16em] text-slate-200 transition hover:bg-white/[0.08] disabled:cursor-default disabled:opacity-30"
+              >
+                Pledge
+              </button>
+            </div>
+          </section>
+          {error && (
+            <p
+              role="alert"
+              className="px-3 text-center text-[11px] leading-4 text-red-300"
+            >
+              {error}
+            </p>
+          )}
+          {/* ── COMPACT CHECKOUT ── */}
+          <section className="standard-shadow rounded-[20px] border border-white/10 bg-white/[0.03] px-3.5 py-3 backdrop-blur-sm">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -481,7 +622,7 @@ export default function CreditsPanel({
                     ? "Nothing selected"
                     : `${selectedItems} ${plural(selectedItems, "item")} selected`}
                 </p>
-                <p className="mt-1 text-[28px] font-light leading-none text-white tabular-nums">
+                <p className="mt-1 text-[24px] font-light leading-none text-white tabular-nums">
                   {formatUsd(total)}
                 </p>
               </div>
@@ -489,20 +630,12 @@ export default function CreditsPanel({
                 type="button"
                 onClick={handleCheckout}
                 disabled={total <= 0 || loading}
-                className="h-11 rounded-2xl border border-teal-300/35 bg-teal-300/[0.07] px-5 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-100 transition hover:bg-teal-300/[0.11] disabled:cursor-default disabled:opacity-30"
+                className="h-10 rounded-xl border border-teal-300/35 bg-teal-300/[0.07] px-4 text-[10px] font-medium uppercase tracking-[0.16em] text-teal-100 transition hover:bg-teal-300/[0.11] disabled:cursor-default disabled:opacity-30"
               >
                 {loading ? "One moment…" : "Checkout"}
               </button>
             </div>
-            {error && (
-              <p
-                role="alert"
-                className="mt-3 border-t border-white/[0.06] pt-3 text-center text-[11px] leading-4 text-red-300"
-              >
-                {error}
-              </p>
-            )}
-          </PanelCard>
+          </section>
         </motion.div>
       </div>
     </div>
