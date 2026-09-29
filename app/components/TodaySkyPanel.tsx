@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, RotateCcw, Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { loadChart } from "@/lib/chartStore";
+import { loadChart, saveChart } from "@/lib/chartStore";
 
 /**
  * TODAY'S SKY — v4
@@ -206,40 +206,105 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   });
 
   useEffect(() => {
-    let cancelled = false;
-    const tryLoad = () => {
-      const chart = loadChart();
-      if (!chart?.chartData) return false; // not ready yet
-      const data = chart.chartData as unknown as {
-        transits?: TransitPlanet[];
-        moonPhase?: MoonPhaseData;
-        profection?: ProfectionData;
-      };
-      if (data.transits) {
-        setTransits(
-          [...data.transits].sort(
+  let cancelled = false;
+
+  const applyChartData = (chartData: {
+    transits?: TransitPlanet[];
+    moonPhase?: MoonPhaseData;
+    profection?: ProfectionData;
+  }) => {
+    if (cancelled) return;
+
+    if (chartData.transits) {
+      setTransits(
+        [...chartData.transits].sort(
           (a, b) => transitRank(a.name) - transitRank(b.name)
         )
-        );
-      }
-      if (data.moonPhase) setMoonPhase(data.moonPhase);
-      if (data.profection) setProfection(data.profection);
-      setIsLoading(false);
-      return true; // loaded
-    };
+      );
+    }
 
-    // Try immediately; if the chart isn't ready, retry briefly until it is.
-    if (tryLoad()) return;
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      if (cancelled || tryLoad() || attempts > 20) {
-        clearInterval(interval);
-        if (attempts > 20) setIsLoading(false); // give up after ~5s, show empty state
+    if (chartData.moonPhase) {
+      setMoonPhase(chartData.moonPhase);
+    }
+
+    if (chartData.profection) {
+      setProfection(chartData.profection);
+    }
+
+    setIsLoading(false);
+  };
+
+  const refreshSky = async () => {
+    const chart = loadChart();
+
+    if (!chart?.chartData) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Immediately show whatever is cached so the screen does not flash blank.
+    applyChartData(chart.chartData);
+
+    try {
+      const response = await fetch("/api/chart-calculate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          birthDate: chart.birthDate,
+          birthTime: chart.birthTime,
+          birthPlace: chart.birthPlace,
+          lat: chart.lat,
+          lng: chart.lng,
+          timezone: chart.timezone,
+          ...(typeof chart.currentLat === "number" &&
+          typeof chart.currentLng === "number"
+            ? {
+                currentLat: chart.currentLat,
+                currentLng: chart.currentLng,
+              }
+            : {}),
+        }),
+      });
+
+      const freshData = await response.json();
+
+      if (!response.ok || !freshData?.success || cancelled) {
+        return;
       }
-    }, 250);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+
+      // Update the visible Current Sky with the newly calculated positions.
+      applyChartData(freshData);
+
+      // Save the refreshed result so readings and other panels inherit it.
+      saveChart({
+        birthDate: chart.birthDate,
+        birthTime: chart.birthTime,
+        birthPlace: chart.birthPlace,
+        lat: chart.lat,
+        lng: chart.lng,
+        timezone: chart.timezone,
+        currentLat: chart.currentLat,
+        currentLng: chart.currentLng,
+        currentPlace: chart.currentPlace ?? "",
+        currentTimezone: chart.currentTimezone ?? "",
+        chartData: freshData,
+      });
+    } catch (error) {
+      console.error("Failed to refresh current sky", error);
+
+      // Keep showing the previously saved data if the refresh fails.
+      setIsLoading(false);
+    }
+  };
+
+  refreshSky();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   const sunNow = useMemo(() => transits.find((p) => p.name === "Sun"), [transits]);
   const moonNow = useMemo(() => transits.find((p) => p.name === "Moon"), [transits]);
