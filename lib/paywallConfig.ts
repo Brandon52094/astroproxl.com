@@ -1,57 +1,38 @@
 // lib/paywallConfig.ts
 //
-// SINGLE SOURCE OF TRUTH for AstroProXL pricing and core entitlements.
+// AstroProXL entitlements and legacy compatibility.
 //
-// IMPORTANT:
-// - All money values are stored in cents.
-// - Change live prices inside PRICING only.
-// - Older exports are kept temporarily as compatibility aliases while the
-//   remaining checkout/webhook/reading files are migrated.
+// Edit monetary values only in:
+//   lib/pricing.ts
 //
-// CURRENT MODEL:
-//
-//   NON-MEMBER
-//     • Regular Reading: $3.00, includes 1 reply.
-//     • JXL:             $4.99, includes 2 replies.
-//     • Extra replies:   $1.00 each, UNIVERSAL across Reading + JXL.
-//     • PWA install:     one free Regular Reading, once ever.
-//
-//   MEMBER
-//     • $12.99/month for now.
-//     • Unlimited Regular Readings.
-//     • Unlimited JXL sessions.
-//     • Up to 8 replies per individual conversation.
-//     • Members-only content/features can be unlocked throughout the app.
-//
-//   REFERRAL
-//     • Referred buyer receives 15% off eligible purchases.
-//     • Referrer receives 1 free Regular Reading after a successful redemption.
-//
-//   SAFETY WALL
-//     • Maximum 8 replies per individual Reading/JXL conversation.
-//     • Starting a fresh conversation resets that per-conversation limit.
-//
-// Downloads remain free. Cooldowns have been removed.
+// Core rules:
+// - Active members receive unlimited Reading and JXL access.
+// - Conversations have a maximum of 8 replies.
+// - Purchased balances remain available if membership ends.
+// - Downloads are free.
+// - Cooldowns have been removed.
 
-// ── Canonical live pricing ────────────────────────────────────────────────────
+import { PRICES, formatUsd } from "@/lib/pricing";
+
+export { formatUsd };
 
 export const PRICING = {
   reading: {
-    price: 300, // $3.00
+    price: PRICES.generalReading,
     includedReplies: 1,
   },
 
   jxl: {
-    price: 499, // $4.99
+    price: PRICES.jxl,
     includedReplies: 2,
   },
 
   replies: {
-    priceEach: 100, // $1.00 each — universal
+    priceEach: PRICES.replyEach,
   },
 
   membership: {
-    price: 1299, // $12.99/month — change THIS value when membership price changes
+    price: PRICES.astroPlusMonthly,
     interval: "month" as const,
 
     unlimitedReadings: true,
@@ -64,13 +45,6 @@ export const PRICING = {
     referrerReadingReward: 1,
   },
 } as const;
-
-export function formatUsd(cents: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
-}
 
 // ── Compatibility price exports ───────────────────────────────────────────────
 // Keep these while older files are still being migrated to PRICING.
