@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles, RotateCcw, Crown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { loadChart, saveChart } from "@/lib/chartStore";
+import { loadChart, saveChart, isSkyFresh } from "@/lib/chartStore";
 
 /**
  * TODAY'S SKY — v4
@@ -206,105 +206,133 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
   });
 
   useEffect(() => {
-  let cancelled = false;
+    let cancelled = false;
 
-  const applyChartData = (chartData: {
-    transits?: TransitPlanet[];
-    moonPhase?: MoonPhaseData;
-    profection?: ProfectionData;
-  }) => {
-    if (cancelled) return;
+    const applyChartData = (chartData: {
+      transits?: TransitPlanet[];
+      moonPhase?: MoonPhaseData;
+      profection?: ProfectionData;
+    }) => {
+      if (cancelled) return;
 
-    if (chartData.transits) {
-      setTransits(
-        [...chartData.transits].sort(
-          (a, b) => transitRank(a.name) - transitRank(b.name)
-        )
-      );
-    }
+      if (chartData.transits) {
+        setTransits(
+          [...chartData.transits].sort(
+            (a, b) => transitRank(a.name) - transitRank(b.name)
+          )
+        );
+      }
 
-    if (chartData.moonPhase) {
-      setMoonPhase(chartData.moonPhase);
-    }
+      if (chartData.moonPhase) {
+        setMoonPhase(chartData.moonPhase);
+      }
 
-    if (chartData.profection) {
-      setProfection(chartData.profection);
-    }
+      if (chartData.profection) {
+        setProfection(chartData.profection);
+      }
 
-    setIsLoading(false);
-  };
-
-  const refreshSky = async () => {
-    const chart = loadChart();
-
-    if (!chart?.chartData) {
       setIsLoading(false);
-      return;
-    }
+    };
 
-    // Immediately show whatever is cached so the screen does not flash blank.
-    applyChartData(chart.chartData);
+    const refreshSky = async () => {
+      const chart = loadChart();
 
-    try {
-      const response = await fetch("/api/chart-calculate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      if (!chart?.chartData) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Immediately show whatever is cached so the screen does not flash blank.
+      applyChartData(chart.chartData);
+
+      try {
+        const response = await fetch("/api/chart-calculate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            birthDate: chart.birthDate,
+            birthTime: chart.birthTime,
+            birthPlace: chart.birthPlace,
+            lat: chart.lat,
+            lng: chart.lng,
+            timezone: chart.timezone,
+            ...(typeof chart.currentLat === "number" &&
+            typeof chart.currentLng === "number"
+              ? {
+                  currentLat: chart.currentLat,
+                  currentLng: chart.currentLng,
+                }
+              : {}),
+          }),
+        });
+
+        const freshData = await response.json();
+
+        if (!response.ok || !freshData?.success || cancelled) {
+          return;
+        }
+
+        // Update the visible Current Sky with the newly calculated positions.
+        applyChartData(freshData);
+
+        // Save the refreshed result so readings and other panels inherit it.
+        saveChart({
           birthDate: chart.birthDate,
           birthTime: chart.birthTime,
           birthPlace: chart.birthPlace,
           lat: chart.lat,
           lng: chart.lng,
           timezone: chart.timezone,
-          ...(typeof chart.currentLat === "number" &&
-          typeof chart.currentLng === "number"
-            ? {
-                currentLat: chart.currentLat,
-                currentLng: chart.currentLng,
-              }
-            : {}),
-        }),
-      });
+          currentLat: chart.currentLat,
+          currentLng: chart.currentLng,
+          currentPlace: chart.currentPlace ?? "",
+          currentTimezone: chart.currentTimezone ?? "",
+          chartData: freshData,
+        });
+      } catch (error) {
+        console.error("Failed to refresh current sky", error);
 
-      const freshData = await response.json();
-
-      if (!response.ok || !freshData?.success || cancelled) {
-        return;
+        // Keep showing the previously saved data if the refresh fails.
+        setIsLoading(false);
       }
+    };
 
-      // Update the visible Current Sky with the newly calculated positions.
-      applyChartData(freshData);
+    refreshSky();
 
-      // Save the refreshed result so readings and other panels inherit it.
-      saveChart({
-        birthDate: chart.birthDate,
-        birthTime: chart.birthTime,
-        birthPlace: chart.birthPlace,
-        lat: chart.lat,
-        lng: chart.lng,
-        timezone: chart.timezone,
-        currentLat: chart.currentLat,
-        currentLng: chart.currentLng,
-        currentPlace: chart.currentPlace ?? "",
-        currentTimezone: chart.currentTimezone ?? "",
-        chartData: freshData,
-      });
-    } catch (error) {
-      console.error("Failed to refresh current sky", error);
+    // On PWA, the panel may stay mounted for hours while the app sits in the
+    // background. Without this, the sky shown on return would still be from
+    // whenever the panel first mounted. Re-check freshness on foreground.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !isSkyFresh()) {
+        refreshSky();
+      }
+    };
 
-      // Keep showing the previously saved data if the refresh fails.
-      setIsLoading(false);
-    }
-  };
+    const handleWindowFocus = () => {
+      if (!isSkyFresh()) {
+        refreshSky();
+      }
+    };
 
-  refreshSky();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
 
-  return () => {
-    cancelled = true;
-  };
-}, []);
+    return () => {
+      cancelled = true;
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+
+      window.removeEventListener(
+        "focus",
+        handleWindowFocus
+      );
+    };
+  }, []);
 
   const sunNow = useMemo(() => transits.find((p) => p.name === "Sun"), [transits]);
   const moonNow = useMemo(() => transits.find((p) => p.name === "Moon"), [transits]);
