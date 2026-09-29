@@ -169,39 +169,8 @@ function localDayKey(): string {
   return `${year}-${month}-${day}`;
 }
 
-/* ── Card chrome — identical to Today's Sky ────────────────────────── */
-function SkyCard({
-  icon: Icon,
-  label,
-  className,
-  children,
-}: {
-  icon: React.ElementType;
-  label: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "standard-shadow rounded-[24px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm",
-        className
-      )}
-    >
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} />
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400">
-          {label}
-        </span>
-      </div>
-      {children}
-    </div>
-  );
-}
-
 /* ── Panel ──────────────────────────────────────────────────────────── */
 export default function BirthChartPanel({
-  userStatus,
   dailyHoroscope: dailyHoroscopeProp,
   onOpenHoroscope,
   onOpenReadings,
@@ -210,7 +179,6 @@ export default function BirthChartPanel({
   const shouldReduceMotion = useReducedMotion();
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
   const [aspects, setAspects] = useState<NatalAspect[]>([]);
-  const [openPlacement, setOpenPlacement] = useState<string | null>(null);
   const [chartOpen, setChartOpen] = useState(false);
   const [chartView, setChartView] = useState<ChartViewMode>("birthchart");
   const [contextMode, setContextMode] = useState<0 | 1 | 2>(0);
@@ -538,230 +506,6 @@ export default function BirthChartPanel({
           inherits: false;
           initial-value: 0deg;
         }
-        .your-readings-shell {
-          position: relative;
-          isolation: isolate;
-          border: 0;
-          border-radius: 22px;
-          background:
-            radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%),
-            linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.08),
-            0 0 22px rgba(203,164,78,0.12),
-            0 16px 38px rgba(0,0,0,0.46);
-          cursor: pointer;
-        }
-        .your-readings-shell::before,
-        .your-readings-shell::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          pointer-events: none;
-          padding: 1.25px;
-          background:
-            conic-gradient(
-              from var(--readings-angle),
-              rgba(255,255,255,0.94) 0deg,
-              rgba(255,255,255,0.74) 54deg,
-              rgba(218,183,104,0.88) 112deg,
-              rgba(255,239,195,0.82) 172deg,
-              rgba(255,255,255,0.96) 226deg,
-              rgba(193,151,67,0.86) 296deg,
-              rgba(255,255,255,0.94) 360deg
-            );
-          -webkit-mask:
-            linear-gradient(#000 0 0) content-box,
-            linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          animation: readingsOrbit 8s linear infinite;
-        }
-        .your-readings-shell::before {
-          z-index: 0;
-          opacity: 0.82;
-        }
-        .your-readings-shell::after {
-          inset: -1px;
-          z-index: -1;
-          padding: 2px;
-          opacity: 0.52;
-          filter: blur(8px);
-        }
-        .your-readings-shell:hover,
-        .your-readings-shell:focus-visible {
-          transform: translateY(-1px);
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.11),
-            0 0 28px rgba(203,164,78,0.18),
-            0 18px 42px rgba(0,0,0,0.50);
-          outline: none;
-        }
-        .your-readings-shell:active {
-          transform: translateY(0);
-        }
-        .upgrade-chart-shell {
-          position: relative;
-          isolation: isolate;
-          border: 0;
-          border-radius: 22px;
-          background:
-            radial-gradient(circle at 50% -70%, rgba(218,183,104,0.10), transparent 68%),
-            linear-gradient(145deg, rgba(12,10,8,0.98), rgba(3,4,8,0.99));
-          box-shadow:
-            inset 0 1px 0 rgba(255,231,169,0.055),
-            0 0 24px rgba(203,164,78,0.16),
-            0 14px 34px rgba(0,0,0,0.46);
-          cursor: pointer;
-        }
-        .upgrade-chart-shell::before,
-        .upgrade-chart-shell::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          pointer-events: none;
-          padding: 1.25px;
-          background:
-            conic-gradient(
-              from var(--readings-angle),
-              rgba(126,88,24,0.72) 0deg,
-              rgba(235,201,119,0.98) 62deg,
-              rgba(158,112,35,0.78) 128deg,
-              rgba(255,226,154,0.96) 188deg,
-              rgba(174,128,46,0.82) 252deg,
-              rgba(238,202,116,0.96) 316deg,
-              rgba(126,88,24,0.72) 360deg
-            );
-          -webkit-mask:
-            linear-gradient(#000 0 0) content-box,
-            linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          animation: readingsOrbit 8s linear infinite;
-        }
-        .upgrade-chart-shell::before {
-          z-index: 0;
-          opacity: 0.92;
-        }
-        .upgrade-chart-shell::after {
-          inset: -1px;
-          z-index: -1;
-          padding: 2px;
-          opacity: 0.72;
-          filter: blur(9px);
-        }
-        .upgrade-chart-shell:hover,
-        .upgrade-chart-shell:focus-visible {
-          transform: translateY(-1px);
-          box-shadow:
-            inset 0 1px 0 rgba(255,231,169,0.08),
-            0 0 30px rgba(203,164,78,0.24),
-            0 18px 42px rgba(0,0,0,0.50);
-          outline: none;
-        }
-        .upgrade-chart-shell:active {
-          transform: translateY(0);
-        }
-        .upgrade-chart-shimmer {
-          position: absolute;
-          inset: 0;
-          z-index: 1;
-          overflow: hidden;
-          border-radius: inherit;
-          pointer-events: none;
-        }
-        .upgrade-chart-shimmer::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          width: 45%;
-          background: linear-gradient(
-            105deg,
-            transparent 0%,
-            rgba(218,183,104,0.04) 43%,
-            rgba(255,226,154,0.15) 50%,
-            rgba(218,183,104,0.05) 57%,
-            transparent 100%
-          );
-          transform: translateX(-145%) skewX(-18deg);
-          animation: readingsShimmer 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
-        }
-        .chart-action-side {
-          position: relative;
-          z-index: 2;
-          display: flex;
-          min-width: 0;
-          height: 100%;
-          align-items: center;
-          justify-content: center;
-          border: 0;
-          background: transparent;
-          color: inherit;
-          cursor: pointer;
-          transition: background 180ms ease, opacity 180ms ease;
-        }
-        .chart-action-side:hover,
-        .chart-action-side:focus-visible {
-          background: rgba(255,255,255,0.035);
-          outline: none;
-        }
-        .chart-action-side:active {
-          background: rgba(255,255,255,0.055);
-        }
-        .chart-action-divider {
-          position: absolute;
-          left: 50%;
-          top: -10%;
-          z-index: 3;
-          width: 1px;
-          height: 120%;
-          transform: rotate(14deg);
-          transform-origin: center;
-          background: linear-gradient(
-            180deg,
-            transparent 0%,
-            rgba(255,255,255,0.30) 18%,
-            rgba(218,183,104,0.44) 50%,
-            rgba(255,255,255,0.26) 82%,
-            transparent 100%
-          );
-          box-shadow: 0 0 10px rgba(218,183,104,0.12);
-          pointer-events: none;
-        }
-        @keyframes readingsShimmer {
-          0% { transform: translateX(-145%) skewX(-18deg); }
-          100% { transform: translateX(245%) skewX(-18deg); }
-        }
-        .your-readings-shimmer {
-          position: absolute;
-          inset: 0;
-          z-index: 1;
-          overflow: hidden;
-          border-radius: inherit;
-          pointer-events: none;
-        }
-        .your-readings-shimmer::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          width: 45%;
-          background: linear-gradient(
-            105deg,
-            transparent 0%,
-            rgba(255,255,255,0.08) 45%,
-            rgba(255,255,255,0.17) 50%,
-            rgba(255,255,255,0.08) 55%,
-            transparent 100%
-          );
-          transform: translateX(-145%) skewX(-18deg);
-          animation: readingsShimmer 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
-        }
         @keyframes readingsOrbit {
           to { --readings-angle: 360deg; }
         }
@@ -893,8 +637,6 @@ export default function BirthChartPanel({
         }
         @media (prefers-reduced-motion: reduce) {
           .element-box::after { animation: none !important; opacity: 0; }
-          .your-readings-shell::before, .your-readings-shell::after, .upgrade-chart-shell::before, .upgrade-chart-shell::after { animation: none !important; }
-          .your-readings-shimmer::after, .upgrade-chart-shimmer::after { animation: none !important; opacity: 0; }
           .chart-track { animation: none !important; transform: none !important; }
           .chart-actions-shell { animation: none !important; }
         }
@@ -1216,7 +958,6 @@ export default function BirthChartPanel({
                             type="button"
                             onClick={() => {
                               if (isDuplicate) return;
-                              setOpenPlacement(planet.name);
                               setSelectedContext({ kind: "placement", planetName: planet.name });
                             }}
                             tabIndex={isDuplicate ? -1 : 0}
@@ -1336,7 +1077,7 @@ export default function BirthChartPanel({
             </section>
 
             {/* ── CHART ACTIONS — one connected premium control with diagonal split ── */}
-            <div className="order-3 flex w-full justify-center">
+            <div className="order-3 flex w-full flex-col items-center gap-3">
               <div className="chart-actions-shell" style={outsideFocusStyle}>
                 <div className="chart-actions-inner">
                   <button
@@ -1415,6 +1156,15 @@ export default function BirthChartPanel({
                   </button>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => window.location.assign("/chart-data?recalculate=true")}
+                className="text-[9px] font-medium uppercase tracking-[0.16em] text-slate-500 transition hover:text-slate-300 focus-visible:outline-none focus-visible:text-slate-300"
+                style={outsideFocusStyle}
+                aria-label="Edit your birth details"
+              >
+                Edit Birth Details
+              </button>
             </div>
           </motion.div>
         )}
