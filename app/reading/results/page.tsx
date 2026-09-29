@@ -699,6 +699,26 @@ function useInView<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | 
   return [ref, inView];
 }
 
+// Activates only while a focal section occupies the center band of the viewport.
+function useCenterFocus<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setFocused(entry.isIntersecting),
+      { root: null, rootMargin: "-28% 0px -28% 0px", threshold: 0.18 },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
+
+  return [ref, focused];
+}
+
 // True while the element sits in the vertical center band of the viewport.
 function FadeIn({
   active,
@@ -728,12 +748,14 @@ function ReadingDeck({
   content,
   sections,
   checkoutOpen,
+  bottomLineFocused,
   children,
 }: {
   topic: string;
   content: string;
   sections: ParsedSection[] | null;
   checkoutOpen: boolean;
+  bottomLineFocused: boolean;
   children: React.ReactNode;
 }) {
   const reduceMotion = useReducedMotion();
@@ -791,7 +813,7 @@ function ReadingDeck({
 
   return (
     <div
-      className={`reading-results scroll-root ${checkoutOpen ? "checkout-open" : ""}`}
+      className={`reading-results scroll-root ${checkoutOpen ? "checkout-open" : ""} ${bottomLineFocused ? "bottom-line-focus" : ""}`}
       ref={viewportRef}
       aria-label="Your reading"
     >
@@ -851,12 +873,12 @@ function ReadingDeck({
 
                 {groups.timing.length > 0 && (
                   <div className="context-dated-windows">
+                    <p className="reading-section-label centered dated-context-heading">
+                      Dated Context
+                    </p>
                     {groups.timing.map((section, index) => (
                       <div key={index} className="act-card">
                         <div className="act-head">
-                          <span className="act-label">
-                            {section.date ? "Dated Context" : "Timing"}
-                          </span>
                           {section.date && <span className="date-badge">{section.date}</span>}
                         </div>
                         <p className="act-body">{renderWithDates(section.body)}</p>
@@ -927,6 +949,7 @@ export default function ReadingResultsPage() {
   const [downloaded, setDownloaded] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [viewingSavedReading, setViewingSavedReading] = useState(false);
+  const [bottomLineRef, bottomLineFocused] = useCenterFocus<HTMLDivElement>();
 
   // ── Reply system state ──
   const [freeRepliesUsed, setFreeRepliesUsed] = useState(0);
@@ -1366,9 +1389,10 @@ export default function ReadingResultsPage() {
         content={page.content}
         sections={parsedSections}
         checkoutOpen={!!clientSecret}
+        bottomLineFocused={bottomLineFocused}
       >
         {closingSections.length > 0 && (
-          <div className="bottom-line-wrap">
+          <div ref={bottomLineRef} className="bottom-line-wrap">
             <p className="bottom-line-label">Bottom Line</p>
 
             {closingSections.map((section, i) => (
@@ -1535,16 +1559,12 @@ export default function ReadingResultsPage() {
           <div className="end-action-row">
             <button
               type="button"
-              className={`end-save-icon ${downloaded ? "saved" : ""}`}
-              onClick={
-                viewingSavedReading
-                  ? () => router.push("/readings")
-                  : handleSaveReading
-              }
-              disabled={!viewingSavedReading && isDownloading}
+              className={`end-save-icon ${downloaded || viewingSavedReading ? "saved" : ""}`}
+              onClick={handleSaveReading}
+              disabled={viewingSavedReading || isDownloading || downloaded}
               aria-label={
                 viewingSavedReading
-                  ? "Open your saved readings"
+                  ? "This reading is already saved"
                   : downloaded
                     ? "Reading saved"
                     : "Save this reading"
@@ -1673,20 +1693,31 @@ const css = `
     position: relative;
     z-index: 1;
     min-height: 100%;
-    background:
-      radial-gradient(circle at 50% 0%, rgba(65,94,145,0.24), transparent 24%),
-      linear-gradient(
-        180deg,
-        #101d38 0%,
-        #0d1832 13%,
-        #0c142d 27%,
-        #0c1027 42%,
-        #090b20 58%,
-        #060817 73%,
-        #03040e 87%,
-        #000000 100%
-      );
+    background: linear-gradient(
+      180deg,
+      #17204a 0%,
+      #141b45 9%,
+      #10163f 22%,
+      #12123a 36%,
+      #0e0d30 50%,
+      #0a0924 63%,
+      #070718 75%,
+      #040512 86%,
+      #010109 95%,
+      #000000 100%
+    );
   }
+  .reading-results .scroll-content::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    background: rgba(0,0,0,0.76);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 520ms cubic-bezier(0.22,1,0.36,1);
+  }
+  .reading-results.bottom-line-focus .scroll-content::before { opacity: 1; }
 
   .reading-results .results-starfield {
     position: fixed;
@@ -1968,32 +1999,16 @@ const css = `
   /* ── Streamlined continuous reading layout ── */
   .reading-results .reading-flow {
     position: relative;
-    z-index: 2;
-    width: min(calc(100% - 24px), 38rem);
-    min-height: 100dvh;
-    margin: max(12px, env(safe-area-inset-top)) auto max(28px, env(safe-area-inset-bottom));
-    overflow: hidden;
-    border: 1px solid rgba(131,152,184,0.25);
-    border-radius: 30px;
-    background: rgba(4,8,19,0.88);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.055),
-      0 24px 70px rgba(0,0,0,0.52),
-      0 0 38px rgba(96,165,250,0.06);
-    backdrop-filter: blur(12px);
-    padding: 0 24px calc(env(safe-area-inset-bottom) + 72px);
+    z-index: 3;
+    width: min(100%, 38rem);
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 54px) 24px calc(env(safe-area-inset-bottom) + 72px);
   }
   .reading-results .reading-hero {
-    min-height: min(76vh, 690px);
+    min-height: 76vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    margin: 0 -24px;
-    padding: calc(env(safe-area-inset-top) + 42px) 28px 58px;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-    background:
-      radial-gradient(circle at 50% -20%, rgba(96,165,250,0.16), transparent 58%),
-      linear-gradient(145deg, rgba(17,29,52,0.96), rgba(8,13,28,0.94));
     opacity: 0;
     transform: translateY(10px);
     transition: opacity 1s ease, transform 1s ease;
@@ -2104,6 +2119,9 @@ const css = `
     font-size: 18px;
     line-height: 1.72;
     color: #dbe4f0;
+    text-align: justify;
+    text-align-last: left;
+    hyphens: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -2137,13 +2155,38 @@ const css = `
     text-transform: uppercase;
     color: #8fa4c2;
   }
-  .reading-results .reading-section-label.centered { text-align: center; }
+  .reading-results .reading-section-label.centered {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+    color: #b7c5d9;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-align: center;
+  }
+  .reading-results .reading-section-label.centered::before,
+  .reading-results .reading-section-label.centered::after {
+    content: "";
+    width: min(18vw, 72px);
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(167,186,212,0.38));
+  }
+  .reading-results .reading-section-label.centered::after {
+    transform: scaleX(-1);
+  }
   .reading-results .reading-section-copy {
     margin: 10px 0 0;
     font-family: Georgia, serif;
     font-size: 16px;
     line-height: 1.72;
     color: #d4deeb;
+    text-align: justify;
+    text-align-last: left;
+    hyphens: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -2175,6 +2218,28 @@ const css = `
     background: rgba(13,27,50,0.78);
     border-color: rgba(126,165,207,0.18);
   }
+  .reading-results .context-dated-windows {
+    margin-top: 52px;
+    padding-top: 36px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .reading-results .dated-context-heading { margin-bottom: 24px; }
+  .reading-results .context-dated-windows .act-head,
+  .reading-results .merged-directive-card .act-head {
+    justify-content: center;
+    text-align: center;
+  }
+  .reading-results .context-dated-windows .act-body,
+  .reading-results .merged-directive-card .act-body {
+    text-align: justify;
+    text-align-last: left;
+    hyphens: auto;
+  }
+  .reading-results .context-dated-windows .date-badge,
+  .reading-results .merged-directive-card .date-badge {
+    margin-inline: auto;
+    text-align: center;
+  }
   .reading-results .merged-directive-card {
     padding: 20px 19px;
     border-color: rgba(152,177,211,0.28);
@@ -2191,7 +2256,15 @@ const css = `
     padding-top: 17px;
     border-top: 1px solid rgba(255,255,255,0.07);
   }
-  .reading-results .merged-directive-card .act-label { color: #c5d4e8; }
+  .reading-results .merged-directive-card .act-label {
+    width: 100%;
+    color: #e4ebf5;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.20em;
+    text-align: center;
+  }
 
   /* ── Calendar summary — all explicit reading dates ── */
   .reading-results .reading-calendar {
@@ -2270,9 +2343,36 @@ const css = `
   }
   .reading-results .reading-ending { padding-bottom: 8px; }
 
+  .reading-results .reading-flow > .reading-hero,
+  .reading-results .reading-flow > .reading-main,
+  .reading-results .reading-flow > .move-block,
+  .reading-results .reading-flow > .reading-calendar,
+  .reading-results .reading-flow > .reading-separator,
+  .reading-results .post-closing,
+  .reading-results .end-actions {
+    transition:
+      opacity 460ms cubic-bezier(0.22,1,0.36,1),
+      filter 460ms cubic-bezier(0.22,1,0.36,1);
+  }
+  .reading-results.bottom-line-focus .reading-flow > .reading-hero,
+  .reading-results.bottom-line-focus .reading-flow > .reading-main,
+  .reading-results.bottom-line-focus .reading-flow > .move-block,
+  .reading-results.bottom-line-focus .reading-flow > .reading-calendar,
+  .reading-results.bottom-line-focus .reading-flow > .reading-separator {
+    opacity: 0.08;
+    filter: grayscale(1) brightness(0.25);
+  }
+  .reading-results.bottom-line-focus .post-closing,
+  .reading-results.bottom-line-focus .end-actions {
+    opacity: 0;
+    filter: brightness(0.15);
+    pointer-events: none;
+  }
+
   /* ── Bottom Line — the closing focal point ── */
   .reading-results .bottom-line-wrap {
     position: relative;
+    z-index: 4;
     margin: 0 -24px;
     padding: 68px 30px 62px;
     text-align: center;
@@ -2280,6 +2380,9 @@ const css = `
       radial-gradient(circle at 50% 45%, rgba(148,163,184,0.085), transparent 52%),
       linear-gradient(180deg, rgba(2,5,12,0.12), rgba(0,0,0,0.46));
     transition: transform 0.7s ease, opacity 0.7s ease;
+  }
+  .reading-results.bottom-line-focus .bottom-line-wrap {
+    transform: scale(1.018);
   }
   .reading-results .bottom-line-wrap::before {
     content: "";
