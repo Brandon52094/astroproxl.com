@@ -50,6 +50,7 @@ interface Balance {
   readings: number;
   jxl: number;
   replies: number;
+  isSubscribed: boolean;
 }
 const MEMBERSHIP_TIERS: Record<
   MembershipTierId,
@@ -114,7 +115,8 @@ export default function CreditsPanel({
   const pledgeAmountCents = useMemo(() => {
     const normalized = pledgeAmount.replace(/[^0-9.]/g, "");
     const amount = Number(normalized);
-    return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+    if (!Number.isFinite(amount)) return 0;
+    return Math.min(Math.round(amount * 100), 100_000_000);
   }, [pledgeAmount]);
   /* Current balances */
   useEffect(() => {
@@ -126,6 +128,8 @@ export default function CreditsPanel({
           readings: Number(d.credits ?? 0),
           jxl: Number(d.jxlCredits ?? 0),
           replies: Number(d.replyCredits ?? 0),
+          isSubscribed:
+            d.isSubscribed === true || d.membershipStatus === "active",
         });
       } catch {
         // Balance stays hidden if this endpoint is unavailable.
@@ -211,6 +215,10 @@ export default function CreditsPanel({
   const handlePledge = async () => {
     if (pledgeAmountCents < 100) {
       setError("Enter a pledge of at least $1.00.");
+      return;
+    }
+    if (Number(pledgeAmount.replace(/[^0-9.]/g, "")) > 1_000_000) {
+      setError("The maximum pledge is $1,000,000.00.");
       return;
     }
     setLoading(true);
@@ -334,42 +342,35 @@ export default function CreditsPanel({
           paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
         }}
       >
-        {/* ── HERO ── */}
-        <motion.header
+        {/* ── CREDITS + BALANCE — one compact unit ── */}
+        <motion.section
           initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
-          className="mb-3 text-center"
+          className="mb-2 overflow-hidden rounded-[18px] border border-white/10 bg-transparent"
         >
-          <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-300">
-            Credits & Access
-          </p>
-        </motion.header>
-        <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-          className="space-y-2.5"
-        >
-          {/* ── BALANCE — compact, matching View My Chart footprint ── */}
-          {balance && (
-            <section className="overflow-hidden rounded-[18px] border border-white/10 bg-transparent">
-              <div
-                className="flex w-full items-center justify-center px-4 py-[12px] text-[12px] font-medium uppercase tracking-[0.18em] text-slate-200"
-                style={{
-                  background:
-                    "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
-                  WebkitBackdropFilter: "blur(14px)",
-                  backdropFilter: "blur(14px)",
-                  boxShadow:
-                    "inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -1px 0 rgba(255,255,255,0.025)",
-                }}
-              >
-                Your Balance
+          <div
+            className="flex w-full items-center justify-center px-4 py-[10px] text-[12px] font-medium uppercase tracking-[0.18em] text-slate-200"
+            style={{
+              background:
+                "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
+              WebkitBackdropFilter: "blur(14px)",
+              backdropFilter: "blur(14px)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -1px 0 rgba(255,255,255,0.025)",
+            }}
+          >
+            Credits And Balance
+          </div>
+          {balance &&
+            (balance.isSubscribed ? (
+              <div className="border-t border-white/[0.06] py-3 text-center text-[10px] font-medium uppercase tracking-[0.22em] text-white">
+                Subscribed
               </div>
-              <div className="grid grid-cols-3 divide-x divide-white/[0.06] border-t border-white/[0.06] px-2 py-3">
+            ) : (
+              <div className="grid grid-cols-3 divide-x divide-white/[0.06] border-t border-white/[0.06] px-2 py-2.5">
                 <div className="text-center">
-                  <p className="text-[20px] font-light leading-none text-white tabular-nums">
+                  <p className="text-[18px] font-light leading-none text-white tabular-nums">
                     {balance.readings}
                   </p>
                   <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
@@ -377,7 +378,7 @@ export default function CreditsPanel({
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[20px] font-light leading-none text-white tabular-nums">
+                  <p className="text-[18px] font-light leading-none text-white tabular-nums">
                     {balance.jxl}
                   </p>
                   <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
@@ -385,7 +386,7 @@ export default function CreditsPanel({
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[20px] font-light leading-none text-white tabular-nums">
+                  <p className="text-[18px] font-light leading-none text-white tabular-nums">
                     {balance.replies}
                   </p>
                   <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
@@ -393,29 +394,27 @@ export default function CreditsPanel({
                   </p>
                 </div>
               </div>
-            </section>
-          )}
+            ))}
+        </motion.section>
+        <motion.div
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
+          className="space-y-2"
+        >
           {/* ── MEMBERSHIP — selected with the compact toggle below ── */}
           <div
             className={`${
               isXlMembership ? "astro-plus-xl-shell" : "astro-plus-shell"
             } standard-shadow`}
           >
-            <div className="astro-plus-inner p-4 backdrop-blur-sm">
-              <div
-                className={`relative z-10 flex items-start gap-3 ${
-                  isXlMembership ? "flex-row-reverse text-right" : ""
-                }`}
-              >
+            <div className="astro-plus-inner p-[14px] backdrop-blur-sm">
+              <div className="relative z-10 flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.20em] text-white">
                     {activeMembership.name}
                   </p>
-                  <div
-                    className={`mt-1 flex items-end gap-1.5 ${
-                      isXlMembership ? "justify-end" : ""
-                    }`}
-                  >
+                  <div className="mt-1 flex items-end gap-1.5">
                     <span className="text-[27px] font-light leading-none text-white tabular-nums">
                       {formatUsd(activeMembership.price)}
                     </span>
@@ -426,21 +425,16 @@ export default function CreditsPanel({
                   </p>
                 </div>
                 <div
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/[0.035]"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/20 bg-white/[0.035]"
                   style={{ boxShadow: "0 0 12px rgba(255,255,255,0.12), 0 0 24px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08)" }}
                 >
                   <Crown className="h-5 w-5 text-white" strokeWidth={1.8} style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.55))" }} />
                 </div>
               </div>
-              <div className="mt-4 border-t border-white/[0.06] pt-3">
-                <div className="grid grid-cols-1 gap-2">
+              <div className="mt-3 border-t border-white/[0.06] pt-2.5">
+                <div className="grid grid-cols-1 gap-1.5">
                   {activeMembership.features.map((feature) => (
-                    <div
-                      key={feature}
-                      className={`flex items-center gap-2.5 ${
-                        isXlMembership ? "flex-row-reverse text-right" : ""
-                      }`}
-                    >
+                    <div key={feature} className="flex items-center gap-2.5">
                       <span
                         className="h-1.5 w-1.5 shrink-0 rounded-full"
                         style={{
@@ -463,7 +457,7 @@ export default function CreditsPanel({
                 type="button"
                 onClick={handleGetAccess}
                 disabled={loading}
-                className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl border text-[11px] font-medium uppercase tracking-[0.18em] transition disabled:cursor-default disabled:opacity-50"
+                className="mt-3 flex h-10 w-full items-center justify-center rounded-xl border text-[10px] font-medium uppercase tracking-[0.18em] transition disabled:cursor-default disabled:opacity-50"
                 style={{
                   borderColor: "rgba(255,255,255,0.28)",
                   background:
@@ -576,20 +570,17 @@ export default function CreditsPanel({
             </div>
           </div>
           {/* ── PLEDGE — intentionally presented without a card ── */}
-          <section className="px-3 py-3 text-center">
+          <section className="px-3 py-2.5 text-center">
             <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-200">
               Pledge To AstroProXL
             </p>
-            <p className="mx-auto mt-1 max-w-[290px] text-[10px] leading-4 text-slate-500">
-              Make a one-time pledge toward the continued growth of the
-              Astrology Engine.
-            </p>
-            <div className="mx-auto mt-3 flex max-w-[280px] items-center gap-2 border-b border-white/15 pb-2">
+            <div className="mx-auto mt-2 flex max-w-[280px] items-center gap-2 border-b border-white/15 pb-2">
               <span className="text-[19px] font-light text-slate-400">$</span>
               <input
                 type="text"
                 inputMode="decimal"
                 aria-label="Pledge amount in dollars"
+                aria-describedby="pledge-statement"
                 value={pledgeAmount}
                 onChange={(event) => setPledgeAmount(event.target.value)}
                 placeholder="Enter amount"
@@ -601,9 +592,15 @@ export default function CreditsPanel({
                 disabled={pledgeAmountCents < 100 || loading}
                 className="h-9 rounded-full border border-white/15 bg-white/[0.04] px-4 text-[9px] font-medium uppercase tracking-[0.16em] text-slate-200 transition hover:bg-white/[0.08] disabled:cursor-default disabled:opacity-30"
               >
-                Pledge
+                Checkout
               </button>
             </div>
+            <p
+              id="pledge-statement"
+              className="mx-auto mt-1.5 max-w-[290px] text-[10px] leading-4 text-slate-500"
+            >
+              Pledge toward the continued growth of the Astrology Engine.
+            </p>
           </section>
           {error && (
             <p
