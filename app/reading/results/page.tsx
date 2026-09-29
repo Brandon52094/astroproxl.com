@@ -699,22 +699,47 @@ function useInView<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | 
   return [ref, inView];
 }
 
-// Activates only while a focal section occupies the center band of the viewport.
+// Activates as the focal section enters the middle of the viewport, then
+// releases when its top reaches the phone's safe-area / Dynamic Island zone.
 function useCenterFocus<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, boolean] {
   const ref = useRef<T>(null);
   const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     const element = ref.current;
-    if (!element || typeof IntersectionObserver === "undefined") return;
+    if (!element || typeof window === "undefined") return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => setFocused(entry.isIntersecting),
-      { root: null, rootMargin: "-28% 0px -28% 0px", threshold: 0.18 },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
+    const scrollRoot = element.closest<HTMLElement>(".scroll-root");
+    let frame = 0;
+
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const rect = element.getBoundingClientRect();
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const focusEntry = viewportHeight * 0.60;
+        const topRelease = Math.max(96, viewportHeight * 0.12);
+        const nextFocused =
+          rect.top <= focusEntry &&
+          rect.top > topRelease &&
+          rect.bottom > topRelease;
+
+        setFocused((current) => (current === nextFocused ? current : nextFocused));
+      });
+    };
+
+    update();
+    scrollRoot?.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      scrollRoot?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, []);
 
   return [ref, focused];
 }
@@ -1687,23 +1712,24 @@ const css = `
   .reading-results.scroll-root::-webkit-scrollbar { display: none; }
   .reading-results.checkout-open { overflow: hidden; }
 
-  /* The gradient lives on the tall content, so it fades through its color
-     bands as you scroll — five graded zones from astral blue down to black. */
+  /* Begin in the same deep sky as the pager, then darken gradually toward
+     Bottom Line. Keeping every early stop close in value avoids a bright,
+     separate-looking Reading Results environment. */
   .reading-results .scroll-content {
     position: relative;
     z-index: 1;
     min-height: 100%;
     background: linear-gradient(
       180deg,
-      #17204a 0%,
-      #141b45 9%,
-      #10163f 22%,
-      #12123a 36%,
-      #0e0d30 50%,
-      #0a0924 63%,
-      #070718 75%,
-      #040512 86%,
-      #010109 95%,
+      #061120 0%,
+      #06101e 12%,
+      #050d1b 25%,
+      #050a18 39%,
+      #050816 52%,
+      #040611 65%,
+      #03040d 77%,
+      #020208 87%,
+      #010104 95%,
       #000000 100%
     );
   }
