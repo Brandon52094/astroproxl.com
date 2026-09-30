@@ -1,31 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
 
-const REFERRAL_COOKIE = "aproxl_ref";
-const REFERRAL_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+import { auth } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams
-    .get("code")
-    ?.trim()
-    .toUpperCase();
+import { getOrCreateReferralCode } from "@/lib/referrals";
 
-  const destination = new URL("/", request.url);
+export async function GET() {
+  try {
+    const { userId } = await auth();
 
-  if (!code || !/^[A-Z0-9_-]{4,64}$/.test(code)) {
-    destination.searchParams.set("referral", "invalid");
-    return NextResponse.redirect(destination);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const code = await getOrCreateReferralCode(userId);
+    return NextResponse.json({ code });
+  } catch (error) {
+    console.error("[referral-code] Error:", error);
+    return NextResponse.json(
+      { error: "Failed to get referral code." },
+      { status: 500 },
+    );
   }
-
-  const response = NextResponse.redirect(destination);
-  response.cookies.set({
-    name: REFERRAL_COOKIE,
-    value: code,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: REFERRAL_COOKIE_MAX_AGE,
-  });
-
-  return response;
 }

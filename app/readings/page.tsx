@@ -26,6 +26,7 @@ const PLUS_SLOT_COUNT = 16;
 const LONG_PRESS_MS = 550;
 
 type ShareMode = "discount" | "commission";
+type ReferralState = "loading" | "ready" | "error";
 
 interface AccessSummary {
   credits?: number;
@@ -75,8 +76,10 @@ export default function SavedReadingsPage() {
   const [readings, setReadings] = useState<SavedReadingRecord[]>([]);
   const [access, setAccess] = useState<AccessSummary | null>(null);
   const [referralCode, setReferralCode] = useState("");
+  const [referralState, setReferralState] = useState<ReferralState>("loading");
   const [currentPage, setCurrentPage] = useState(0);
   const [shareMode, setShareMode] = useState<ShareMode>("discount");
+  const [selectedTheme, setSelectedTheme] = useState(0);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +100,28 @@ export default function SavedReadingsPage() {
     }
   }, []);
 
+  const loadReferralCode = useCallback(async () => {
+    setReferralState("loading");
+
+    try {
+      const response = await fetch("/api/user/referral-code", {
+        cache: "no-store",
+      });
+      const data = response.ok
+        ? ((await response.json()) as { code?: string })
+        : null;
+      const code = data?.code?.trim() ?? "";
+
+      if (!code) throw new Error("Referral code unavailable");
+
+      setReferralCode(code);
+      setReferralState("ready");
+    } catch {
+      setReferralCode("");
+      setReferralState("error");
+    }
+  }, []);
+
   useEffect(() => {
     setLimitNotice(
       new URLSearchParams(window.location.search).get("limit") === "1",
@@ -108,11 +133,8 @@ export default function SavedReadingsPage() {
       .then((data: AccessSummary | null) => setAccess(data))
       .catch(() => setAccess(null));
 
-    void fetch("/api/user/referral-code", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { code?: string } | null) => setReferralCode(data?.code ?? ""))
-      .catch(() => setReferralCode(""));
-  }, [refresh]);
+    void loadReferralCode();
+  }, [loadReferralCode, refresh]);
 
   useEffect(() => {
     return () => {
@@ -121,8 +143,6 @@ export default function SavedReadingsPage() {
   }, []);
 
   const capacity = getSavedReadingCapacity(access);
-  const isSubscribed =
-    access?.membershipStatus === "active" || access?.isSubscribed === true;
   const pageStart = currentPage * READINGS_PER_PAGE;
   const pageSlots = useMemo(
     () =>
@@ -207,7 +227,7 @@ export default function SavedReadingsPage() {
   return (
     <main className="dashboard-page">
       <header className="dashboard-header">
-        <button type="button" className="back" onClick={() => router.push("/")} aria-label="Go back">
+        <button type="button" className="back" onClick={() => router.back()} aria-label="Return to birth chart">
           <ChevronLeft aria-hidden="true" />
         </button>
         <h1>My Dashboard</h1>
@@ -237,21 +257,42 @@ export default function SavedReadingsPage() {
 
         <div className="share-area">
           <div className="share-heading-row">
-            <h2>{shareMode === "discount" ? "Share a Discount" : "Earn Commission"}</h2>
-            {shareMode === "commission" && <Crown className="mode-crown" aria-hidden="true" />}
+            <h2>{shareMode === "discount" ? "Share a Discount" : "Earn a Commission"}</h2>
           </div>
 
           <button
             type="button"
             className="share-code"
-            onClick={shareReferral}
-            disabled={!referralCode || shareMode === "commission"}
-            aria-label={shareMode === "discount" ? "Share referral link" : "Commission access coming soon"}
+            onClick={
+              shareMode === "commission"
+                ? undefined
+                : referralState === "error"
+                  ? () => void loadReferralCode()
+                  : shareReferral
+            }
+            disabled={shareMode === "commission" || referralState === "loading"}
+            aria-label={
+              shareMode === "commission"
+                ? "Commission access coming soon"
+                : referralState === "error"
+                  ? "Retry referral link"
+                  : "Share referral link"
+            }
           >
             {shareMode === "commission" ? (
               <><LockKeyhole aria-hidden="true" /><span>Coming Soon</span></>
             ) : (
-              <><span>{referralCode ? "ASTROSHARE" : "Loading"}</span>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}</>
+              <>
+                <span>
+                  {referralState === "ready"
+                    ? "ASTROSHARE"
+                    : referralState === "error"
+                      ? "Try Again"
+                      : "Loading"}
+                </span>
+                {referralState === "ready" &&
+                  (copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />)}
+              </>
             )}
           </button>
 
@@ -265,7 +306,7 @@ export default function SavedReadingsPage() {
               aria-pressed={shareMode === "commission"}
             ><span /></button>
             <span className={shareMode === "commission" ? "active" : ""}>
-              Commission{!isSubscribed && <Crown className="inline-crown" aria-hidden="true" />}
+              Earn
             </span>
           </div>
         </div>
@@ -282,9 +323,16 @@ export default function SavedReadingsPage() {
       <section className="theme-row" aria-label="Theme selection">
         <h2>Theme</h2>
         <div className="theme-swatches">
-          <button type="button" className="theme-swatch active" aria-label="Current theme" />
-          <button type="button" className="theme-swatch" aria-label="Future theme two" disabled />
-          <button type="button" className="theme-swatch" aria-label="Future theme three" disabled />
+          {["Midnight", "Ember", "Forest"].map((theme, index) => (
+            <button
+              type="button"
+              key={theme}
+              className={`theme-swatch ${selectedTheme === index ? "active" : ""}`}
+              onClick={() => setSelectedTheme(index)}
+              aria-label={`${theme} theme${index > 0 ? " preview" : ""}`}
+              aria-pressed={selectedTheme === index}
+            />
+          ))}
         </div>
       </section>
 
@@ -368,7 +416,7 @@ export default function SavedReadingsPage() {
           color: #f8fafc;
           font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
           display: grid;
-          grid-template-rows: 42px minmax(248px, 35vh) 50px minmax(0, 1fr);
+          grid-template-rows: 42px minmax(286px, 42vh) 50px minmax(0, 1fr);
           gap: 8px;
         }
         .dashboard-header, .dashboard-card, .theme-row, .readings-section, .notice {
@@ -386,31 +434,30 @@ export default function SavedReadingsPage() {
           overflow: hidden;
           border: 1px solid rgba(148,163,184,.18);
           border-radius: 28px;
-          padding: 14px 18px 12px;
+          padding: 17px 18px 14px;
           background: linear-gradient(145deg, rgba(17,24,39,.78), rgba(3,5,12,.94));
           box-shadow: inset 0 1px rgba(255,255,255,.025), 0 20px 50px rgba(0,0,0,.35);
         }
+        .balance-block { padding-bottom: 14px; border-bottom: 1px solid rgba(148,163,184,.14); }
         .balance-block h2, .share-area h2 { text-align: center; font-size: 11px; letter-spacing: .2em; color: rgba(174,190,216,.72); }
         .balance-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 8px; }
         .balance-grid div { display: grid; place-items: center; gap: 2px; border-right: 1px solid rgba(148,163,184,.12); }
         .balance-grid div:last-child { border-right: 0; }
         .balance-grid strong { font-family: var(--font-display, Georgia, serif); font-size: 22px; font-weight: 400; }
         .balance-grid span { font-size: 8px; letter-spacing: .18em; text-transform: uppercase; color: rgba(148,163,184,.58); }
-        .activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+        .activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
         .activity-stat { text-align: center; }
         .activity-stat span { display: block; min-height: 13px; font-family: var(--font-display, Georgia, serif); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; color: rgba(174,190,216,.66); }
         .activity-stat strong { display: inline-block; min-width: 46px; padding: 2px 7px 4px; border-bottom: 1px solid rgba(226,232,240,.32); font-family: var(--font-display, Georgia, serif); font-size: 19px; font-weight: 400; }
         .activity-stat small { font-size: 11px; color: rgba(148,163,184,.58); }
-        .share-area { margin-top: 9px; display: grid; justify-items: center; gap: 6px; }
-        .share-heading-row { display: flex; align-items: center; gap: 7px; }
-        .mode-crown { width: 14px; height: 14px; color: #d9c795; }
-        .share-code { min-width: 126px; height: 52px; padding: 0 14px; display: flex; justify-content: center; align-items: center; gap: 9px; border: 1px solid rgba(220,205,165,.46); border-radius: 17px; background: rgba(8,9,15,.74); color: #efe7d4; font-family: var(--font-display, Georgia, serif); font-size: 12px; letter-spacing: .11em; text-transform: uppercase; box-shadow: 0 0 18px rgba(202,178,115,.08); }
+        .share-area { margin-top: 15px; display: grid; justify-items: center; gap: 8px; }
+        .share-heading-row { width: 100%; min-height: 16px; display: grid; place-items: center; }
+        .share-code { width: 154px; height: 52px; padding: 0 14px; display: flex; justify-content: center; align-items: center; gap: 9px; border: 1px solid rgba(220,205,165,.46); border-radius: 17px; background: rgba(8,9,15,.74); color: #efe7d4; font-family: var(--font-display, Georgia, serif); font-size: 12px; letter-spacing: .11em; text-transform: uppercase; box-shadow: 0 0 18px rgba(202,178,115,.08); }
         .share-code:disabled { border-color: rgba(148,163,184,.18); color: rgba(148,163,184,.5); box-shadow: none; }
         .share-code :global(svg) { width: 15px; height: 15px; }
-        .share-toggle-row { display: flex; align-items: center; justify-content: center; gap: 8px; color: rgba(148,163,184,.42); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
-        .share-toggle-row > span { display: inline-flex; align-items: center; gap: 4px; }
+        .share-toggle-row { width: 174px; display: grid; grid-template-columns: 54px 42px 54px; align-items: center; justify-content: center; gap: 8px; color: rgba(148,163,184,.42); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
+        .share-toggle-row > span { display: inline-flex; align-items: center; justify-content: center; }
         .share-toggle-row .active { color: rgba(226,232,240,.78); }
-        .inline-crown { width: 11px; height: 11px; color: #d9c795; }
         .mode-toggle { width: 42px; height: 22px; padding: 2px; border: 1px solid rgba(148,163,184,.24); border-radius: 999px; background: rgba(15,23,42,.86); }
         .mode-toggle span { display: block; width: 16px; height: 16px; border-radius: 50%; background: rgba(226,232,240,.78); transition: transform 180ms ease; }
         .mode-toggle.on span { transform: translateX(19px); background: #d9c795; }
@@ -423,7 +470,8 @@ export default function SavedReadingsPage() {
         .theme-swatch:nth-child(2) { background: linear-gradient(145deg, #252025, #0b090d); }
         .theme-swatch:nth-child(3) { background: linear-gradient(145deg, #172520, #080e0b); }
         .theme-swatch.active { border-color: rgba(255,255,255,.72); box-shadow: 0 0 10px rgba(200,219,255,.24); }
-        .theme-swatch:disabled { opacity: .4; }
+        .theme-swatch:not(.active) { opacity: .48; }
+        .theme-swatch:active { transform: scale(.92); }
         .notice { position: fixed; z-index: 20; left: 50%; top: max(58px, calc(env(safe-area-inset-top) + 48px)); transform: translateX(-50%); padding: 9px 16px; border-radius: 999px; background: rgba(12,14,22,.94); color: #d8caaa; font-size: 11px; text-align: center; }
         .notice.error { color: #fda4af; }
         .readings-section { min-height: 0; display: grid; grid-template-rows: 30px minmax(0, 1fr) auto 32px; gap: 5px; }
@@ -448,11 +496,12 @@ export default function SavedReadingsPage() {
         .page-navigation > span { color: rgba(148,163,184,.52); font-size: 9px; letter-spacing: .15em; }
         .page-navigation .delete { width: auto; padding-inline: 14px; color: #fecaca; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
         @media (max-height: 740px) {
-          .dashboard-page { grid-template-rows: 38px minmax(232px, 35vh) 42px minmax(0, 1fr); gap: 5px; padding-top: max(8px, env(safe-area-inset-top)); }
+          .dashboard-page { grid-template-rows: 38px minmax(270px, 40vh) 42px minmax(0, 1fr); gap: 5px; padding-top: max(8px, env(safe-area-inset-top)); }
           .dashboard-card { padding-top: 10px; }
           .balance-grid { margin-top: 5px; }
-          .activity-grid { margin-top: 7px; }
-          .share-area { margin-top: 5px; gap: 4px; }
+          .balance-block { padding-bottom: 9px; }
+          .activity-grid { margin-top: 10px; }
+          .share-area { margin-top: 9px; gap: 5px; }
           .share-code { height: 44px; }
         }
         @media (max-width: 350px) {
