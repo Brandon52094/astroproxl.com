@@ -1,6 +1,8 @@
 import type { StoredReading } from "@/lib/chartStore";
 
-export const MAX_SAVED_READINGS = 12;
+export const FREE_SAVED_READINGS = 8;
+export const PLUS_SAVED_READINGS = 16;
+export const MAX_SAVED_READINGS = 24;
 
 export interface SavedReadingFollowup {
   id: string;
@@ -76,22 +78,20 @@ export async function listSavedReadings(): Promise<SavedReadingRecord[]> {
 }
 
 export async function getSavedReading(id: string): Promise<SavedReadingRecord | null> {
-  const record = await withStore<SavedReadingRecord | undefined>("readonly", (store) =>
-    store.get(id),
-  );
+  const record = await withStore<SavedReadingRecord | undefined>("readonly", (store) => store.get(id));
   return record ?? null;
 }
 
 export async function saveReadingLocally(
   record: SavedReadingRecord,
+  allowedLimit: number = MAX_SAVED_READINGS,
 ): Promise<SaveReadingResult> {
+  const limit = Math.max(1, Math.min(MAX_SAVED_READINGS, Math.floor(allowedLimit)));
   const existing = await getSavedReading(record.id);
 
   if (!existing) {
     const readings = await listSavedReadings();
-    if (readings.length >= MAX_SAVED_READINGS) {
-      return { status: "limit", limit: MAX_SAVED_READINGS };
-    }
+    if (readings.length >= limit) return { status: "limit", limit };
   }
 
   await withStore("readwrite", (store) => store.put(record));
