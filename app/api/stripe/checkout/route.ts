@@ -14,12 +14,34 @@ import { eq } from "drizzle-orm";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const ONE_TIME_READING_CREDITS = 1;
 const REFERRAL_COOKIE = "aproxl_ref";
-function applyReferralDiscount(
-  amountCents: number
-): number {
-  return Math.round(
-    amountCents * (1 - REFERRAL_DISCOUNT_PERCENT)
-  );
+const ASTROSHARE_COUPON_ID =
+  process.env.STRIPE_REFERRAL_COUPON_ID ?? "ASTROSHARE";
+
+async function getAstroshareCouponId(): Promise<string> {
+  try {
+    const coupon = await stripe.coupons.retrieve(ASTROSHARE_COUPON_ID);
+    return coupon.id;
+  } catch (error) {
+    const stripeError = error as { code?: string };
+    if (stripeError.code !== "resource_missing") throw error;
+  }
+
+  try {
+    const coupon = await stripe.coupons.create({
+      id: ASTROSHARE_COUPON_ID,
+      name: `ASTROSHARE · ${Math.round(REFERRAL_DISCOUNT_PERCENT * 100)}% referral`,
+      percent_off: REFERRAL_DISCOUNT_PERCENT * 100,
+      duration: "once",
+      metadata: {
+        program: "astroshare",
+      },
+    });
+    return coupon.id;
+  } catch (error) {
+    // Another request may have created the coupon between retrieve and create.
+    const coupon = await stripe.coupons.retrieve(ASTROSHARE_COUPON_ID);
+    return coupon.id;
+  }
 }
 async function resolveReferral(userId: string) {
   const cookieStore = await cookies();
@@ -99,15 +121,13 @@ export async function POST(
       mode === "cart"
         ? await resolveReferral(userId)
         : null;
+    const referralCouponId = referral
+      ? await getAstroshareCouponId()
+      : null;
     /* ───────────────────────────────────────
        ONE REGULAR READING
     ─────────────────────────────────────── */
     if (mode === "one_time") {
-      const unitAmount = referral
-        ? applyReferralDiscount(
-            PRICING.reading.price
-          )
-        : PRICING.reading.price;
       const session =
         await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
@@ -123,7 +143,7 @@ export async function POST(
                     ? `One personalized reading · includes ${PRICING.reading.includedReplies} reply · 15% referral discount applied`
                     : `One personalized reading · includes ${PRICING.reading.includedReplies} reply`,
                 },
-                unit_amount: unitAmount,
+                unit_amount: PRICING.reading.price,
               },
               quantity: 1,
             },
@@ -142,6 +162,9 @@ export async function POST(
                 }
               : {}),
           },
+          discounts: referralCouponId
+            ? [{ coupon: referralCouponId }]
+            : undefined,
           success_url:
             `${returnUrl}?payment=success&mode=one_time`,
           cancel_url:
@@ -155,14 +178,11 @@ export async function POST(
        SUBSCRIPTION — SINGLE XL MEMBERSHIP
     ─────────────────────────────────────── */
     if (mode === "subscription") {
-      const unitAmount = referral
-        ? applyReferralDiscount(PRICING.membership.price)
-        : PRICING.membership.price;
       const session =
         await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
           mode: "subscription",
-          allow_promotion_codes: true,
+          allow_promotion_codes: referralCouponId ? undefined : true,
           line_items: [
             {
               price_data: {
@@ -173,7 +193,7 @@ export async function POST(
                     ? "Unlimited General Readings + JXL · up to 8 replies per conversation · members-only access · 15% referral discount applied"
                     : "Unlimited General Readings + JXL · up to 8 replies per conversation · members-only access",
                 },
-                unit_amount: unitAmount,
+                unit_amount: PRICING.membership.price,
                 recurring: {
                   interval: PRICING.membership.interval,
                 },
@@ -204,6 +224,9 @@ export async function POST(
                 }
               : {}),
           },
+          discounts: referralCouponId
+            ? [{ coupon: referralCouponId }]
+            : undefined,
           success_url:
             `${returnUrl}?payment=success&mode=subscription`,
           cancel_url:
@@ -300,11 +323,6 @@ export async function POST(
        ONE JXL
     ─────────────────────────────────────── */
     if (mode === "jxl_session") {
-      const unitAmount = referral
-        ? applyReferralDiscount(
-            PRICING.jxl.price
-          )
-        : PRICING.jxl.price;
       const session =
         await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
@@ -320,7 +338,7 @@ export async function POST(
                     ? `One JXL session · includes ${PRICING.jxl.includedReplies} replies · 15% referral discount applied`
                     : `One JXL session · includes ${PRICING.jxl.includedReplies} replies`,
                 },
-                unit_amount: unitAmount,
+                unit_amount: PRICING.jxl.price,
               },
               quantity: 1,
             },
@@ -343,6 +361,9 @@ export async function POST(
                 }
               : {}),
           },
+          discounts: referralCouponId
+            ? [{ coupon: referralCouponId }]
+            : undefined,
           success_url:
             `${returnUrl}?payment=success&mode=jxl_session`,
           cancel_url:
@@ -423,6 +444,15 @@ export async function POST(
           { status: 400 }
         );
       }
+      if (referralCouponId && parsedPledgeAmount > 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Please complete the ASTROSHARE purchase separately from your pledge so the pledge is not discounted.",
+          },
+          { status: 400 }
+        );
+      }
       let grantCredits = 0;
       let grantJxlCredits = 0;
       /*
@@ -447,11 +477,6 @@ export async function POST(
           )
         );
       if (readingQuantity > 0) {
-        const readingAmount = referral
-          ? applyReferralDiscount(
-              PRICING.reading.price
-            )
-          : PRICING.reading.price;
         lineItems.push({
           price_data: {
             currency: "usd",
@@ -462,8 +487,7 @@ export async function POST(
                 ? `Includes ${PRICING.reading.includedReplies} reply · 15% referral discount applied`
                 : `Includes ${PRICING.reading.includedReplies} reply`,
             },
-            unit_amount:
-              readingAmount,
+            unit_amount: PRICING.reading.price,
           },
           quantity:
             readingQuantity,
@@ -487,11 +511,6 @@ export async function POST(
           )
         );
       if (jxlQuantity > 0) {
-        const jxlAmount = referral
-          ? applyReferralDiscount(
-              PRICING.jxl.price
-            )
-          : PRICING.jxl.price;
         lineItems.push({
           price_data: {
             currency: "usd",
@@ -502,7 +521,7 @@ export async function POST(
                 ? `Includes ${PRICING.jxl.includedReplies} replies · 15% referral discount applied`
                 : `Includes ${PRICING.jxl.includedReplies} replies`,
             },
-            unit_amount: jxlAmount,
+            unit_amount: PRICING.jxl.price,
           },
           quantity:
             jxlQuantity,
@@ -526,11 +545,6 @@ export async function POST(
           )
         );
       if (replyQuantity > 0) {
-        const replyAmount = referral
-          ? applyReferralDiscount(
-              PRICING.replies.priceEach
-            )
-          : PRICING.replies.priceEach;
         lineItems.push({
           price_data: {
             currency: "usd",
@@ -541,8 +555,7 @@ export async function POST(
                 ? "Works with Reading or JXL · 15% referral discount applied"
                 : "Works with Reading or JXL",
             },
-            unit_amount:
-              replyAmount,
+            unit_amount: PRICING.replies.priceEach,
           },
           quantity:
             replyQuantity,
@@ -611,6 +624,13 @@ export async function POST(
                 }
               : {}),
           },
+          discounts:
+            referralCouponId &&
+            (grantCredits > 0 ||
+              grantJxlCredits > 0 ||
+              grantReplyCredits > 0)
+              ? [{ coupon: referralCouponId }]
+              : undefined,
           success_url:
             `${returnUrl}?payment=success&mode=cart`,
           cancel_url:

@@ -176,17 +176,21 @@ export default function SavedReadingsPage() {
   const shareReferral = async () => {
     if (!referralCode || shareMode === "commission") return;
 
+    const referralUrl = `${window.location.origin}/api/referral/capture?code=${encodeURIComponent(
+      referralCode,
+    )}`;
+
     const shareData = {
       title: "AstroProXL",
-      text: `Use my AstroProXL referral code ${referralCode} for a discount on your first eligible reading.`,
-      url: window.location.origin,
+      text: "Use my ASTROSHARE link for 15% off your first eligible AstroProXL purchase.",
+      url: referralUrl,
     };
 
     try {
       if (navigator.share) {
         await navigator.share(shareData);
       } else {
-        await navigator.clipboard.writeText(referralCode);
+        await navigator.clipboard.writeText(referralUrl);
       }
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
@@ -247,7 +251,7 @@ export default function SavedReadingsPage() {
             {shareMode === "commission" ? (
               <><LockKeyhole aria-hidden="true" /><span>Coming Soon</span></>
             ) : (
-              <><span>{referralCode || "Loading"}</span>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}</>
+              <><span>{referralCode ? "ASTROSHARE" : "Loading"}</span>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}</>
             )}
           </button>
 
@@ -266,7 +270,11 @@ export default function SavedReadingsPage() {
           </div>
         </div>
 
-        <button type="button" className="edit-chart" onClick={() => router.push("/birth-chart")}>
+        <button
+          type="button"
+          className="edit-chart"
+          onClick={() => router.push("/chart-data?recalculate=true")}
+        >
           <Pencil aria-hidden="true" /> Edit Chart
         </button>
       </section>
