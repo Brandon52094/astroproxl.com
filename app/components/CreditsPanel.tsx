@@ -33,7 +33,7 @@ interface Product {
 const PRODUCTS: Product[] = [
   {
     id: "jxl",
-    title: "JXL Private Session",
+    title: "Ask Anything Voice feature",
     desc: `Private ask-anything astrology · includes ${PRICING.jxl.includedReplies} replies`,
     price: PRICING.jxl.price,
     icon: Sparkles,
