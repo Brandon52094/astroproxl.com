@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -11,13 +12,16 @@ import {
   Minus,
 } from "lucide-react";
 import { PRICING, formatUsd } from "@/lib/paywallConfig";
+
 /* ─────────────────────────────────────────────
    Products
 ───────────────────────────────────────────── */
 type ProductId = "jxl" | "reading" | "replies";
 type MembershipTierId = "astro_plus" | "astro_plus_xl";
+
 const MIN_PLEDGE_CENTS = 50;
 const MAX_PLEDGE_CENTS = 100_000_000;
+
 interface Product {
   id: ProductId;
   title: string;
@@ -25,6 +29,7 @@ interface Product {
   price: number;
   icon: React.ElementType;
 }
+
 const PRODUCTS: Product[] = [
   {
     id: "jxl",
@@ -48,12 +53,14 @@ const PRODUCTS: Product[] = [
     icon: MessageCircleMore,
   },
 ];
+
 interface Balance {
   readings: number;
   jxl: number;
   replies: number;
   isSubscribed: boolean;
 }
+
 const MEMBERSHIP_TIERS: Record<
   MembershipTierId,
   {
@@ -90,9 +97,11 @@ const MEMBERSHIP_TIERS: Record<
     ],
   },
 };
+
 function plural(n: number, one: string, many?: string): string {
   return n === 1 ? one : many ?? `${one}s`;
 }
+
 export default function CreditsPanel({
   onClose,
   embedded = false,
@@ -128,6 +137,7 @@ export default function CreditsPanel({
     parsedPledgeAmountCents,
     MAX_PLEDGE_CENTS
   );
+
   /* Current balances */
   useEffect(() => {
     (async () => {
@@ -146,12 +156,14 @@ export default function CreditsPanel({
       }
     })();
   }, []);
+
   const step = useCallback((id: ProductId, amount: number) => {
     setCart((current) => ({
       ...current,
       [id]: Math.max(0, current[id] + amount),
     }));
   }, []);
+
   const total = useMemo(
     () =>
       cart.jxl * PRICING.jxl.price +
@@ -159,11 +171,14 @@ export default function CreditsPanel({
       cart.replies * PRICING.replies.priceEach,
     [cart]
   );
+
   const selectedItems = useMemo(
     () => Object.values(cart).reduce((sum, qty) => sum + qty, 0),
     [cart]
   );
+
   const checkoutTotal = total + pledgeAmountCents;
+
   /* ── Credit checkout ── */
   const handleCheckout = async () => {
     if (checkoutTotal <= 0) return;
@@ -205,6 +220,7 @@ export default function CreditsPanel({
       setLoading(false);
     }
   };
+
   /* ── Membership checkout ── */
   const handleGetAccess = async () => {
     setLoading(true);
@@ -231,13 +247,24 @@ export default function CreditsPanel({
       setLoading(false);
     }
   };
+
   const rootClass = embedded
-    ? "relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible font-sans text-slate-100"
-    : "fixed inset-0 z-50 min-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
+    ? "credits-scroll-shell relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-visible font-sans text-slate-100"
+    : "credits-scroll-shell fixed inset-0 z-50 min-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden font-sans text-slate-100";
+
   const astroPlusPremiumCss = `
+    .credits-scroll-shell {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .credits-scroll-shell::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
+    }
     @property --astro-plus-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-  .astro-plus-shell,
-  .astro-plus-xl-shell {
+    .astro-plus-shell,
+    .astro-plus-xl-shell {
       position: relative;
       isolation: isolate;
       border-radius: 22px;
@@ -258,24 +285,24 @@ export default function CreditsPanel({
         0 14px 34px rgba(0,0,0,0.44);
       animation: astroPlusOrbit 8s linear infinite;
     }
-  .astro-plus-xl-shell {
-    background:
-      conic-gradient(
-        from var(--astro-plus-angle),
-        rgba(255,255,255,0.98) 0deg,
-        rgba(171,196,232,0.80) 72deg,
-        rgba(255,255,255,0.72) 136deg,
-        rgba(226,235,248,0.98) 210deg,
-        rgba(140,171,219,0.76) 292deg,
-        rgba(255,255,255,0.98) 360deg
-      );
-    box-shadow:
-      0 0 22px rgba(255,255,255,0.20),
-      0 0 38px rgba(140,171,219,0.10),
-      0 14px 34px rgba(0,0,0,0.44);
-  }
-  .astro-plus-shell::after,
-  .astro-plus-xl-shell::after {
+    .astro-plus-xl-shell {
+      background:
+        conic-gradient(
+          from var(--astro-plus-angle),
+          rgba(255,255,255,0.98) 0deg,
+          rgba(171,196,232,0.80) 72deg,
+          rgba(255,255,255,0.72) 136deg,
+          rgba(226,235,248,0.98) 210deg,
+          rgba(140,171,219,0.76) 292deg,
+          rgba(255,255,255,0.98) 360deg
+        );
+      box-shadow:
+        0 0 22px rgba(255,255,255,0.20),
+        0 0 38px rgba(140,171,219,0.10),
+        0 14px 34px rgba(0,0,0,0.44);
+    }
+    .astro-plus-shell::after,
+    .astro-plus-xl-shell::after {
       content: "";
       position: absolute;
       inset: -2px;
@@ -298,11 +325,12 @@ export default function CreditsPanel({
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
     }
     @keyframes astroPlusOrbit { to { --astro-plus-angle: 360deg; } }
-  @media (prefers-reduced-motion: reduce) {
-    .astro-plus-shell,
-    .astro-plus-xl-shell { animation: none !important; }
-  }
+    @media (prefers-reduced-motion: reduce) {
+      .astro-plus-shell,
+      .astro-plus-xl-shell { animation: none !important; }
+    }
   `;
+
   return (
     <div
       className={rootClass}
@@ -311,6 +339,7 @@ export default function CreditsPanel({
       }}
     >
       <style>{astroPlusPremiumCss}</style>
+
       {!embedded && (
         <button
           type="button"
@@ -321,6 +350,7 @@ export default function CreditsPanel({
           <ChevronLeft size={17} />
         </button>
       )}
+
       <div
         className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
         style={{
@@ -328,35 +358,25 @@ export default function CreditsPanel({
           paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
         }}
       >
-        {/* ── CREDITS + BALANCE — one compact unit ── */}
+        {/* ── CREDITS + BALANCE — compressed header + balance strip ── */}
         <motion.section
           initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
-          className="mb-2 overflow-hidden rounded-[18px] border border-white/10 bg-transparent"
+          className="mb-2"
         >
-          <div
-            className="flex w-full items-center justify-center px-4 py-[10px] text-[12px] font-medium uppercase tracking-[0.18em] text-slate-200"
-            style={{
-              background:
-                "radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%), linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88))",
-              WebkitBackdropFilter: "blur(14px)",
-              backdropFilter: "blur(14px)",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.055), inset 0 -1px 0 rgba(255,255,255,0.025)",
-            }}
-          >
+          <p className="mb-1.5 text-center text-[10px] font-medium uppercase tracking-[0.24em] text-slate-500">
             Credits And Balance
-          </div>
+          </p>
           {balance &&
             (balance.isSubscribed ? (
-              <div className="border-t border-white/[0.06] py-3 text-center text-[10px] font-medium uppercase tracking-[0.22em] text-white">
+              <div className="rounded-[14px] border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-center text-[9px] font-medium uppercase tracking-[0.20em] text-white backdrop-blur-sm">
                 Subscribed
               </div>
             ) : (
-              <div className="grid grid-cols-3 divide-x divide-white/[0.06] border-t border-white/[0.06] px-2 py-2.5">
+              <div className="grid grid-cols-3 divide-x divide-white/[0.06] rounded-[14px] border border-white/[0.08] bg-white/[0.025] px-1 py-2 backdrop-blur-sm">
                 <div className="text-center">
-                  <p className="text-[18px] font-light leading-none text-white tabular-nums">
+                  <p className="text-[16px] font-light leading-none text-white tabular-nums">
                     {balance.readings}
                   </p>
                   <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
@@ -364,7 +384,7 @@ export default function CreditsPanel({
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[18px] font-light leading-none text-white tabular-nums">
+                  <p className="text-[16px] font-light leading-none text-white tabular-nums">
                     {balance.jxl}
                   </p>
                   <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
@@ -372,7 +392,7 @@ export default function CreditsPanel({
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-[18px] font-light leading-none text-white tabular-nums">
+                  <p className="text-[16px] font-light leading-none text-white tabular-nums">
                     {balance.replies}
                   </p>
                   <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
@@ -382,6 +402,7 @@ export default function CreditsPanel({
               </div>
             ))}
         </motion.section>
+
         <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -417,6 +438,7 @@ export default function CreditsPanel({
                   <Crown className="h-5 w-5 text-white" strokeWidth={1.8} style={{ filter: "drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.55))" }} />
                 </div>
               </div>
+
               <div className="mt-3 border-t border-white/[0.06] pt-2.5">
                 <div className="grid grid-cols-1 gap-1.5">
                   {activeMembership.features.map((feature) => (
@@ -439,6 +461,7 @@ export default function CreditsPanel({
                   ))}
                 </div>
               </div>
+
               <button
                 type="button"
                 onClick={handleGetAccess}
@@ -461,6 +484,7 @@ export default function CreditsPanel({
               </button>
             </div>
           </div>
+
           {/* Small membership switch, intentionally outside both cards. */}
           <div
             role="radiogroup"
@@ -501,6 +525,7 @@ export default function CreditsPanel({
               );
             })}
           </div>
+
           {/* ── INDIVIDUAL PURCHASE OPTIONS ── */}
           <div className="pt-2">
             <div className="space-y-2.5">
@@ -555,10 +580,11 @@ export default function CreditsPanel({
               })}
             </div>
           </div>
+
           {/* ── PLEDGE — intentionally presented without a card ── */}
-          <section className="px-3 py-1.5 text-center">
-            <div className="mx-auto flex max-w-[280px] items-center gap-2 border-b border-white/15 pb-1.5">
-              <span className="text-[19px] font-light text-slate-400">$</span>
+          <section className="px-3 py-2 text-center">
+            <div className="mx-auto flex max-w-[300px] items-center gap-2.5 border-b border-white/30 pb-2">
+              <span className="text-[22px] font-light text-slate-200">$</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -570,17 +596,18 @@ export default function CreditsPanel({
                   if (error) setError("");
                 }}
                 placeholder="Enter amount"
-                className="min-w-0 flex-1 bg-transparent text-[16px] font-light text-white outline-none placeholder:text-slate-700"
+                className="min-w-0 flex-1 bg-transparent text-[18px] font-light text-white outline-none placeholder:text-slate-400/90"
               />
             </div>
             <p
               id="pledge-statement"
-              className="mx-auto mt-1 max-w-[290px] text-[10px] leading-4 text-slate-500"
+              className="mx-auto mt-1.5 max-w-[300px] text-[11px] leading-4 text-slate-400"
             >
               Pledge toward the continued expansion of{" "}
-              <span className="text-[#DAB768]">AstroProXL</span>
+              <span className="font-medium text-[#E6C87D]">AstroProXL</span>
             </p>
           </section>
+
           {error && (
             <p
               role="alert"
@@ -589,6 +616,7 @@ export default function CreditsPanel({
               {error}
             </p>
           )}
+
           {/* ── COMPACT CHECKOUT ── */}
           <section className="standard-shadow rounded-[20px] border border-white/10 bg-white/[0.03] px-3.5 py-3 backdrop-blur-sm">
             <div className="flex items-center justify-between">

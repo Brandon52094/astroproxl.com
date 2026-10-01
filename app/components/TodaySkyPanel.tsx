@@ -424,9 +424,19 @@ export default function TodaySkyPanel({ userStatus }: TodaySkyPanelProps) {
 
   return (
     <div
+      data-todays-sky-panel
       className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden font-sans text-slate-100"
     >
       <style jsx>{`
+        :global(*:has([data-todays-sky-panel])) {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+        :global(*:has([data-todays-sky-panel]))::-webkit-scrollbar {
+          width: 0 !important;
+          height: 0 !important;
+          display: none !important;
+        }
         @keyframes transitEscalator {
           from { transform: translate3d(0, 0, 0); }
           to { transform: translate3d(0, calc(var(--transit-count) * -52px), 0); }
