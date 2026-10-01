@@ -63,7 +63,6 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -90,15 +89,11 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
     const resize = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
-
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-
       canvas.width = w * dpr;
       canvas.height = h * dpr;
-
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
-
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
@@ -114,7 +109,6 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
 
     for (let layer = 0; layer < 3; layer++) {
       const stars: PStar[] = [];
-
       for (let i = 0; i < counts[layer]; i++) {
         stars.push({
           x: Math.random(),
@@ -122,13 +116,11 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
           r: Math.random() * sizes[layer] + 0.3,
         });
       }
-
       parallax.push(stars);
     }
 
     // Independent twinkling stars.
     const twinkling: TStar[] = [];
-
     for (let i = 0; i < 34; i++) {
       twinkling.push({
         x: Math.random(),
@@ -143,7 +135,6 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
     const shooters: Shooter[] = [];
     let tick = 0;
     let nextShoot = 360;
-
     let raf = 0;
     let running = !document.hidden;
 
@@ -151,19 +142,16 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
       if (!running) return;
       const w = window.innerWidth;
       const h = window.innerHeight;
-
       ctx.clearRect(0, 0, w, h);
 
       // Parallax stars.
       for (let layer = 0; layer < 3; layer++) {
         for (const star of parallax[layer]) {
           star.x -= speeds[layer] / w;
-
           if (star.x < 0) {
             star.x = 1;
             star.y = Math.random();
           }
-
           ctx.fillStyle = `rgba(219,234,254,${alphas[layer]})`;
           ctx.beginPath();
           ctx.arc(star.x * w, star.y * h, star.r, 0, Math.PI * 2);
@@ -174,9 +162,7 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
       // Twinkling stars.
       for (const star of twinkling) {
         star.ph += star.sp;
-
         const twinkle = (Math.sin(star.ph) + 1) / 2;
-
         ctx.fillStyle = `rgba(226,232,240,${0.2 + twinkle * 0.6})`;
         ctx.beginPath();
         ctx.arc(star.x * w, star.y * h, star.r * (0.7 + twinkle * 0.4), 0, Math.PI * 2);
@@ -196,19 +182,16 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
           maxLife: 60 + Math.random() * 20,
           len: Math.random() * 40 + 50,
         });
-
         nextShoot = tick + 360 + Math.random() * 240;
       }
 
       for (let i = shooters.length - 1; i >= 0; i--) {
         const shooter = shooters[i];
-
         shooter.x += shooter.vx;
         shooter.y += shooter.vy;
         shooter.life++;
 
         let fade = 1;
-
         if (shooter.life < 10) {
           fade = shooter.life / 10;
         } else if (shooter.life > shooter.maxLife - 15) {
@@ -216,10 +199,8 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
         }
 
         const magnitude = Math.sqrt(shooter.vx * shooter.vx + shooter.vy * shooter.vy);
-
         const tailX = shooter.x - (shooter.vx / magnitude) * shooter.len;
         const tailY = shooter.y - (shooter.vy / magnitude) * shooter.len;
-
         const gradient = ctx.createLinearGradient(shooter.x, shooter.y, tailX, tailY);
 
         gradient.addColorStop(0, `rgba(226,232,240,${0.9 * fade})`);
@@ -228,7 +209,6 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
         ctx.strokeStyle = gradient;
         ctx.lineWidth = 1.6;
         ctx.lineCap = "round";
-
         ctx.beginPath();
         ctx.moveTo(shooter.x, shooter.y);
         ctx.lineTo(tailX, tailY);
@@ -961,6 +941,8 @@ function ReadingDeck({
 
 export default function ReadingResultsPage() {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
+  const [hasEntered, setHasEntered] = useState(false);
   const [reading, setReading] = useState<StoredReading | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSources, setShowSources] = useState(false);
@@ -1031,6 +1013,16 @@ export default function ReadingResultsPage() {
       cancelled = true;
     };
   }, [router]);
+
+  useEffect(() => {
+    if (isLoading || !reading) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      setHasEntered(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isLoading, reading]);
 
   useEffect(() => {
     if (!reading || !readingKey || viewingSavedReading) return;
@@ -1366,16 +1358,7 @@ export default function ReadingResultsPage() {
   };
 
   if (isLoading) {
-    return (
-      <div
-        className="flex min-h-screen items-center justify-center"
-        style={{ background: "#0a0e27" }}
-      >
-        <p className="text-sm text-slate-400" role="status">
-          Loading your reading…
-        </p>
-      </div>
-    );
+    return <div className="min-h-screen bg-black" aria-label="Loading your reading" />;
   }
   if (!reading || !page || typeof page.content !== "string" || !page.content.trim()) {
     return (
@@ -1407,7 +1390,15 @@ export default function ReadingResultsPage() {
   const paywallVisible = !isSubscribed && (showPaywall || outOfReplies);
 
   return (
-    <>
+    <div className="min-h-screen bg-black">
+      <motion.div
+        initial={false}
+        animate={{ opacity: hasEntered ? 1 : 0 }}
+        transition={{
+          duration: reduceMotion ? 0.12 : 0.78,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+      >
       <ReadingDeck
         key={readingKey}
         topic={reading.topic}
@@ -1683,7 +1674,8 @@ export default function ReadingResultsPage() {
           </div>
         </div>
       )}
-    </>
+      </motion.div>
+    </div>
   );
 }
 
