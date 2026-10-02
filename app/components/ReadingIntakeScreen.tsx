@@ -39,12 +39,12 @@ declare global {
 const ASK_MIN_HOLD_MS = 450;
 
 const ASK_WAVE = {
-  sensitivity: 1.1,
-  idle: 0.16,
+  sensitivity: 1.5,
+  idle: 0.18,
   lines: 3,
-  speed: 1.8,
-  glow: 15,
-  thickness: 2.2,
+  speed: 2.2,
+  glow: 18,
+  thickness: 2.45,
   colors: ["#22c55e", "#3b82f6", "#a855f7", "#ef4444", "#f59e0b"],
 };
 
@@ -608,6 +608,8 @@ export default function ReadingIntakeScreen({
   const askHoldingRef = useRef(false);
   const [askError, setAskError] = useState<string | null>(null);
   const [isTranscribingAsk, setIsTranscribingAsk] = useState(false);
+  const [voiceJourneyActive, setVoiceJourneyActive] = useState(false);
+  const [voiceNavigating, setVoiceNavigating] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const askHoldStartRef = useRef(0);
@@ -618,7 +620,6 @@ export default function ReadingIntakeScreen({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterRafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const headerCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -978,7 +979,7 @@ export default function ReadingIntakeScreen({
       audioCtxRef.current = null;
     }
 
-    for (const canvas of [canvasRef.current, headerCanvasRef.current]) {
+    for (const canvas of [canvasRef.current]) {
       const ctx = canvas?.getContext("2d");
       if (canvas && ctx) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1083,7 +1084,7 @@ export default function ReadingIntakeScreen({
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.78;
+      analyser.smoothingTimeConstant = 0.66;
       source.connect(analyser);
       analyserRef.current = analyser;
 
@@ -1123,7 +1124,11 @@ export default function ReadingIntakeScreen({
         c2d.lineJoin = "round";
         c2d.globalCompositeOperation = "lighter";
 
-        const amp = (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) * (ch * 0.42);
+        const speakingBoost = 1 + smooth * 0.95;
+        const amp =
+          (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) *
+          (ch * 0.42) *
+          speakingBoost;
 
         for (let line = 0; line < ASK_WAVE.lines; line++) {
           const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
@@ -1151,8 +1156,11 @@ export default function ReadingIntakeScreen({
           c2d.stroke();
         }
 
+        const coreBoost = 1 + smooth * 0.8;
         const coreAmp =
-          (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) * (ch * 0.42);
+          (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) *
+          (ch * 0.42) *
+          coreBoost;
         c2d.beginPath();
         for (let x = 0; x <= cw; x += 2) {
           const tx = x / cw;
@@ -1194,10 +1202,9 @@ export default function ReadingIntakeScreen({
         }
 
         const energy = count ? (sum / count) / 255 : 0;
-        smooth += (energy - smooth) * 0.18;
+        smooth += (energy - smooth) * 0.26;
 
         drawWave(canvasRef.current);
-        drawWave(headerCanvasRef.current);
 
         meterRafRef.current = requestAnimationFrame(draw);
       };
@@ -1230,9 +1237,16 @@ export default function ReadingIntakeScreen({
         timeframeValue: "next-45-days",
       });
 
-      router.push("/reading/preparing");
+      setVoiceNavigating(true);
+
+      // Keep the voice experience on screen long enough to hand off cleanly.
+      // The full-screen black veil prevents the intake UI from flashing back
+      // before the Preparing route mounts.
+      window.setTimeout(() => {
+        router.push("/reading/preparing?source=voice");
+      }, shouldReduceMotion ? 80 : 520);
     },
-    [router]
+    [router, shouldReduceMotion]
   );
 
   const transcribeAskAudio = useCallback(
@@ -1263,6 +1277,8 @@ export default function ReadingIntakeScreen({
 
         submitAskAnything(data.text);
       } catch {
+        setVoiceJourneyActive(false);
+        setVoiceNavigating(false);
         setAskError("Something went wrong with voice input. Try again.");
       } finally {
         setIsTranscribingAsk(false);
@@ -1290,6 +1306,8 @@ export default function ReadingIntakeScreen({
       }
 
       setAskError(null);
+      setVoiceJourneyActive(true);
+      setVoiceNavigating(false);
       askPointerStartYRef.current = e.clientY;
       askCancelledRef.current = false;
       audioChunksRef.current = [];
@@ -1321,6 +1339,8 @@ export default function ReadingIntakeScreen({
         askCancelledRef.current = true;
         askHoldingRef.current = false;
         setAskHolding(false);
+        setVoiceJourneyActive(false);
+        setVoiceNavigating(false);
         stopAskMeter();
         setAskError("Voice recording was interrupted. Try again.");
       };
@@ -1355,6 +1375,8 @@ export default function ReadingIntakeScreen({
       } catch {
         askHoldingRef.current = false;
         setAskHolding(false);
+        setVoiceJourneyActive(false);
+        setVoiceNavigating(false);
         mediaRecorderRef.current = null;
         setAskError("Voice recording couldn't start. Try again.");
         return;
@@ -1375,6 +1397,8 @@ export default function ReadingIntakeScreen({
     askCancelledRef.current = true;
     askHoldingRef.current = false;
     setAskHolding(false);
+    setVoiceJourneyActive(false);
+    setVoiceNavigating(false);
     setAskError(null);
 
     stopAskMeter();
@@ -1406,6 +1430,8 @@ export default function ReadingIntakeScreen({
 
     if (elapsed < ASK_MIN_HOLD_MS) {
       askCancelledRef.current = true;
+      setVoiceJourneyActive(false);
+      setVoiceNavigating(false);
       stopAskRecorder(true);
       setAskError("Press and hold while you speak.");
       return;
@@ -1564,13 +1590,47 @@ export default function ReadingIntakeScreen({
     return theme.areaColors[key];
   }, [theme]);
 
+  // This screen owns vertical scrolling while it is mounted. That keeps it
+  // edge-to-edge inside the swipe container and prevents a parent scrollbar
+  // from appearing beside the microphone experience.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.classList.add("astro-intake-no-scrollbar");
+    body.classList.add("astro-intake-no-scrollbar");
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+      html.classList.remove("astro-intake-no-scrollbar");
+      body.classList.remove("astro-intake-no-scrollbar");
+    };
+  }, []);
+
+  const voiceVisualActive = voiceJourneyActive || askHolding || isTranscribingAsk || voiceNavigating;
+
   return (
       <div
-      className="no-scrollbar relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden text-slate-100"
+      className="no-scrollbar relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden bg-[#050816] text-slate-100"
+      style={{
+        minHeight: "100dvh",
+        height: "100dvh",
+        overscrollBehaviorY: "contain",
+        WebkitOverflowScrolling: "touch",
+      }}
     >
       <style jsx>{`
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+        :global(.astro-intake-no-scrollbar) { -ms-overflow-style: none; scrollbar-width: none; }
+        :global(.astro-intake-no-scrollbar::-webkit-scrollbar) { display: none !important; width: 0 !important; height: 0 !important; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
         @keyframes heroShine {
@@ -1999,14 +2059,14 @@ export default function ReadingIntakeScreen({
             onClick={() => onSwipeLeft?.()}
             className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: askHolding ? 0 : selectedArea ? 0.72 : 1,
+              opacity: voiceVisualActive ? 0 : selectedArea ? 0.72 : 1,
               filter: askHolding
                 ? "blur(4px) brightness(0.18)"
                 : selectedArea
                   ? "grayscale(0.72) brightness(0.52) saturate(0.42)"
                   : "brightness(1) saturate(1)",
-              pointerEvents: askHolding ? "none" : "auto",
-              transitionDuration: askHolding || selectedArea ? "700ms" : "350ms",
+              pointerEvents: voiceVisualActive ? "none" : "auto",
+              transitionDuration: voiceVisualActive || selectedArea ? "700ms" : "350ms",
               textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
             }}
           >
@@ -2016,7 +2076,7 @@ export default function ReadingIntakeScreen({
           {/* ── HERO — locked at exactly 236px for every state ── */}
           <section className="mb-[14px] pt-0">
             <div
-              className={`hero-glow-shell ${selectedArea && !askHolding ? "hero-glow-shell-focus" : ""}`}
+              className={`hero-glow-shell ${selectedArea && !voiceVisualActive ? "hero-glow-shell-focus" : ""}`}
               style={{
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
@@ -2027,18 +2087,18 @@ export default function ReadingIntakeScreen({
               <div
                 ref={heroStageRef}
                 className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
-                onClick={askHolding ? undefined : cycleHeroInfo}
+                onClick={voiceVisualActive ? undefined : cycleHeroInfo}
                 onContextMenu={(e) => e.preventDefault()}
-                aria-label={askHolding ? "Ask Anything is listening" : "Tap to change hero information"}
+                aria-label={voiceVisualActive ? "Ask Anything voice flow is active" : "Tap to change hero information"}
                 style={{
-                  cursor: askHolding ? "default" : "pointer",
-                  opacity: askHolding ? 1 : selectedArea ? 0.68 : 1,
-                  filter: askHolding
+                  cursor: voiceVisualActive ? "default" : "pointer",
+                  opacity: voiceVisualActive ? 1 : selectedArea ? 0.68 : 1,
+                  filter: voiceVisualActive
                     ? "brightness(1) saturate(1)"
                     : selectedArea
                       ? "grayscale(0.72) brightness(0.56) saturate(0.42)"
                       : "grayscale(0) brightness(1) saturate(1)",
-                  transitionDuration: askHolding || selectedArea ? "700ms" : "350ms",
+                  transitionDuration: voiceVisualActive || selectedArea ? "700ms" : "350ms",
                 }}
               >
                 {/* One master canvas: every hero uses the exact same 374 × 236 composition. */}
@@ -2051,7 +2111,7 @@ export default function ReadingIntakeScreen({
                 >
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
-                      key={askHolding ? "listening" : heroInfoMode}
+                      key={voiceVisualActive ? "listening" : heroInfoMode}
                       initial={
                         shouldReduceMotion
                           ? { opacity: 0 }
@@ -2069,14 +2129,24 @@ export default function ReadingIntakeScreen({
                       }}
                       className="absolute inset-0"
                     >
-                      {askHolding ? (
+                      {voiceVisualActive ? (
                         /* HERO 4 — waveform-only listening state */
                         <div className="absolute inset-0 flex items-center justify-center px-[30px]">
                           <canvas
                             ref={canvasRef}
                             aria-hidden="true"
-                            className="h-[112px] w-[320px] max-w-full"
+                            className="h-[122px] w-[330px] max-w-full"
+                            style={{ opacity: askHolding ? 1 : 0.42 }}
                           />
+                          {!askHolding && (isTranscribingAsk || voiceNavigating) ? (
+                            <motion.p
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="absolute bottom-[31px] left-0 right-0 text-[9px] font-medium uppercase tracking-[0.2em] text-slate-300/72"
+                            >
+                              {voiceNavigating ? "Opening your reading…" : "Understanding your question…"}
+                            </motion.p>
+                          ) : null}
                         </div>
                       ) : heroInfoMode === "brand" ? (
                         /* HERO 1 — centered brand statement, preserving the original AstroPro typography language */
@@ -2371,21 +2441,14 @@ export default function ReadingIntakeScreen({
             <p
               className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
               style={{
-                opacity: askHolding ? 0 : 1,
-                filter: askHolding ? "blur(4px)" : "blur(0px)",
+                opacity: voiceVisualActive ? 0 : 1,
+                filter: voiceVisualActive ? "blur(4px)" : "blur(0px)",
                 textShadow:
                   "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
               }}
             >
               {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
             </p>
-
-            <canvas
-              ref={headerCanvasRef}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-1/2 h-[22px] w-[180px] max-w-[68%] -translate-x-1/2 -translate-y-1/2 transition-opacity duration-300"
-              style={{ opacity: askHolding ? 1 : 0 }}
-            />
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -2410,13 +2473,13 @@ export default function ReadingIntakeScreen({
                       ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: askHolding ? 0 : selectedArea && !isSelected ? 0.74 : 1,
+                    opacity: voiceVisualActive ? 0 : selectedArea && !isSelected ? 0.74 : 1,
                     filter: askHolding
                       ? "blur(4px) brightness(0.18)"
                       : selectedArea && !isSelected
                         ? "grayscale(0.70) brightness(0.54) saturate(0.45)"
                         : "brightness(1) saturate(1)",
-                    transitionDuration: selectedArea || askHolding ? "700ms" : "350ms",
+                    transitionDuration: selectedArea || voiceVisualActive ? "700ms" : "350ms",
                   }}
                 >
                   {Icon ? (
@@ -2451,10 +2514,10 @@ export default function ReadingIntakeScreen({
             data-reading-context="true"
             className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
             style={{
-              opacity: askHolding ? 0 : 1,
-              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
-              pointerEvents: askHolding ? "none" : "auto",
-              transitionDuration: selectedArea || askHolding ? "700ms" : "350ms",
+              opacity: voiceVisualActive ? 0 : 1,
+              filter: voiceVisualActive ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
+              pointerEvents: voiceVisualActive ? "none" : "auto",
+              transitionDuration: selectedArea || voiceVisualActive ? "700ms" : "350ms",
             }}
           >
             <div
@@ -2510,10 +2573,10 @@ export default function ReadingIntakeScreen({
           <div
             className="mt-3 flex flex-col items-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
-              opacity: askHolding ? 0 : 1,
-              filter: askHolding ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
-              pointerEvents: askHolding ? "none" : "auto",
-              transitionDuration: askHolding ? "700ms" : "350ms",
+              opacity: voiceVisualActive ? 0 : 1,
+              filter: voiceVisualActive ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
+              pointerEvents: voiceVisualActive ? "none" : "auto",
+              transitionDuration: voiceVisualActive ? "700ms" : "350ms",
             }}
           >
             {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
@@ -2566,11 +2629,11 @@ export default function ReadingIntakeScreen({
         className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
         aria-label="Press and hold to speak. Swipe up to cancel."
         style={{
-          opacity: selectedArea && !askHolding ? 0.76 : 1,
-          filter: selectedArea && !askHolding
+          opacity: selectedArea && !voiceVisualActive ? 0.76 : 1,
+          filter: selectedArea && !voiceVisualActive
             ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
             : "brightness(1) saturate(1)",
-          transform: askHolding ? "scale(1.012)" : undefined,
+          transform: voiceVisualActive ? "scale(1.012)" : undefined,
           WebkitUserSelect: "none",
           userSelect: "none",
           WebkitTouchCallout: "none",
@@ -2589,7 +2652,7 @@ export default function ReadingIntakeScreen({
         <span
           aria-hidden="true"
           className="ask-focus-veil"
-          style={{ opacity: selectedArea && !askHolding ? 0.48 : 0 }}
+          style={{ opacity: selectedArea && !voiceVisualActive ? 0.48 : 0 }}
         />
       </button>
 
@@ -2617,7 +2680,7 @@ export default function ReadingIntakeScreen({
     </div>
   </div>
 
-  {askError && !askHolding ? (
+  {askError && !voiceVisualActive ? (
     <p className="mt-2 text-center text-[11px] text-slate-400/78">
       {askError}
     </p>
@@ -2631,6 +2694,14 @@ export default function ReadingIntakeScreen({
 
         </motion.div>
       </div>
+
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-[9998] bg-black"
+        initial={false}
+        animate={{ opacity: voiceNavigating ? 1 : 0 }}
+        transition={{ duration: shouldReduceMotion ? 0.08 : 0.5, ease: [0.22, 1, 0.36, 1] }}
+      />
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
