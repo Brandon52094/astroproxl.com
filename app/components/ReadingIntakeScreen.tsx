@@ -1590,27 +1590,29 @@ export default function ReadingIntakeScreen({
     return theme.areaColors[key];
   }, [theme]);
 
-  // The pager owns the viewport and vertical scrolling. Keep the intake
-  // transparent and let it fill that parent rather than creating a second
-  // 100dvh viewport inside the pager.
+  // The pager owns the viewport and vertical scrolling. Do not lock <html> or
+  // <body> here: on iOS Safari that can freeze a stale visual viewport height
+  // until the user performs a pull/bounce gesture. Hide only the pager panel's
+  // scrollbar and let Safari continue updating the viewport normally.
+  const intakeRootRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    if (typeof document === "undefined") return;
+    const root = intakeRootRef.current;
+    if (!root) return;
 
-    const html = document.documentElement;
-    const body = document.body;
-    const previousHtmlOverflow = html.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
+    const panel = root.closest<HTMLElement>("[data-pager-panel]");
+    if (!panel) return;
 
-    html.style.overflow = "hidden";
-    body.style.overflow = "hidden";
-    html.classList.add("astro-intake-no-scrollbar");
-    body.classList.add("astro-intake-no-scrollbar");
+    panel.classList.add("astro-intake-panel-no-scrollbar");
+
+    // A tiny reflow on the owning panel ensures its percentage height is
+    // resolved against the pager's current viewport on first paint.
+    panel.style.minHeight = "100%";
+    void panel.offsetHeight;
 
     return () => {
-      html.style.overflow = previousHtmlOverflow;
-      body.style.overflow = previousBodyOverflow;
-      html.classList.remove("astro-intake-no-scrollbar");
-      body.classList.remove("astro-intake-no-scrollbar");
+      panel.classList.remove("astro-intake-panel-no-scrollbar");
+      panel.style.minHeight = "";
     };
   }, []);
 
@@ -1618,15 +1620,17 @@ export default function ReadingIntakeScreen({
 
   return (
       <div
-      className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden bg-transparent text-slate-100"
+      ref={intakeRootRef}
+      className="relative h-full min-h-full w-full min-w-0 max-w-full overflow-x-hidden bg-transparent text-slate-100"
       style={{
+        height: "100%",
         minHeight: "100%",
         background: "transparent",
       }}
     >
       <style jsx>{`
-        :global(.astro-intake-no-scrollbar) { -ms-overflow-style: none; scrollbar-width: none; }
-        :global(.astro-intake-no-scrollbar::-webkit-scrollbar) { display: none !important; width: 0 !important; height: 0 !important; }
+        :global(.astro-intake-panel-no-scrollbar) { -ms-overflow-style: none; scrollbar-width: none; }
+        :global(.astro-intake-panel-no-scrollbar::-webkit-scrollbar) { display: none !important; width: 0 !important; height: 0 !important; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
         @keyframes heroShine {
