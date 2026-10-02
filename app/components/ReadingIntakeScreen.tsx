@@ -1590,9 +1590,9 @@ export default function ReadingIntakeScreen({
     return theme.areaColors[key];
   }, [theme]);
 
-  // This screen owns vertical scrolling while it is mounted. That keeps it
-  // edge-to-edge inside the swipe container and prevents a parent scrollbar
-  // from appearing beside the microphone experience.
+  // The pager owns the viewport and vertical scrolling. Keep the intake
+  // transparent and let it fill that parent rather than creating a second
+  // 100dvh viewport inside the pager.
   useEffect(() => {
     if (typeof document === "undefined") return;
 
@@ -1618,17 +1618,13 @@ export default function ReadingIntakeScreen({
 
   return (
       <div
-      className="no-scrollbar relative h-[100dvh] min-h-[100dvh] max-h-[100dvh] w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden bg-[#050816] text-slate-100"
+      className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden bg-transparent text-slate-100"
       style={{
-        minHeight: "100dvh",
-        height: "100dvh",
-        overscrollBehaviorY: "contain",
-        WebkitOverflowScrolling: "touch",
+        minHeight: "100%",
+        background: "transparent",
       }}
     >
       <style jsx>{`
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
         :global(.astro-intake-no-scrollbar) { -ms-overflow-style: none; scrollbar-width: none; }
         :global(.astro-intake-no-scrollbar::-webkit-scrollbar) { display: none !important; width: 0 !important; height: 0 !important; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
