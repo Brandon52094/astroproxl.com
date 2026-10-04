@@ -33,9 +33,20 @@ interface AccessSummary {
   jxlCredits?: number;
   replyCredits?: number;
   readingsCompleted?: number;
+
   membershipStatus?: string;
   isSubscribed?: boolean;
-  subscriptionTier?: string | null;
+
+  membershipPlan?: "plus" | "plus_xl" | null;
+  effectiveMembershipPlan?: "plus" | "plus_xl" | null;
+
+  membershipReadingsUsed?: number;
+  membershipJxlUsed?: number;
+
+  membershipEntitlements?: {
+    readingsPerMonth: number | null;
+    jxlPerMonth: number | null;
+  };
 }
 
 function formatTopic(topic: string) {
@@ -59,7 +70,17 @@ function getSavedReadingCapacity(access: AccessSummary | null) {
 
   if (!isSubscribed) return FREE_SLOT_COUNT;
 
-  const tier = (access?.subscriptionTier ?? "").toLowerCase();
+  const plan =
+    access?.effectiveMembershipPlan ?? access?.membershipPlan ?? null;
+
+  if (plan === "plus_xl") return MAX_SAVED_READINGS;
+  if (plan === "plus") return PLUS_SLOT_COUNT;
+
+  // Fallback for legacy payloads that used subscriptionTier strings.
+  const tier = (
+    (access as AccessSummary & { subscriptionTier?: string | null })
+      ?.subscriptionTier ?? ""
+  ).toLowerCase();
   const isXl =
     tier.includes("plus_xl") ||
     tier.includes("plus-xl") ||
@@ -153,6 +174,45 @@ export default function SavedReadingsPage() {
     [pageStart, readings],
   );
 
+  // ── Membership display values ─────────────────────────────────────────────
+
+  const plan =
+    access?.effectiveMembershipPlan ??
+    access?.membershipPlan ??
+    null;
+
+  const isMember =
+    access?.membershipStatus === "active" ||
+    access?.isSubscribed === true;
+
+  const readingAllowance =
+    access?.membershipEntitlements?.readingsPerMonth ?? null;
+
+  const jxlAllowance =
+    access?.membershipEntitlements?.jxlPerMonth ?? null;
+
+  const membershipReadingsUsed =
+    Number(access?.membershipReadingsUsed ?? 0);
+
+  const membershipJxlUsed =
+    Number(access?.membershipJxlUsed ?? 0);
+
+  const readingRemaining =
+    readingAllowance === null
+      ? null
+      : Math.max(
+          0,
+          readingAllowance - membershipReadingsUsed,
+        );
+
+  const jxlRemaining =
+    jxlAllowance === null
+      ? null
+      : Math.max(
+          0,
+          jxlAllowance - membershipJxlUsed,
+        );
+
   const removeReading = async (id: string) => {
     try {
       await deleteSavedReading(id);
@@ -236,11 +296,32 @@ export default function SavedReadingsPage() {
 
       <section className="dashboard-card" aria-label="Account overview">
         <div className="balance-block">
-          <h2>Balance</h2>
+          <h2>{isMember && plan === "plus" ? "This Cycle" : "Balance"}</h2>
           <div className="balance-grid">
-            <div><strong>{access?.credits ?? 0}</strong><span>Readings</span></div>
-            <div><strong>{access?.jxlCredits ?? 0}</strong><span>JXL</span></div>
-            <div><strong>{access?.replyCredits ?? 0}</strong><span>Replies</span></div>
+            <div>
+              <strong>
+                {isMember
+                  ? readingAllowance === null
+                    ? "∞"
+                    : `${readingRemaining} / ${readingAllowance}`
+                  : access?.credits ?? 0}
+              </strong>
+              <span>Readings</span>
+            </div>
+            <div>
+              <strong>
+                {isMember
+                  ? jxlAllowance === null
+                    ? "∞"
+                    : `${jxlRemaining} / ${jxlAllowance}`
+                  : access?.jxlCredits ?? 0}
+              </strong>
+              <span>JXL</span>
+            </div>
+            <div>
+              <strong>{access?.replyCredits ?? 0}</strong>
+              <span>Replies</span>
+            </div>
           </div>
         </div>
 

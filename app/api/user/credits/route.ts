@@ -72,11 +72,11 @@ export async function GET() {
       metadata?.manualMembershipPlan;
 
     const manualMembershipPlan: MembershipPlan | null =
-  manualMembership
-    ? isMembershipPlan(storedManualMembershipPlan)
-      ? storedManualMembershipPlan
-      : "plus_xl"
-    : null;
+      manualMembership
+        ? isMembershipPlan(storedManualMembershipPlan)
+          ? storedManualMembershipPlan
+          : "plus_xl"
+        : null;
 
     // ── Effective membership ─────────────────────────────────────────────────
 
@@ -98,6 +98,14 @@ export async function GET() {
       effectiveMembershipPlan
         ? getMembershipEntitlements(effectiveMembershipPlan)
         : null;
+
+    // ── Monthly membership usage ─────────────────────────────────────────────
+
+    const membershipReadingsUsed =
+      Number(metadata?.membershipReadingsUsed ?? 0);
+
+    const membershipJxlUsed =
+      Number(metadata?.membershipJxlUsed ?? 0);
 
     return NextResponse.json({
       // ── Purchased balances ──
@@ -137,6 +145,10 @@ export async function GET() {
       readingsCompleted: Number(
         metadata?.readingsCompleted ?? 0
       ),
+
+      // Current billing-cycle usage, for member allowance display.
+      membershipReadingsUsed,
+      membershipJxlUsed,
 
       // Downloads are free for everyone.
       downloadUnlocked: true,
