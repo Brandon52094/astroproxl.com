@@ -9,7 +9,12 @@ import {
 } from "@/lib/jxlConfig";
 import { buildValidDateIndex, checkDateSupported } from "@/lib/validateReadingDates";
 import { validateAndFilterAspects } from "@/lib/reading/engine";
-import { PRICING } from "@/lib/paywallConfig";
+import {
+  PRICING,
+  type MembershipPlan,
+  isMembershipPlan,
+  getMembershipEntitlements,
+} from "@/lib/paywallConfig";
 import type {
   HouseRuler,
   MutualReception,
@@ -984,62 +989,162 @@ export async function POST(request: NextRequest) {
     };
 
     // ── JXL access model ───────────────────────────────────────────────────
+
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
-    const isSubscribed = metadata?.isSubscribed === true;
-    const jxlCredits = Number(metadata?.jxlCredits ?? 0);
-    const replyCredits = Number(metadata?.replyCredits ?? 0);
+    // Resolve effective membership.
 
-    const historyLen = earlyBody.conversationHistory?.length ?? 0;
-    const turnCount = historyLen + 1;
-    const isNewSession = historyLen === 0;
+    const membershipStatus =
+      metadata?.membershipStatus as string | undefined;
 
-    // Membership: unlimited JXL sessions, up to the global per-conversation cap.
-    // Non-member JXL: one JXL credit starts the session and includes the number
-    // of turns defined in PRICING.jxl.includedReplies. Extra turns use the
-    // universal reply-credit pool until the same safety cap.
-    const includedTurns = isSubscribed
-      ? JXL_MAX_REPLIES_PER_CONVERSATION
-      : PRICING.jxl.includedReplies;
+    const manualMembership =
+      metadata?.manualMembership === true;
+
+    const storedPaidPlan =
+      metadata?.membershipPlan;
+
+    const storedManualPlan =
+      metadata?.manualMembershipPlan;
+
+    const paidMembershipPlan: MembershipPlan | null =
+      membershipStatus === "active"
+        ? isMembershipPlan(storedPaidPlan)
+          ? storedPaidPlan
+          // Legacy active subscribers had unlimited access.
+          : "plus_xl"
+        : null;
+
+    const manualMembershipPlan: MembershipPlan | null =
+      manualMembership
+        ? isMembershipPlan(storedManualPlan)
+          ? storedManualPlan
+          // Existing manually comped users retain full access.
+          : "plus_xl"
+        : null;
+
+    const effectiveMembershipPlan: MembershipPlan | null =
+      manualMembership
+        ? manualMembershipPlan
+        : paidMembershipPlan;
+
+    const entitlements =
+      effectiveMembershipPlan
+        ? getMembershipEntitlements(effectiveMembershipPlan)
+        : null;
+
+    const isSubscribed =
+      effectiveMembershipPlan !== null;
+
+    // Purchased JXL / reply balances.
+
+    const jxlCredits =
+      Number(metadata?.jxlCredits ?? 0);
+
+    const replyCredits =
+      Number(metadata?.replyCredits ?? 0);
+
+    // Monthly membership JXL usage.
+
+    const membershipJxlUsed =
+      Number(metadata?.membershipJxlUsed ?? 0);
+
+    const jxlAllowance =
+      entitlements?.jxlPerMonth ?? null;
+
+    const hasIncludedMembershipJxl =
+      isSubscribed &&
+      (
+        jxlAllowance === null ||
+        membershipJxlUsed < jxlAllowance
+      );
+
+    const historyLen =
+      earlyBody.conversationHistory?.length ?? 0;
+
+    const turnCount =
+      historyLen + 1;
+
+    const isNewSession =
+      historyLen === 0;
+
+    // Membership reply allowance is still governed by the per-conversation cap.
+    // Non-member purchased JXL keeps the normal purchased-session reply allowance.
+
+    const includedTurns =
+      isSubscribed
+        ? JXL_MAX_REPLIES_PER_CONVERSATION
+        : PRICING.jxl.includedReplies;
 
     if (turnCount > JXL_MAX_REPLIES_PER_CONVERSATION) {
       return NextResponse.json(
-        { error: JXL_CONVERSATION_CAP_MESSAGE, code: "JXL_CONVERSATION_CAP" },
-        { status: 402 }
+        {
+          error: JXL_CONVERSATION_CAP_MESSAGE,
+          code: "JXL_CONVERSATION_CAP",
+        },
+        {
+          status: 402,
+        }
       );
     }
 
     let metaUpdate: Record<string, unknown> | null = null;
 
     if (isNewSession) {
-      if (isSubscribed) {
-        // Members do not spend JXL credits to begin a new session.
-        metaUpdate = null;
+      if (hasIncludedMembershipJxl) {
+        // Plus consumes one of its monthly included JXL sessions.
+        // XL is unlimited, but we still increment usage for informational tracking.
+        metaUpdate = {
+          membershipJxlUsed:
+            membershipJxlUsed + 1,
+        };
       } else if (jxlCredits > 0) {
-        metaUpdate = { jxlCredits: jxlCredits - 1 };
+        // Non-members, or Plus after its monthly allowance,
+        // fall back to purchased JXL credits.
+        metaUpdate = {
+          jxlCredits:
+            jxlCredits - 1,
+        };
       } else {
         return NextResponse.json(
-          { error: "You need JXL access to start this session.", code: "NO_JXL_ACCESS" },
-          { status: 402 }
+          {
+            error:
+              effectiveMembershipPlan === "plus"
+                ? "You've used your included JXL sessions for this billing cycle."
+                : "You need JXL access to start this session.",
+            code: "NO_JXL_ACCESS",
+          },
+          {
+            status: 402,
+          }
         );
       }
     } else if (turnCount <= includedTurns) {
+      // Replies already included with the active JXL conversation.
       metaUpdate = null;
     } else if (!isSubscribed && replyCredits > 0) {
-      metaUpdate = { replyCredits: replyCredits - 1 };
+      metaUpdate = {
+        replyCredits:
+          replyCredits - 1,
+      };
     } else {
       return NextResponse.json(
         {
           error: isSubscribed
             ? JXL_CONVERSATION_CAP_MESSAGE
             : "You've used the replies included with this session.",
-          code: isSubscribed ? "JXL_CONVERSATION_CAP" : "NEEDS_REPLY_PACK",
+          code: isSubscribed
+            ? "JXL_CONVERSATION_CAP"
+            : "NEEDS_REPLY_PACK",
           isSubscribed,
-          tailMode: isSubscribed ? undefined : "reply_pack",
+          tailMode: isSubscribed
+            ? undefined
+            : "reply_pack",
         },
-        { status: 402 }
+        {
+          status: 402,
+        }
       );
     }
 

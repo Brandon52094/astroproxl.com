@@ -123,6 +123,9 @@ export async function handleReading(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
+    const isAskAnything =
+      body.topic === "ask-anything";
+
     // ── ELIGIBILITY CHECK ──
 
     const { userId } = await auth();
@@ -178,16 +181,27 @@ export async function handleReading(request: NextRequest) {
         ? getMembershipEntitlements(effectiveMembershipPlan)
         : null;
 
-    // ── Reading allowance ────────────────────────────────────────────────────────
+    // ── Access allowance ─────────────────────────────────────────────────────────
 
     const credits =
       Number(metadata?.credits ?? 0);
 
+    const jxlCredits =
+      Number(metadata?.jxlCredits ?? 0);
+
     const membershipReadingsUsed =
       Number(metadata?.membershipReadingsUsed ?? 0);
 
+    const membershipJxlUsed =
+      Number(metadata?.membershipJxlUsed ?? 0);
+
     const readingAllowance =
       entitlements?.readingsPerMonth ?? null;
+
+    const jxlAllowance =
+      entitlements?.jxlPerMonth ?? null;
+
+    // ── Regular Reading access ───────────────────────────────────────────────────
 
     const hasIncludedMembershipReading =
       effectiveMembershipPlan !== null &&
@@ -199,17 +213,47 @@ export async function handleReading(request: NextRequest) {
     const hasPurchasedReadingCredit =
       credits >= CREDITS_PER_READING;
 
-    const hasReadingAccess =
+    const hasRegularReadingAccess =
       hasIncludedMembershipReading ||
       hasPurchasedReadingCredit;
+
+    // ── Ask Anything / JXL access ────────────────────────────────────────────────
+
+    const hasIncludedMembershipJxl =
+      effectiveMembershipPlan !== null &&
+      (
+        jxlAllowance === null ||
+        membershipJxlUsed < jxlAllowance
+      );
+
+    const hasPurchasedJxlCredit =
+      jxlCredits > 0;
+
+    const hasJxlAccess =
+      hasIncludedMembershipJxl ||
+      hasPurchasedJxlCredit;
+
+    // ── Final access decision ────────────────────────────────────────────────────
+
+    const hasReadingAccess =
+      isAskAnything
+        ? hasJxlAccess
+        : hasRegularReadingAccess;
 
     if (!hasReadingAccess) {
       return NextResponse.json(
         {
-          error:
-            effectiveMembershipPlan === "plus"
+          error: isAskAnything
+            ? effectiveMembershipPlan === "plus"
+              ? "You've used all 12 Astro Plus JXL sessions for this billing cycle. Purchase JXL access or upgrade to Astro Plus XL."
+              : "You need JXL access to use Ask Anything."
+            : effectiveMembershipPlan === "plus"
               ? "You've used all 16 Astro Plus readings for this billing cycle. Purchase a Reading or upgrade to Astro Plus XL."
               : "Insufficient credits. Purchase a Reading or subscribe.",
+
+          code: isAskAnything
+            ? "NO_JXL_ACCESS"
+            : "NO_READING_ACCESS",
         },
         {
           status: 403,
@@ -228,7 +272,6 @@ export async function handleReading(request: NextRequest) {
 
     // ── RESOLVE TOPIC ──
     const topic = getTopic(body.topic);
-    const isAskAnything = body.topic === "ask-anything";
 
     // ── BUILD PROMPT & DATE INDEX ──
     const prompt = buildReadingPrompt(readingBody, topic, validatedAspects);
