@@ -40,3 +40,34 @@ export const stripeFulfillments = pgTable("stripe_fulfillments", {
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ─── READING ANALYTICS ───────────────────────────────────────────────────────
+
+// Privacy-safe product analytics only.
+// Never stores the user's question, reading text, birth data, or chart data.
+export const readingAnalytics = pgTable("reading_analytics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  userId: text("user_id").notNull(),
+  readingId: text("reading_id").notNull(),
+
+  eventType: text("event_type").notNull(),
+  topic: text("topic").notNull(),
+
+  membershipPlan: text("membership_plan"),
+
+  usedMembershipAllowance:
+    boolean("used_membership_allowance"),
+
+  usedPurchasedCredit:
+    boolean("used_purchased_credit"),
+
+  source: text("source"),
+
+  feedbackRating: text("feedback_rating"),
+
+  createdAt:
+    timestamp("created_at")
+      .notNull()
+      .defaultNow(),
+});
