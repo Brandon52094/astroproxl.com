@@ -1045,18 +1045,27 @@ export default function ReadingResultsPage() {
 
     if (!hasMarkedComplete.current) {
       hasMarkedComplete.current = true;
-      fetch("/api/user/reading-complete", { method: "POST" })
-        .then((res) => {
-          if (!res.ok) throw new Error("reading-complete failed");
-          try {
-            localStorage.setItem(completedFlag, "1");
-          } catch {
-            // ignore persistence failure
-          }
-        })
-        .catch(() => {
-          hasMarkedComplete.current = false;
-        });
+      fetch("/api/user/reading-complete", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    topic: reading.topic,
+  }),
+})
+  .then((res) => {
+    if (!res.ok) throw new Error("reading-complete failed");
+
+    try {
+      localStorage.setItem(completedFlag, "1");
+    } catch {
+      // ignore persistence failure
+    }
+  })
+  .catch(() => {
+    hasMarkedComplete.current = false;
+  });
     }
   }, [reading, readingKey, viewingSavedReading]);
 
