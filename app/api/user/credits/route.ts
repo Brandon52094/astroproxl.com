@@ -10,6 +10,10 @@ import type { MembershipStatus } from "@/lib/paywallConfig";
 //   paused   → falls back to normal purchased-credit access
 //   canceled → falls back to normal purchased-credit access
 //
+// manualMembership:
+//   true     → grants member access regardless of membershipStatus.
+//              Use this to comp specific users without touching Stripe.
+//
 // Purchased balances remain on the account even while someone is a member.
 // They can be used again if membership becomes paused/canceled.
 export async function GET() {
@@ -38,6 +42,12 @@ export async function GET() {
         ? "active"
         : "canceled");
 
+    const manualMembership =
+      metadata?.manualMembership === true;
+
+    const hasMembershipAccess =
+      membershipStatus === "active" || manualMembership;
+
     return NextResponse.json({
       // ── Purchased balances ──
       credits: Number(metadata?.credits ?? 0),
@@ -52,10 +62,11 @@ export async function GET() {
 
       // ── Membership ──
       membershipStatus,
+      manualMembership,
 
       // Compatibility convenience flag for existing UI.
-      isSubscribed:
-        membershipStatus === "active",
+      // Paid OR manually comped users get member access.
+      isSubscribed: hasMembershipAccess,
 
       // TEMPORARY legacy field.
       // New membership has no Base/Plus tier.
