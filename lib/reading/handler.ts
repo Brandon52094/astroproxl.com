@@ -11,8 +11,6 @@ import {
 } from "./engine";
 import { getTopic } from "./topics";
 
-const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
-const FREE_READING_RESET_MS = 7 * 24 * 60 * 60 * 1000;
 const CREDITS_PER_READING = 1;
 
 const DEFAULT_SYSTEM =
@@ -130,21 +128,26 @@ export async function handleReading(request: NextRequest) {
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
-    const isSubscribed = metadata?.isSubscribed === true;
-    const credits = Number(metadata?.credits ?? 0);
-    const isPaid = isSubscribed || credits >= CREDITS_PER_READING;
+    const membershipStatus =
+  metadata?.membershipStatus as string | undefined;
 
-    const lastFree = metadata?.freeReadingUsedAt ? new Date(metadata.freeReadingUsedAt as string) : null;
-    const freeAvailable = !lastFree || Date.now() >= lastFree.getTime() + FREE_READING_RESET_MS;
+const manualMembership =
+  metadata?.manualMembership === true;
 
-    const cooldown = metadata?.cooldownStartedAt ? new Date(metadata.cooldownStartedAt as string) : null;
-    if (!isPaid && cooldown && Date.now() < cooldown.getTime() + COOLDOWN_MS) {
-      return NextResponse.json({ error: "Cooldown active. Please wait." }, { status: 403 });
-    }
+const hasMembershipAccess =
+  membershipStatus === "active" || manualMembership;
 
-    if (!isPaid && !freeAvailable) {
-      return NextResponse.json({ error: "Insufficient credits. Purchase more or subscribe." }, { status: 403 });
-    }
+const credits = Number(metadata?.credits ?? 0);
+
+const hasReadingAccess =
+  hasMembershipAccess || credits >= CREDITS_PER_READING;
+
+if (!hasReadingAccess) {
+  return NextResponse.json(
+    { error: "Insufficient credits. Purchase more or subscribe." },
+    { status: 403 }
+  );
+}
 
     // ── VALIDATE ASPECTS ──
     const validatedAspects = validateAndFilterAspects(body.transitAspects);
