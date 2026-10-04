@@ -8,7 +8,7 @@ import {
 
 const CREDITS_PER_READING = 1;
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const { userId } = await auth();
 
@@ -18,6 +18,18 @@ export async function POST() {
         { status: 401 }
       );
     }
+
+    // ── Topic / mode ─────────────────────────────────────────────────────────
+
+    const body = await request.json().catch(() => ({}));
+
+    const topic =
+      typeof body?.topic === "string"
+        ? body.topic
+        : "general";
+
+    const isAskAnything =
+      topic === "ask-anything";
 
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
@@ -73,13 +85,21 @@ export async function POST() {
     const hasMembershipAccess =
       effectiveMembershipPlan !== null;
 
-    // ── Monthly member Reading usage ─────────────────────────────────────────
+    // ── Usage buckets ────────────────────────────────────────────────────────────
 
     const currentMembershipReadingsUsed =
       Number(metadata?.membershipReadingsUsed ?? 0);
 
+    const currentMembershipJxlUsed =
+      Number(metadata?.membershipJxlUsed ?? 0);
+
     const readingAllowance =
       entitlements?.readingsPerMonth ?? null;
+
+    const jxlAllowance =
+      entitlements?.jxlPerMonth ?? null;
+
+    // ── Included membership allowance ────────────────────────────────────────────
 
     const hasIncludedMemberReading =
       hasMembershipAccess &&
@@ -88,37 +108,75 @@ export async function POST() {
         currentMembershipReadingsUsed < readingAllowance
       );
 
-    // Track member usage even for XL.
-    // For XL this is informational because the allowance is unlimited.
-    const newMembershipReadingsUsed =
-  hasIncludedMemberReading
-    ? currentMembershipReadingsUsed + 1
-    : currentMembershipReadingsUsed;
+    const hasIncludedMemberJxl =
+      hasMembershipAccess &&
+      (
+        jxlAllowance === null ||
+        currentMembershipJxlUsed < jxlAllowance
+      );
 
-    // ── Purchased / welcome credit accounting ────────────────────────────────
-    //
-    // Non-members spend credits normally.
-    //
-    // Astro Plus:
-    //   first 16 monthly Readings use membership allowance.
-    //   Reading #17+ falls back to purchased/welcome credits.
-    //
-    // Astro Plus XL:
-    //   unlimited, so purchased credits are never touched.
+    // ── Purchased balances ───────────────────────────────────────────────────────
 
     const currentCredits =
       Number(metadata?.credits ?? 0);
 
-    const shouldSpendCredit =
-      !hasIncludedMemberReading;
+    const currentJxlCredits =
+      Number(metadata?.jxlCredits ?? 0);
+
+    // ── Decide which bucket this completion uses ────────────────────────────────
+
+    const usesIncludedMembership =
+      isAskAnything
+        ? hasIncludedMemberJxl
+        : hasIncludedMemberReading;
+
+    const shouldSpendPurchasedCredit =
+      !usesIncludedMembership;
+
+    // Defensive guard: generation should already have verified access,
+    // but never silently clamp a balance below zero here.
+
+    if (
+      shouldSpendPurchasedCredit &&
+      (
+        isAskAnything
+          ? currentJxlCredits < 1
+          : currentCredits < CREDITS_PER_READING
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error: isAskAnything
+            ? "No JXL credit available to complete Ask Anything."
+            : "No Reading credit available to complete this reading.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // ── New balances / usage ────────────────────────────────────────────────────
+
+    const newMembershipReadingsUsed =
+      !isAskAnything && hasIncludedMemberReading
+        ? currentMembershipReadingsUsed + 1
+        : currentMembershipReadingsUsed;
+
+    const newMembershipJxlUsed =
+      isAskAnything && hasIncludedMemberJxl
+        ? currentMembershipJxlUsed + 1
+        : currentMembershipJxlUsed;
 
     const newCredits =
-      shouldSpendCredit
-        ? Math.max(
-            0,
-            currentCredits - CREDITS_PER_READING
-          )
+      !isAskAnything && shouldSpendPurchasedCredit
+        ? currentCredits - CREDITS_PER_READING
         : currentCredits;
+
+    const newJxlCredits =
+      isAskAnything && shouldSpendPurchasedCredit
+        ? currentJxlCredits - 1
+        : currentJxlCredits;
 
     await client.users.updateUserMetadata(userId, {
       publicMetadata: {
@@ -128,33 +186,49 @@ export async function POST() {
         firstReadingUsed: true,
 
         credits: newCredits,
+        jxlCredits: newJxlCredits,
 
         membershipReadingsUsed:
           newMembershipReadingsUsed,
 
+        membershipJxlUsed:
+          newMembershipJxlUsed,
+
         // Regular readings include 1 reply.
-        freeRepliesRemaining: 1,
+        // Ask Anything/JXL manages its own reply behavior separately.
+        ...(isAskAnything
+          ? {}
+          : { freeRepliesRemaining: 1 }),
       },
     });
 
     console.log(
       `[reading-complete] ${userId}` +
+        ` — topic: ${topic}` +
         ` — readingsCompleted: ${current} → ${next}` +
         (effectiveMembershipPlan
           ? ` — plan: ${effectiveMembershipPlan}`
           : " — non-member") +
-        (hasIncludedMemberReading
-          ? ` — membership reading (${currentMembershipReadingsUsed} → ${newMembershipReadingsUsed})`
+        (usesIncludedMembership
+          ? isAskAnything
+            ? ` — membership JXL (${currentMembershipJxlUsed} → ${newMembershipJxlUsed})`
+            : ` — membership reading (${currentMembershipReadingsUsed} → ${newMembershipReadingsUsed})`
           : "") +
-        (shouldSpendCredit
-          ? ` — deducted ${CREDITS_PER_READING} credit (${currentCredits} → ${newCredits})`
+        (shouldSpendPurchasedCredit
+          ? isAskAnything
+            ? ` — deducted 1 JXL credit (${currentJxlCredits} → ${newJxlCredits})`
+            : ` — deducted ${CREDITS_PER_READING} credit (${currentCredits} → ${newCredits})`
           : "")
     );
 
     return NextResponse.json({
       readingsCompleted: next,
 
+      topic,
+      isAskAnything,
+
       creditsRemaining: newCredits,
+      jxlCreditsRemaining: newJxlCredits,
 
       membershipPlan:
         effectiveMembershipPlan,
@@ -162,14 +236,25 @@ export async function POST() {
       membershipReadingsUsed:
         newMembershipReadingsUsed,
 
+      membershipJxlUsed:
+        newMembershipJxlUsed,
+
       membershipReadingAllowance:
         readingAllowance,
 
+      membershipJxlAllowance:
+        jxlAllowance,
+
       usedMembershipAllowance:
-        hasIncludedMemberReading,
+        usesIncludedMembership,
 
       usedCredit:
-        shouldSpendCredit,
+        !isAskAnything &&
+        shouldSpendPurchasedCredit,
+
+      usedJxlCredit:
+        isAskAnything &&
+        shouldSpendPurchasedCredit,
     });
   } catch (error) {
     console.error(
