@@ -56,12 +56,12 @@ export async function GET() {
       metadata?.membershipPlan;
 
     const paidMembershipPlan: MembershipPlan | null =
-      isMembershipPlan(storedMembershipPlan)
-        ? storedMembershipPlan
-        : membershipStatus === "active"
-          // Legacy paid members previously had unlimited membership.
-          ? "plus_xl"
-          : null;
+  membershipStatus === "active"
+    ? isMembershipPlan(storedMembershipPlan)
+      ? storedMembershipPlan
+      // Legacy paid members previously had unlimited membership.
+      : "plus_xl"
+    : null;
 
     // ── Manual / complimentary membership ────────────────────────────────────
 
