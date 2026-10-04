@@ -1,21 +1,28 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import type { MembershipStatus } from "@/lib/paywallConfig";
+import {
+  type MembershipStatus,
+  type MembershipPlan,
+  isMembershipPlan,
+  getMembershipEntitlements,
+} from "@/lib/paywallConfig";
 
 // ── GET /api/user/credits ─────────────────────────────────────────────────────
-// Central user access/balance endpoint.
+// Central user access / balance / membership endpoint.
 //
-// Membership:
-//   active   → unlimited Reading + JXL access and member-only content
-//   paused   → falls back to normal purchased-credit access
-//   canceled → falls back to normal purchased-credit access
+// Paid membership:
+//   membershipStatus: "active" | "paused" | "canceled"
+//   membershipPlan:   "plus" | "plus_xl"
 //
-// manualMembership:
-//   true     → grants member access regardless of membershipStatus.
-//              Use this to comp specific users without touching Stripe.
+// Manual membership:
+//   manualMembership: true
+//   manualMembershipPlan: "plus" | "plus_xl"
 //
-// Purchased balances remain on the account even while someone is a member.
+// Purchased balances remain on the account while someone is a member.
 // They can be used again if membership becomes paused/canceled.
+//
+// Legacy active members without a membershipPlan are treated as Plus XL
+// because the previous membership model provided unlimited access.
 export async function GET() {
   try {
     const { userId } = await auth();
@@ -31,22 +38,66 @@ export async function GET() {
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
+    // ── Membership status ────────────────────────────────────────────────────
+
     const storedMembershipStatus =
       metadata?.membershipStatus as MembershipStatus | undefined;
 
-    // Backward compatibility for users who existed before
-    // membershipStatus was introduced.
+    // Backward compatibility for users created before membershipStatus existed.
     const membershipStatus: MembershipStatus =
       storedMembershipStatus ??
       (metadata?.isSubscribed === true
         ? "active"
         : "canceled");
 
+    // ── Paid membership plan ─────────────────────────────────────────────────
+
+    const storedMembershipPlan =
+      metadata?.membershipPlan;
+
+    const paidMembershipPlan: MembershipPlan | null =
+      isMembershipPlan(storedMembershipPlan)
+        ? storedMembershipPlan
+        : membershipStatus === "active"
+          // Legacy paid members previously had unlimited membership.
+          ? "plus_xl"
+          : null;
+
+    // ── Manual / complimentary membership ────────────────────────────────────
+
     const manualMembership =
       metadata?.manualMembership === true;
 
+    const storedManualMembershipPlan =
+      metadata?.manualMembershipPlan;
+
+    const manualMembershipPlan: MembershipPlan | null =
+  manualMembership
+    ? isMembershipPlan(storedManualMembershipPlan)
+      ? storedManualMembershipPlan
+      : "plus_xl"
+    : null;
+
+    // ── Effective membership ─────────────────────────────────────────────────
+
+    const hasPaidMembership =
+      membershipStatus === "active";
+
     const hasMembershipAccess =
-      membershipStatus === "active" || manualMembership;
+      hasPaidMembership || manualMembership;
+
+    // Manual membership intentionally overrides the paid plan while enabled.
+    const effectiveMembershipPlan: MembershipPlan | null =
+      manualMembership
+        ? manualMembershipPlan
+        : hasPaidMembership
+          ? paidMembershipPlan
+          : null;
+
+    const membershipEntitlements =
+      effectiveMembershipPlan
+        ? getMembershipEntitlements(effectiveMembershipPlan)
+        : null;
 
     return NextResponse.json({
       // ── Purchased balances ──
@@ -55,21 +106,30 @@ export async function GET() {
       replyCredits: Number(metadata?.replyCredits ?? 0),
 
       // TEMPORARY LEGACY BALANCE.
-      // Remove only after all JXL/follow-up consumers use replyCredits.
       jxlReplyCredits: Number(
         metadata?.jxlReplyCredits ?? 0
       ),
 
       // ── Membership ──
       membershipStatus,
-      manualMembership,
 
-      // Compatibility convenience flag for existing UI.
-      // Paid OR manually comped users get member access.
+      // Paid Stripe plan.
+      membershipPlan: paidMembershipPlan,
+
+      // Manual override.
+      manualMembership,
+      manualMembershipPlan,
+
+      // The plan AstroProXL should actually use for feature access.
+      effectiveMembershipPlan,
+
+      // Existing UI can continue checking this.
       isSubscribed: hasMembershipAccess,
 
+      // Centralized plan capabilities.
+      membershipEntitlements,
+
       // TEMPORARY legacy field.
-      // New membership has no Base/Plus tier.
       subscriptionTier:
         (metadata?.subscriptionTier as string) ?? null,
 
@@ -86,7 +146,7 @@ export async function GET() {
         metadata?.freeRepliesRemaining ?? 0
       ),
 
-      // One free PWA Reading, once ever.
+      // PWA install reward.
       pwaFreeReadingUsed:
         metadata?.pwaFreeReadingUsed === true,
     });

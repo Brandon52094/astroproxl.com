@@ -2,7 +2,11 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import Stripe from "stripe";
-import { PRICING } from "@/lib/paywallConfig";
+import {
+  PRICING,
+  MEMBERSHIP_PLANS,
+  type MembershipPlan,
+} from "@/lib/paywallConfig";
 import { JXL_SESSION } from "@/lib/jxlConfig";
 import {
   lookupReferralCode,
@@ -11,6 +15,7 @@ import {
 import { db } from "@/lib/db";
 import { referralRedemptions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const ONE_TIME_READING_CREDITS = 1;
 const REFERRAL_COOKIE = "aproxl_ref";
@@ -43,16 +48,19 @@ async function getAstroshareCouponId(): Promise<string> {
     return coupon.id;
   }
 }
+
 async function resolveReferral(userId: string) {
   const cookieStore = await cookies();
   const code =
     cookieStore.get(REFERRAL_COOKIE)?.value;
   if (!code) return null;
+
   const lookup = await lookupReferralCode(
     code,
     userId
   );
   if (!lookup) return null;
+
   const alreadyRedeemed = await db
     .select()
     .from(referralRedemptions)
@@ -63,11 +71,14 @@ async function resolveReferral(userId: string) {
       )
     )
     .limit(1);
+
   if (alreadyRedeemed.length > 0) {
     return null;
   }
+
   return lookup;
 }
+
 /* ─────────────────────────────────────────────
    POST
 ───────────────────────────────────────────── */
@@ -76,20 +87,25 @@ export async function POST(
 ) {
   try {
     const { userId } = await auth();
+
     if (!userId) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
       );
     }
+
     const body = await request.json();
+
     const {
       returnUrl,
       mode,
       items,
       pledgeAmountCents,
+      membershipPlan,
     } = body as {
       returnUrl: string;
+
       mode:
         | "one_time"
         | "subscription"
@@ -98,12 +114,17 @@ export async function POST(
         | "jxl_session"
         | "bundle_pack"
         | "cart";
+
       items?: Array<{
         id?: string;
         quantity?: number;
       }>;
+
       pledgeAmountCents?: number;
+
+      membershipPlan?: MembershipPlan;
     };
+
     if (!returnUrl) {
       return NextResponse.json(
         {
@@ -114,6 +135,7 @@ export async function POST(
         }
       );
     }
+
     const referral =
       mode === "one_time" ||
       mode === "subscription" ||
@@ -121,9 +143,11 @@ export async function POST(
       mode === "cart"
         ? await resolveReferral(userId)
         : null;
+
     const referralCouponId = referral
       ? await getAstroshareCouponId()
       : null;
+
     /* ───────────────────────────────────────
        ONE REGULAR READING
     ─────────────────────────────────────── */
@@ -170,72 +194,116 @@ export async function POST(
           cancel_url:
             `${returnUrl}?payment=cancelled`,
         });
+
       return NextResponse.json({
         url: session.url,
       });
     }
+
     /* ───────────────────────────────────────
-       SUBSCRIPTION — SINGLE XL MEMBERSHIP
+       SUBSCRIPTION — ASTRO PLUS / PLUS XL
     ─────────────────────────────────────── */
     if (mode === "subscription") {
+      if (
+        membershipPlan !== "plus" &&
+        membershipPlan !== "plus_xl"
+      ) {
+        return NextResponse.json(
+          {
+            error: "Valid membershipPlan is required.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const plan = MEMBERSHIP_PLANS[membershipPlan];
+
+      const isPlusXL =
+        membershipPlan === "plus_xl";
+
+      const description = isPlusXL
+        ? referral
+          ? "Unlimited Signature Readings + JXL · up to 8 replies per conversation · premium member features · 15% referral discount applied"
+          : "Unlimited Signature Readings + JXL · up to 8 replies per conversation · premium member features"
+        : referral
+          ? "16 Signature Readings + 12 JXL sessions monthly · up to 4 replies per conversation · member features · 15% referral discount applied"
+          : "16 Signature Readings + 12 JXL sessions monthly · up to 4 replies per conversation · member features";
+
       const session =
         await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
+
           mode: "subscription",
-          allow_promotion_codes: referralCouponId ? undefined : true,
+
+          allow_promotion_codes:
+            referralCouponId
+              ? undefined
+              : true,
+
           line_items: [
             {
               price_data: {
                 currency: "usd",
+
                 product_data: {
-                  name: "AstroProXL Membership",
-                  description: referral
-                    ? "Unlimited General Readings + JXL · up to 8 replies per conversation · members-only access · 15% referral discount applied"
-                    : "Unlimited General Readings + JXL · up to 8 replies per conversation · members-only access",
+                  name: plan.name,
+                  description,
                 },
-                unit_amount: PRICING.membership.price,
+
+                unit_amount: plan.price,
+
                 recurring: {
-                  interval: PRICING.membership.interval,
+                  interval: plan.interval,
                 },
               },
+
               quantity: 1,
             },
           ],
+
           subscription_data: {
             metadata: {
               userId,
               membership: "astroproxl",
-              // Temporary compatibility for the current webhook until it is migrated.
-              tier: "sub_base",
+              membershipPlan,
             },
           },
+
           metadata: {
             userId,
             mode: "subscription",
             membership: "astroproxl",
-            // Temporary compatibility for the current webhook until it is migrated.
-            tier: "sub_base",
+            membershipPlan,
+
             ...(referral
               ? {
                   referralCodeId:
                     referral.codeId,
+
                   referralOwnerUserId:
                     referral.ownerUserId,
                 }
               : {}),
           },
+
           discounts: referralCouponId
             ? [{ coupon: referralCouponId }]
             : undefined,
+
           success_url:
-            `${returnUrl}?payment=success&mode=subscription`,
+            `${returnUrl}?payment=success&mode=subscription&plan=${membershipPlan}`,
+
           cancel_url:
             `${returnUrl}?payment=cancelled`,
         });
+
       return NextResponse.json({
         url: session.url,
       });
     }
+
     /* ───────────────────────────────────────
        LEGACY FOLLOW-UP CHECKOUT
        Leaving this route temporarily so
@@ -245,6 +313,7 @@ export async function POST(
     ─────────────────────────────────────── */
     if (mode === "followup") {
       const followupPrice = PRICING.replies.priceEach;
+
       const session =
         await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
@@ -274,10 +343,12 @@ export async function POST(
           cancel_url:
             `${returnUrl}?payment=cancelled`,
         });
+
       return NextResponse.json({
         url: session.url,
       });
     }
+
     /* ───────────────────────────────────────
        REPLY PACK
        3 universal replies = $3
@@ -315,10 +386,12 @@ export async function POST(
           cancel_url:
             `${returnUrl}?payment=cancelled`,
         });
+
       return NextResponse.json({
         url: session.url,
       });
     }
+
     /* ───────────────────────────────────────
        ONE JXL
     ─────────────────────────────────────── */
@@ -369,10 +442,12 @@ export async function POST(
           cancel_url:
             `${returnUrl}?payment=cancelled`,
         });
+
       return NextResponse.json({
         url: session.url,
       });
     }
+
     /* ───────────────────────────────────────
        LEGACY BUNDLE
     ─────────────────────────────────────── */
@@ -410,10 +485,12 @@ export async function POST(
           cancel_url:
             `${returnUrl}?payment=cancelled`,
         });
+
       return NextResponse.json({
         url: session.url,
       });
     }
+
     /* ═══════════════════════════════════════
        NEW CREDITS CART
     ═══════════════════════════════════════ */
@@ -425,10 +502,13 @@ export async function POST(
         }> = Array.isArray(items)
           ? items
           : [];
+
       const lineItems:
         Stripe.Checkout.SessionCreateParams.LineItem[] =
         [];
+
       const parsedPledgeAmount = Number(pledgeAmountCents ?? 0);
+
       if (
         !Number.isFinite(parsedPledgeAmount) ||
         !Number.isInteger(parsedPledgeAmount) ||
@@ -444,6 +524,7 @@ export async function POST(
           { status: 400 }
         );
       }
+
       if (referralCouponId && parsedPledgeAmount > 0) {
         return NextResponse.json(
           {
@@ -453,20 +534,24 @@ export async function POST(
           { status: 400 }
         );
       }
+
       let grantCredits = 0;
       let grantJxlCredits = 0;
+
       /*
         Universal purchased replies.
         These will eventually be the ONLY
         reply-credit balance.
       */
       let grantReplyCredits = 0;
+
       /* ── Reading ── */
       const readingItem =
         cartItems.find(
           (item) =>
             item.id === "reading"
         );
+
       const readingQuantity =
         Math.max(
           0,
@@ -476,6 +561,7 @@ export async function POST(
             )
           )
         );
+
       if (readingQuantity > 0) {
         lineItems.push({
           price_data: {
@@ -492,15 +578,18 @@ export async function POST(
           quantity:
             readingQuantity,
         });
+
         grantCredits +=
           readingQuantity;
       }
+
       /* ── JXL ── */
       const jxlItem =
         cartItems.find(
           (item) =>
             item.id === "jxl"
         );
+
       const jxlQuantity =
         Math.max(
           0,
@@ -510,6 +599,7 @@ export async function POST(
             )
           )
         );
+
       if (jxlQuantity > 0) {
         lineItems.push({
           price_data: {
@@ -526,15 +616,18 @@ export async function POST(
           quantity:
             jxlQuantity,
         });
+
         grantJxlCredits +=
           jxlQuantity;
       }
+
       /* ── UNIVERSAL REPLIES — $1 EACH ── */
       const repliesItem =
         cartItems.find(
           (item) =>
             item.id === "replies"
         );
+
       const replyQuantity =
         Math.max(
           0,
@@ -544,6 +637,7 @@ export async function POST(
             )
           )
         );
+
       if (replyQuantity > 0) {
         lineItems.push({
           price_data: {
@@ -560,9 +654,11 @@ export async function POST(
           quantity:
             replyQuantity,
         });
+
         grantReplyCredits +=
           replyQuantity;
       }
+
       /* ── Optional one-time pledge ── */
       if (parsedPledgeAmount > 0) {
         lineItems.push({
@@ -578,6 +674,7 @@ export async function POST(
           quantity: 1,
         });
       }
+
       /* Nothing selected */
       if (
         lineItems.length === 0
@@ -592,6 +689,7 @@ export async function POST(
           }
         );
       }
+
       /* Stripe Checkout */
       const session =
         await stripe.checkout.sessions.create({
@@ -636,10 +734,12 @@ export async function POST(
           cancel_url:
             `${returnUrl}?payment=cancelled`,
         });
+
       return NextResponse.json({
         url: session.url,
       });
     }
+
     return NextResponse.json(
       {
         error: "Invalid mode",
@@ -653,6 +753,7 @@ export async function POST(
       "[checkout] Error:",
       error
     );
+
     return NextResponse.json(
       {
         error:

@@ -10,6 +10,11 @@ import {
   type ReadingPage,
 } from "./engine";
 import { getTopic } from "./topics";
+import {
+  type MembershipPlan,
+  isMembershipPlan,
+  getMembershipEntitlements,
+} from "@/lib/paywallConfig";
 
 const CREDITS_PER_READING = 1;
 
@@ -119,35 +124,98 @@ export async function handleReading(request: NextRequest) {
     }
 
     // ── ELIGIBILITY CHECK ──
+
     const { userId } = await auth();
+
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
+    // ── Resolve effective membership ─────────────────────────────────────────────
+
     const membershipStatus =
-  metadata?.membershipStatus as string | undefined;
+      metadata?.membershipStatus as string | undefined;
 
-const manualMembership =
-  metadata?.manualMembership === true;
+    const manualMembership =
+      metadata?.manualMembership === true;
 
-const hasMembershipAccess =
-  membershipStatus === "active" || manualMembership;
+    const storedPaidPlan =
+      metadata?.membershipPlan;
 
-const credits = Number(metadata?.credits ?? 0);
+    const storedManualPlan =
+      metadata?.manualMembershipPlan;
 
-const hasReadingAccess =
-  hasMembershipAccess || credits >= CREDITS_PER_READING;
+    const paidMembershipPlan: MembershipPlan | null =
+      membershipStatus === "active"
+        ? isMembershipPlan(storedPaidPlan)
+          ? storedPaidPlan
+          // Legacy paid membership was unlimited.
+          : "plus_xl"
+        : null;
 
-if (!hasReadingAccess) {
-  return NextResponse.json(
-    { error: "Insufficient credits. Purchase more or subscribe." },
-    { status: 403 }
-  );
-}
+    const manualMembershipPlan: MembershipPlan | null =
+      manualMembership
+        ? isMembershipPlan(storedManualPlan)
+          ? storedManualPlan
+          // Existing manually comped users retain full access.
+          : "plus_xl"
+        : null;
+
+    const effectiveMembershipPlan: MembershipPlan | null =
+      manualMembership
+        ? manualMembershipPlan
+        : paidMembershipPlan;
+
+    const entitlements =
+      effectiveMembershipPlan
+        ? getMembershipEntitlements(effectiveMembershipPlan)
+        : null;
+
+    // ── Reading allowance ────────────────────────────────────────────────────────
+
+    const credits =
+      Number(metadata?.credits ?? 0);
+
+    const membershipReadingsUsed =
+      Number(metadata?.membershipReadingsUsed ?? 0);
+
+    const readingAllowance =
+      entitlements?.readingsPerMonth ?? null;
+
+    const hasIncludedMembershipReading =
+      effectiveMembershipPlan !== null &&
+      (
+        readingAllowance === null ||
+        membershipReadingsUsed < readingAllowance
+      );
+
+    const hasPurchasedReadingCredit =
+      credits >= CREDITS_PER_READING;
+
+    const hasReadingAccess =
+      hasIncludedMembershipReading ||
+      hasPurchasedReadingCredit;
+
+    if (!hasReadingAccess) {
+      return NextResponse.json(
+        {
+          error:
+            effectiveMembershipPlan === "plus"
+              ? "You've used all 16 Astro Plus readings for this billing cycle. Purchase a Reading or upgrade to Astro Plus XL."
+              : "Insufficient credits. Purchase a Reading or subscribe.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
 
     // ── VALIDATE ASPECTS ──
     const validatedAspects = validateAndFilterAspects(body.transitAspects);

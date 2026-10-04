@@ -1,7 +1,11 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import {
+  type MembershipPlan,
+  isMembershipPlan,
+  getMembershipEntitlements,
+} from "@/lib/paywallConfig";
 
-const JXL_FIRST_READING_CREDITS = 0;
 const CREDITS_PER_READING = 1;
 
 export async function POST() {
@@ -19,44 +23,102 @@ export async function POST() {
     const user = await client.users.getUser(userId);
     const metadata = user.publicMetadata;
 
-    const current = Number(metadata?.readingsCompleted ?? 0);
+    // ── Overall reading count ────────────────────────────────────────────────
+
+    const current =
+      Number(metadata?.readingsCompleted ?? 0);
+
     const next = current + 1;
 
-    const isFirstReading = current === 0;
+    // ── Resolve effective membership ─────────────────────────────────────────
 
-    // ── Membership access ────────────────────────────────────────────────────
-    // Paid Stripe members OR manually comped users have unlimited access.
     const membershipStatus =
       metadata?.membershipStatus as string | undefined;
 
     const manualMembership =
       metadata?.manualMembership === true;
 
-    const isSubscribed =
-      membershipStatus === "active" ||
-      manualMembership;
+    const storedPaidPlan =
+      metadata?.membershipPlan;
 
-    // ── Reading credit accounting ────────────────────────────────────────────
-    // Non-members spend 1 regular Reading credit per completed reading.
-    // Members keep their purchased/welcome credits untouched.
-    const currentCredits = Number(metadata?.credits ?? 0);
+    const storedManualPlan =
+      metadata?.manualMembershipPlan;
 
-    const newCredits = isSubscribed
-      ? currentCredits
-      : Math.max(
-          0,
-          currentCredits - CREDITS_PER_READING
-        );
+    const paidMembershipPlan: MembershipPlan | null =
+      membershipStatus === "active"
+        ? isMembershipPlan(storedPaidPlan)
+          ? storedPaidPlan
+          // Legacy active subscribers had unlimited access.
+          : "plus_xl"
+        : null;
 
-    // ── JXL first-reading bonus ───────────────────────────────────────────────
-    // Currently disabled.
-    const currentJxlCredits =
-      Number(metadata?.jxlCredits ?? 0);
+    const manualMembershipPlan: MembershipPlan | null =
+      manualMembership
+        ? isMembershipPlan(storedManualPlan)
+          ? storedManualPlan
+          // Existing manually comped users retain full access.
+          : "plus_xl"
+        : null;
 
-    const jxlCreditsToGrant =
-      isFirstReading
-        ? JXL_FIRST_READING_CREDITS
-        : 0;
+    const effectiveMembershipPlan: MembershipPlan | null =
+      manualMembership
+        ? manualMembershipPlan
+        : paidMembershipPlan;
+
+    const entitlements =
+      effectiveMembershipPlan
+        ? getMembershipEntitlements(effectiveMembershipPlan)
+        : null;
+
+    const hasMembershipAccess =
+      effectiveMembershipPlan !== null;
+
+    // ── Monthly member Reading usage ─────────────────────────────────────────
+
+    const currentMembershipReadingsUsed =
+      Number(metadata?.membershipReadingsUsed ?? 0);
+
+    const readingAllowance =
+      entitlements?.readingsPerMonth ?? null;
+
+    const hasIncludedMemberReading =
+      hasMembershipAccess &&
+      (
+        readingAllowance === null ||
+        currentMembershipReadingsUsed < readingAllowance
+      );
+
+    // Track member usage even for XL.
+    // For XL this is informational because the allowance is unlimited.
+    const newMembershipReadingsUsed =
+  hasIncludedMemberReading
+    ? currentMembershipReadingsUsed + 1
+    : currentMembershipReadingsUsed;
+
+    // ── Purchased / welcome credit accounting ────────────────────────────────
+    //
+    // Non-members spend credits normally.
+    //
+    // Astro Plus:
+    //   first 16 monthly Readings use membership allowance.
+    //   Reading #17+ falls back to purchased/welcome credits.
+    //
+    // Astro Plus XL:
+    //   unlimited, so purchased credits are never touched.
+
+    const currentCredits =
+      Number(metadata?.credits ?? 0);
+
+    const shouldSpendCredit =
+      !hasIncludedMemberReading;
+
+    const newCredits =
+      shouldSpendCredit
+        ? Math.max(
+            0,
+            currentCredits - CREDITS_PER_READING
+          )
+        : currentCredits;
 
     await client.users.updateUserMetadata(userId, {
       publicMetadata: {
@@ -67,39 +129,62 @@ export async function POST() {
 
         credits: newCredits,
 
-        // Regular readings include 1 free reply.
-        freeRepliesRemaining: 1,
+        membershipReadingsUsed:
+          newMembershipReadingsUsed,
 
-        jxlCredits:
-          currentJxlCredits + jxlCreditsToGrant,
+        // Regular readings include 1 reply.
+        freeRepliesRemaining: 1,
       },
     });
 
     console.log(
-      `[reading-complete] ${userId} — readingsCompleted: ${current} → ${next}` +
-        (isFirstReading
-          ? ` — granted ${jxlCreditsToGrant} JXL credits`
+      `[reading-complete] ${userId}` +
+        ` — readingsCompleted: ${current} → ${next}` +
+        (effectiveMembershipPlan
+          ? ` — plan: ${effectiveMembershipPlan}`
+          : " — non-member") +
+        (hasIncludedMemberReading
+          ? ` — membership reading (${currentMembershipReadingsUsed} → ${newMembershipReadingsUsed})`
           : "") +
-        (!isSubscribed
-          ? ` — deducted ${CREDITS_PER_READING} reading credit (${currentCredits} → ${newCredits})`
-          : "") +
-        (isSubscribed
-          ? " — member, no credit deducted"
+        (shouldSpendCredit
+          ? ` — deducted ${CREDITS_PER_READING} credit (${currentCredits} → ${newCredits})`
           : "")
     );
 
     return NextResponse.json({
       readingsCompleted: next,
-      jxlCreditsGranted: jxlCreditsToGrant,
+
       creditsRemaining: newCredits,
-      isSubscribed,
+
+      membershipPlan:
+        effectiveMembershipPlan,
+
+      membershipReadingsUsed:
+        newMembershipReadingsUsed,
+
+      membershipReadingAllowance:
+        readingAllowance,
+
+      usedMembershipAllowance:
+        hasIncludedMemberReading,
+
+      usedCredit:
+        shouldSpendCredit,
     });
   } catch (error) {
-    console.error("[reading-complete] Error:", error);
+    console.error(
+      "[reading-complete] Error:",
+      error
+    );
 
     return NextResponse.json(
-      { error: "Failed to record reading completion." },
-      { status: 500 }
+      {
+        error:
+          "Failed to record reading completion.",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

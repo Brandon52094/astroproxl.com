@@ -7,7 +7,11 @@ import { trackServerPurchase } from "@/lib/tiktokEvents";
 import { recordRedemption, REFERRAL_REWARD_CREDITS } from "@/lib/referrals";
 import { db } from "@/lib/db";
 import { stripeFulfillments } from "@/lib/db/schema";
-import type { MembershipStatus } from "@/lib/paywallConfig";
+import {
+  type MembershipStatus,
+  type MembershipPlan,
+  isMembershipPlan,
+} from "@/lib/paywallConfig";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -138,8 +142,26 @@ async function syncSubscriptionState(subscription: Stripe.Subscription) {
 
   const membershipStatus = normalizeMembershipStatus(subscription);
 
+  const rawMembershipPlan =
+    subscription.metadata?.membershipPlan;
+
+  const membershipPlan: MembershipPlan | undefined =
+    isMembershipPlan(rawMembershipPlan)
+      ? rawMembershipPlan
+      : undefined;
+
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
+
+  // Preserve the existing Clerk plan when Stripe has no valid new plan.
+  // Protects legacy subscriptions from being overwritten with undefined.
+  const existingMembershipPlan: MembershipPlan | undefined =
+    isMembershipPlan(user.publicMetadata?.membershipPlan)
+      ? (user.publicMetadata.membershipPlan as MembershipPlan)
+      : undefined;
+
+  const resolvedMembershipPlan =
+    membershipPlan ?? existingMembershipPlan;
 
   await client.users.updateUserMetadata(userId, {
     publicMetadata: {
@@ -148,22 +170,30 @@ async function syncSubscriptionState(subscription: Stripe.Subscription) {
       membershipStatus,
       isSubscribed: membershipStatus === "active",
 
-      subscriptionId:
-        membershipStatus === "canceled" ? undefined : subscription.id,
+      membershipPlan: resolvedMembershipPlan,
 
-      // Retired tier system. Clear it while new membership is synchronized.
+      subscriptionId:
+        membershipStatus === "canceled"
+          ? undefined
+          : subscription.id,
+
+      // Retired tier system.
       subscriptionTier: undefined,
 
       ...(membershipStatus === "canceled"
         ? {
-            subscriptionCancelledAt: new Date().toISOString(),
+            subscriptionCancelledAt:
+              new Date().toISOString(),
           }
         : {}),
     },
   });
 
   console.log(
-    `[webhook] subscription sync — ${userId}: ${membershipStatus}`
+    `[webhook] subscription sync — ${userId}: ${membershipStatus}` +
+      (resolvedMembershipPlan
+        ? ` (${resolvedMembershipPlan})`
+        : "")
   );
 }
 
@@ -282,6 +312,18 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        const rawMembershipPlan =
+          session.metadata?.membershipPlan;
+
+        if (!isMembershipPlan(rawMembershipPlan)) {
+          throw new Error(
+            `Subscription checkout completed with invalid membershipPlan: ${rawMembershipPlan}`
+          );
+        }
+
+        const membershipPlan: MembershipPlan =
+          rawMembershipPlan;
+
         await client.users.updateUserMetadata(userId, {
           publicMetadata: {
             ...meta,
@@ -289,7 +331,15 @@ export async function POST(request: NextRequest) {
             membershipStatus: "active",
             isSubscribed: true,
 
+            membershipPlan,
+
             subscriptionId: stripeSubscriptionId,
+
+            // New billing-cycle usage starts at zero.
+            membershipReadingsUsed: 0,
+            membershipJxlUsed: 0,
+
+            // Retired tier field.
             subscriptionTier: undefined,
 
             subscriptionStartedAt:
@@ -304,7 +354,7 @@ export async function POST(request: NextRequest) {
         });
 
         console.log(
-          `[webhook] subscription — active membership for ${userId}`
+          `[webhook] subscription — active ${membershipPlan} membership for ${userId}`
         );
 
       /* ── One JXL ── */
@@ -473,7 +523,9 @@ export async function POST(request: NextRequest) {
 
   /* ═══════════════════════════════════════════
      SUCCESSFUL SUBSCRIPTION INVOICE
-     No credit reset anymore — membership is unlimited.
+     Successful recurring subscription invoice.
+     Reset monthly membership usage for the new billing cycle.
+     Purchased credits remain untouched.
   ═══════════════════════════════════════════ */
 
   if (event.type === "invoice.payment_succeeded") {
@@ -522,8 +574,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true });
       }
 
+      const rawMembershipPlan =
+        subscription.metadata?.membershipPlan;
+
+      const membershipPlan: MembershipPlan | undefined =
+        isMembershipPlan(rawMembershipPlan)
+          ? rawMembershipPlan
+          : undefined;
+
       const client = await clerkClient();
       const user = await client.users.getUser(userId);
+
+      // Preserve the existing Clerk plan when Stripe has no valid new plan.
+      const existingMembershipPlan: MembershipPlan | undefined =
+        isMembershipPlan(user.publicMetadata?.membershipPlan)
+          ? (user.publicMetadata.membershipPlan as MembershipPlan)
+          : undefined;
+
+      const resolvedMembershipPlan =
+        membershipPlan ?? existingMembershipPlan;
 
       await client.users.updateUserMetadata(userId, {
         publicMetadata: {
@@ -532,15 +601,25 @@ export async function POST(request: NextRequest) {
           membershipStatus: "active",
           isSubscribed: true,
 
+          membershipPlan: resolvedMembershipPlan,
+
           subscriptionId: subscription.id,
+
           subscriptionTier: undefined,
+
+          // New billing cycle begins.
+          membershipReadingsUsed: 0,
+          membershipJxlUsed: 0,
 
           lastRenewalAt: new Date().toISOString(),
         },
       });
 
       console.log(
-        `[webhook] renewal — membership remains active for ${userId}`
+        `[webhook] renewal — membership remains active for ${userId}` +
+          (resolvedMembershipPlan
+            ? ` (${resolvedMembershipPlan})`
+            : "")
       );
 
     } catch (err) {
@@ -611,10 +690,15 @@ export async function POST(request: NextRequest) {
             membershipStatus: "canceled",
             isSubscribed: false,
 
+            membershipPlan: undefined,
+
             subscriptionId: undefined,
             subscriptionTier: undefined,
 
             subscriptionCancelledAt: new Date().toISOString(),
+
+            // NOTE: manualMembership is intentionally left untouched so
+            // a manually-comped beta user keeps access after cancellation.
           },
         });
 
