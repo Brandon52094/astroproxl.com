@@ -1,5 +1,6 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { logReadingCompleted } from "@/lib/analytics/readingAnalytics";
 import {
   type MembershipPlan,
   isMembershipPlan,
@@ -27,6 +28,12 @@ export async function POST(request: Request) {
       typeof body?.topic === "string"
         ? body.topic
         : "general";
+
+    const readingId =
+      typeof body?.readingId === "string" &&
+      body.readingId.trim()
+        ? body.readingId.trim()
+        : null;
 
     const isAskAnything =
       topic === "ask-anything";
@@ -60,7 +67,6 @@ export async function POST(request: Request) {
       membershipStatus === "active"
         ? isMembershipPlan(storedPaidPlan)
           ? storedPaidPlan
-          // Legacy active subscribers had unlimited access.
           : "plus_xl"
         : null;
 
@@ -68,7 +74,6 @@ export async function POST(request: Request) {
       manualMembership
         ? isMembershipPlan(storedManualPlan)
           ? storedManualPlan
-          // Existing manually comped users retain full access.
           : "plus_xl"
         : null;
 
@@ -85,7 +90,7 @@ export async function POST(request: Request) {
     const hasMembershipAccess =
       effectiveMembershipPlan !== null;
 
-    // ── Usage buckets ────────────────────────────────────────────────────────────
+    // ── Usage buckets ─────────────────────────────────────────────────────────
 
     const currentMembershipReadingsUsed =
       Number(metadata?.membershipReadingsUsed ?? 0);
@@ -99,7 +104,7 @@ export async function POST(request: Request) {
     const jxlAllowance =
       entitlements?.jxlPerMonth ?? null;
 
-    // ── Included membership allowance ────────────────────────────────────────────
+    // ── Included membership allowance ────────────────────────────────────────
 
     const hasIncludedMemberReading =
       hasMembershipAccess &&
@@ -115,7 +120,7 @@ export async function POST(request: Request) {
         currentMembershipJxlUsed < jxlAllowance
       );
 
-    // ── Purchased balances ───────────────────────────────────────────────────────
+    // ── Purchased balances ────────────────────────────────────────────────────
 
     const currentCredits =
       Number(metadata?.credits ?? 0);
@@ -123,7 +128,7 @@ export async function POST(request: Request) {
     const currentJxlCredits =
       Number(metadata?.jxlCredits ?? 0);
 
-    // ── Decide which bucket this completion uses ────────────────────────────────
+    // ── Decide which bucket this completion uses ─────────────────────────────
 
     const usesIncludedMembership =
       isAskAnything
@@ -132,9 +137,6 @@ export async function POST(request: Request) {
 
     const shouldSpendPurchasedCredit =
       !usesIncludedMembership;
-
-    // Defensive guard: generation should already have verified access,
-    // but never silently clamp a balance below zero here.
 
     if (
       shouldSpendPurchasedCredit &&
@@ -156,7 +158,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── New balances / usage ────────────────────────────────────────────────────
+    // ── New balances / usage ──────────────────────────────────────────────────
 
     const newMembershipReadingsUsed =
       !isAskAnything && hasIncludedMemberReading
@@ -181,26 +183,36 @@ export async function POST(request: Request) {
     await client.users.updateUserMetadata(userId, {
       publicMetadata: {
         ...metadata,
-
         readingsCompleted: next,
         firstReadingUsed: true,
-
         credits: newCredits,
         jxlCredits: newJxlCredits,
-
-        membershipReadingsUsed:
-          newMembershipReadingsUsed,
-
-        membershipJxlUsed:
-          newMembershipJxlUsed,
-
-        // Regular readings include 1 reply.
-        // Ask Anything/JXL manages its own reply behavior separately.
+        membershipReadingsUsed: newMembershipReadingsUsed,
+        membershipJxlUsed: newMembershipJxlUsed,
         ...(isAskAnything
           ? {}
           : { freeRepliesRemaining: 1 }),
       },
     });
+
+    // Analytics is observational and must never break accounting.
+    if (readingId) {
+      try {
+        await logReadingCompleted({
+          userId,
+          readingId,
+          topic,
+          membershipPlan: effectiveMembershipPlan,
+          usedMembershipAllowance: usesIncludedMembership,
+          usedPurchasedCredit: shouldSpendPurchasedCredit,
+        });
+      } catch (analyticsError) {
+        console.error(
+          "[reading-complete] Analytics logging failed:",
+          analyticsError
+        );
+      }
+    }
 
     console.log(
       `[reading-complete] ${userId}` +
@@ -223,35 +235,19 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       readingsCompleted: next,
-
       topic,
       isAskAnything,
-
       creditsRemaining: newCredits,
       jxlCreditsRemaining: newJxlCredits,
-
-      membershipPlan:
-        effectiveMembershipPlan,
-
-      membershipReadingsUsed:
-        newMembershipReadingsUsed,
-
-      membershipJxlUsed:
-        newMembershipJxlUsed,
-
-      membershipReadingAllowance:
-        readingAllowance,
-
-      membershipJxlAllowance:
-        jxlAllowance,
-
-      usedMembershipAllowance:
-        usesIncludedMembership,
-
+      membershipPlan: effectiveMembershipPlan,
+      membershipReadingsUsed: newMembershipReadingsUsed,
+      membershipJxlUsed: newMembershipJxlUsed,
+      membershipReadingAllowance: readingAllowance,
+      membershipJxlAllowance: jxlAllowance,
+      usedMembershipAllowance: usesIncludedMembership,
       usedCredit:
         !isAskAnything &&
         shouldSpendPurchasedCredit,
-
       usedJxlCredit:
         isAskAnything &&
         shouldSpendPurchasedCredit,
