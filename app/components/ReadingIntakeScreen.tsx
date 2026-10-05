@@ -318,7 +318,7 @@ export default function ReadingIntakeScreen({
     useState<CheckoutIntent>(null);
   const theme = THEMES.cosmic;
 
-  // Locked feature soft cue / third-attempt routing.
+  // Locked feature soft cue / second-attempt routing.
   const [lockedFeaturePrompt, setLockedFeaturePrompt] =
     useState<LockedFeature | null>(null);
 
@@ -330,7 +330,6 @@ export default function ReadingIntakeScreen({
   // Chart-derived data for the hero information system.
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
-  const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
 
   // The hero is informational only now — no user-facing toggle.
   // Ask Anything temporarily replaces it with a listening state.
@@ -443,9 +442,8 @@ export default function ReadingIntakeScreen({
       lockedFeatureAttemptsRef.current[feature] =
         nextAttempt;
 
-      // First + second attempt:
-      // quietly explain where access comes from.
-      if (nextAttempt < 3) {
+      // First attempt: explain what is needed.
+      if (nextAttempt < 2) {
         setLockedFeaturePrompt(feature);
 
         window.setTimeout(() => {
@@ -457,9 +455,7 @@ export default function ReadingIntakeScreen({
         return;
       }
 
-      // Third attempt:
-      // send them to Credits with the requested
-      // product/membership intent preserved.
+      // Second attempt: open Credits with intent.
       lockedFeatureAttemptsRef.current[feature] = 0;
       setLockedFeaturePrompt(null);
 
@@ -467,6 +463,43 @@ export default function ReadingIntakeScreen({
     },
     [onOpenCredits]
   );
+
+  // When returning from the browser back/forward cache, blur whatever was
+  // previously focused so the Voice button's animated border does not repaint
+  // incorrectly on iOS Safari.
+  useEffect(() => {
+    const resetReturnedFocus = () => {
+      if (document.visibilityState !== "visible") return;
+
+      const active = document.activeElement;
+
+      if (active instanceof HTMLElement) {
+        active.blur();
+      }
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      resetReturnedFocus
+    );
+
+    window.addEventListener(
+      "pageshow",
+      resetReturnedFocus
+    );
+
+    return () => {
+      document.removeEventListener(
+        "visibilitychange",
+        resetReturnedFocus
+      );
+
+      window.removeEventListener(
+        "pageshow",
+        resetReturnedFocus
+      );
+    };
+  }, []);
 
   useEffect(() => {
     async function ensureChart() {
@@ -553,7 +586,6 @@ export default function ReadingIntakeScreen({
     const data = chart?.chartData as unknown as {
       tropical?: { planets?: unknown; angles?: unknown };
       transits?: unknown;
-      moonPhase?: MoonPhaseData;
     } | undefined;
 
     if (!data) return;
@@ -563,7 +595,6 @@ export default function ReadingIntakeScreen({
       ...normalizePlacements(data.tropical?.angles),
     ]);
     setTransits(normalizePlacements(data.transits));
-    setMoonPhase(data.moonPhase ?? null);
   }, [chartStatus]);
 
   const fetchInFlight = useRef(false);
@@ -638,7 +669,7 @@ export default function ReadingIntakeScreen({
     hasIncludedVoiceReading ||
     hasPurchasedVoiceReading;
 
-  /* ── Hero information — Brand + Big Three + current sky context ─── */
+  /* ── Hero information — Brand + Big Three ─── */
   const heroData = useMemo(() => {
     const find = (arr: Placement[], names: string[]) =>
       arr.find((p) =>
@@ -649,8 +680,6 @@ export default function ReadingIntakeScreen({
     const natalSun = find(natal, ["Sun"]);
     const natalMoon = find(natal, ["Moon"]);
     const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
-    const currentSun = find(transits, ["Sun"]);
-    const currentMoon = find(transits, ["Moon"]);
 
     return {
       personal: [
@@ -658,10 +687,8 @@ export default function ReadingIntakeScreen({
         { role: "Moon", sign: natalMoon?.sign ?? "—", degree: natalMoon?.degree, house: natalMoon?.house },
         { role: "Rising", sign: natalRising?.sign ?? "—", degree: natalRising?.degree, house: natalRising?.house },
       ],
-      currentSun,
-      currentMoon,
     };
-  }, [natal, transits]);
+  }, [natal]);
 
   const stopAskRecorder = useCallback((discard = false) => {
     const recorder = mediaRecorderRef.current;
@@ -1673,6 +1700,10 @@ export default function ReadingIntakeScreen({
           }
         }
 
+        /* Gold border is painted as a layered background rather than a
+         * masked pseudo-element. This keeps the animated conic gradient
+         * stable across iOS Safari's back/forward cache, where the mask
+         * layer could otherwise repaint incorrectly and fill the button. */
         .ask-premium {
           position: relative;
           overflow: hidden;
@@ -1680,26 +1711,20 @@ export default function ReadingIntakeScreen({
           -webkit-user-select: none;
           -webkit-touch-callout: none;
           isolation: isolate;
-          border: 0;
+          border: 1.25px solid transparent;
           border-radius: 24px;
-          background:
-            radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%),
-            linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97));
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.08),
-            0 0 22px rgba(203,164,78,0.12),
-            0 16px 38px rgba(0,0,0,0.46);
-        }
 
-        .ask-premium::before,
-        .ask-premium::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          pointer-events: none;
-          padding: 1.25px;
           background:
+            radial-gradient(
+              circle at 50% -70%,
+              rgba(255,255,255,0.11),
+              transparent 66%
+            ) padding-box,
+            linear-gradient(
+              145deg,
+              rgba(19,18,24,0.96),
+              rgba(7,10,21,0.97)
+            ) padding-box,
             conic-gradient(
               from var(--voice-angle),
               rgba(255,255,255,0.94) 0deg,
@@ -1709,26 +1734,19 @@ export default function ReadingIntakeScreen({
               rgba(255,255,255,0.96) 226deg,
               rgba(193,151,67,0.86) 296deg,
               rgba(255,255,255,0.94) 360deg
-            );
-          -webkit-mask:
-            linear-gradient(#000 0 0) content-box,
-            linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
+            ) border-box;
+
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.08),
+            0 0 22px rgba(203,164,78,0.12),
+            0 16px 38px rgba(0,0,0,0.46);
+
           animation: voiceOrbit 8s linear infinite;
         }
 
-        .ask-premium::before {
-          z-index: 0;
-          opacity: 0.82;
-        }
-
+        .ask-premium::before,
         .ask-premium::after {
-          inset: -1px;
-          z-index: -1;
-          padding: 2px;
-          opacity: 0.52;
-          filter: blur(8px);
+          content: none;
         }
 
         .ask-premium:hover,
@@ -1831,8 +1849,7 @@ export default function ReadingIntakeScreen({
 
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
-          .ask-premium::before,
-          .ask-premium::after,
+          .ask-premium,
           .ask-mic-halo { animation: none !important; }
           .mic-ready-toggle,
           .mic-ready-knob { transition: none !important; }
@@ -1955,10 +1972,9 @@ export default function ReadingIntakeScreen({
                           ) : null}
                         </div>
                       ) : (
-                        /* HERO — brand identity + Big Three + current sky context */
-                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[15px] pb-[10px] text-center">
+                        /* HERO — brand identity + Big Three */
+                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[23px] pb-[18px] text-center">
 
-                          {/* Brand block — shifted down about 2px */}
                           <p
                             className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
                             style={{
@@ -2012,7 +2028,7 @@ export default function ReadingIntakeScreen({
                           />
 
                           {/* Big Three — slightly larger */}
-                          <div className="mt-[11px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                          <div className="mt-[15px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
                             {heroData.personal.map((item) => (
                               <div
                                 key={`brand-${item.role}`}
@@ -2039,39 +2055,6 @@ export default function ReadingIntakeScreen({
                                 </span>
                               </div>
                             ))}
-                          </div>
-
-                          {/* Current-sky context moved from old second hero */}
-                          <div className="absolute inset-x-[22px] bottom-[9px] flex flex-col items-center text-center">
-                            <span
-                              className="mb-[6px] h-px w-[56px]"
-                              style={{
-                                background:
-                                  "linear-gradient(90deg, transparent, rgba(34,211,238,0.62), transparent)",
-                                boxShadow:
-                                  "0 0 7px rgba(34,211,238,0.10)",
-                              }}
-                              aria-hidden="true"
-                            />
-
-                            <span className="max-w-full truncate text-[10px] font-medium leading-[1.3] tracking-[0.01em] text-slate-200/86">
-                              Sun in {heroData.currentSun?.sign ?? "—"} · Moon in{" "}
-                              {moonPhase?.moonSign ??
-                                heroData.currentMoon?.sign ??
-                                "—"}{" "}
-                              · {moonPhase?.phaseName ?? "Moon"}
-                            </span>
-
-                            <span className="mt-[3px] max-w-full truncate text-[10px] font-medium leading-[1.3] tracking-[0.01em] text-sky-100/82">
-                              {moonPhase?.nextEventName === "Full Moon" &&
-                              typeof moonPhase.daysUntilNextEvent === "number"
-                                ? moonPhase.daysUntilNextEvent === 0
-                                  ? "Full Moon today"
-                                  : `Full Moon in ${moonPhase.daysUntilNextEvent} day${
-                                      moonPhase.daysUntilNextEvent === 1 ? "" : "s"
-                                    }`
-                                : "Full Moon timing updating"}
-                            </span>
                           </div>
                         </div>
                       )}
@@ -2367,7 +2350,7 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
-          <section className="mt-3">
+          <section className="mt-6 border-t border-white/[0.08] pt-5">
   <div className="flex w-full items-center justify-center">
     <div className="relative h-[86px] w-[72%] max-w-[304px]">
       <button
@@ -2440,7 +2423,7 @@ export default function ReadingIntakeScreen({
   ) : (
     <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
       {lockedFeaturePrompt === "voice"
-        ? "Become a Member"
+        ? "Get Credits"
         : micEnabled
           ? "Press · Hold · Speak"
           : "Turn on the microphone"}
