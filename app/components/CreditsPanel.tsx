@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ChevronLeft,
@@ -105,9 +105,16 @@ function plural(n: number, one: string, many?: string): string {
 export default function CreditsPanel({
   onClose,
   embedded = false,
+  initialIntent = null,
 }: {
   onClose?: () => void;
   embedded?: boolean;
+  /**
+   * When the panel opens as a result of a locked feature tap, this tells it
+   * which product or membership to visibly add to the cart after a short
+   * delay. This makes the arrival feel intentional rather than preloaded.
+   */
+  initialIntent?: "voice" | "context" | null;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const [cart, setCart] = useState<Record<ProductId, number>>({
@@ -163,6 +170,28 @@ export default function CreditsPanel({
       [id]: Math.max(0, current[id] + amount),
     }));
   }, []);
+
+  // Visual add-to-cart for locked feature intent.
+  // The delay is what creates the moment: the panel is already on screen,
+  // then the requested item adds itself.
+  const intentAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!initialIntent) return;
+    if (intentAppliedRef.current) return;
+    intentAppliedRef.current = true;
+
+    const timer = window.setTimeout(() => {
+      if (initialIntent === "voice") {
+        step("jxl", 1);
+      }
+
+      if (initialIntent === "context") {
+        setMembershipTier("astro_plus");
+      }
+    }, shouldReduceMotion ? 0 : 550);
+
+    return () => window.clearTimeout(timer);
+  }, [initialIntent, shouldReduceMotion, step]);
 
   const total = useMemo(
     () =>
