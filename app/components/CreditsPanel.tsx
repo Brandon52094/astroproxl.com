@@ -388,7 +388,7 @@ export default function CreditsPanel({
                     {balance.jxl}
                   </p>
                   <p className="mt-1 text-[8px] uppercase tracking-[0.14em] text-slate-500">
-                    JXL
+                    Ask Anything
                   </p>
                 </div>
                 <div className="text-center">
