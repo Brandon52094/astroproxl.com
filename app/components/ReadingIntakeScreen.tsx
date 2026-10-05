@@ -88,12 +88,12 @@ const AREAS = [
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
   {
-    id: "other",
-    title: "What's Coming",
-    icon: null,
-    marker: "✦",
-    defaultQuestion: "What is coming for me in the next 30–45 days?",
-  },
+  id: "other",
+  title: "What's Coming",
+  icon: null,
+  marker: "✦",
+  defaultQuestion: "What is coming for me in the next 30–45 days?",
+},
 ];
 
 // One luminous cosmic aura for the current app theme. Personalized theme
@@ -170,6 +170,11 @@ interface MoonPhaseData {
   nextSignIngressAt?: string;
 }
 
+interface ProfectionData {
+  activatedHouse: number;
+  activatedSign: string;
+}
+
 type ElementName = "Earth" | "Fire" | "Water" | "Air";
 
 const SIGN_ELEMENTS: Record<string, ElementName> = {
@@ -209,6 +214,37 @@ const HERO_ELEMENT_COLORS: Record<
     border: "rgba(186,230,253,0.60)",
   },
 };
+
+const HERO_ELEMENT_ORDER: ElementName[] = ["Earth", "Fire", "Water", "Air"];
+
+// Match the BirthChartPanel astrology-symbol treatment without importing its layout.
+const HERO_TEXT_VARIATION = "\uFE0E";
+const HERO_GLYPHS: Record<string, string> = {
+  Sun: `☉${HERO_TEXT_VARIATION}`,
+  Moon: `☽${HERO_TEXT_VARIATION}`,
+  Mercury: `☿${HERO_TEXT_VARIATION}`,
+  Venus: `♀${HERO_TEXT_VARIATION}`,
+  Mars: `♂${HERO_TEXT_VARIATION}`,
+  Jupiter: `♃${HERO_TEXT_VARIATION}`,
+  Saturn: `♄${HERO_TEXT_VARIATION}`,
+};
+
+function heroSignRuler(sign?: string): string {
+  if (!sign) return "Sun";
+  const rulers: Record<string, string> = {
+    Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
+    Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
+    Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
+  };
+  return rulers[sign] ?? "Sun";
+}
+
+function heroOrdinal(value?: number): string {
+  if (!value) return "—";
+  const s = ["th", "st", "nd", "rd"];
+  const v = value % 100;
+  return `${value}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
 
 function signAccentColor(sign: string): string {
   const element = SIGN_ELEMENTS[sign];
@@ -591,6 +627,11 @@ export default function ReadingIntakeScreen({
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
   const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
+  const [profection, setProfection] = useState<ProfectionData | null>(null);
+  const [heroCurrentPlace, setHeroCurrentPlace] = useState("");
+  const [heroCurrentTimezone, setHeroCurrentTimezone] = useState("");
+  const [heroHasGpsLocation, setHeroHasGpsLocation] = useState(false);
+  const [heroNow, setHeroNow] = useState(() => new Date());
 
   // The normal hero is user-controlled only: Brand (with Big Three) → Current Sky.
   // Ask Anything temporarily replaces these with a third listening state.
@@ -694,7 +735,6 @@ export default function ReadingIntakeScreen({
     setSelectedArea(null);
     setQuestion("");
     setContextFocused(false);
-    setLockedFeaturePrompt(null);
   }, [clearSelectionTimeout]);
 
   const cycleHeroInfo = useCallback(() => {
@@ -713,10 +753,15 @@ export default function ReadingIntakeScreen({
         nextAttempt;
 
       // First attempt: soft UI cue only.
-      // Stays visible until the user does something that clearly resets
-      // the interface — selecting/deselecting a reading, or tapping elsewhere.
       if (nextAttempt === 1) {
         setLockedFeaturePrompt(feature);
+
+        window.setTimeout(() => {
+          setLockedFeaturePrompt((current) =>
+            current === feature ? null : current
+          );
+        }, 3200);
+
         return;
       }
 
@@ -810,10 +855,25 @@ export default function ReadingIntakeScreen({
 
     const chart = loadChart();
 
+    const chartLocation = chart as unknown as {
+      currentPlace?: string;
+      currentTimezone?: string;
+      currentLat?: number;
+      currentLng?: number;
+    } | null;
+
+    setHeroCurrentPlace(chartLocation?.currentPlace ?? "");
+    setHeroCurrentTimezone(chartLocation?.currentTimezone ?? "");
+    setHeroHasGpsLocation(
+      typeof chartLocation?.currentLat === "number" &&
+      typeof chartLocation?.currentLng === "number"
+    );
+
     const data = chart?.chartData as unknown as {
       tropical?: { planets?: unknown; angles?: unknown };
       transits?: unknown;
       moonPhase?: MoonPhaseData;
+      profection?: ProfectionData;
     } | undefined;
 
     if (!data) return;
@@ -824,6 +884,7 @@ export default function ReadingIntakeScreen({
     ]);
     setTransits(normalizePlacements(data.transits));
     setMoonPhase(data.moonPhase ?? null);
+    setProfection(data.profection ?? null);
   }, [chartStatus]);
 
   const fetchInFlight = useRef(false);
@@ -898,6 +959,15 @@ export default function ReadingIntakeScreen({
     hasIncludedVoiceReading ||
     hasPurchasedVoiceReading;
 
+  // Future switch. Entitlement already exists, but the actual alternate
+  // theme UI can remain disabled until we're ready to expose it.
+  const themesEnabled =
+    process.env.NEXT_PUBLIC_ENABLE_XL_THEMES === "true";
+
+  const canUseCustomThemes =
+    themesEnabled &&
+    userStatus?.membershipEntitlements?.customThemes === true;
+
   /* ── Hero information — Brand + Big Three → Current Sky ───────── */
   const heroData = useMemo(() => {
     const find = (arr: Placement[], names: string[]) =>
@@ -912,6 +982,18 @@ export default function ReadingIntakeScreen({
     const currentSun = find(transits, ["Sun"]);
     const currentMoon = find(transits, ["Moon"]);
 
+    const counts: Record<ElementName, number> = { Earth: 0, Fire: 0, Water: 0, Air: 0 };
+    const balanceBodies = new Set([
+      "Sun", "Moon", "Ascendant", "Rising", "ASC", "Mercury", "Venus", "Mars",
+      "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto",
+    ]);
+    natal.forEach((placement) => {
+      if (!balanceBodies.has(placement.name)) return;
+      const element = SIGN_ELEMENTS[placement.sign];
+      if (element) counts[element] += 1;
+    });
+    const maxElementCount = Math.max(1, ...Object.values(counts));
+
     return {
       personal: [
         { role: "Sun", sign: natalSun?.sign ?? "—", degree: natalSun?.degree, house: natalSun?.house },
@@ -920,24 +1002,80 @@ export default function ReadingIntakeScreen({
       ],
       currentSun,
       currentMoon,
+      counts,
+      maxElementCount,
     };
   }, [natal, transits]);
 
+  useEffect(() => {
+    const update = () => setHeroNow(new Date());
+    update();
+    const timer = window.setInterval(update, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const heroAsOf = useMemo(() => {
+    const timezone = heroCurrentTimezone || undefined;
+
+    const datePart = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: timezone,
+    }).format(heroNow);
+
+    const timePart = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: timezone,
+    })
+      .format(heroNow)
+      .replace(" AM", " am")
+      .replace(" PM", " pm");
+
+    const place = heroCurrentPlace ? ` in ${heroCurrentPlace}` : "";
+    const source = heroHasGpsLocation ? " (GPS)" : "";
+
+    return `As of ${datePart} at ${timePart}${place}${source}`;
+  }, [heroCurrentPlace, heroCurrentTimezone, heroHasGpsLocation, heroNow]);
+
   const moonWaxing = moonPhase?.nextEventName === "Full Moon";
 
-  const nextFullMoonLine = useMemo(() => {
-    if (moonPhase?.nextEventName === "Full Moon" && typeof moonPhase.daysUntilNextEvent === "number") {
-      const days = moonPhase.daysUntilNextEvent;
-      if (days === 0) return "Full Moon today";
-      return `Full Moon in ${days} day${days === 1 ? "" : "s"}`;
+  const moonIngressLine = useMemo(() => {
+    if (moonPhase?.nextSignName && moonPhase?.nextSignIngressAt) {
+      const raw = new Date(moonPhase.nextSignIngressAt);
+      if (!Number.isNaN(raw.getTime())) {
+        const timezone = heroCurrentTimezone || undefined;
+        const date = new Intl.DateTimeFormat("en-US", {
+          month: "numeric",
+          day: "numeric",
+          timeZone: timezone,
+        }).format(raw);
+        const time = new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: timezone,
+        })
+          .format(raw)
+          .replace(" AM", " am")
+          .replace(" PM", " pm");
+
+        return `Enters ${moonPhase.nextSignName} ${date} at ${time}`;
+      }
+
+      return `Enters ${moonPhase.nextSignName} ${moonPhase.nextSignIngressAt}`;
     }
-    if (typeof moonPhase?.daysUntilNextEvent === "number") {
-      const days = moonPhase.daysUntilNextEvent;
-      if (days === 0) return `${moonPhase.nextEventName ?? "New Moon"} today`;
-      return `${moonPhase.nextEventName ?? "New Moon"} in ${days} day${days === 1 ? "" : "s"}`;
+
+    if (moonPhase?.nextEventName && typeof moonPhase.daysUntilNextEvent === "number") {
+      return moonPhase.daysUntilNextEvent === 0
+        ? `${moonPhase.nextEventName} exact today`
+        : `${moonPhase.nextEventName} in ${moonPhase.daysUntilNextEvent} day${moonPhase.daysUntilNextEvent === 1 ? "" : "s"}`;
     }
-    return "Full Moon";
-  }, [moonPhase]);
+
+    return "Live lunar timing";
+  }, [heroCurrentTimezone, moonPhase]);
+
 
   const stopAskRecorder = useCallback((discard = false) => {
     const recorder = mediaRecorderRef.current;
@@ -1340,6 +1478,116 @@ export default function ReadingIntakeScreen({
     [revealVoiceTranscript]
   );
 
+  const openVoiceCheckout = useCallback(async () => {
+    try {
+      setAskError(null);
+
+      const response = await fetch(
+        "/api/stripe/checkout",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "jxl_session",
+            returnUrl: window.location.href,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          "Couldn't open voice reading checkout."
+        );
+      }
+
+      if (data?.clientSecret) {
+        setCheckoutIntent("voice");
+        setClientSecret(data.clientSecret);
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      throw new Error(
+        "Couldn't open voice reading checkout."
+      );
+    } catch (error) {
+      setAskError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't start checkout."
+      );
+    }
+  }, []);
+
+  const openMembershipCheckout = useCallback(async () => {
+    if (!stripePromise) {
+      setSubmitError(
+        "Membership checkout is unavailable right now."
+      );
+      return;
+    }
+
+    try {
+      setIsCreatingReading(true);
+      setSubmitError(null);
+
+      const response = await fetch(
+        "/api/stripe/checkout",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "subscription",
+            membershipPlan: "plus",
+            returnUrl: window.location.href,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Couldn't open membership."
+        );
+      }
+
+      if (data?.clientSecret) {
+        setCheckoutIntent("subscription");
+        setClientSecret(data.clientSecret);
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      throw new Error(
+        "Couldn't open membership."
+      );
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't open membership."
+      );
+
+      setIsCreatingReading(false);
+    }
+  }, []);
+
   const startAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
@@ -1568,7 +1816,6 @@ export default function ReadingIntakeScreen({
     clearSelectionTimeout();
     setSelectedArea(id);
     setQuestion("");
-    setLockedFeaturePrompt(null);
     const area = AREAS.find((a) => a.id === id);
     trackTtq("ViewContent", { content_id: id, content_name: area?.title });
 
@@ -1690,6 +1937,10 @@ export default function ReadingIntakeScreen({
     return theme.areaColors[key];
   }, [theme]);
 
+  // The pager owns the viewport and vertical scrolling. Do not lock <html> or
+  // <body> here: on iOS Safari that can freeze a stale visual viewport height
+  // until the user performs a pull/bounce gesture. Hide only the pager panel's
+  // scrollbar and let Safari continue updating the viewport normally.
   const intakeRootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -1713,14 +1964,6 @@ export default function ReadingIntakeScreen({
   }, []);
 
   const voiceVisualActive = voiceJourneyActive || askHolding || isTranscribingAsk || voiceNavigating;
-
-  // ── Reading header priority ──────────────────────────────────────────────
-  // membership notice  ↓  selected reading title  ↓  neutral rotation
-  const readingHeaderText = useMemo(() => {
-    if (lockedFeaturePrompt) return "Become A Member";
-    if (selectedAreaConfig) return selectedAreaConfig.title;
-    return null; // rotation handles the neutral state
-  }, [lockedFeaturePrompt, selectedAreaConfig]);
 
   return (
       <div
@@ -2214,7 +2457,7 @@ export default function ReadingIntakeScreen({
                       className="absolute inset-0"
                     >
                       {voiceVisualActive ? (
-                        /* HERO — waveform-only listening state */
+                        /* HERO 4 — waveform-only listening state */
                         <div className="absolute inset-0 flex items-center justify-center px-[30px]">
                           <canvas
                             ref={canvasRef}
@@ -2234,7 +2477,7 @@ export default function ReadingIntakeScreen({
                         </div>
                       ) : heroInfoMode === "brand" ? (
                         /* HERO 1 — brand identity + the user's Big Three + swipe cue inside the card. */
-                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[10px] pb-[18px] text-center">
+                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[13px] pb-[22px] text-center">
                           <p
                             className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
                             style={{
@@ -2247,7 +2490,7 @@ export default function ReadingIntakeScreen({
                           </p>
 
                           <h1
-                            className="mt-[2px] whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                            className="mt-[1px] whitespace-nowrap text-[32px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                             style={{
                               transform: "scaleY(1.045)",
                               transformOrigin: "center bottom",
@@ -2259,7 +2502,7 @@ export default function ReadingIntakeScreen({
                           </h1>
 
                           <span
-                            className="my-[6px] h-px w-[82px]"
+                            className="my-[7px] h-px w-[82px]"
                             style={{
                               background:
                                 "linear-gradient(90deg, transparent, rgba(203,213,225,0.42), transparent)",
@@ -2277,18 +2520,18 @@ export default function ReadingIntakeScreen({
                           </p>
 
                           {/* Big Three */}
-                          <div className="mt-[16px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                          <div className="mt-[17px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
                             {heroData.personal.map((item) => (
                               <div
                                 key={`brand-${item.role}`}
                                 className="flex min-w-0 flex-col items-center text-center"
                               >
-                                <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">
+                                <span className="text-[7px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">
                                   {item.role}
                                 </span>
 
                                 <span
-                                  className="mt-[5px] max-w-full truncate text-[19px] font-medium leading-none"
+                                  className="mt-[5px] max-w-full truncate text-[15px] font-medium leading-none"
                                   style={{
                                     color: signAccentColor(item.sign),
                                     textShadow: `0 0 12px ${signAccentGlow(item.sign)}`,
@@ -2297,15 +2540,36 @@ export default function ReadingIntakeScreen({
                                   {item.sign}
                                 </span>
 
-                                <span className="mt-[4px] text-[10px] font-medium tabular-nums text-slate-300/70">
+                                <span className="mt-[4px] text-[8px] font-medium tabular-nums text-slate-300/70">
                                   {item.degree ?? "—"}
                                 </span>
                               </div>
                             ))}
                           </div>
+
+                          <motion.button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onSwipeLeft?.();
+                            }}
+                            initial={false}
+                            animate={
+                              shouldReduceMotion
+                                ? { opacity: 0.48 }
+                                : { opacity: [0.34, 0.68, 0.42] }
+                            }
+                            transition={
+                              shouldReduceMotion
+                                ? { duration: 0 }
+                                : { duration: 2.6, times: [0, 0.48, 1], ease: "easeInOut" }
+                            }
+                            className="tap-fix absolute bottom-[8px] text-[8px] font-medium uppercase tracking-[0.18em] text-slate-400/60"
+                          >
+                          </motion.button>
                         </div>
                       ) : (
-                        /* HERO 2 — premium Current Sky: larger luminaries + richer lunar timing */
+                        /* HERO 3 — premium Current Sky: larger luminaries + richer lunar timing */
                         <div className="absolute inset-0 px-[18px] pt-[24px] pb-[8px]">
                           <div className="relative grid h-[154px] grid-cols-2">
                             <div className="flex flex-col items-center justify-start pr-[14px] text-center">
@@ -2386,7 +2650,7 @@ export default function ReadingIntakeScreen({
                             </div>
                           </div>
 
-                          <div className="absolute inset-x-[22px] bottom-[14px] flex flex-col items-center text-center">
+                          <div className="absolute inset-x-[22px] bottom-[9px] flex flex-col items-center text-center">
                             <span
                               className="mb-[6px] h-px w-[56px]"
                               style={{
@@ -2397,8 +2661,12 @@ export default function ReadingIntakeScreen({
                               aria-hidden="true"
                             />
 
-                            <span className="max-w-full truncate text-[11px] font-medium leading-[1.3] tracking-[0.01em] text-sky-100/82">
-                              {nextFullMoonLine}
+                            <span className="max-w-full truncate text-[10px] font-medium leading-[1.3] tracking-[0.01em] text-slate-200/86">
+                              {heroAsOf}
+                            </span>
+
+                            <span className="mt-[3px] max-w-full truncate text-[10px] font-medium leading-[1.3] tracking-[0.01em] text-sky-100/82">
+                              {moonIngressLine}
                             </span>
                           </div>
                         </div>
@@ -2498,107 +2766,22 @@ export default function ReadingIntakeScreen({
           </AnimatePresence>
 
           {/* ── Dynamic reading header ──
-              One visual treatment. Three priorities:
-              membership notice → selected reading title → neutral rotation. */}
+              The heading keeps one visual treatment; selection only changes the word. */}
           <div
             className="relative mb-[14px] h-[26px] overflow-hidden text-center"
             aria-live="polite"
           >
-            <AnimatePresence mode="wait" initial={false}>
-              {lockedFeaturePrompt ? (
-                <motion.p
-                  key="membership-notice"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{
-                    duration: shouldReduceMotion ? 0.08 : 0.28,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
-                  className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-amber-100/92 sm:text-[14.5px]"
-                  style={{
-                    textShadow:
-                      "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(251,191,36,0.20)",
-                  }}
-                >
-                  Become A Member
-                </motion.p>
-              ) : selectedAreaConfig ? (
-                <motion.p
-                  key={`selected-${selectedAreaConfig.id}`}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{
-                    duration: shouldReduceMotion ? 0.08 : 0.28,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
-                  className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
-                  style={{
-                    textShadow:
-                      "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-                  }}
-                >
-                  {selectedAreaConfig.title}
-                </motion.p>
-              ) : (
-                <motion.p
-                  key="neutral-rotation"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{
-                    duration: shouldReduceMotion ? 0.08 : 0.3,
-                  }}
-                  className="absolute inset-x-0 top-0 flex h-[26px] flex-col items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
-                  style={{
-                    textShadow:
-                      "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-                  }}
-                >
-                  <motion.span
-                    animate={
-                      shouldReduceMotion
-                        ? { opacity: 0.92 }
-                        : { opacity: [0.92, 0.92, 0.2, 0.2, 0.92] }
-                    }
-                    transition={
-                      shouldReduceMotion
-                        ? { duration: 0 }
-                        : {
-                            duration: 5.6,
-                            times: [0, 0.42, 0.5, 0.92, 1],
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                          }
-                    }
-                    className="absolute"
-                  >
-                    Select A Reading
-                  </motion.span>
-                  <motion.span
-                    animate={
-                      shouldReduceMotion
-                        ? { opacity: 0.92 }
-                        : { opacity: [0.2, 0.2, 0.92, 0.92, 0.2] }
-                    }
-                    transition={
-                      shouldReduceMotion
-                        ? { duration: 0 }
-                        : {
-                            duration: 5.6,
-                            times: [0, 0.42, 0.5, 0.92, 1],
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                          }
-                    }
-                    className="absolute"
-                  >
-                    Swipe Page To Explore
-                  </motion.span>
-                </motion.p>
-              )}
-            </AnimatePresence>
+            <p
+              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
+              style={{
+                opacity: voiceVisualActive ? 0 : 1,
+                filter: voiceVisualActive ? "blur(4px)" : "blur(0px)",
+                textShadow:
+                  "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
+              }}
+            >
+              {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
+            </p>
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -2685,7 +2868,9 @@ export default function ReadingIntakeScreen({
             <div className="relative h-full rounded-[20px] bg-transparent px-4 py-2 pr-12">
               {!contextFocused && question.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[14px] font-medium text-slate-400/72">
-                  Add Context (Optional)
+                  {!canUseAddContext && lockedFeaturePrompt === "context"
+                    ? "Become a Member"
+                    : "Add Context (Optional)"}
                 </div>
               )}
 
@@ -2850,9 +3035,11 @@ export default function ReadingIntakeScreen({
     </p>
   ) : (
     <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
-      {micEnabled
-        ? "Press · Hold · Speak"
-        : "Turn on the microphone"}
+      {lockedFeaturePrompt === "voice"
+        ? "Become a Member"
+        : micEnabled
+          ? "Press · Hold · Speak"
+          : "Turn on the microphone"}
     </p>
   )}
 </section>
