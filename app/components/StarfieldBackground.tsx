@@ -2,8 +2,75 @@
 
 import React, { useEffect, useRef } from "react";
 
+type StarTint = "blue" | "white" | "warm" | "violet";
+
+type Star = {
+  x: number;
+  y: number;
+  radius: number;
+  alpha: number;
+  phase: number;
+  speed: number;
+  strength: number;
+  drift: number;
+  tint: StarTint;
+  bright: boolean;
+  spike: boolean;
+};
+
+type ShootingStar = {
+  active: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  length: number;
+};
+
+const OVERSCAN_BOTTOM = 200;
+const FPS = 30;
+
+const STAR_LAYERS = [
+  { count: 220, drift: 0.7, min: 0.25, max: 0.8 },
+  { count: 130, drift: 1.5, min: 0.35, max: 1.05 },
+  { count: 60, drift: 2.6, min: 0.5, max: 1.45 },
+] as const;
+
+function randomTint(): StarTint {
+  const n = Math.random();
+
+  if (n < 0.5) return "blue";
+  if (n < 0.7) return "white";
+  if (n < 0.86) return "warm";
+
+  return "violet";
+}
+
+function tintColor(
+  tint: StarTint,
+  alpha: number
+): string {
+  switch (tint) {
+    case "warm":
+      return `rgba(255,226,190,${alpha})`;
+
+    case "violet":
+      return `rgba(218,200,255,${alpha})`;
+
+    case "white":
+      return `rgba(245,248,255,${alpha})`;
+
+    default:
+      return `rgba(204,226,255,${alpha})`;
+  }
+}
+
 export default function StarfieldBackground() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(
+    null
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -12,334 +79,87 @@ export default function StarfieldBackground() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const OVERSCAN_BOTTOM = 200;
-    const TARGET_FPS = 30;
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
 
-    type StarTint =
-      | "blue"
-      | "warm"
-      | "violet"
-      | "white";
-
-    type Star = {
-      x: number;
-      y: number;
-
-      radius: number;
-      baseAlpha: number;
-
-      phase: number;
-      twinkleSpeed: number;
-      twinkleStrength: number;
-
-      depth: 0 | 1 | 2;
-
-      driftX: number;
-      driftY: number;
-
-      tint: StarTint;
-
-      glow: boolean;
-      spike: boolean;
-    };
-
-    type ShootingStar = {
-      active: boolean;
-
-      x: number;
-      y: number;
-
-      vx: number;
-      vy: number;
-
-      life: number;
-      maxLife: number;
-
-      length: number;
-      width: number;
-    };
-
-    let dpr = Math.min(
-      window.devicePixelRatio || 1,
-      1.5
-    );
-
-    let cssWidth = 0;
-    let cssHeight = 0;
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
 
     let raf = 0;
     let running = true;
     let lastFrame = 0;
 
-    const frameInterval = 1000 / TARGET_FPS;
+    const shooting: ShootingStar = {
+      active: false,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      life: 0,
+      maxLife: 1,
+      length: 100,
+    };
 
-    let nextShootingStarAt =
+    let nextShootingStar =
       performance.now() +
       5000 +
       Math.random() * 7000;
 
-    const shootingStar: ShootingStar = {
-      active: false,
-
-      x: 0,
-      y: 0,
-
-      vx: 0,
-      vy: 0,
-
-      life: 0,
-      maxLife: 0,
-
-      length: 0,
-      width: 0,
-    };
-
-    function getViewportSize() {
+    const getSize = () => {
       const vv = window.visualViewport;
-
-      const width = Math.max(
-        window.innerWidth,
-        document.documentElement.clientWidth,
-        vv?.width ?? 0
-      );
 
       const visibleBottom = vv
         ? vv.offsetTop + vv.height
         : window.innerHeight;
 
-      const visibleHeight = Math.max(
-        window.innerHeight,
-        document.documentElement.clientHeight,
-        visibleBottom
-      );
-
       return {
-        width: Math.ceil(width),
+        width: Math.ceil(
+          Math.max(
+            window.innerWidth,
+            document.documentElement.clientWidth,
+            vv?.width ?? 0
+          )
+        ),
+
         height: Math.ceil(
-          visibleHeight + OVERSCAN_BOTTOM
+          Math.max(
+            window.innerHeight,
+            document.documentElement.clientHeight,
+            visibleBottom
+          ) + OVERSCAN_BOTTOM
         ),
       };
-    }
+    };
 
-    function randomTint(): StarTint {
-      const roll = Math.random();
+    const resize = () => {
+      const next = getSize();
 
-      if (roll < 0.52) return "blue";
-      if (roll < 0.69) return "white";
-      if (roll < 0.85) return "warm";
-
-      return "violet";
-    }
-
-    function tintRgb(
-      tint: StarTint
-    ): [number, number, number] {
-      switch (tint) {
-        case "warm":
-          return [255, 226, 183];
-
-        case "violet":
-          return [216, 196, 255];
-
-        case "white":
-          return [244, 248, 255];
-
-        case "blue":
-        default:
-          return [202, 225, 255];
-      }
-    }
-
-    /*
-     * Three depth fields:
-     *
-     * far:
-     * many tiny stars, barely moving
-     *
-     * middle:
-     * visible motion and brighter twinkle
-     *
-     * near:
-     * fewer but larger / brighter stars
-     */
-    function makeLayer(
-      count: number,
-      depth: 0 | 1 | 2
-    ): Star[] {
-      return Array.from(
-        { length: count },
-        () => {
-          const strongTwinkle =
-            Math.random() < 0.5;
-
-          let radiusMin = 0.25;
-          let radiusRange = 0.65;
-          let baseAlpha = 0.22;
-
-          let driftScale = 0.15;
-
-          if (depth === 1) {
-            radiusMin = 0.35;
-            radiusRange = 0.9;
-            baseAlpha = 0.28;
-
-            driftScale = 0.34;
-          }
-
-          if (depth === 2) {
-            radiusMin = 0.5;
-            radiusRange = 1.35;
-            baseAlpha = 0.35;
-
-            driftScale = 0.68;
-          }
-
-          const radius =
-            radiusMin +
-            Math.random() * radiusRange;
-
-          const bright =
-            radius >
-              (depth === 2 ? 1.15 : 0.9) &&
-            Math.random() < 0.45;
-
-          return {
-            x: Math.random(),
-            y: Math.random(),
-
-            radius,
-
-            baseAlpha:
-              baseAlpha +
-              Math.random() * 0.26,
-
-            phase:
-              Math.random() *
-              Math.PI *
-              2,
-
-            twinkleSpeed:
-              0.012 +
-              Math.random() * 0.032,
-
-            twinkleStrength:
-              strongTwinkle
-                ? 0.72 +
-                  Math.random() * 0.45
-                : 0.22 +
-                  Math.random() * 0.28,
-
-            depth,
-
-            driftX:
-              (0.002 +
-                Math.random() * 0.004) *
-              driftScale,
-
-            driftY:
-              (-0.00035 +
-                Math.random() * 0.0007) *
-              driftScale,
-
-            tint: randomTint(),
-
-            glow: bright,
-            spike:
-              bright &&
-              Math.random() < 0.46,
-          };
-        }
-      );
-    }
-
-    /*
-     * ~650 stars total.
-     *
-     * Dense enough to feel like a sky,
-     * but not so dense that mobile Safari
-     * spends the whole frame painting blur.
-     */
-    const farStars = makeLayer(
-      360,
-      0
-    );
-
-    const middleStars = makeLayer(
-      200,
-      1
-    );
-
-    const nearStars = makeLayer(
-      90,
-      2
-    );
-
-    const stars = [
-      ...farStars,
-      ...middleStars,
-      ...nearStars,
-    ];
-
-    function applyCanvasSize() {
-      dpr = Math.min(
-        window.devicePixelRatio || 1,
-        1.5
-      );
-
-      const {
-        width,
-        height,
-      } = getViewportSize();
-
-      /*
-       * Critical:
-       *
-       * Do absolutely nothing if the
-       * physical viewport did not change.
-       *
-       * Reassigning canvas.width or
-       * canvas.height clears the canvas,
-       * which was the source of the old
-       * iOS toolbar flicker.
-       */
+      // Don't clear/reset the canvas unless
+      // its physical size actually changed.
       if (
-        width === cssWidth &&
-        height === cssHeight
+        next.width === width &&
+        next.height === height
       ) {
         return;
       }
 
-      cssWidth = width;
-      cssHeight = height;
+      width = next.width;
+      height = next.height;
 
-      canvas.style.width =
-        `${width}px`;
+      const mobile = width < 600;
 
-      canvas.style.height =
-        `${height}px`;
-
-      const bufferWidth = Math.max(
-        1,
-        Math.round(width * dpr)
+      dpr = Math.min(
+        window.devicePixelRatio || 1,
+        mobile ? 1.25 : 1.5
       );
 
-      const bufferHeight = Math.max(
-        1,
-        Math.round(height * dpr)
-      );
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
 
-      if (
-        canvas.width !== bufferWidth
-      ) {
-        canvas.width = bufferWidth;
-      }
-
-      if (
-        canvas.height !== bufferHeight
-      ) {
-        canvas.height =
-          bufferHeight;
-      }
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
 
       ctx.setTransform(
         dpr,
@@ -349,372 +169,204 @@ export default function StarfieldBackground() {
         0,
         0
       );
-    }
+    };
 
-    applyCanvasSize();
+    resize();
 
-    /*
-     * visualViewport.resize is still useful
-     * because an actual viewport-size change
-     * should resize the canvas.
-     *
-     * We intentionally DO NOT listen for
-     * visualViewport.scroll anymore.
-     */
-    window.addEventListener(
-      "resize",
-      applyCanvasSize
-    );
+    const stars: Star[] =
+      STAR_LAYERS.flatMap((layer) =>
+        Array.from(
+          { length: layer.count },
+          () => {
+            const hardTwinkle =
+              Math.random() < 0.5;
 
-    window.addEventListener(
-      "orientationchange",
-      applyCanvasSize
-    );
+            const radius =
+              layer.min +
+              Math.random() *
+                (layer.max - layer.min);
 
-    window.visualViewport?.addEventListener(
-      "resize",
-      applyCanvasSize
-    );
+            const bright =
+              radius > 0.9 &&
+              Math.random() < 0.3;
 
-    function drawNebula(
-      now: number,
-      w: number,
-      h: number
-    ) {
-      const seconds =
-        now * 0.001;
+            return {
+              x: Math.random(),
+              y: Math.random(),
 
-      const breatheA =
-        0.92 +
+              radius,
+
+              alpha:
+                0.2 +
+                Math.random() * 0.48,
+
+              phase:
+                Math.random() *
+                Math.PI *
+                2,
+
+              speed:
+                0.7 +
+                Math.random() * 1.5,
+
+              strength: hardTwinkle
+                ? 0.75 +
+                  Math.random() * 0.35
+                : 0.2 +
+                  Math.random() * 0.3,
+
+              drift: layer.drift,
+
+              tint: randomTint(),
+
+              bright,
+
+              spike:
+                bright &&
+                Math.random() < 0.45,
+            };
+          }
+        )
+      );
+
+    const drawNebula = (time: number) => {
+      const seconds = time / 1000;
+
+      const sway =
+        Math.sin(seconds * 0.08);
+
+      const breathe =
+        1 +
         Math.sin(seconds * 0.18) *
-          0.08;
-
-      const breatheB =
-        0.92 +
-        Math.cos(seconds * 0.14) *
-          0.08;
-
-      const swayX =
-        Math.sin(seconds * 0.07) *
-        w *
-        0.025;
-
-      const swayY =
-        Math.cos(seconds * 0.055) *
-        h *
-        0.018;
+          0.06;
 
       ctx.save();
 
-      ctx.globalCompositeOperation =
-        "screen";
+      ctx.globalCompositeOperation = "screen";
 
-      /*
-       * Violet cloud
-       */
-      {
-        const x =
-          w * 0.18 + swayX;
+      const x =
+        width *
+        (0.24 + sway * 0.025);
 
-        const y =
-          h * 0.26 + swayY;
+      const y =
+        height *
+        (0.34 + sway * 0.012);
 
-        const radius =
-          Math.max(w, h) *
-          0.38 *
-          breatheA;
+      const radius =
+        Math.max(width, height) *
+        0.48 *
+        breathe;
 
-        const gradient =
-          ctx.createRadialGradient(
-            x,
-            y,
-            0,
-            x,
-            y,
-            radius
-          );
-
-        gradient.addColorStop(
+      const nebula =
+        ctx.createRadialGradient(
+          x,
+          y,
           0,
-          "rgba(109,40,217,0.085)"
+          x,
+          y,
+          radius
         );
 
-        gradient.addColorStop(
-          0.35,
-          "rgba(76,29,149,0.054)"
-        );
+      nebula.addColorStop(
+        0,
+        "rgba(103,64,190,0.07)"
+      );
 
-        gradient.addColorStop(
-          1,
-          "rgba(30,27,75,0)"
-        );
+      nebula.addColorStop(
+        0.35,
+        "rgba(37,99,235,0.045)"
+      );
 
-        ctx.fillStyle = gradient;
+      nebula.addColorStop(
+        0.7,
+        "rgba(20,120,110,0.018)"
+      );
 
-        ctx.fillRect(
-          0,
-          0,
-          w,
-          h
-        );
-      }
+      nebula.addColorStop(
+        1,
+        "rgba(0,0,0,0)"
+      );
 
-      /*
-       * Blue cloud
-       */
-      {
-        const x =
-          w * 0.78 -
-          swayX * 0.7;
+      ctx.fillStyle = nebula;
 
-        const y =
-          h * 0.55 -
-          swayY * 0.7;
-
-        const radius =
-          Math.max(w, h) *
-          0.33 *
-          breatheB;
-
-        const gradient =
-          ctx.createRadialGradient(
-            x,
-            y,
-            0,
-            x,
-            y,
-            radius
-          );
-
-        gradient.addColorStop(
-          0,
-          "rgba(37,99,235,0.075)"
-        );
-
-        gradient.addColorStop(
-          0.42,
-          "rgba(30,64,175,0.042)"
-        );
-
-        gradient.addColorStop(
-          1,
-          "rgba(15,23,42,0)"
-        );
-
-        ctx.fillStyle = gradient;
-
-        ctx.fillRect(
-          0,
-          0,
-          w,
-          h
-        );
-      }
-
-      /*
-       * Teal lower cloud
-       */
-      {
-        const x =
-          w * 0.52 +
-          swayX * 0.5;
-
-        const y =
-          h * 0.86;
-
-        const radius =
-          Math.max(w, h) *
-          0.29 *
-          breatheA;
-
-        const gradient =
-          ctx.createRadialGradient(
-            x,
-            y,
-            0,
-            x,
-            y,
-            radius
-          );
-
-        gradient.addColorStop(
-          0,
-          "rgba(20,184,166,0.040)"
-        );
-
-        gradient.addColorStop(
-          1,
-          "rgba(13,148,136,0)"
-        );
-
-        ctx.fillStyle = gradient;
-
-        ctx.fillRect(
-          0,
-          0,
-          w,
-          h
-        );
-      }
+      ctx.fillRect(
+        0,
+        0,
+        width,
+        height
+      );
 
       ctx.restore();
-    }
+    };
 
-    function drawStar(
+    const drawStar = (
       star: Star,
-      w: number,
-      h: number,
-      frameScale: number
-    ) {
-      /*
-       * Parallax.
-       *
-       * Near stars move several times faster
-       * than distant stars.
-       */
-      star.x +=
-        star.driftX *
-        frameScale;
+      dt: number,
+      time: number
+    ) => {
+      if (!reducedMotion) {
+        star.x +=
+          star.drift *
+          0.0000035 *
+          dt;
 
-      star.y +=
-        star.driftY *
-        frameScale;
-
-      if (star.x > 1.015) {
-        star.x = -0.015;
+        if (star.x > 1.02) {
+          star.x = -0.02;
+        }
       }
 
-      if (star.x < -0.015) {
-        star.x = 1.015;
-      }
-
-      if (star.y > 1.015) {
-        star.y = -0.015;
-      }
-
-      if (star.y < -0.015) {
-        star.y = 1.015;
-      }
-
-      star.phase +=
-        star.twinkleSpeed *
-        frameScale;
-
-      /*
-       * Two waves prevent every pulse from
-       * feeling like the same sine animation.
-       */
-      const waveA =
-        (Math.sin(star.phase) + 1) /
-        2;
-
-      const waveB =
+      const pulse =
         (Math.sin(
-          star.phase * 0.47 + 1.7
+          star.phase +
+            time *
+              0.001 *
+              star.speed
         ) +
           1) /
         2;
 
-      const pulse =
-        waveA * 0.72 +
-        waveB * 0.28;
-
-      const strength =
-        star.twinkleStrength;
-
-      const alpha =
+      const brightness =
         Math.min(
           1,
-          star.baseAlpha *
+          star.alpha *
             (
               0.55 +
-              pulse * strength
+              pulse *
+                star.strength
             )
         );
 
       const radius =
         star.radius *
         (
-          0.82 +
-          pulse *
-            Math.min(
-              0.48,
-              strength * 0.38
-            )
+          0.85 +
+          pulse * 0.25
         );
 
-      const x =
-        star.x * w;
+      const x = star.x * width;
+      const y = star.y * height;
 
-      const y =
-        star.y * h;
+      ctx.save();
 
-      const [r, g, b] =
-        tintRgb(star.tint);
-
-      /*
-       * Glow only on selected brighter stars.
-       */
       if (
-        star.glow &&
-        pulse > 0.58
+        star.bright &&
+        pulse > 0.72
       ) {
-        const glowRadius =
-          radius *
-          (
-            5 +
-            pulse * 5
+        ctx.shadowBlur =
+          4 + pulse * 7;
+
+        ctx.shadowColor =
+          tintColor(
+            star.tint,
+            0.55
           );
-
-        const glow =
-          ctx.createRadialGradient(
-            x,
-            y,
-            0,
-            x,
-            y,
-            glowRadius
-          );
-
-        glow.addColorStop(
-          0,
-          `rgba(${r},${g},${b},${
-            alpha * 0.36
-          })`
-        );
-
-        glow.addColorStop(
-          0.32,
-          `rgba(${r},${g},${b},${
-            alpha * 0.14
-          })`
-        );
-
-        glow.addColorStop(
-          1,
-          `rgba(${r},${g},${b},0)`
-        );
-
-        ctx.fillStyle = glow;
-
-        ctx.beginPath();
-
-        ctx.arc(
-          x,
-          y,
-          glowRadius,
-          0,
-          Math.PI * 2
-        );
-
-        ctx.fill();
       }
 
-      /*
-       * Star core.
-       */
       ctx.fillStyle =
-        `rgba(${r},${g},${b},${alpha})`;
+        tintColor(
+          star.tint,
+          brightness
+        );
 
       ctx.beginPath();
 
@@ -728,44 +380,36 @@ export default function StarfieldBackground() {
 
       ctx.fill();
 
-      /*
-       * Very short diffraction flare.
-       *
-       * Only appears near pulse peak so it
-       * looks like a flash rather than a
-       * permanent plus sign.
-       */
+      ctx.restore();
+
+      // Brief diffraction spike only at
+      // the very top of the twinkle.
       if (
         star.spike &&
-        pulse > 0.91
+        pulse > 0.94
       ) {
         const flare =
-          (pulse - 0.91) /
-          0.09;
-
-        const horizontal =
-          radius *
-          (
-            5 +
-            flare * 6
-          );
-
-        const vertical =
-          radius *
-          (
-            3 +
-            flare * 4
-          );
+          (pulse - 0.94) /
+          0.06;
 
         ctx.save();
 
         ctx.strokeStyle =
-          `rgba(${r},${g},${b},${
-            0.16 +
-            flare * 0.42
-          })`;
+          tintColor(
+            star.tint,
+            0.12 +
+              flare * 0.34
+          );
 
-        ctx.lineWidth = 0.65;
+        ctx.lineWidth = 0.55;
+
+        const horizontal =
+          radius *
+          (4 + flare * 4);
+
+        const vertical =
+          radius *
+          (2.5 + flare * 3);
 
         ctx.beginPath();
 
@@ -773,7 +417,6 @@ export default function StarfieldBackground() {
           x - horizontal,
           y
         );
-
         ctx.lineTo(
           x + horizontal,
           y
@@ -783,7 +426,6 @@ export default function StarfieldBackground() {
           x,
           y - vertical
         );
-
         ctx.lineTo(
           x,
           y + vertical
@@ -793,87 +435,65 @@ export default function StarfieldBackground() {
 
         ctx.restore();
       }
-    }
+    };
 
-    function startShootingStar(
-      w: number,
-      h: number
-    ) {
-      /*
-       * Start mostly in the top/right
-       * portion and streak down-left.
-       */
-      shootingStar.active = true;
+    const beginShootingStar = () => {
+      shooting.active = true;
 
-      shootingStar.x =
-        w *
-        (
-          0.46 +
-          Math.random() * 0.54
-        );
+      shooting.x =
+        width *
+        (0.55 +
+          Math.random() * 0.4);
 
-      shootingStar.y =
-        h *
-        (
-          0.04 +
-          Math.random() * 0.31
-        );
+      shooting.y =
+        height *
+        (0.05 +
+          Math.random() * 0.28);
 
-      const speed =
-        11 +
-        Math.random() * 8;
+      shooting.vx =
+        -(420 +
+          Math.random() * 160);
 
-      shootingStar.vx =
-        -speed;
+      shooting.vy =
+        150 +
+        Math.random() * 100;
 
-      shootingStar.vy =
-        speed *
-        (
-          0.34 +
-          Math.random() * 0.28
-        );
+      shooting.life = 0;
 
-      shootingStar.life = 0;
+      shooting.maxLife =
+        0.45 +
+        Math.random() * 0.25;
 
-      shootingStar.maxLife =
-        28 +
-        Math.random() * 18;
+      shooting.length =
+        70 +
+        Math.random() * 90;
+    };
 
-      shootingStar.length =
-        78 +
-        Math.random() * 95;
-
-      shootingStar.width =
-        0.8 +
-        Math.random() * 0.8;
-    }
-
-    function drawShootingStar(
-      frameScale: number
-    ) {
-      if (!shootingStar.active) {
+    const drawShootingStar = (
+      dtSeconds: number
+    ) => {
+      if (!shooting.active) {
         return;
       }
 
-      shootingStar.life +=
-        frameScale;
+      shooting.life += dtSeconds;
 
-      shootingStar.x +=
-        shootingStar.vx *
-        frameScale;
+      shooting.x +=
+        shooting.vx *
+        dtSeconds;
 
-      shootingStar.y +=
-        shootingStar.vy *
-        frameScale;
+      shooting.y +=
+        shooting.vy *
+        dtSeconds;
 
       const progress =
-        shootingStar.life /
-        shootingStar.maxLife;
+        shooting.life /
+        shooting.maxLife;
 
       if (progress >= 1) {
-        shootingStar.active = false;
+        shooting.active = false;
 
-        nextShootingStarAt =
+        nextShootingStar =
           performance.now() +
           5000 +
           Math.random() * 7000;
@@ -881,83 +501,64 @@ export default function StarfieldBackground() {
         return;
       }
 
-      const fade =
-        progress < 0.18
-          ? progress / 0.18
-          : 1 -
-            (
-              progress - 0.18
-            ) /
-              0.82;
+      const alpha =
+        Math.sin(
+          progress * Math.PI
+        );
 
-      const speedLength =
+      const magnitude =
         Math.hypot(
-          shootingStar.vx,
-          shootingStar.vy
+          shooting.vx,
+          shooting.vy
         );
 
       const nx =
-        shootingStar.vx /
-        speedLength;
+        shooting.vx /
+        magnitude;
 
       const ny =
-        shootingStar.vy /
-        speedLength;
+        shooting.vy /
+        magnitude;
 
       const tailX =
-        shootingStar.x -
+        shooting.x -
         nx *
-          shootingStar.length;
+          shooting.length;
 
       const tailY =
-        shootingStar.y -
+        shooting.y -
         ny *
-          shootingStar.length;
+          shooting.length;
 
       const gradient =
         ctx.createLinearGradient(
           tailX,
           tailY,
-          shootingStar.x,
-          shootingStar.y
+          shooting.x,
+          shooting.y
         );
 
       gradient.addColorStop(
         0,
-        "rgba(165,180,252,0)"
-      );
-
-      gradient.addColorStop(
-        0.72,
-        `rgba(191,219,254,${
-          fade * 0.34
-        })`
+        "rgba(191,219,254,0)"
       );
 
       gradient.addColorStop(
         1,
         `rgba(255,255,255,${
-          fade * 0.92
+          alpha * 0.9
         })`
       );
 
       ctx.save();
 
-      ctx.strokeStyle =
-        gradient;
-
-      ctx.lineWidth =
-        shootingStar.width;
-
-      ctx.lineCap =
-        "round";
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 1;
+      ctx.lineCap = "round";
 
       ctx.shadowBlur = 8;
-
       ctx.shadowColor =
-        `rgba(191,219,254,${
-          fade * 0.5
-        })`;
+        "rgba(191,219,254,0.45)";
 
       ctx.beginPath();
 
@@ -967,150 +568,68 @@ export default function StarfieldBackground() {
       );
 
       ctx.lineTo(
-        shootingStar.x,
-        shootingStar.y
+        shooting.x,
+        shooting.y
       );
 
       ctx.stroke();
 
-      /*
-       * Head flare.
-       */
-      ctx.fillStyle =
-        `rgba(255,255,255,${
-          fade * 0.95
-        })`;
-
-      ctx.beginPath();
-
-      ctx.arc(
-        shootingStar.x,
-        shootingStar.y,
-        1.4,
-        0,
-        Math.PI * 2
-      );
-
-      ctx.fill();
-
       ctx.restore();
-    }
+    };
 
-    const draw = (
-      now: number
-    ) => {
+    const draw = (time: number) => {
       if (!running) return;
 
       raf =
-        requestAnimationFrame(
-          draw
-        );
+        requestAnimationFrame(draw);
 
       const elapsed =
-        now - lastFrame;
+        time - lastFrame;
 
       if (
         elapsed <
-        frameInterval
+        1000 / FPS
       ) {
         return;
       }
 
-      /*
-       * Normalize motion to the intended
-       * 30fps timestep.
-       */
-      const frameScale =
-        Math.min(
-          2.5,
-          elapsed /
-            frameInterval
-        );
-
-      lastFrame =
-        now -
-        (
-          elapsed %
-          frameInterval
-        );
-
-      const w = cssWidth;
-      const h = cssHeight;
-
-      if (!w || !h) {
-        return;
-      }
+      lastFrame = time;
 
       ctx.clearRect(
         0,
         0,
-        w,
-        h
+        width,
+        height
       );
 
-      drawNebula(
-        now,
-        w,
-        h
-      );
+      drawNebula(time);
 
-      /*
-       * Draw far → near so larger foreground
-       * points naturally sit above the haze.
-       */
-      for (
-        const star of farStars
-      ) {
+      for (const star of stars) {
         drawStar(
           star,
-          w,
-          h,
-          frameScale
-        );
-      }
-
-      for (
-        const star of middleStars
-      ) {
-        drawStar(
-          star,
-          w,
-          h,
-          frameScale
-        );
-      }
-
-      for (
-        const star of nearStars
-      ) {
-        drawStar(
-          star,
-          w,
-          h,
-          frameScale
+          elapsed,
+          time
         );
       }
 
       if (
-        !shootingStar.active &&
-        now >=
-          nextShootingStarAt
+        !reducedMotion &&
+        !shooting.active &&
+        time >=
+          nextShootingStar
       ) {
-        startShootingStar(
-          w,
-          h
-        );
+        beginShootingStar();
       }
 
-      drawShootingStar(
-        frameScale
-      );
+      if (!reducedMotion) {
+        drawShootingStar(
+          elapsed / 1000
+        );
+      }
     };
 
     const handleVisibility = () => {
-      if (
-        document.hidden
-      ) {
+      if (document.hidden) {
         running = false;
 
         cancelAnimationFrame(
@@ -1120,23 +639,31 @@ export default function StarfieldBackground() {
         return;
       }
 
-      if (!running) {
-        running = true;
+      running = true;
+      lastFrame = 0;
 
-        lastFrame = 0;
+      resize();
 
-        /*
-         * This may no-op if dimensions did
-         * not actually change.
-         */
-        applyCanvasSize();
-
-        raf =
-          requestAnimationFrame(
-            draw
-          );
-      }
+      raf =
+        requestAnimationFrame(
+          draw
+        );
     };
+
+    window.addEventListener(
+      "resize",
+      resize
+    );
+
+    window.addEventListener(
+      "orientationchange",
+      resize
+    );
+
+    window.visualViewport?.addEventListener(
+      "resize",
+      resize
+    );
 
     document.addEventListener(
       "visibilitychange",
@@ -1144,9 +671,7 @@ export default function StarfieldBackground() {
     );
 
     raf =
-      requestAnimationFrame(
-        draw
-      );
+      requestAnimationFrame(draw);
 
     return () => {
       running = false;
@@ -1157,17 +682,17 @@ export default function StarfieldBackground() {
 
       window.removeEventListener(
         "resize",
-        applyCanvasSize
+        resize
       );
 
       window.removeEventListener(
         "orientationchange",
-        applyCanvasSize
+        resize
       );
 
       window.visualViewport?.removeEventListener(
         "resize",
-        applyCanvasSize
+        resize
       );
 
       document.removeEventListener(
@@ -1183,21 +708,14 @@ export default function StarfieldBackground() {
       aria-hidden="true"
       style={{
         position: "fixed",
-
         top: 0,
         left: 0,
 
         width: "100vw",
-
-        /*
-         * The JS sizing replaces this after mount,
-         * including the 200px overscan. This is
-         * simply a safe first-paint fallback.
-         */
-        height: "calc(100dvh + 200px)",
+        height:
+          "calc(100dvh + 200px)",
 
         pointerEvents: "none",
-
         zIndex: 0,
       }}
     />
