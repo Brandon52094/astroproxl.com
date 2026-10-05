@@ -110,9 +110,35 @@ const HERO_PALETTE: [string, string, string, string] = [
 const HERO_CANVAS_WIDTH = 374;
 const HERO_HORIZONTAL_INSET = 20;
 
+type CheckoutIntent =
+  | "reading"
+  | "voice"
+  | "subscription"
+  | null;
+
 interface UserStatus {
   credits: number;
+  jxlCredits: number;
+
   isSubscribed: boolean;
+
+  effectiveMembershipPlan:
+    | "plus"
+    | "plus_xl"
+    | null;
+
+  membershipJxlUsed: number;
+
+  membershipEntitlements: {
+    readingsPerMonth: number | null;
+    jxlPerMonth: number | null;
+
+    voiceReading: boolean;
+    addContext: boolean;
+    extendedSavedReading: boolean;
+    customThemes: boolean;
+    commissionAccess: boolean;
+  } | null;
 }
 
 interface ReadingIntakeScreenProps {
@@ -580,6 +606,8 @@ export default function ReadingIntakeScreen({
     if (propUserStatus) setUserStatus(propUserStatus);
   }, [propUserStatus]);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [checkoutIntent, setCheckoutIntent] =
+    useState<CheckoutIntent>(null);
   const theme = THEMES.cosmic;
 
   // Chart-derived data for the fixed-size hero information system.
@@ -620,6 +648,16 @@ export default function ReadingIntakeScreen({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const meterRafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Premium voice transcript reveal.
+  const [voiceTranscript, setVoiceTranscript] =
+    useState("");
+
+  const [voiceTranscriptPreview, setVoiceTranscriptPreview] =
+    useState("");
+
+  const transcriptTimersRef =
+    useRef<number[]>([]);
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -815,7 +853,21 @@ export default function ReadingIntakeScreen({
       const data = await response.json();
       setUserStatus({
         credits: Number(data.credits ?? 0),
+        jxlCredits: Number(data.jxlCredits ?? 0),
+
         isSubscribed: data.isSubscribed === true,
+
+        effectiveMembershipPlan:
+          data.effectiveMembershipPlan === "plus" ||
+          data.effectiveMembershipPlan === "plus_xl"
+            ? data.effectiveMembershipPlan
+            : null,
+
+        membershipJxlUsed:
+          Number(data.membershipJxlUsed ?? 0),
+
+        membershipEntitlements:
+          data.membershipEntitlements ?? null,
       });
     } catch { }
     finally { setTimeout(() => { fetchInFlight.current = false; }, 2000); }
@@ -841,6 +893,37 @@ export default function ReadingIntakeScreen({
   const beginReadingStyle = selectedArea
     ? BEGIN_READING_STYLES[selectedArea as keyof typeof BEGIN_READING_STYLES]
     : null;
+
+  // ── Access flags derived from the expanded userStatus ─────────────────────
+
+  const canUseAddContext =
+    userStatus?.membershipEntitlements?.addContext === true;
+
+  const jxlAllowance =
+    userStatus?.membershipEntitlements?.jxlPerMonth ?? null;
+
+  const hasIncludedVoiceReading =
+    userStatus?.isSubscribed === true &&
+    (
+      jxlAllowance === null ||
+      Number(userStatus?.membershipJxlUsed ?? 0) < jxlAllowance
+    );
+
+  const hasPurchasedVoiceReading =
+    Number(userStatus?.jxlCredits ?? 0) > 0;
+
+  const hasVoiceReadingAccess =
+    hasIncludedVoiceReading ||
+    hasPurchasedVoiceReading;
+
+  // Future switch. Entitlement already exists, but the actual alternate
+  // theme UI can remain disabled until we're ready to expose it.
+  const themesEnabled =
+    process.env.NEXT_PUBLIC_ENABLE_XL_THEMES === "true";
+
+  const canUseCustomThemes =
+    themesEnabled &&
+    userStatus?.membershipEntitlements?.customThemes === true;
 
   /* ── Hero information — four quiet slides, one fixed stage ───────── */
   const heroData = useMemo(() => {
@@ -1249,6 +1332,71 @@ export default function ReadingIntakeScreen({
     [router, shouldReduceMotion]
   );
 
+  const revealVoiceTranscript = useCallback(
+    (transcript: string) => {
+      const clean = transcript.trim();
+
+      setVoiceTranscript(clean);
+      setVoiceTranscriptPreview("");
+
+      transcriptTimersRef.current.forEach(
+        window.clearTimeout
+      );
+
+      transcriptTimersRef.current = [];
+
+      if (shouldReduceMotion) {
+        setVoiceTranscriptPreview(clean);
+
+        const timer = window.setTimeout(() => {
+          submitAskAnything(clean);
+        }, 450);
+
+        transcriptTimersRef.current.push(timer);
+        return;
+      }
+
+      const words = clean.split(/\s+/);
+
+      // Reveal the finished Whisper transcript in small groups so it
+      // feels alive without pretending we're doing streaming STT.
+      const groups: string[] = [];
+
+      for (let i = 0; i < words.length; i += 3) {
+        groups.push(
+          words.slice(0, i + 3).join(" ")
+        );
+      }
+
+      const totalRevealMs = 900;
+
+      groups.forEach((value, index) => {
+        const delay =
+          groups.length <= 1
+            ? 0
+            : Math.round(
+                (index / (groups.length - 1)) *
+                totalRevealMs
+              );
+
+        const timer = window.setTimeout(() => {
+          setVoiceTranscriptPreview(value);
+        }, delay);
+
+        transcriptTimersRef.current.push(timer);
+      });
+
+      const submitTimer = window.setTimeout(() => {
+        submitAskAnything(clean);
+      }, totalRevealMs + 900);
+
+      transcriptTimersRef.current.push(
+        submitTimer
+      );
+    },
+    [shouldReduceMotion, submitAskAnything]
+  );
+
   const transcribeAskAudio = useCallback(
     async (blob: Blob) => {
       if (blob.size === 0) {
@@ -1275,7 +1423,7 @@ export default function ReadingIntakeScreen({
           return;
         }
 
-        submitAskAnything(data.text);
+        revealVoiceTranscript(data.text);
       } catch {
         setVoiceJourneyActive(false);
         setVoiceNavigating(false);
@@ -1284,13 +1432,128 @@ export default function ReadingIntakeScreen({
         setIsTranscribingAsk(false);
       }
     },
-    [submitAskAnything]
+    [revealVoiceTranscript]
   );
+
+  const openVoiceCheckout = useCallback(async () => {
+    try {
+      setAskError(null);
+
+      const response = await fetch(
+        "/api/stripe/checkout",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "jxl_session",
+            returnUrl: window.location.href,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          "Couldn't open voice reading checkout."
+        );
+      }
+
+      if (data?.clientSecret) {
+        setCheckoutIntent("voice");
+        setClientSecret(data.clientSecret);
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      throw new Error(
+        "Couldn't open voice reading checkout."
+      );
+    } catch (error) {
+      setAskError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't start checkout."
+      );
+    }
+  }, []);
+
+  const openMembershipCheckout = useCallback(async () => {
+    if (!stripePromise) {
+      setSubmitError(
+        "Membership checkout is unavailable right now."
+      );
+      return;
+    }
+
+    try {
+      setIsCreatingReading(true);
+      setSubmitError(null);
+
+      const response = await fetch(
+        "/api/stripe/checkout",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "subscription",
+            membershipPlan: "plus",
+            returnUrl: window.location.href,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Couldn't open membership."
+        );
+      }
+
+      if (data?.clientSecret) {
+        setCheckoutIntent("subscription");
+        setClientSecret(data.clientSecret);
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      throw new Error(
+        "Couldn't open membership."
+      );
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't open membership."
+      );
+
+      setIsCreatingReading(false);
+    }
+  }, []);
 
   const startAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
       e.currentTarget.setPointerCapture?.(e.pointerId);
+
+      if (!hasVoiceReadingAccess) {
+        void openVoiceCheckout();
+        return;
+      }
 
       if (!micEnabled || isTranscribingAsk) return;
 
@@ -1311,6 +1574,16 @@ export default function ReadingIntakeScreen({
       askPointerStartYRef.current = e.clientY;
       askCancelledRef.current = false;
       audioChunksRef.current = [];
+
+      // Clear any previous transcript reveal for the new recording.
+      setVoiceTranscript("");
+      setVoiceTranscriptPreview("");
+
+      transcriptTimersRef.current.forEach(
+        window.clearTimeout
+      );
+
+      transcriptTimersRef.current = [];
 
       const preferredType = [
         "audio/mp4",
@@ -1388,7 +1661,15 @@ export default function ReadingIntakeScreen({
         });
       });
     },
-    [isTranscribingAsk, micEnabled, startAskMeter, stopAskMeter, transcribeAskAudio]
+    [
+      hasVoiceReadingAccess,
+      openVoiceCheckout,
+      isTranscribingAsk,
+      micEnabled,
+      startAskMeter,
+      stopAskMeter,
+      transcribeAskAudio,
+    ]
   );
 
   const cancelAskHold = useCallback(() => {
@@ -1439,6 +1720,14 @@ export default function ReadingIntakeScreen({
 
     stopAskRecorder(false);
   }, [stopAskMeter, stopAskRecorder]);
+
+  useEffect(() => {
+    return () => {
+      transcriptTimersRef.current.forEach(
+        window.clearTimeout
+      );
+    };
+  }, []);
 
   useEffect(() => {
     const shutMicDownForPageExit = () => {
@@ -1530,7 +1819,21 @@ export default function ReadingIntakeScreen({
           const d = await res.json();
           status = {
             credits: Number(d.credits ?? 0),
+            jxlCredits: Number(d.jxlCredits ?? 0),
+
             isSubscribed: d.isSubscribed === true,
+
+            effectiveMembershipPlan:
+              d.effectiveMembershipPlan === "plus" ||
+              d.effectiveMembershipPlan === "plus_xl"
+                ? d.effectiveMembershipPlan
+                : null,
+
+            membershipJxlUsed:
+              Number(d.membershipJxlUsed ?? 0),
+
+            membershipEntitlements:
+              d.membershipEntitlements ?? null,
           };
           setUserStatus(status);
         }
@@ -1568,6 +1871,7 @@ export default function ReadingIntakeScreen({
       // - embedded checkout returns clientSecret
       // - hosted checkout returns url
       if (checkoutData?.clientSecret) {
+        setCheckoutIntent("reading");
         setClientSecret(checkoutData.clientSecret);
         return;
       }
@@ -2432,6 +2736,93 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
+          {/* ── Voice transcript preview — appears above the reading-choice
+              cards during Ask Anything reveal. Kept separate from the hero so
+              the waveform inside the hero remains untouched. ── */}
+          <AnimatePresence>
+            {voiceVisualActive &&
+              voiceTranscriptPreview && (
+                <motion.div
+                  key="voice-transcript"
+                  initial={{
+                    opacity: 0,
+                    y: 8,
+                    filter: "blur(4px)",
+                  }}
+                  animate={{
+                    opacity: 1,
+                    y: 0,
+                    filter: "blur(0px)",
+                  }}
+                  exit={{
+                    opacity: 0,
+                    y: -10,
+                    filter: "blur(5px)",
+                  }}
+                  transition={{
+                    duration: shouldReduceMotion
+                      ? 0.08
+                      : 0.38,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="pointer-events-none relative z-20 mx-auto mb-3 mt-1 w-[88%] max-w-[360px] text-center"
+                >
+                  <div
+                    className="mx-auto max-h-[72px] overflow-hidden px-3"
+                    style={{
+                      WebkitMaskImage:
+                        "linear-gradient(to bottom, transparent 0%, black 18%, black 88%, transparent 100%)",
+                      maskImage:
+                        "linear-gradient(to bottom, transparent 0%, black 18%, black 88%, transparent 100%)",
+                    }}
+                  >
+                    <motion.p
+                      key={voiceTranscriptPreview}
+                      initial={{
+                        opacity: 0.38,
+                        y: 5,
+                      }}
+                      animate={{
+                        opacity: 0.94,
+                        y: 0,
+                      }}
+                      transition={{
+                        duration: shouldReduceMotion
+                          ? 0
+                          : 0.22,
+                      }}
+                      className="line-clamp-3 text-[15px] font-normal leading-[1.55] tracking-[0.01em] text-slate-100/90"
+                      style={{
+                        fontFamily:
+                          'var(--font-display, Georgia, "Times New Roman", serif)',
+                        textShadow:
+                          "0 2px 14px rgba(0,0,0,0.95), 0 0 18px rgba(199,210,254,0.08)",
+                      }}
+                    >
+                      {voiceTranscriptPreview}
+                    </motion.p>
+                  </div>
+
+                  <motion.div
+                    aria-hidden="true"
+                    animate={{
+                      opacity: [0.22, 0.52, 0.22],
+                    }}
+                    transition={{
+                      duration: 1.8,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="mx-auto mt-2 h-px w-12"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, transparent, rgba(226,232,240,0.52), transparent)",
+                    }}
+                  />
+                </motion.div>
+              )}
+          </AnimatePresence>
+
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
           <div
@@ -2535,13 +2926,29 @@ export default function ReadingIntakeScreen({
             <div className="relative h-full rounded-[20px] bg-transparent px-4 py-2 pr-12">
               {!contextFocused && question.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[14px] font-medium text-slate-400/72">
-                  Add Context (Optional)
+                  {canUseAddContext
+                    ? "Add Context (Optional)"
+                    : "Add Context · Astro Plus"}
                 </div>
               )}
+
+              {!canUseAddContext && (
+                <button
+                  type="button"
+                  className="absolute inset-0 z-20 rounded-[20px]"
+                  aria-label="Add Context is included with Astro Plus"
+                  onClick={() => void openMembershipCheckout()}
+                  style={{
+                    background: "transparent",
+                  }}
+                />
+              )}
+
               <Textarea
                 id="question"
                 rows={2}
                 value={question}
+                disabled={!canUseAddContext}
                 onFocus={() => {
                   clearSelectionTimeout();
                   setContextFocused(true);
@@ -2711,7 +3118,11 @@ export default function ReadingIntakeScreen({
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
                 <button
                   type="button"
-                  onClick={() => { setClientSecret(null); setIsCreatingReading(false); }}
+                  onClick={() => {
+                    setClientSecret(null);
+                    setCheckoutIntent(null);
+                    setIsCreatingReading(false);
+                  }}
                   style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "#e2e8f0", borderRadius: 9999, width: 36, height: 36, cursor: "pointer", fontSize: 18, lineHeight: 1 }}
                   aria-label="Close checkout"
                 >
@@ -2724,19 +3135,85 @@ export default function ReadingIntakeScreen({
                   options={{
                     clientSecret,
                     onComplete: async () => {
-                      // Payment succeeded in-app. The Stripe webhook grants the
-                      // reading credit asynchronously, so poll until it lands
-                      // before generating — otherwise /api/readings sees 0 credits.
+                      if (checkoutIntent === "reading") {
+                        // Normal Reading purchase: wait for the webhook to
+                        // grant the reading credit, then continue into the
+                        // preparing route.
+                        for (let i = 0; i < 10; i++) {
+                          try {
+                            const res = await fetch(
+                              "/api/user/credits",
+                              { cache: "no-store" }
+                            );
+
+                            const d = await res.json();
+
+                            if (
+                              Number(d.credits ?? 0) >= 1 ||
+                              d.isSubscribed === true
+                            ) {
+                              break;
+                            }
+                          } catch {}
+
+                          await new Promise((r) =>
+                            setTimeout(r, 800)
+                          );
+                        }
+
+                        setClientSecret(null);
+                        setCheckoutIntent(null);
+
+                        router.push("/reading/preparing");
+                        return;
+                      }
+
+                      // Voice purchase or new subscription:
+                      // wait briefly for Stripe webhook → refresh status → remain on Intake.
                       for (let i = 0; i < 10; i++) {
                         try {
-                          const res = await fetch("/api/user/credits", { cache: "no-store" });
-                          const d = await res.json();
-                          if (Number(d.credits ?? 0) >= 1 || d.isSubscribed === true) break;
-                        } catch { /* keep polling */ }
-                        await new Promise((r) => setTimeout(r, 800));
+                          await fetchStatus();
+
+                          if (checkoutIntent === "voice") {
+                            const res = await fetch(
+                              "/api/user/credits",
+                              { cache: "no-store" }
+                            );
+
+                            const d = await res.json();
+
+                            if (
+                              Number(d.jxlCredits ?? 0) > 0 ||
+                              d.isSubscribed === true
+                            ) {
+                              break;
+                            }
+                          }
+
+                          if (checkoutIntent === "subscription") {
+                            const res = await fetch(
+                              "/api/user/credits",
+                              { cache: "no-store" }
+                            );
+
+                            const d = await res.json();
+
+                            if (d.isSubscribed === true) {
+                              break;
+                            }
+                          }
+                        } catch {}
+
+                        await new Promise((r) =>
+                          setTimeout(r, 800)
+                        );
                       }
+
+                      await fetchStatus();
+
                       setClientSecret(null);
-                      router.push("/reading/preparing");
+                      setCheckoutIntent(null);
+                      setIsCreatingReading(false);
                     },
                   }}
                 >
