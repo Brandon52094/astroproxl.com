@@ -230,10 +230,13 @@ export default function CreditsPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "subscription",
-          membershipTier,
-          returnUrl: `${window.location.origin}/reading/intake`,
-        }),
+  mode: "subscription",
+  membershipPlan:
+    membershipTier === "astro_plus_xl"
+      ? "plus_xl"
+      : "plus",
+  returnUrl: `${window.location.origin}/reading/intake`,
+}),
       });
       const data = await res.json();
       if (data.url) {
