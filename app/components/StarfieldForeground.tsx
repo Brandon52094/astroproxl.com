@@ -30,13 +30,14 @@ const FPS = 30;
 const OVERSCAN_BOTTOM = 200;
 
 /*
- * Intentionally sparse.
+ * Only the distinctive close stars remain.
  *
- * These are not "more background stars."
- * These are the distinctive close stars
- * that create foreground depth.
+ * Every star in this layer is now a
+ * "hero" star: larger, brighter, and
+ * visibly animated. The tiny, static
+ * background stars have been removed.
  */
-const STAR_COUNT = 24;
+const STAR_COUNT = 12;
 
 function starColor(
   color: StarColor,
@@ -163,23 +164,20 @@ export default function StarfieldForeground() {
     const stars: ForegroundStar[] =
       Array.from(
         { length: STAR_COUNT },
-        (_, index) => {
+        () => {
           /*
-           * Prevent every star from looking
-           * equally important.
+           * Every star is now a hero star:
+           * larger radius, brighter alpha,
+           * longer spikes, and optional
+           * diagonal diffraction.
            */
-          const heroStar =
-            index < 6;
-
           return {
             x: Math.random(),
             y: Math.random(),
 
-            radius: heroStar
-              ? 1.15 +
-                Math.random() * 1.25
-              : 0.65 +
-                Math.random() * 0.8,
+            radius:
+              1.15 +
+              Math.random() * 1.25,
 
             phase:
               Math.random() *
@@ -190,11 +188,9 @@ export default function StarfieldForeground() {
               0.45 +
               Math.random() * 0.75,
 
-            alpha: heroStar
-              ? 0.48 +
-                Math.random() * 0.28
-              : 0.25 +
-                Math.random() * 0.3,
+            alpha:
+              0.48 +
+              Math.random() * 0.28,
 
             /*
              * Different amplitudes make
@@ -210,14 +206,11 @@ export default function StarfieldForeground() {
 
             color: randomColor(),
 
-            spikeLength: heroStar
-              ? 12 +
-                Math.random() * 18
-              : 5 +
-                Math.random() * 10,
+            spikeLength:
+              12 +
+              Math.random() * 18,
 
             diagonal:
-              heroStar &&
               Math.random() < 0.55,
 
             soft:
