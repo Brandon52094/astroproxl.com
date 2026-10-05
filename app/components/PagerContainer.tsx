@@ -92,6 +92,8 @@ const HORIZONTAL_DOMINANCE_RATIO = 1.4;
 
 type GestureAxis = "undecided" | "horizontal" | "vertical";
 
+type CreditsIntent = "voice" | "context" | null;
+
 export default function PagerContainer() {
   const totalPanels = 4;
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -99,6 +101,13 @@ export default function PagerContainer() {
   const [isDragging, setIsDragging] = useState(false);
   const [suppressTransition, setSuppressTransition] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
+
+  // When a locked feature is triggered from Reading Intake, we remember
+  // what the user was trying to buy, then hand it to CreditsPanel so the
+  // correct item can visibly add itself after the panel is on screen.
+  const [creditsIntent, setCreditsIntent] =
+    useState<CreditsIntent>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const slideOffsetRef = useRef<-1 | 0 | 1>(0);
   const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -218,6 +227,35 @@ export default function PagerContainer() {
 
   const goToNext = useCallback(() => startSlide(1), [startSlide]);
   const goToPrevious = useCallback(() => startSlide(-1), [startSlide]);
+
+  // ── Locked feature → Credits handoff ────────────────────────────────
+  // Reading Intake tells us WHAT the user wanted. We store that intent,
+  // then move to the Credits panel. CreditsPanel consumes the intent and
+  // plays a short delayed add-to-cart animation once it's on screen.
+  const openCreditsFor = useCallback(
+    (intent: "voice" | "context") => {
+      setCreditsIntent(intent);
+      goToPrevious();
+    },
+    [goToPrevious]
+  );
+
+  // Once the user has actually left the Credits panel (or swiped back to
+  // Intake and then somewhere else), clear the stored intent so it only
+  // fires once per locked-feature tap.
+  useEffect(() => {
+    if (creditsIntent === null) return;
+    if (currentIndex !== 3) return;
+
+    // We're on Credits now. Leave the intent in place so CreditsPanel can
+    // apply it; CreditsPanel guards against re-applying it internally.
+    // Clear it after a beat so the next visit to Credits starts neutral.
+    const timer = window.setTimeout(() => {
+      setCreditsIntent(null);
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [creditsIntent, currentIndex]);
 
   // ── Circular handoff after each transition ──────────────────────────
   const handleTrackTransitionEnd = useCallback((event: React.TransitionEvent<HTMLDivElement>) => {
@@ -512,6 +550,7 @@ export default function PagerContainer() {
               <ReadingIntakeScreen
                 userStatus={userStatus}
                 onSwipeLeft={goToNext}
+                onOpenCredits={openCreditsFor}
               />
             )}
 
@@ -524,7 +563,10 @@ export default function PagerContainer() {
             )}
 
             {panelIndex === 3 && (
-              <CreditsPanel embedded />
+              <CreditsPanel
+                embedded
+                initialIntent={creditsIntent}
+              />
             )}
           </div>
         ))}
