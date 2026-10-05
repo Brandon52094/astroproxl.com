@@ -1,5 +1,6 @@
 "use client";
 
+import StarfieldForeground from "./StarfieldForeground";
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import BirthChartPanel from "./BirthChartPanel";
@@ -476,47 +477,68 @@ export default function PagerContainer() {
               "radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%)",
           }}
         />
-        <StarfieldBackground />
-      </div>
+              <StarfieldBackground />
+    </div>
 
+    {/* APP / PAGER CONTENT */}
+    <div
+      className="relative z-10 h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       <div
-        className="relative z-10 h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        className="flex h-full w-full min-w-0 max-w-full"
+        onTransitionEnd={handleTrackTransitionEnd}
+        style={{
+          transform: `translateX(-${(1 + slideOffset) * 100}%)`,
+          transition: noAnimation
+            ? "none"
+            : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
+          cursor: isDragging ? "grabbing" : "grab",
+          height: "100%",
+        }}
       >
-        <div
-          className="flex h-full w-full min-w-0 max-w-full"
-          onTransitionEnd={handleTrackTransitionEnd}
-          style={{
-            transform: `translateX(-${(1 + slideOffset) * 100}%)`,
-            transition: noAnimation
-              ? "none"
-              : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-            cursor: isDragging ? "grabbing" : "grab",
-            height: "100%",
-          }}
-        >
-          {panelOrder.map((panelIndex) => (
-            <div key={panelIndex} data-pager-panel className={panelClass}>
-              {panelIndex === 0 && (
-                <ReadingIntakeScreen
-                  userStatus={userStatus}
-                  onSwipeLeft={goToNext}
-                  onOpenCredits={goToPrevious}
-                />
-              )}
-              {panelIndex === 1 && <BirthChartPanel userStatus={userStatus} />}
-              {panelIndex === 2 && <TodaySkyPanel userStatus={userStatus} />}
-              {panelIndex === 3 && <CreditsPanel embedded />}
-            </div>
-          ))}
-        </div>
+        {panelOrder.map((panelIndex) => (
+          <div
+            key={panelIndex}
+            data-pager-panel
+            className={panelClass}
+          >
+            {panelIndex === 0 && (
+              <ReadingIntakeScreen
+                userStatus={userStatus}
+                onSwipeLeft={goToNext}
+              />
+            )}
+
+            {panelIndex === 1 && (
+              <BirthChartPanel userStatus={userStatus} />
+            )}
+
+            {panelIndex === 2 && (
+              <TodaySkyPanel userStatus={userStatus} />
+            )}
+
+            {panelIndex === 3 && (
+              <CreditsPanel embedded />
+            )}
+          </div>
+        ))}
       </div>
     </div>
-  );
-}
+
+    {/* FOREGROUND STARFIELD — ADD IT HERE */}
+    <div
+      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+      aria-hidden="true"
+    >
+      <StarfieldForeground />
+    </div>
+
+  </div>
+);

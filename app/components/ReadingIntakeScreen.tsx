@@ -88,12 +88,12 @@ const AREAS = [
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
   {
-    id: "other",
-    title: "What's Coming",
-    icon: null,
-    marker: "30–45",
-    defaultQuestion: "What is coming for me in the next 30–45 days?",
-  },
+  id: "other",
+  title: "What's Coming",
+  icon: null,
+  marker: "✦",
+  defaultQuestion: "What is coming for me in the next 30–45 days?",
+},
 ];
 
 // One luminous cosmic aura for the current app theme. Personalized theme
@@ -2566,7 +2566,6 @@ export default function ReadingIntakeScreen({
                             }
                             className="tap-fix absolute bottom-[8px] text-[8px] font-medium uppercase tracking-[0.18em] text-slate-400/60"
                           >
-                            Swipe Left To Explore
                           </motion.button>
                         </div>
                       ) : (
