@@ -16,15 +16,17 @@ type Star = {
   tint: StarTint;
   bright: boolean;
   spike: boolean;
+  accent: boolean;
+  spikeScale: number;
 };
 
 const OVERSCAN_BOTTOM = 200;
 const FPS = 30;
 
 const STAR_LAYERS = [
-  { count: 175, sway: 0.45, min: 0.22, max: 0.68 },
-  { count: 105, sway: 0.8, min: 0.3, max: 0.9 },
-  { count: 48, sway: 1.15, min: 0.4, max: 1.15 },
+  { count: 205, sway: 0.7, min: 0.24, max: 0.78 },
+  { count: 125, sway: 1.1, min: 0.34, max: 1.02 },
+  { count: 60, sway: 1.5, min: 0.48, max: 1.28 },
 ] as const;
 
 function randomTint(): StarTint {
@@ -35,6 +37,13 @@ function randomTint(): StarTint {
   if (n < 0.86) return "warm";
 
   return "violet";
+}
+
+function accentTint(): StarTint {
+  if (Math.random() < 0.55) return "white";
+  if (Math.random() < 0.75) return "blue";
+
+  return "warm";
 }
 
 function tintColor(tint: StarTint, alpha: number): string {
@@ -129,13 +138,15 @@ export default function StarfieldBackground() {
     resize();
 
     const stars: Star[] = STAR_LAYERS.flatMap((layer) =>
-      Array.from({ length: layer.count }, () => {
+      Array.from({ length: layer.count }, (): Star => {
         const hardTwinkle = Math.random() < 0.5;
 
         const radius =
           layer.min + Math.random() * (layer.max - layer.min);
 
-        const bright = radius > 0.85 && Math.random() < 0.2;
+        const accent = Math.random() < 0.08;
+        const bright =
+          accent || (radius > 0.9 && Math.random() < 0.28);
 
         return {
           baseX: Math.random(),
@@ -143,23 +154,35 @@ export default function StarfieldBackground() {
 
           radius,
 
-          alpha: 0.16 + Math.random() * 0.36,
+          alpha: accent
+            ? 0.34 + Math.random() * 0.28
+            : 0.2 + Math.random() * 0.42,
 
           phase: Math.random() * Math.PI * 2,
 
-          speed: 0.7 + Math.random() * 1.5,
+          speed: accent
+            ? 1.3 + Math.random() * 1.2
+            : 0.9 + Math.random() * 1.5,
 
-          strength: hardTwinkle
-            ? 0.75 + Math.random() * 0.35
-            : 0.2 + Math.random() * 0.3,
+          strength: accent
+            ? 0.85 + Math.random() * 0.4
+            : hardTwinkle
+              ? 0.65 + Math.random() * 0.35
+              : 0.22 + Math.random() * 0.28,
 
           sway: layer.sway,
 
-          tint: randomTint(),
+          tint: accent ? accentTint() : randomTint(),
 
           bright,
 
-          spike: bright && Math.random() < 0.45,
+          spike: accent
+            ? Math.random() < 0.75
+            : bright && Math.random() < 0.4,
+
+          accent,
+
+          spikeScale: accent ? 1.6 + Math.random() * 1.4 : 1,
         };
       })
     );
@@ -196,19 +219,19 @@ export default function StarfieldBackground() {
     };
 
     const drawStar = (star: Star, time: number) => {
-      const motionTime = time * 0.00012;
+      const motionTime = time * 0.00032;
 
       const swayX = reducedMotion
         ? 0
         : Math.sin(motionTime * star.speed + star.phase) *
           star.sway *
-          0.0025;
+          0.0045;
 
       const swayY = reducedMotion
         ? 0
-        : Math.cos(motionTime * star.speed * 0.65 + star.phase) *
+        : Math.cos(motionTime * star.speed * 0.72 + star.phase) *
           star.sway *
-          0.0009;
+          0.0018;
 
       const pulse =
         (Math.sin(star.phase + time * 0.001 * star.speed) + 1) / 2;
@@ -218,7 +241,9 @@ export default function StarfieldBackground() {
         star.alpha * (0.55 + pulse * star.strength)
       );
 
-      const radius = star.radius * (0.85 + pulse * 0.25);
+      const radius =
+        star.radius *
+        (star.accent ? 0.95 + pulse * 0.38 : 0.85 + pulse * 0.25);
 
       const x = (star.baseX + swayX) * width;
 
@@ -226,10 +251,10 @@ export default function StarfieldBackground() {
 
       ctx.save();
 
-      if (star.bright && pulse > 0.72) {
-        ctx.shadowBlur = 4 + pulse * 7;
+      if (star.bright && pulse > 0.62) {
+        ctx.shadowBlur = star.accent ? 10 + pulse * 10 : 4 + pulse * 7;
 
-        ctx.shadowColor = tintColor(star.tint, 0.55);
+        ctx.shadowColor = tintColor(star.tint, star.accent ? 0.75 : 0.55);
       }
 
       ctx.fillStyle = tintColor(star.tint, brightness);
@@ -242,20 +267,33 @@ export default function StarfieldBackground() {
 
       ctx.restore();
 
-      // Brief diffraction spike only at
-      // the very top of the twinkle.
-      if (star.spike && pulse > 0.94) {
-        const flare = (pulse - 0.94) / 0.06;
+      // Diffraction spikes near the top of the twinkle.
+      // Accent stars get longer spikes plus diagonals.
+      if (star.spike && pulse > 0.82) {
+        const flare = (pulse - 0.82) / 0.18;
 
         ctx.save();
 
-        ctx.strokeStyle = tintColor(star.tint, 0.12 + flare * 0.34);
+        ctx.strokeStyle = tintColor(
+          star.tint,
+          star.accent ? 0.2 + flare * 0.42 : 0.1 + flare * 0.24
+        );
 
-        ctx.lineWidth = 0.55;
+        ctx.lineWidth = star.accent ? 0.8 : 0.5;
 
-        const horizontal = radius * (4 + flare * 4);
+        const spikeScale = star.spikeScale;
 
-        const vertical = radius * (2.5 + flare * 3);
+        const horizontal =
+          radius *
+          (star.accent ? 7 : 4.5) *
+          spikeScale *
+          (0.7 + flare * 0.5);
+
+        const vertical =
+          radius *
+          (star.accent ? 6 : 3.2) *
+          spikeScale *
+          (0.7 + flare * 0.5);
 
         ctx.beginPath();
 
@@ -264,6 +302,14 @@ export default function StarfieldBackground() {
 
         ctx.moveTo(x, y - vertical);
         ctx.lineTo(x, y + vertical);
+
+        if (star.accent) {
+          ctx.moveTo(x - horizontal * 0.7, y - vertical * 0.7);
+          ctx.lineTo(x + horizontal * 0.7, y + vertical * 0.7);
+
+          ctx.moveTo(x + horizontal * 0.7, y - vertical * 0.7);
+          ctx.lineTo(x - horizontal * 0.7, y + vertical * 0.7);
+        }
 
         ctx.stroke();
 
