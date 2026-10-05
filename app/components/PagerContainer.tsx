@@ -8,15 +8,72 @@ import CreditsPanel from "./CreditsPanel";
 import StarfieldBackground from "./StarfieldBackground";
 import { migrateChartV2 } from "@/lib/chartStore";
 
-// ── Simplified to match ReadingIntakeScreen ───────────────────────────────────
+// ── Shared with ReadingIntakeScreen ───────────────────────────────────────────
 interface UserStatus {
   credits: number;
+  jxlCredits: number;
+
   isSubscribed: boolean;
+
+  effectiveMembershipPlan:
+    | "plus"
+    | "plus_xl"
+    | null;
+
+  membershipJxlUsed: number;
+
+  membershipEntitlements: {
+    readingsPerMonth: number | null;
+    jxlPerMonth: number | null;
+
+    voiceReading: boolean;
+    addContext: boolean;
+    extendedSavedReading: boolean;
+    customThemes: boolean;
+    commissionAccess: boolean;
+  } | null;
+
   readingsCompleted: number;
   onCooldown: boolean;
   cooldownExpiresAt: string | null;
   canBypass: boolean;
   pwaFreeReadingUsed?: boolean;
+}
+
+function normalizeUserStatus(data: any): UserStatus {
+  return {
+    credits: Number(data?.credits ?? 0),
+    jxlCredits: Number(data?.jxlCredits ?? 0),
+
+    isSubscribed: data?.isSubscribed === true,
+
+    effectiveMembershipPlan:
+      data?.effectiveMembershipPlan === "plus" ||
+      data?.effectiveMembershipPlan === "plus_xl"
+        ? data.effectiveMembershipPlan
+        : null,
+
+    membershipJxlUsed:
+      Number(data?.membershipJxlUsed ?? 0),
+
+    membershipEntitlements:
+      data?.membershipEntitlements ?? null,
+
+    readingsCompleted:
+      Number(data?.readingsCompleted ?? 0),
+
+    onCooldown:
+      data?.onCooldown === true,
+
+    cooldownExpiresAt:
+      data?.cooldownExpiresAt ?? null,
+
+    canBypass:
+      data?.canBypass === true,
+
+    pwaFreeReadingUsed:
+      data?.pwaFreeReadingUsed === true,
+  };
 }
 
 /**
@@ -70,15 +127,7 @@ export default function PagerContainer() {
       try {
         const response = await fetch("/api/user/credits");
         const data = await response.json();
-        setUserStatus({
-          credits: Number(data.credits ?? 0),
-          isSubscribed: data.isSubscribed === true,
-          readingsCompleted: Number(data.readingsCompleted ?? 0),
-          onCooldown: data.onCooldown === true,
-          cooldownExpiresAt: data.cooldownExpiresAt ?? null,
-          canBypass: data.canBypass === true,
-          pwaFreeReadingUsed: data.pwaFreeReadingUsed === true,
-        });
+        setUserStatus(normalizeUserStatus(data));
       } catch {
         // silent
       }
@@ -103,15 +152,7 @@ export default function PagerContainer() {
       })
       .then((status) => {
         if (status) {
-          setUserStatus({
-            credits: Number(status.credits ?? 0),
-            isSubscribed: status.isSubscribed === true,
-            readingsCompleted: Number(status.readingsCompleted ?? 0),
-            onCooldown: status.onCooldown === true,
-            cooldownExpiresAt: status.cooldownExpiresAt ?? null,
-            canBypass: status.canBypass === true,
-            pwaFreeReadingUsed: status.pwaFreeReadingUsed === true,
-          });
+          setUserStatus(normalizeUserStatus(status));
         }
       })
       .catch(() => {});
@@ -138,15 +179,7 @@ export default function PagerContainer() {
       })
       .then((status) => {
         if (status) {
-          setUserStatus({
-            credits: Number(status.credits ?? 0),
-            isSubscribed: status.isSubscribed === true,
-            readingsCompleted: Number(status.readingsCompleted ?? 0),
-            onCooldown: status.onCooldown === true,
-            cooldownExpiresAt: status.cooldownExpiresAt ?? null,
-            canBypass: status.canBypass === true,
-            pwaFreeReadingUsed: status.pwaFreeReadingUsed === true,
-          });
+          setUserStatus(normalizeUserStatus(status));
         }
       })
       .catch(() => {});
