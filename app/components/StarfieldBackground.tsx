@@ -32,10 +32,18 @@ type ShootingStar = {
 const OVERSCAN_BOTTOM = 200;
 const FPS = 30;
 
+/*
+ * Reduced and simplified.
+ *
+ * The faintest, slowest layer has been
+ * removed entirely, and the remaining
+ * layers are thinner. Every star left
+ * here is either noticeably drifting or
+ * noticeably twinkling.
+ */
 const STAR_LAYERS = [
-  { count: 220, drift: 0.7, min: 0.25, max: 0.8 },
-  { count: 130, drift: 1.5, min: 0.35, max: 1.05 },
-  { count: 60, drift: 2.6, min: 0.5, max: 1.45 },
+  { count: 110, drift: 1.5, min: 0.35, max: 1.05 },
+  { count: 50, drift: 2.6, min: 0.5, max: 1.45 },
 ] as const;
 
 function randomTint(): StarTint {
