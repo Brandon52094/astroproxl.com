@@ -116,6 +116,8 @@ type CheckoutIntent =
   | "subscription"
   | null;
 
+type LockedFeature = "context" | "voice";
+
 interface UserStatus {
   credits: number;
   jxlCredits: number;
@@ -144,6 +146,7 @@ interface UserStatus {
 interface ReadingIntakeScreenProps {
   userStatus: UserStatus | null;
   onSwipeLeft?: () => void;
+  onOpenCredits?: () => void;
   /** Set false while this panel is offscreen, then true when the user swipes back. */
   isActive?: boolean;
 }
@@ -591,6 +594,7 @@ const BEGIN_READING_STYLES = {
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
+  onOpenCredits,
   isActive = true,
 }: ReadingIntakeScreenProps) {
   const router = useRouter();
@@ -610,6 +614,15 @@ export default function ReadingIntakeScreen({
     useState<CheckoutIntent>(null);
   const theme = THEMES.cosmic;
 
+  // Locked feature soft cue / second-attempt routing.
+  const [lockedFeaturePrompt, setLockedFeaturePrompt] =
+    useState<LockedFeature | null>(null);
+
+  const lockedFeatureAttemptsRef = useRef<Record<LockedFeature, number>>({
+    context: 0,
+    voice: 0,
+  });
+
   // Chart-derived data for the fixed-size hero information system.
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
@@ -620,9 +633,9 @@ export default function ReadingIntakeScreen({
   const [heroHasGpsLocation, setHeroHasGpsLocation] = useState(false);
   const [heroNow, setHeroNow] = useState(() => new Date());
 
-  // The normal hero is user-controlled only: Brand → Quick Chart → Current Sky.
-  // Ask Anything temporarily replaces these with a fourth listening state.
-  const [heroInfoMode, setHeroInfoMode] = useState<"brand" | "quick" | "sky">("brand");
+  // The normal hero is user-controlled only: Brand (with Big Three) → Current Sky.
+  // Ask Anything temporarily replaces these with a third listening state.
+  const [heroInfoMode, setHeroInfoMode] = useState<"brand" | "sky">("brand");
   const [heroCompositionScale, setHeroCompositionScale] = useState(1);
   const heroStageRef = useRef<HTMLDivElement | null>(null);
   const [heroSweepActive, setHeroSweepActive] = useState(false);
@@ -726,9 +739,39 @@ export default function ReadingIntakeScreen({
 
   const cycleHeroInfo = useCallback(() => {
     if (askHoldingRef.current) return;
-    const modes: Array<"brand" | "quick" | "sky"> = ["brand", "quick", "sky"];
-    setHeroInfoMode((mode) => modes[(modes.indexOf(mode) + 1) % modes.length]);
+    setHeroInfoMode((mode) =>
+      mode === "brand" ? "sky" : "brand"
+    );
   }, []);
+
+  const handleLockedFeature = useCallback(
+    (feature: LockedFeature) => {
+      const nextAttempt =
+        lockedFeatureAttemptsRef.current[feature] + 1;
+
+      lockedFeatureAttemptsRef.current[feature] =
+        nextAttempt;
+
+      // First attempt: soft UI cue only.
+      if (nextAttempt === 1) {
+        setLockedFeaturePrompt(feature);
+
+        window.setTimeout(() => {
+          setLockedFeaturePrompt((current) =>
+            current === feature ? null : current
+          );
+        }, 3200);
+
+        return;
+      }
+
+      // Second attempt: show the user where access lives.
+      lockedFeatureAttemptsRef.current[feature] = 0;
+      setLockedFeaturePrompt(null);
+      onOpenCredits?.();
+    },
+    [onOpenCredits]
+  );
 
   useEffect(() => {
     async function ensureChart() {
@@ -925,7 +968,7 @@ export default function ReadingIntakeScreen({
     themesEnabled &&
     userStatus?.membershipEntitlements?.customThemes === true;
 
-  /* ── Hero information — four quiet slides, one fixed stage ───────── */
+  /* ── Hero information — Brand + Big Three → Current Sky ───────── */
   const heroData = useMemo(() => {
     const find = (arr: Placement[], names: string[]) =>
       arr.find((p) =>
@@ -1551,7 +1594,7 @@ export default function ReadingIntakeScreen({
       e.currentTarget.setPointerCapture?.(e.pointerId);
 
       if (!hasVoiceReadingAccess) {
-        void openVoiceCheckout();
+        handleLockedFeature("voice");
         return;
       }
 
@@ -1662,8 +1705,8 @@ export default function ReadingIntakeScreen({
       });
     },
     [
+      handleLockedFeature,
       hasVoiceReadingAccess,
-      openVoiceCheckout,
       isTranscribingAsk,
       micEnabled,
       startAskMeter,
@@ -2357,26 +2400,6 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* ── Swipe cue — page navigation stays separate from hero navigation ── */}
-          <button
-            type="button"
-            onClick={() => onSwipeLeft?.()}
-            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85 transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{
-              opacity: voiceVisualActive ? 0 : selectedArea ? 0.72 : 1,
-              filter: askHolding
-                ? "blur(4px) brightness(0.18)"
-                : selectedArea
-                  ? "grayscale(0.72) brightness(0.52) saturate(0.42)"
-                  : "brightness(1) saturate(1)",
-              pointerEvents: voiceVisualActive ? "none" : "auto",
-              transitionDuration: voiceVisualActive || selectedArea ? "700ms" : "350ms",
-              textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)",
-            }}
-          >
-            Swipe Left To Explore
-          </button>
-
           {/* ── HERO — locked at exactly 236px for every state ── */}
           <section className="mb-[14px] pt-0">
             <div
@@ -2453,10 +2476,10 @@ export default function ReadingIntakeScreen({
                           ) : null}
                         </div>
                       ) : heroInfoMode === "brand" ? (
-                        /* HERO 1 — centered brand statement, preserving the original AstroPro typography language */
-                        <div className="absolute inset-0 flex flex-col items-center justify-center px-[18px] pb-[18px] text-center">
+                        /* HERO 1 — brand identity + the user's Big Three + swipe cue inside the card. */
+                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[13px] pb-[22px] text-center">
                           <p
-                            className="mb-[2px] text-[25px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
+                            className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
                             style={{
                               fontFamily: '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
                               textShadow:
@@ -2467,7 +2490,7 @@ export default function ReadingIntakeScreen({
                           </p>
 
                           <h1
-                            className="whitespace-nowrap text-[36px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                            className="mt-[1px] whitespace-nowrap text-[32px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                             style={{
                               transform: "scaleY(1.045)",
                               transformOrigin: "center bottom",
@@ -2479,7 +2502,7 @@ export default function ReadingIntakeScreen({
                           </h1>
 
                           <span
-                            className="my-[12px] h-px w-[92px]"
+                            className="my-[7px] h-px w-[82px]"
                             style={{
                               background:
                                 "linear-gradient(90deg, transparent, rgba(203,213,225,0.42), transparent)",
@@ -2488,7 +2511,7 @@ export default function ReadingIntakeScreen({
                           />
 
                           <p
-                            className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.24em] text-slate-300/52"
+                            className="whitespace-nowrap text-[8px] font-medium uppercase tracking-[0.22em] text-slate-300/52"
                             style={{ textShadow: "0 2px 10px rgba(0,0,0,0.72)" }}
                           >
                             <span className="text-indigo-200/72">AstroProXL</span>
@@ -2496,7 +2519,40 @@ export default function ReadingIntakeScreen({
                             <span>The Astrology Engine</span>
                           </p>
 
-                          <motion.p
+                          {/* Big Three */}
+                          <div className="mt-[17px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                            {heroData.personal.map((item) => (
+                              <div
+                                key={`brand-${item.role}`}
+                                className="flex min-w-0 flex-col items-center text-center"
+                              >
+                                <span className="text-[7px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">
+                                  {item.role}
+                                </span>
+
+                                <span
+                                  className="mt-[5px] max-w-full truncate text-[15px] font-medium leading-none"
+                                  style={{
+                                    color: signAccentColor(item.sign),
+                                    textShadow: `0 0 12px ${signAccentGlow(item.sign)}`,
+                                  }}
+                                >
+                                  {item.sign}
+                                </span>
+
+                                <span className="mt-[4px] text-[8px] font-medium tabular-nums text-slate-300/70">
+                                  {item.degree ?? "—"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <motion.button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onSwipeLeft?.();
+                            }}
                             initial={false}
                             animate={
                               shouldReduceMotion
@@ -2508,123 +2564,10 @@ export default function ReadingIntakeScreen({
                                 ? { duration: 0 }
                                 : { duration: 2.6, times: [0, 0.48, 1], ease: "easeInOut" }
                             }
-                            className="absolute bottom-[10px] text-[8px] font-medium uppercase tracking-[0.18em] text-slate-400/55"
+                            className="tap-fix absolute bottom-[8px] text-[8px] font-medium uppercase tracking-[0.18em] text-slate-400/60"
                           >
-                            Tap for more
-                          </motion.p>
-                        </div>
-                      ) : heroInfoMode === "quick" ? (
-                        /* HERO 2 — user's Big Three above; elemental balance + profection below */
-                        <div className="absolute inset-0 px-[18px] py-[16px]">
-                          <div className="grid h-[102px] grid-cols-3 items-start gap-[10px]">
-                            {heroData.personal.map((item) => (
-                              <div key={`quick-${item.role}`} className="flex min-w-0 flex-col items-center text-center">
-                                <span className="text-[7px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">
-                                  {item.role}
-                                </span>
-                                <span
-                                  className="mt-[7px] max-w-full truncate text-[16px] font-medium leading-none"
-                                  style={{
-                                    color: signAccentColor(item.sign),
-                                    textShadow: `0 0 12px ${signAccentGlow(item.sign)}`,
-                                  }}
-                                >
-                                  {item.sign}
-                                </span>
-                                <span className="mt-[6px] text-[9px] font-medium tabular-nums text-slate-300/76">
-                                  {item.degree ?? "—"}
-                                </span>
-                                <span className="mt-[3px] text-[7px] font-medium text-slate-500/76">
-                                  {item.house ? `${heroOrdinal(item.house)} House` : "—"}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="relative mt-[4px] grid h-[96px] grid-cols-2 gap-[22px]">
-                            <div className="flex flex-col justify-center pr-[4px]">
-                              <p className="mb-[9px] text-left text-[7px] font-semibold uppercase tracking-[0.14em] text-slate-400/66">
-                                Elemental Balance
-                              </p>
-                              <div className="space-y-[7px]">
-                                {HERO_ELEMENT_ORDER.map((element) => {
-                                  const count = heroData.counts[element];
-                                  const ratio = count / heroData.maxElementCount;
-                                  const colors = HERO_ELEMENT_COLORS[element];
-                                  return (
-                                    <div key={element} className="flex items-center gap-[7px]">
-                                      <span
-                                        className="h-[6px] w-[6px] shrink-0 rounded-full"
-                                        style={{
-                                          backgroundColor: colors.bar,
-                                          boxShadow: `0 0 8px ${colors.glow}`,
-                                        }}
-                                        aria-hidden="true"
-                                      />
-                                      <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/[0.055]">
-                                        <motion.div
-                                          initial={false}
-                                          animate={{ width: `${Math.max(count ? 16 : 5, ratio * 100)}%` }}
-                                          transition={{
-                                            duration: shouldReduceMotion ? 0 : 0.45,
-                                            ease: [0.22, 1, 0.36, 1],
-                                          }}
-                                          className="h-full rounded-full"
-                                          style={{
-                                            backgroundColor: colors.bar,
-                                            boxShadow: `0 0 9px ${colors.glow}`,
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            <span
-                              className="absolute left-1/2 top-1/2 h-[66px] w-px -translate-x-1/2 -translate-y-1/2 bg-white/[0.07]"
-                              aria-hidden="true"
-                            />
-
-                            <div className="flex flex-col items-center justify-center pl-[4px] text-center">
-                              <p className="text-[7px] font-semibold uppercase tracking-[0.14em] text-slate-400/66">
-                                Profection Year
-                              </p>
-                              <div
-                                className="mt-[7px] flex h-[34px] w-[34px] items-center justify-center rounded-[11px] border bg-black/20"
-                                style={{
-                                  borderColor: profection?.activatedSign
-                                    ? HERO_ELEMENT_COLORS[SIGN_ELEMENTS[profection.activatedSign]]?.border ?? "rgba(255,255,255,0.10)"
-                                    : "rgba(255,255,255,0.10)",
-                                  boxShadow: profection?.activatedSign
-                                    ? `0 0 15px ${signAccentGlow(profection.activatedSign)}, inset 0 0 10px ${signAccentGlow(profection.activatedSign)}`
-                                    : "none",
-                                }}
-                              >
-                                <span
-                                  className="text-[17px]"
-                                  style={{ color: signAccentColor(profection?.activatedSign ?? "") }}
-                                >
-                                  {HERO_GLYPHS[heroSignRuler(profection?.activatedSign)] ?? "✦"}
-                                </span>
-                              </div>
-                              <span
-                                className="mt-[6px] max-w-full truncate text-[13px] font-medium leading-none"
-                                style={{
-                                  color: signAccentColor(profection?.activatedSign ?? ""),
-                                  textShadow: `0 0 10px ${signAccentGlow(profection?.activatedSign ?? "")}`,
-                                }}
-                              >
-                                {profection?.activatedSign ?? "—"}
-                              </span>
-                              <span className="mt-[4px] text-[7px] font-medium text-slate-400/72">
-                                {profection?.activatedHouse
-                                  ? `${heroOrdinal(profection.activatedHouse)} House Activated`
-                                  : "—"}
-                              </span>
-                            </div>
-                          </div>
+                            Swipe Left To Explore
+                          </motion.button>
                         </div>
                       ) : (
                         /* HERO 3 — premium Current Sky: larger luminaries + richer lunar timing */
@@ -2926,9 +2869,9 @@ export default function ReadingIntakeScreen({
             <div className="relative h-full rounded-[20px] bg-transparent px-4 py-2 pr-12">
               {!contextFocused && question.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[14px] font-medium text-slate-400/72">
-                  {canUseAddContext
-                    ? "Add Context (Optional)"
-                    : "Add Context · Astro Plus"}
+                  {!canUseAddContext && lockedFeaturePrompt === "context"
+                    ? "Become a Member"
+                    : "Add Context (Optional)"}
                 </div>
               )}
 
@@ -2937,7 +2880,7 @@ export default function ReadingIntakeScreen({
                   type="button"
                   className="absolute inset-0 z-20 rounded-[20px]"
                   aria-label="Add Context is included with Astro Plus"
-                  onClick={() => void openMembershipCheckout()}
+                  onClick={() => handleLockedFeature("context")}
                   style={{
                     background: "transparent",
                   }}
@@ -3093,7 +3036,11 @@ export default function ReadingIntakeScreen({
     </p>
   ) : (
     <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
-      {micEnabled ? "Press · Hold · Speak" : "Turn on the microphone"}
+      {lockedFeaturePrompt === "voice"
+        ? "Become a Member"
+        : micEnabled
+          ? "Press · Hold · Speak"
+          : "Turn on the microphone"}
     </p>
   )}
 </section>

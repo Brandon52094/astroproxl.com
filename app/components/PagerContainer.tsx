@@ -504,7 +504,11 @@ export default function PagerContainer() {
           {panelOrder.map((panelIndex) => (
             <div key={panelIndex} data-pager-panel className={panelClass}>
               {panelIndex === 0 && (
-                <ReadingIntakeScreen userStatus={userStatus} onSwipeLeft={goToNext} />
+                <ReadingIntakeScreen
+                  userStatus={userStatus}
+                  onSwipeLeft={goToNext}
+                  onOpenCredits={goToPrevious}
+                />
               )}
               {panelIndex === 1 && <BirthChartPanel userStatus={userStatus} />}
               {panelIndex === 2 && <TodaySkyPanel userStatus={userStatus} />}
