@@ -1996,7 +1996,7 @@ export default function ReadingIntakeScreen({
                                 "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
                             }}
                           >
-                            Astrological Predictions
+                            Astrological Readings
                           </h1>
 
                           <p
