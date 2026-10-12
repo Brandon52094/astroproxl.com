@@ -1856,19 +1856,6 @@ export default function ReadingIntakeScreen({
         }
       `}</style>
 
-      {/* Match the Birth Chart focus depth: selected readings sit against a
-          near-black sky while the active card and controls remain above it. */}
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[5] bg-black"
-        initial={false}
-        animate={{ opacity: selectedArea ? 0.48 : 0 }}
-        transition={{
-          duration: shouldReduceMotion ? 0 : selectedArea ? 0.95 : 0.3,
-          ease: [0.22, 1, 0.36, 1],
-        }}
-      />
-
       <div
         className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col px-[clamp(12px,4vw,16px)]"
         onClickCapture={(e) => {
@@ -1896,7 +1883,7 @@ export default function ReadingIntakeScreen({
           {/* ── HERO — locked at exactly 236px for every state ── */}
           <section className="mb-[14px] pt-0">
             <div
-              className={`hero-glow-shell ${selectedArea && !voiceVisualActive ? "hero-glow-shell-focus" : ""}`}
+              className="hero-glow-shell"
               style={{
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
@@ -1915,13 +1902,9 @@ export default function ReadingIntakeScreen({
                 }
                 style={{
                   cursor: "default",
-                  opacity: voiceVisualActive ? 1 : selectedArea ? 0.68 : 1,
-                  filter: voiceVisualActive
-                    ? "brightness(1) saturate(1)"
-                    : selectedArea
-                      ? "grayscale(0.72) brightness(0.56) saturate(0.42)"
-                      : "grayscale(0) brightness(1) saturate(1)",
-                  transitionDuration: voiceVisualActive || selectedArea ? "700ms" : "350ms",
+                  opacity: 1,
+                  filter: "none",
+                  transitionDuration: "350ms",
                 }}
               >
                 {/* One master canvas: every hero uses the exact same 374 × 236 composition. */}
@@ -2056,6 +2039,18 @@ export default function ReadingIntakeScreen({
                               </div>
                             ))}
                           </div>
+
+                          {/* Daily Horoscope — recessed glass button */}
+                          <button
+                            type="button"
+                            className="mt-[12px] flex h-[36px] w-[286px] max-w-full items-center justify-center rounded-[11px] border border-white/[0.12] bg-black/[0.18] text-[11px] font-medium tracking-[0.055em] text-slate-100/90 transition-colors duration-200 hover:bg-white/[0.07] active:bg-white/[0.10]"
+                            style={{
+                              boxShadow:
+                                "inset 0 2px 5px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.025)",
+                            }}
+                          >
+                            Tap for Daily Horoscope
+                          </button>
                         </div>
                       )}
                     </motion.div>
@@ -2193,13 +2188,11 @@ export default function ReadingIntakeScreen({
                       ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: voiceVisualActive ? 0 : selectedArea && !isSelected ? 0.74 : 1,
+                    opacity: voiceVisualActive ? 0 : 1,
                     filter: askHolding
                       ? "blur(4px) brightness(0.18)"
-                      : selectedArea && !isSelected
-                        ? "grayscale(0.70) brightness(0.54) saturate(0.45)"
-                        : "brightness(1) saturate(1)",
-                    transitionDuration: selectedArea || voiceVisualActive ? "700ms" : "350ms",
+                      : "brightness(1) saturate(1)",
+                    transitionDuration: voiceVisualActive ? "700ms" : "350ms",
                   }}
                 >
                   {Icon ? (
@@ -2365,10 +2358,8 @@ export default function ReadingIntakeScreen({
         className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
         aria-label="Press and hold to speak. Swipe up to cancel."
         style={{
-          opacity: selectedArea && !voiceVisualActive ? 0.76 : 1,
-          filter: selectedArea && !voiceVisualActive
-            ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-            : "brightness(1) saturate(1)",
+          opacity: 1,
+          filter: "brightness(1) saturate(1)",
           transform: voiceVisualActive ? "scale(1.012)" : undefined,
           WebkitUserSelect: "none",
           userSelect: "none",
@@ -2388,7 +2379,7 @@ export default function ReadingIntakeScreen({
         <span
           aria-hidden="true"
           className="ask-focus-veil"
-          style={{ opacity: selectedArea && !voiceVisualActive ? 0.48 : 0 }}
+          style={{ opacity: 0 }}
         />
       </button>
 
