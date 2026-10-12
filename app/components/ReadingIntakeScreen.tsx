@@ -1958,20 +1958,25 @@ export default function ReadingIntakeScreen({
                         /* HERO — brand identity + Big Three */
                         <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[23px] pb-[18px] text-center">
 
-                          <p
-                            className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
-                            style={{
-                              fontFamily:
-                                '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
-                              textShadow:
-                                "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
-                            }}
+                          {/* AstroProXL pill — replaces the old Personalized line */}
+                          <div
+                            className="absolute left-1/2 top-[4px] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/[0.12] bg-black/[0.16] px-[16px] py-[5px]"
                           >
-                            Personalized
-                          </p>
+                            <span
+                              className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
+                              style={{
+                                fontFamily:
+                                  '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
+                                textShadow:
+                                  "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
+                              }}
+                            >
+                              AstroProXL
+                            </span>
+                          </div>
 
                           <h1
-                            className="mt-[1px] whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                            className="mt-[14px] whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
                             style={{
                               transform: "scaleY(1.045)",
                               transformOrigin: "center bottom",
@@ -1979,39 +1984,11 @@ export default function ReadingIntakeScreen({
                                 "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
                             }}
                           >
-                            Astrological Predictions
+                            The Astrology Engine
                           </h1>
 
-                          <p
-                            className="mt-[6px] whitespace-nowrap text-[8px] font-medium uppercase tracking-[0.22em] text-slate-300/52"
-                            style={{
-                              textShadow:
-                                "0 2px 10px rgba(0,0,0,0.72)",
-                            }}
-                          >
-                            <span className="text-indigo-200/72">
-                              AstroProXL
-                            </span>
-
-                            <span className="mx-2 text-slate-500/70">
-                              |
-                            </span>
-
-                            <span>The Astrology Engine</span>
-                          </p>
-
-                          {/* Divider moved BELOW AstroProXL / The Astrology Engine */}
-                          <span
-                            className="mt-[7px] h-px w-[82px]"
-                            style={{
-                              background:
-                                "linear-gradient(90deg, transparent, rgba(203,213,225,0.42), transparent)",
-                            }}
-                            aria-hidden="true"
-                          />
-
                           {/* Big Three — slightly larger */}
-                          <div className="mt-[15px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                          <div className="mt-[44px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
                             {heroData.personal.map((item) => (
                               <div
                                 key={`brand-${item.role}`}
