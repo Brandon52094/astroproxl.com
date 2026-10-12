@@ -1974,31 +1974,35 @@ export default function ReadingIntakeScreen({
                             </motion.p>
                           ) : null}
                         </div>
-                      ) : (
+                                            ) : (
                         /* HERO — brand identity + Big Three */
-                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[34px] pb-[22px] text-center">
-                          <h1
-                            className="whitespace-nowrap text-[46px] font-semibold leading-[0.92] tracking-[-0.05em] text-white"
-                            style={{
-                              transform: "scaleY(1.05)",
-                              transformOrigin: "center bottom",
-                              textShadow:
-                                "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
-                            }}
-                          >
-                            AstroProXL
-                          </h1>
+                        <div className="absolute inset-0 text-center">
+                          {/* Brand block */}
+                          <div className="absolute inset-x-0 top-[48px] flex flex-col items-center">
+                            <h1
+                              className="whitespace-nowrap text-[52px] font-semibold leading-[0.9] tracking-[-0.055em] text-white"
+                              style={{
+                                transform: "scaleY(1.06)",
+                                transformOrigin: "center bottom",
+                                textShadow:
+                                  "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
+                              }}
+                            >
+                              AstroProXL
+                            </h1>
 
-                          <p
-                            className="mt-[8px] whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.28em] text-slate-300/56"
-                            style={{
-                              textShadow: "0 2px 10px rgba(0,0,0,0.72)",
-                            }}
-                          >
-                            The Astrology Engine
-                          </p>
+                            <p
+                              className="mt-[10px] whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.30em] text-slate-300/56"
+                              style={{
+                                textShadow: "0 2px 10px rgba(0,0,0,0.72)",
+                              }}
+                            >
+                              The Astrology Engine
+                            </p>
+                          </div>
 
-                          <div className="mt-auto grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                          {/* Big Three */}
+                          <div className="absolute inset-x-0 bottom-[24px] grid grid-cols-3 gap-[10px] px-[26px]">
                             {heroData.personal.map((item) => (
                               <div
                                 key={`brand-${item.role}`}
