@@ -339,6 +339,15 @@ export default function ReadingIntakeScreen({
   const heroWasActiveRef = useRef(false);
   const previousSelectedAreaRef = useRef<string | null>(null);
 
+  // Rotating prompt under the reading grid.
+  const rotatingPrompts = [
+    "Tap for Horoscope",
+    "Select a Reading",
+    "Swipe Left to Explore",
+  ] as const;
+
+  const [rotatingPromptIndex, setRotatingPromptIndex] = useState(0);
+
   // Ask Anything live-listening state.
   const [micEnabled, setMicEnabled] = useState(false);
   const [micConnecting, setMicConnecting] = useState(false);
@@ -646,6 +655,17 @@ export default function ReadingIntakeScreen({
   const beginReadingStyle = selectedArea
     ? BEGIN_READING_STYLES[selectedArea as keyof typeof BEGIN_READING_STYLES]
     : null;
+
+  // Rotate the prompt every 4s when no reading is selected.
+  useEffect(() => {
+    if (selectedAreaConfig) return;
+
+    const interval = window.setInterval(() => {
+      setRotatingPromptIndex((prev) => (prev + 1) % rotatingPrompts.length);
+    }, 4000);
+
+    return () => window.clearInterval(interval);
+  }, [selectedAreaConfig]);
 
   // ── Access flags derived from the expanded userStatus ─────────────────────
 
@@ -1956,39 +1976,29 @@ export default function ReadingIntakeScreen({
                         </div>
                       ) : (
                         /* HERO — brand identity + Big Three */
-                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[23px] pb-[18px] text-center">
-
-                          {/* AstroProXL pill — replaces the old Personalized line */}
-                          <div
-                            className="absolute left-1/2 top-[4px] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/[0.12] bg-black/[0.16] px-[16px] py-[5px]"
-                          >
-                            <span
-                              className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
-                              style={{
-                                fontFamily:
-                                  '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
-                                textShadow:
-                                  "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
-                              }}
-                            >
-                              AstroProXL
-                            </span>
-                          </div>
-
+                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[34px] pb-[22px] text-center">
                           <h1
-                            className="mt-[14px] whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                            className="whitespace-nowrap text-[46px] font-semibold leading-[0.92] tracking-[-0.05em] text-white"
                             style={{
-                              transform: "scaleY(1.045)",
+                              transform: "scaleY(1.05)",
                               transformOrigin: "center bottom",
                               textShadow:
                                 "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
                             }}
                           >
-                            The Astrology Engine
+                            AstroProXL
                           </h1>
 
-                          {/* Big Three — slightly larger */}
-                          <div className="mt-[44px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                          <p
+                            className="mt-[8px] whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.28em] text-slate-300/56"
+                            style={{
+                              textShadow: "0 2px 10px rgba(0,0,0,0.72)",
+                            }}
+                          >
+                            The Astrology Engine
+                          </p>
+
+                          <div className="mt-auto grid w-full grid-cols-3 gap-[10px] px-[8px]">
                             {heroData.personal.map((item) => (
                               <div
                                 key={`brand-${item.role}`}
@@ -2002,9 +2012,7 @@ export default function ReadingIntakeScreen({
                                   className="mt-[4px] max-w-full truncate text-[18px] font-medium leading-none"
                                   style={{
                                     color: signAccentColor(item.sign),
-                                    textShadow: `0 0 12px ${signAccentGlow(
-                                      item.sign
-                                    )}`,
+                                    textShadow: `0 0 12px ${signAccentGlow(item.sign)}`,
                                   }}
                                 >
                                   {item.sign}
@@ -2016,18 +2024,6 @@ export default function ReadingIntakeScreen({
                               </div>
                             ))}
                           </div>
-
-                          {/* Daily Horoscope — recessed glass button */}
-                          <button
-                            type="button"
-                            className="mt-[12px] flex h-[48px] w-[calc(50%_-_6px)] max-w-full items-center justify-center rounded-[11px] border border-white/[0.12] bg-black/[0.18] text-[11px] font-medium tracking-[0.055em] text-slate-100/90 transition-colors duration-200 hover:bg-white/[0.07] active:bg-white/[0.10]"
-                            style={{
-                              boxShadow:
-                                "inset 0 2px 5px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.025)",
-                            }}
-                          >
-                            Tap for Daily Horoscope
-                          </button>
                         </div>
                       )}
                     </motion.div>
@@ -2130,17 +2126,39 @@ export default function ReadingIntakeScreen({
             className="relative mb-[14px] h-[26px] overflow-hidden text-center"
             aria-live="polite"
           >
-            <p
-              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
-              style={{
-                opacity: voiceVisualActive ? 0 : 1,
-                filter: voiceVisualActive ? "blur(4px)" : "blur(0px)",
-                textShadow:
-                  "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-              }}
-            >
-              {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
-            </p>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.button
+                key={selectedAreaConfig ? selectedAreaConfig.title : rotatingPrompts[rotatingPromptIndex]}
+                type="button"
+                onClick={() => {
+                  if (!selectedAreaConfig && rotatingPrompts[rotatingPromptIndex] === "Tap for Horoscope") {
+                    // horoscope trigger will go here next
+                  }
+                }}
+                className="tap-fix absolute inset-x-0 top-0 flex h-[26px] items-center justify-center bg-transparent px-3 text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
+                style={{
+                  opacity: voiceVisualActive ? 0 : 1,
+                  filter: voiceVisualActive ? "blur(4px)" : "blur(0px)",
+                  textShadow:
+                    "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
+                  cursor:
+                    !selectedAreaConfig && rotatingPrompts[rotatingPromptIndex] === "Tap for Horoscope"
+                      ? "pointer"
+                      : "default",
+                }}
+                initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
+                animate={{ opacity: voiceVisualActive ? 0 : 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+                transition={{
+                  duration: shouldReduceMotion ? 0 : 0.35,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+              >
+                {selectedAreaConfig
+                  ? selectedAreaConfig.title
+                  : rotatingPrompts[rotatingPromptIndex]}
+              </motion.button>
+            </AnimatePresence>
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
