@@ -339,15 +339,6 @@ export default function ReadingIntakeScreen({
   const heroWasActiveRef = useRef(false);
   const previousSelectedAreaRef = useRef<string | null>(null);
 
-  // Rotating prompt under the reading grid.
-  const rotatingPrompts = [
-    "Tap for Horoscope",
-    "Select a Reading",
-    "Swipe Left to Explore",
-  ] as const;
-
-  const [rotatingPromptIndex, setRotatingPromptIndex] = useState(0);
-
   // Ask Anything live-listening state.
   const [micEnabled, setMicEnabled] = useState(false);
   const [micConnecting, setMicConnecting] = useState(false);
@@ -655,17 +646,6 @@ export default function ReadingIntakeScreen({
   const beginReadingStyle = selectedArea
     ? BEGIN_READING_STYLES[selectedArea as keyof typeof BEGIN_READING_STYLES]
     : null;
-
-  // Rotate the prompt every 4s when no reading is selected.
-  useEffect(() => {
-    if (selectedAreaConfig) return;
-
-    const interval = window.setInterval(() => {
-      setRotatingPromptIndex((prev) => (prev + 1) % rotatingPrompts.length);
-    }, 4000);
-
-    return () => window.clearInterval(interval);
-  }, [selectedAreaConfig]);
 
   // ── Access flags derived from the expanded userStatus ─────────────────────
 
@@ -1876,6 +1856,19 @@ export default function ReadingIntakeScreen({
         }
       `}</style>
 
+      {/* Match the Birth Chart focus depth: selected readings sit against a
+          near-black sky while the active card and controls remain above it. */}
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[5] bg-black"
+        initial={false}
+        animate={{ opacity: selectedArea ? 0.48 : 0 }}
+        transition={{
+          duration: shouldReduceMotion ? 0 : selectedArea ? 0.95 : 0.3,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+      />
+
       <div
         className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col px-[clamp(12px,4vw,16px)]"
         onClickCapture={(e) => {
@@ -1903,7 +1896,7 @@ export default function ReadingIntakeScreen({
           {/* ── HERO — locked at exactly 236px for every state ── */}
           <section className="mb-[14px] pt-0">
             <div
-              className="hero-glow-shell"
+              className={`hero-glow-shell ${selectedArea && !voiceVisualActive ? "hero-glow-shell-focus" : ""}`}
               style={{
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
@@ -1922,9 +1915,13 @@ export default function ReadingIntakeScreen({
                 }
                 style={{
                   cursor: "default",
-                  opacity: 1,
-                  filter: "none",
-                  transitionDuration: "350ms",
+                  opacity: voiceVisualActive ? 1 : selectedArea ? 0.68 : 1,
+                  filter: voiceVisualActive
+                    ? "brightness(1) saturate(1)"
+                    : selectedArea
+                      ? "grayscale(0.72) brightness(0.56) saturate(0.42)"
+                      : "grayscale(0) brightness(1) saturate(1)",
+                  transitionDuration: voiceVisualActive || selectedArea ? "700ms" : "350ms",
                 }}
               >
                 {/* One master canvas: every hero uses the exact same 374 × 236 composition. */}
@@ -1974,35 +1971,64 @@ export default function ReadingIntakeScreen({
                             </motion.p>
                           ) : null}
                         </div>
-                                            ) : (
+                      ) : (
                         /* HERO — brand identity + Big Three */
-                        <div className="absolute inset-0 text-center">
-                          {/* Brand block */}
-                          <div className="absolute inset-x-0 top-[48px] flex flex-col items-center">
-                            <h1
-                              className="whitespace-nowrap text-[52px] font-semibold leading-[0.9] tracking-[-0.055em] text-white"
-                              style={{
-                                transform: "scaleY(1.06)",
-                                transformOrigin: "center bottom",
-                                textShadow:
-                                  "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
-                              }}
-                            >
+                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[23px] pb-[18px] text-center">
+
+                          <p
+                            className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
+                            style={{
+                              fontFamily:
+                                '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
+                              textShadow:
+                                "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
+                            }}
+                          >
+                            Personalized
+                          </p>
+
+                          <h1
+                            className="mt-[1px] whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
+                            style={{
+                              transform: "scaleY(1.045)",
+                              transformOrigin: "center bottom",
+                              textShadow:
+                                "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
+                            }}
+                          >
+                            Astrological Predictions
+                          </h1>
+
+                          <p
+                            className="mt-[6px] whitespace-nowrap text-[8px] font-medium uppercase tracking-[0.22em] text-slate-300/52"
+                            style={{
+                              textShadow:
+                                "0 2px 10px rgba(0,0,0,0.72)",
+                            }}
+                          >
+                            <span className="text-indigo-200/72">
                               AstroProXL
-                            </h1>
+                            </span>
 
-                            <p
-                              className="mt-[10px] whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.30em] text-slate-300/56"
-                              style={{
-                                textShadow: "0 2px 10px rgba(0,0,0,0.72)",
-                              }}
-                            >
-                              The Astrology Engine
-                            </p>
-                          </div>
+                            <span className="mx-2 text-slate-500/70">
+                              |
+                            </span>
 
-                          {/* Big Three */}
-                          <div className="absolute inset-x-0 bottom-[24px] grid grid-cols-3 gap-[10px] px-[26px]">
+                            <span>The Astrology Engine</span>
+                          </p>
+
+                          {/* Divider moved BELOW AstroProXL / The Astrology Engine */}
+                          <span
+                            className="mt-[7px] h-px w-[82px]"
+                            style={{
+                              background:
+                                "linear-gradient(90deg, transparent, rgba(203,213,225,0.42), transparent)",
+                            }}
+                            aria-hidden="true"
+                          />
+
+                          {/* Big Three — slightly larger */}
+                          <div className="mt-[15px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
                             {heroData.personal.map((item) => (
                               <div
                                 key={`brand-${item.role}`}
@@ -2016,7 +2042,9 @@ export default function ReadingIntakeScreen({
                                   className="mt-[4px] max-w-full truncate text-[18px] font-medium leading-none"
                                   style={{
                                     color: signAccentColor(item.sign),
-                                    textShadow: `0 0 12px ${signAccentGlow(item.sign)}`,
+                                    textShadow: `0 0 12px ${signAccentGlow(
+                                      item.sign
+                                    )}`,
                                   }}
                                 >
                                   {item.sign}
@@ -2130,39 +2158,17 @@ export default function ReadingIntakeScreen({
             className="relative mb-[14px] h-[26px] overflow-hidden text-center"
             aria-live="polite"
           >
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.button
-                key={selectedAreaConfig ? selectedAreaConfig.title : rotatingPrompts[rotatingPromptIndex]}
-                type="button"
-                onClick={() => {
-                  if (!selectedAreaConfig && rotatingPrompts[rotatingPromptIndex] === "Tap for Horoscope") {
-                    // horoscope trigger will go here next
-                  }
-                }}
-                className="tap-fix absolute inset-x-0 top-0 flex h-[26px] items-center justify-center bg-transparent px-3 text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 sm:text-[14.5px]"
-                style={{
-                  opacity: voiceVisualActive ? 0 : 1,
-                  filter: voiceVisualActive ? "blur(4px)" : "blur(0px)",
-                  textShadow:
-                    "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-                  cursor:
-                    !selectedAreaConfig && rotatingPrompts[rotatingPromptIndex] === "Tap for Horoscope"
-                      ? "pointer"
-                      : "default",
-                }}
-                initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
-                animate={{ opacity: voiceVisualActive ? 0 : 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
-                transition={{
-                  duration: shouldReduceMotion ? 0 : 0.35,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                {selectedAreaConfig
-                  ? selectedAreaConfig.title
-                  : rotatingPrompts[rotatingPromptIndex]}
-              </motion.button>
-            </AnimatePresence>
+            <p
+              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
+              style={{
+                opacity: voiceVisualActive ? 0 : 1,
+                filter: voiceVisualActive ? "blur(4px)" : "blur(0px)",
+                textShadow:
+                  "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
+              }}
+            >
+              {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
+            </p>
           </div>
 
           {/* ── READING GRID (2×2) — symbols only ── */}
@@ -2187,11 +2193,13 @@ export default function ReadingIntakeScreen({
                       ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
                       : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
                     transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: voiceVisualActive ? 0 : 1,
+                    opacity: voiceVisualActive ? 0 : selectedArea && !isSelected ? 0.74 : 1,
                     filter: askHolding
                       ? "blur(4px) brightness(0.18)"
-                      : "brightness(1) saturate(1)",
-                    transitionDuration: voiceVisualActive ? "700ms" : "350ms",
+                      : selectedArea && !isSelected
+                        ? "grayscale(0.70) brightness(0.54) saturate(0.45)"
+                        : "brightness(1) saturate(1)",
+                    transitionDuration: selectedArea || voiceVisualActive ? "700ms" : "350ms",
                   }}
                 >
                   {Icon ? (
@@ -2357,8 +2365,10 @@ export default function ReadingIntakeScreen({
         className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
         aria-label="Press and hold to speak. Swipe up to cancel."
         style={{
-          opacity: 1,
-          filter: "brightness(1) saturate(1)",
+          opacity: selectedArea && !voiceVisualActive ? 0.76 : 1,
+          filter: selectedArea && !voiceVisualActive
+            ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
+            : "brightness(1) saturate(1)",
           transform: voiceVisualActive ? "scale(1.012)" : undefined,
           WebkitUserSelect: "none",
           userSelect: "none",
@@ -2378,7 +2388,7 @@ export default function ReadingIntakeScreen({
         <span
           aria-hidden="true"
           className="ask-focus-veil"
-          style={{ opacity: 0 }}
+          style={{ opacity: selectedArea && !voiceVisualActive ? 0.48 : 0 }}
         />
       </button>
 
