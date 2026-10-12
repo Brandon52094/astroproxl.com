@@ -2043,7 +2043,7 @@ export default function ReadingIntakeScreen({
                           {/* Daily Horoscope — recessed glass button */}
                           <button
                             type="button"
-                            className="mt-[12px] flex h-[36px] w-[calc(50%_-_6px)] max-w-full items-center justify-center rounded-[11px] border border-white/[0.12] bg-black/[0.18] text-[11px] font-medium tracking-[0.055em] text-slate-100/90 transition-colors duration-200 hover:bg-white/[0.07] active:bg-white/[0.10]"
+                            className="mt-[12px] flex h-[44px] w-[calc(50%_-_6px)] max-w-full items-center justify-center rounded-[11px] border border-white/[0.12] bg-black/[0.18] text-[11px] font-medium tracking-[0.055em] text-slate-100/90 transition-colors duration-200 hover:bg-white/[0.07] active:bg-white/[0.10]"
                             style={{
                               boxShadow:
                                 "inset 0 2px 5px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.025)",
