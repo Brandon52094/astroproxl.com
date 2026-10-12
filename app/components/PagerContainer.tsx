@@ -396,8 +396,9 @@ export default function PagerContainer() {
   // Keep every panel locked to the pager viewport. `overflow-y-auto` by itself
   // can make overflow-x compute to `auto` on mobile browsers, which allows a
   // wide child to create a sideways scroll position inside a panel.
+  // A 42px top padding reserves space for the four-panel navigation indicator.
   const panelClass =
-    "pager-panel relative h-full min-h-0 w-full min-w-full max-w-full flex-shrink-0 overflow-y-auto overflow-x-hidden overscroll-x-none bg-transparent";
+    "pager-panel relative h-full min-h-0 w-full min-w-full max-w-full flex-shrink-0 overflow-y-auto overflow-x-hidden overscroll-x-none bg-transparent pt-[42px] box-border";
 
   // Mobile browsers can restore a horizontal scroll offset when returning to a
   // page. The pager itself is transform-driven, so document/panel scrollLeft
@@ -515,6 +516,42 @@ export default function PagerContainer() {
           }}
         />
               <StarfieldBackground />
+    </div>
+
+    {/* Four-panel navigation indicator */}
+    <div
+      className="pointer-events-none absolute inset-x-0 top-[10px] z-30 flex flex-col items-center gap-[7px]"
+      aria-label={`Page ${currentIndex + 1} of ${totalPanels}`}
+    >
+      <span
+        className="text-[9px] font-medium uppercase tracking-[0.23em] text-slate-300/65"
+        style={{
+          textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+        }}
+      >
+        Swipe Left to Explore
+      </span>
+
+      <div className="flex items-center justify-center gap-[7px]">
+        {Array.from({ length: totalPanels }, (_, index) => (
+          <span
+            key={index}
+            aria-hidden="true"
+            className="h-[5px] rounded-full transition-all duration-500"
+            style={{
+              width: currentIndex === index ? 17 : 5,
+              background:
+                currentIndex === index
+                  ? "rgba(125,211,252,0.95)"
+                  : "rgba(148,163,184,0.35)",
+              boxShadow:
+                currentIndex === index
+                  ? "0 0 9px rgba(56,189,248,0.35)"
+                  : "none",
+            }}
+          />
+        ))}
+      </div>
     </div>
 
     {/* APP / PAGER CONTENT */}
