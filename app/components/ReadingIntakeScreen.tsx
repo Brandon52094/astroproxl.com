@@ -370,19 +370,19 @@ export default function ReadingIntakeScreen({
   const transcriptTimersRef =
     useRef<number[]>([]);
 
-  // Browser live speech recognition is progressive; Whisper remains the fallback.
-  type LiveSpeechResult = { isFinal: boolean; 0: { transcript: string } };
-  type LiveSpeechEvent = { resultIndex: number; results: ArrayLike<LiveSpeechResult> };
-  type LiveSpeechRecognizer = {
-    continuous: boolean; interimResults: boolean; lang: string;
-    onresult: ((event: LiveSpeechEvent) => void) | null;
-    onerror: (() => void) | null;
-    start: () => void; stop: () => void; abort: () => void;
-  };
-  const liveSpeechRef = useRef<LiveSpeechRecognizer | null>(null);
-  const liveTextRef = useRef("");
-  const liveFinalRef = useRef("");
+  // Streaming OpenAI transcription (WebRTC): browser receives an ephemeral token,
+  // never the server API key. Keep the completed-audio Whisper route as fallback.
+  const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
+  const realtimeChannelRef = useRef<RTCDataChannel | null>(null);
+  const realtimeFinalRef = useRef("");
+  const realtimePartialRef = useRef<Record<string, string>>({});
+  const realtimeReadyRef = useRef(false);
+  const releasedRef = useRef(false);
+  const realtimeWaitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackAudioRef = useRef<Blob | null>(null);
+  const awaitingRealtimeRef = useRef(false);
   const didSubmitVoiceRef = useRef(false);
+
 
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
@@ -1046,6 +1046,66 @@ export default function ReadingIntakeScreen({
     [revealVoiceTranscript]
   );
 
+  const closeRealtime = useCallback(() => {
+    if (realtimeWaitRef.current) clearTimeout(realtimeWaitRef.current);
+    realtimeWaitRef.current = null;
+    realtimeChannelRef.current?.close();
+    realtimeChannelRef.current = null;
+    realtimePeerRef.current?.close();
+    realtimePeerRef.current = null;
+    realtimeReadyRef.current = false;
+  }, []);
+
+  const completeStreaming = useCallback((text: string) => {
+    if (!releasedRef.current || didSubmitVoiceRef.current || text.trim().length < 2) return;
+    didSubmitVoiceRef.current = true;
+    closeRealtime();
+    submitAskAnything(text.trim());
+  }, [closeRealtime, submitAskAnything]);
+
+  const connectRealtime = useCallback(async (stream: MediaStream) => {
+    try {
+      const tokenRes = await fetch("/api/jxl/transcribe/session", { method: "POST" });
+      if (!tokenRes.ok || !askHoldingRef.current) return;
+      const tokenData = await tokenRes.json();
+      const secret = tokenData?.client_secret?.value;
+      if (typeof secret !== "string" || !secret || !askHoldingRef.current) return;
+      const pc = new RTCPeerConnection();
+      realtimePeerRef.current = pc;
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) { pc.close(); return; }
+      pc.addTrack(audioTrack, stream);
+      const dc = pc.createDataChannel("oai-events");
+      realtimeChannelRef.current = dc;
+      dc.onmessage = (message) => {
+        let event: {type?:string;item_id?:string;delta?:string;transcript?:string};
+        try { event = JSON.parse(message.data); } catch { return; }
+        const item = event.item_id || "current";
+        if (event.type === "conversation.item.input_audio_transcription.delta") {
+          realtimePartialRef.current[item] = (realtimePartialRef.current[item] || "") + (event.delta || "");
+          if (askHoldingRef.current) setVoiceTranscriptPreview((realtimeFinalRef.current + " " + Object.values(realtimePartialRef.current).join(" ")).trim());
+        } else if (event.type === "conversation.item.input_audio_transcription.completed") {
+          delete realtimePartialRef.current[item];
+          const phrase = (event.transcript || "").trim();
+          if (phrase) realtimeFinalRef.current = (realtimeFinalRef.current + " " + phrase).trim();
+          setVoiceTranscriptPreview(realtimeFinalRef.current);
+          if (releasedRef.current) completeStreaming(realtimeFinalRef.current);
+        }
+      };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const answerRes = await fetch("https://api.openai.com/v1/realtime/calls", {
+        method: "POST", headers: {Authorization: `Bearer ${secret}`, "Content-Type":"application/sdp"},
+        body: offer.sdp,
+      });
+      if (!answerRes.ok || !askHoldingRef.current) { pc.close(); return; }
+      await pc.setRemoteDescription({ type: "answer", sdp: await answerRes.text() });
+      realtimeReadyRef.current = true;
+    } catch {
+      // Old Whisper endpoint handles failed network/session establishment.
+    }
+  }, [completeStreaming]);
+
   const startAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
@@ -1079,41 +1139,13 @@ export default function ReadingIntakeScreen({
       // Clear any previous transcript reveal for the new recording.
       setVoiceTranscript("");
       setVoiceTranscriptPreview("");
-      liveTextRef.current = "";
-      liveFinalRef.current = "";
+      realtimeFinalRef.current = "";
+      realtimePartialRef.current = {};
+      releasedRef.current = false;
+      fallbackAudioRef.current = null;
+      awaitingRealtimeRef.current = false;
       didSubmitVoiceRef.current = false;
-      liveSpeechRef.current?.abort();
-      liveSpeechRef.current = null;
-      // Start real-time browser transcription as soon as recording begins.
-      // Safari/Firefox may not support this; retain Whisper fallback on release.
-      const speechWindow = window as Window & {
-        SpeechRecognition?: new () => LiveSpeechRecognizer;
-        webkitSpeechRecognition?: new () => LiveSpeechRecognizer;
-      };
-      const SpeechCtor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-      if (SpeechCtor) {
-        try {
-          const speech = new SpeechCtor();
-          speech.continuous = true;
-          speech.interimResults = true;
-          speech.lang = document.documentElement.lang || "en-US";
-          speech.onresult = (event) => {
-            let finalized = "";
-            let interim = "";
-            for (let i = 0; i < event.results.length; i++) {
-              const result = event.results[i];
-              if (result.isFinal) finalized += result[0].transcript + " ";
-              else interim += result[0].transcript + " ";
-            }
-            liveFinalRef.current = finalized.trim();
-            liveTextRef.current = `${finalized} ${interim}`.trim();
-            if (askHoldingRef.current) setVoiceTranscriptPreview(liveTextRef.current);
-          };
-          speech.onerror = () => { /* Whisper fallback remains available. */ };
-          speech.start();
-          liveSpeechRef.current = speech;
-        } catch { liveSpeechRef.current = null; }
-      }
+      closeRealtime();
 
       transcriptTimersRef.current.forEach(
         window.clearTimeout
@@ -1171,9 +1203,13 @@ export default function ReadingIntakeScreen({
         audioChunksRef.current = [];
 
         if (cancelled || didSubmitVoiceRef.current) return;
-        // If live recognition did not yield usable text, preserve the original
-        // Whisper path rather than navigating with a blank or partial question.
-        void transcribeAskAudio(blob);
+        fallbackAudioRef.current = blob;
+        // If streaming could not complete promptly, fall back to the existing
+        // high-quality Whisper endpoint rather than losing the question.
+        if (!awaitingRealtimeRef.current) {
+          closeRealtime();
+          void transcribeAskAudio(blob);
+        }
       };
 
       askHoldStartRef.current = Date.now();
@@ -1193,10 +1229,9 @@ export default function ReadingIntakeScreen({
         return;
       }
 
+      void connectRealtime(stream);
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          void startAskMeter();
-        });
+        requestAnimationFrame(() => { void startAskMeter(); });
       });
     },
     [
@@ -1207,6 +1242,7 @@ export default function ReadingIntakeScreen({
       startAskMeter,
       stopAskMeter,
       transcribeAskAudio,
+      connectRealtime, closeRealtime,
     ]
   );
 
@@ -1221,11 +1257,10 @@ export default function ReadingIntakeScreen({
     setAskError(null);
 
     stopAskMeter();
-    liveSpeechRef.current?.abort();
-    liveSpeechRef.current = null;
+    closeRealtime();
     stopAskRecorder(true);
     triggerIntakeHaptic();
-  }, [stopAskMeter, stopAskRecorder]);
+  }, [stopAskMeter, stopAskRecorder, closeRealtime]);
 
   const moveAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -1248,29 +1283,38 @@ export default function ReadingIntakeScreen({
     setAskHolding(false);
     triggerIntakeHaptic();
     stopAskMeter();
-    liveSpeechRef.current?.stop();
-    liveSpeechRef.current = null;
+    releasedRef.current = true;
 
     if (elapsed < ASK_MIN_HOLD_MS) {
       askCancelledRef.current = true;
       setVoiceJourneyActive(false);
       setVoiceNavigating(false);
+      closeRealtime();
       stopAskRecorder(true);
       setAskError("Press and hold while you speak.");
       return;
     }
 
-    const liveText = (liveFinalRef.current || liveTextRef.current).trim();
-    if (liveText.length >= 2) {
-      didSubmitVoiceRef.current = true;
-      // Save the question and start Preparing on release, without another
-      // staged transcript reveal.
-      submitAskAnything(liveText);
-      stopAskRecorder(true);
+    // Transition the visual immediately. The route opens only when the final
+    // transcript is saved; never submit an interim/possibly incomplete phrase.
+    setVoiceNavigating(true);
+    stopAskRecorder(false);
+    if (realtimeReadyRef.current && realtimeChannelRef.current?.readyState === "open") {
+      awaitingRealtimeRef.current = true;
+      // End the utterance even if VAD hasn't closed the last sentence yet.
+      realtimeChannelRef.current.send(JSON.stringify({type:"input_audio_buffer.commit"}));
+      // Avoid hanging forever if completion doesn't arrive.
+      realtimeWaitRef.current = setTimeout(() => {
+        if (didSubmitVoiceRef.current) return;
+        closeRealtime();
+        if (fallbackAudioRef.current) void transcribeAskAudio(fallbackAudioRef.current);
+        else setAskError("Couldn't finish transcription. Please try again.");
+      }, 3500);
     } else {
-      stopAskRecorder(false);
+      // The recorder's onstop handler will send the complete audio to Whisper.
+      closeRealtime();
     }
-  }, [stopAskMeter, stopAskRecorder, submitAskAnything]);
+  }, [stopAskMeter, stopAskRecorder, closeRealtime, completeStreaming, transcribeAskAudio]);
 
   useEffect(() => {
     return () => {
