@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-// app/api/jxl/transcribe/session/route.ts
+// app/api/reading/transcribe/session/route.ts
 // Creates an ephemeral token; OPENAI_API_KEY never reaches the browser.
 export async function POST() {
   const { userId } = await auth();
@@ -35,7 +35,7 @@ export async function POST() {
       cache: "no-store",
     });
     if (!upstream.ok) {
-      console.error("[jxl/realtime-session]", upstream.status, (await upstream.text()).slice(0, 200));
+      console.error("[reading/realtime-session]", upstream.status, (await upstream.text()).slice(0, 200));
       return NextResponse.json({error:"Streaming unavailable"},{status:502});
     }
     return NextResponse.json(await upstream.json(), {headers:{"Cache-Control":"no-store"}});

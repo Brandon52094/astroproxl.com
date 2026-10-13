@@ -1065,11 +1065,17 @@ export default function ReadingIntakeScreen({
 
   const connectRealtime = useCallback(async (stream: MediaStream) => {
     try {
-      const tokenRes = await fetch("/api/jxl/transcribe/session", { method: "POST" });
-      if (!tokenRes.ok || !askHoldingRef.current) return;
+      const tokenRes = await fetch("/api/reading/transcribe/session", { method: "POST" });
+      if (!tokenRes.ok || !askHoldingRef.current) {
+        if (!tokenRes.ok) console.error("[reading/transcribe] Session request failed:", tokenRes.status);
+        return;
+      }
       const tokenData = await tokenRes.json();
-      const secret = tokenData?.client_secret?.value;
-      if (typeof secret !== "string" || !secret || !askHoldingRef.current) return;
+      const secret = tokenData?.value ?? tokenData?.client_secret?.value;
+      if (typeof secret !== "string" || !secret || !askHoldingRef.current) {
+        console.error("[reading/transcribe] Missing streaming token or hold released");
+        return;
+      }
       const pc = new RTCPeerConnection();
       realtimePeerRef.current = pc;
       const audioTrack = stream.getAudioTracks()[0];
@@ -1098,11 +1104,15 @@ export default function ReadingIntakeScreen({
         method: "POST", headers: {Authorization: `Bearer ${secret}`, "Content-Type":"application/sdp"},
         body: offer.sdp,
       });
-      if (!answerRes.ok || !askHoldingRef.current) { pc.close(); return; }
+      if (!answerRes.ok || !askHoldingRef.current) {
+        if (!answerRes.ok) console.error("[reading/transcribe] WebRTC handshake failed:", answerRes.status);
+        pc.close(); return;
+      }
       await pc.setRemoteDescription({ type: "answer", sdp: await answerRes.text() });
       realtimeReadyRef.current = true;
-    } catch {
-      // Old Whisper endpoint handles failed network/session establishment.
+    } catch (error) {
+      console.error("[reading/transcribe] Streaming connection failed:", error);
+      // Existing Whisper endpoint remains the fallback.
     }
   }, [completeStreaming]);
 
