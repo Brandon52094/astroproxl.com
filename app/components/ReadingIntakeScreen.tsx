@@ -1947,28 +1947,10 @@ export default function ReadingIntakeScreen({
                     transformOrigin: "center center",
                   }}
                 >
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.div
-                      key={voiceVisualActive ? "listening" : `brand-${heroInfoIndex}`}
-                      initial={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: 5, filter: "blur(3px)" }
-                      }
-                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                      exit={
-                        shouldReduceMotion
-                          ? { opacity: 0 }
-                          : { opacity: 0, y: -4, filter: "blur(3px)" }
-                      }
-                      transition={{
-                        duration: shouldReduceMotion ? 0.12 : 0.34,
-                        ease: [0.22, 1, 0.36, 1],
-                      }}
-                      className="absolute inset-0"
-                    >
-                      {voiceVisualActive ? (
-                        /* HERO — waveform-only listening state */
+                  {voiceVisualActive ? (
+                    <div className="absolute inset-0">
+
+
                         <div className="absolute inset-0 flex items-center justify-center px-[30px]">
                           <canvas
                             ref={canvasRef}
@@ -1986,9 +1968,10 @@ export default function ReadingIntakeScreen({
                             </motion.p>
                           ) : null}
                         </div>
-                      ) : (
-                        /* HERO — brand identity + Big Three */
-                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[23px] pb-[18px] text-center">
+                                          </div>
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[23px] pb-[18px] text-center">
+
 
                           <p
                             className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
@@ -2042,48 +2025,57 @@ export default function ReadingIntakeScreen({
                             aria-hidden="true"
                           />
 
-                          {/* Three tap-through information states, keeping the 236px canvas. */}
-                          {heroInfoIndex === 0 ? (
-                            <div className="mt-[15px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
-                              {heroData.personal.map((item) => (
-                                <div key={`brand-${item.role}`} className="flex min-w-0 flex-col items-center text-center">
-                                  <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">{item.role}</span>
-                                  <span className="mt-[4px] max-w-full truncate text-[18px] font-medium leading-none" style={{ color: signAccentColor(item.sign), textShadow: `0 0 12px ${signAccentGlow(item.sign)}` }}>{item.sign}</span>
-                                  <span className="mt-[4px] text-[9px] font-medium tabular-nums text-slate-300/70">{item.degree ?? "—"}</span>
+
+                          <AnimatePresence mode="wait" initial={false}>
+                            <motion.div
+                              key={heroInfoIndex}
+                              initial={shouldReduceMotion ? {opacity:0} : {opacity:0,y:6}}
+                              animate={{opacity:1,y:0}}
+                              exit={shouldReduceMotion ? {opacity:0} : {opacity:0,y:-5}}
+                              transition={{duration:shouldReduceMotion ? 0.1 : 0.28}}
+                              className="absolute inset-x-[14px] top-[119px] bottom-[20px] flex items-center justify-center"
+                            >
+                              {heroInfoIndex === 0 ? (
+                                <div className="grid w-full grid-cols-3 justify-items-center gap-[9px]">
+                                  {heroData.personal.map((item) => (
+                                    <div key={item.role} className="flex h-[86px] w-[86px] flex-col items-center justify-center rounded-full border text-center"
+                                      style={{borderColor:"rgba(203,213,225,0.28)",background:"rgba(15,23,42,0.30)",boxShadow:`0 0 14px ${signAccentGlow(item.sign)}`}}>
+                                      <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-slate-300/70">{item.role}</span>
+                                      <span className="mt-[3px] text-[16px] font-medium leading-none" style={{color:signAccentColor(item.sign)}}>{item.sign}</span>
+                                      <span className="mt-[5px] text-[10px] tabular-nums text-slate-300/72">{item.degree ?? "—"}</span>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                          ) : heroInfoIndex === 1 ? (
-                            <div className="mt-[13px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
-                              {["Sun", "Moon", "Mercury"].map((name) => {
-                                const item = transits.find((p) => p.name?.toLowerCase() === name.toLowerCase());
-                                return <div key={name} className="flex min-w-0 flex-col items-center text-center">
-                                  <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">Current {name}</span>
-                                  <span className="mt-[4px] max-w-full truncate text-[16px] font-medium leading-none" style={{ color: signAccentColor(item?.sign ?? "") }}>{item?.sign ?? "—"}</span>
-                                  <span className="mt-[4px] text-[9px] tabular-nums text-slate-300/70">{item?.degree ?? "—"}</span>
-                                </div>;
-                              })}
-                            </div>
-                          ) : (
-                            <div className="mt-[12px] flex w-full flex-col items-center gap-[8px]">
-                              <p className="text-[9px] uppercase tracking-[0.23em] text-slate-300/65">Your Elemental Blueprint</p>
-                              <div className="grid w-full grid-cols-4 gap-[10px] px-[13px]">
-                                {(["Fire", "Earth", "Air", "Water"] as const).map((element) => {
-                                  const count = natal.filter((p) => SIGN_ELEMENTS[p.sign] === element && ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"].includes(p.name)).length;
-                                  return <div key={element} className="flex flex-col items-center gap-[5px]">
-                                    <div className="flex h-[28px] items-end"><span className="w-[4px] rounded-full" style={{ height: `${Math.max(4,count*5)}px`, background: HERO_ELEMENT_COLORS[element].bar, boxShadow: `0 0 9px ${HERO_ELEMENT_COLORS[element].glow}` }}/></div>
-                                    <span className="text-[8px] text-slate-300/75">{element}</span>
-                                    <span className="text-[9px] text-slate-300/65">{natal.length ? count : "—"}</span>
-                                  </div>;
-                                })}
-                              </div>
-                            </div>
-                          )}
-                          <span className="absolute bottom-[8px] text-[8px] uppercase tracking-[0.18em] text-slate-400/50">Tap for more</span>
-                        </div>
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
+                              ) : heroInfoIndex === 1 ? (
+                                <div className="flex w-full flex-col items-center gap-[14px]">
+                                  <span className="text-[9px] uppercase tracking-[0.2em] text-slate-300/65">Elemental Balance</span>
+                                  <div className="flex w-full items-end justify-evenly px-[22px]">
+                                    {(["Earth","Fire","Water","Air"] as const).map((element) => {
+                                      const count=natal.filter(p=>SIGN_ELEMENTS[p.sign]===element && ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto"].includes(p.name)).length;
+                                      return <div key={element} className="flex flex-col items-center gap-[7px]">
+                                        <div className="flex h-[47px] items-end"><span className="w-[6px] rounded-full" style={{height:`${Math.max(11,count*9)}px`,maxHeight:"47px",background:HERO_ELEMENT_COLORS[element].bar,boxShadow:`0 0 12px ${HERO_ELEMENT_COLORS[element].glow}`}} /></div>
+                                        <span className="text-[9px] font-medium uppercase tracking-[0.12em] text-slate-300/75">{element}</span>
+                                      </div>;
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="grid w-full grid-cols-2 gap-[24px] px-[40px]">
+                                  {(["Sun","Moon"] as const).map((name)=>{
+                                    const item=transits.find(p=>p.name?.toLowerCase()===name.toLowerCase());
+                                    return <div key={name} className="flex flex-col items-center gap-[6px] text-center">
+                                      <span className="text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-300/65">Current {name}</span>
+                                      <span className="text-[20px] leading-tight" style={{color:signAccentColor(item?.sign ?? "")}}>{item?.sign ?? "—"}</span>
+                                      <span className="text-[11px] tabular-nums text-slate-300/70">{item?.degree ?? "—"}</span>
+                                    </div>;
+                                  })}
+                                </div>
+                              )}
+                            </motion.div>
+                          </AnimatePresence>
+                          <span className="absolute bottom-[7px] text-[8px] uppercase tracking-[0.18em] text-slate-400/50">Tap for more</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
