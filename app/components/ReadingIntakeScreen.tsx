@@ -331,8 +331,9 @@ export default function ReadingIntakeScreen({
   const [natal, setNatal] = useState<Placement[]>([]);
   const [transits, setTransits] = useState<Placement[]>([]);
 
-  // The hero is informational only now — no user-facing toggle.
-  // Ask Anything temporarily replaces it with a listening state.
+  // Tap through three information panels; Ask Anything replaces the hero while recording.
+  const [heroInfoIndex, setHeroInfoIndex] = useState(0);
+  const cycleHeroInfo = useCallback(() => setHeroInfoIndex((index) => (index + 1) % 3), []);
   const [heroCompositionScale, setHeroCompositionScale] = useState(1);
   const heroStageRef = useRef<HTMLDivElement | null>(null);
   const [heroSweepActive, setHeroSweepActive] = useState(false);
@@ -1893,6 +1894,16 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
+          {/* Page navigation is separate from the tap-through hero information. */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85"
+            style={{ textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)" }}
+          >
+            Swipe Left To Explore
+          </button>
+
           {/* ── HERO — locked at exactly 236px for every state ── */}
           <section className="mb-[14px] pt-0">
             <div
@@ -1907,14 +1918,18 @@ export default function ReadingIntakeScreen({
               <div
                 ref={heroStageRef}
                 className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
+                onClick={voiceVisualActive ? undefined : cycleHeroInfo}
+                role="button"
+                tabIndex={voiceVisualActive ? -1 : 0}
+                onKeyDown={(e) => { if (!voiceVisualActive && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); cycleHeroInfo(); } }}
                 onContextMenu={(e) => e.preventDefault()}
                 aria-label={
                   voiceVisualActive
                     ? "Ask Anything voice flow is active"
-                    : "Personalized astrological predictions"
+                    : "Tap to change astrological information"
                 }
                 style={{
-                  cursor: "default",
+                  cursor: voiceVisualActive ? "default" : "pointer",
                   opacity: voiceVisualActive ? 1 : selectedArea ? 0.68 : 1,
                   filter: voiceVisualActive
                     ? "brightness(1) saturate(1)"
@@ -1934,7 +1949,7 @@ export default function ReadingIntakeScreen({
                 >
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
-                      key={voiceVisualActive ? "listening" : "brand"}
+                      key={voiceVisualActive ? "listening" : `brand-${heroInfoIndex}`}
                       initial={
                         shouldReduceMotion
                           ? { opacity: 0 }
@@ -2027,35 +2042,44 @@ export default function ReadingIntakeScreen({
                             aria-hidden="true"
                           />
 
-                          {/* Big Three — slightly larger */}
-                          <div className="mt-[15px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
-                            {heroData.personal.map((item) => (
-                              <div
-                                key={`brand-${item.role}`}
-                                className="flex min-w-0 flex-col items-center text-center"
-                              >
-                                <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">
-                                  {item.role}
-                                </span>
-
-                                <span
-                                  className="mt-[4px] max-w-full truncate text-[18px] font-medium leading-none"
-                                  style={{
-                                    color: signAccentColor(item.sign),
-                                    textShadow: `0 0 12px ${signAccentGlow(
-                                      item.sign
-                                    )}`,
-                                  }}
-                                >
-                                  {item.sign}
-                                </span>
-
-                                <span className="mt-[4px] text-[9px] font-medium tabular-nums text-slate-300/70">
-                                  {item.degree ?? "—"}
-                                </span>
+                          {/* Three tap-through information states, keeping the 236px canvas. */}
+                          {heroInfoIndex === 0 ? (
+                            <div className="mt-[15px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                              {heroData.personal.map((item) => (
+                                <div key={`brand-${item.role}`} className="flex min-w-0 flex-col items-center text-center">
+                                  <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">{item.role}</span>
+                                  <span className="mt-[4px] max-w-full truncate text-[18px] font-medium leading-none" style={{ color: signAccentColor(item.sign), textShadow: `0 0 12px ${signAccentGlow(item.sign)}` }}>{item.sign}</span>
+                                  <span className="mt-[4px] text-[9px] font-medium tabular-nums text-slate-300/70">{item.degree ?? "—"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : heroInfoIndex === 1 ? (
+                            <div className="mt-[13px] grid w-full grid-cols-3 gap-[10px] px-[8px]">
+                              {["Sun", "Moon", "Mercury"].map((name) => {
+                                const item = transits.find((p) => p.name?.toLowerCase() === name.toLowerCase());
+                                return <div key={name} className="flex min-w-0 flex-col items-center text-center">
+                                  <span className="text-[8px] font-semibold uppercase tracking-[0.15em] text-slate-400/66">Current {name}</span>
+                                  <span className="mt-[4px] max-w-full truncate text-[16px] font-medium leading-none" style={{ color: signAccentColor(item?.sign ?? "") }}>{item?.sign ?? "—"}</span>
+                                  <span className="mt-[4px] text-[9px] tabular-nums text-slate-300/70">{item?.degree ?? "—"}</span>
+                                </div>;
+                              })}
+                            </div>
+                          ) : (
+                            <div className="mt-[12px] flex w-full flex-col items-center gap-[8px]">
+                              <p className="text-[9px] uppercase tracking-[0.23em] text-slate-300/65">Your Elemental Blueprint</p>
+                              <div className="grid w-full grid-cols-4 gap-[10px] px-[13px]">
+                                {(["Fire", "Earth", "Air", "Water"] as const).map((element) => {
+                                  const count = natal.filter((p) => SIGN_ELEMENTS[p.sign] === element && ["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"].includes(p.name)).length;
+                                  return <div key={element} className="flex flex-col items-center gap-[5px]">
+                                    <div className="flex h-[28px] items-end"><span className="w-[4px] rounded-full" style={{ height: `${Math.max(4,count*5)}px`, background: HERO_ELEMENT_COLORS[element].bar, boxShadow: `0 0 9px ${HERO_ELEMENT_COLORS[element].glow}` }}/></div>
+                                    <span className="text-[8px] text-slate-300/75">{element}</span>
+                                    <span className="text-[9px] text-slate-300/65">{natal.length ? count : "—"}</span>
+                                  </div>;
+                                })}
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          )}
+                          <span className="absolute bottom-[8px] text-[8px] uppercase tracking-[0.18em] text-slate-400/50">Tap for more</span>
                         </div>
                       )}
                     </motion.div>
@@ -2350,7 +2374,7 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
-          <section className="mt-6 border-t border-white/[0.08] pt-5">
+          <section className="mt-6 pt-5">
   <div className="flex w-full items-center justify-center">
     <div className="relative h-[86px] w-[72%] max-w-[304px]">
       <button
