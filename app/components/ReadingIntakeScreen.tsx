@@ -370,6 +370,20 @@ export default function ReadingIntakeScreen({
   const transcriptTimersRef =
     useRef<number[]>([]);
 
+  // Browser live speech recognition is progressive; Whisper remains the fallback.
+  type LiveSpeechResult = { isFinal: boolean; 0: { transcript: string } };
+  type LiveSpeechEvent = { resultIndex: number; results: ArrayLike<LiveSpeechResult> };
+  type LiveSpeechRecognizer = {
+    continuous: boolean; interimResults: boolean; lang: string;
+    onresult: ((event: LiveSpeechEvent) => void) | null;
+    onerror: (() => void) | null;
+    start: () => void; stop: () => void; abort: () => void;
+  };
+  const liveSpeechRef = useRef<LiveSpeechRecognizer | null>(null);
+  const liveTextRef = useRef("");
+  const liveFinalRef = useRef("");
+  const didSubmitVoiceRef = useRef(false);
+
   // Play the glass sweep once on entry, and once again whenever the swipe
   // container marks this panel active after the user returns to it.
   useEffect(() => {
@@ -979,80 +993,17 @@ export default function ReadingIntakeScreen({
 
       setVoiceNavigating(true);
 
-      // Keep the voice experience on screen long enough to hand off cleanly.
-      // The full-screen black veil prevents the intake UI from flashing back
-      // before the Preparing route mounts.
-      window.setTimeout(() => {
-        router.push("/reading/preparing?source=voice");
-      }, shouldReduceMotion ? 80 : 520);
+      router.push("/reading/preparing?source=voice");
     },
     [router, shouldReduceMotion]
   );
 
-  const revealVoiceTranscript = useCallback(
-    (transcript: string) => {
-      const clean = transcript.trim();
-
-      setVoiceTranscript(clean);
-      setVoiceTranscriptPreview("");
-
-      transcriptTimersRef.current.forEach(
-        window.clearTimeout
-      );
-
-      transcriptTimersRef.current = [];
-
-      if (shouldReduceMotion) {
-        setVoiceTranscriptPreview(clean);
-
-        const timer = window.setTimeout(() => {
-          submitAskAnything(clean);
-        }, 450);
-
-        transcriptTimersRef.current.push(timer);
-        return;
-      }
-
-      const words = clean.split(/\s+/);
-
-      // Reveal the finished Whisper transcript in small groups so it
-      // feels alive without pretending we're doing streaming STT.
-      const groups: string[] = [];
-
-      for (let i = 0; i < words.length; i += 3) {
-        groups.push(
-          words.slice(0, i + 3).join(" ")
-        );
-      }
-
-      const totalRevealMs = 900;
-
-      groups.forEach((value, index) => {
-        const delay =
-          groups.length <= 1
-            ? 0
-            : Math.round(
-                (index / (groups.length - 1)) *
-                totalRevealMs
-              );
-
-        const timer = window.setTimeout(() => {
-          setVoiceTranscriptPreview(value);
-        }, delay);
-
-        transcriptTimersRef.current.push(timer);
-      });
-
-      const submitTimer = window.setTimeout(() => {
-        submitAskAnything(clean);
-      }, totalRevealMs + 900);
-
-      transcriptTimersRef.current.push(
-        submitTimer
-      );
-    },
-    [shouldReduceMotion, submitAskAnything]
-  );
+  const revealVoiceTranscript = useCallback((transcript: string) => {
+    const clean = transcript.trim();
+    setVoiceTranscript(clean);
+    setVoiceTranscriptPreview(clean);
+    submitAskAnything(clean);
+  }, [submitAskAnything]);
 
   const transcribeAskAudio = useCallback(
     async (blob: Blob) => {
@@ -1080,7 +1031,10 @@ export default function ReadingIntakeScreen({
           return;
         }
 
-        revealVoiceTranscript(data.text);
+        if (!didSubmitVoiceRef.current) {
+          didSubmitVoiceRef.current = true;
+          revealVoiceTranscript(data.text);
+        }
       } catch {
         setVoiceJourneyActive(false);
         setVoiceNavigating(false);
@@ -1125,6 +1079,41 @@ export default function ReadingIntakeScreen({
       // Clear any previous transcript reveal for the new recording.
       setVoiceTranscript("");
       setVoiceTranscriptPreview("");
+      liveTextRef.current = "";
+      liveFinalRef.current = "";
+      didSubmitVoiceRef.current = false;
+      liveSpeechRef.current?.abort();
+      liveSpeechRef.current = null;
+      // Start real-time browser transcription as soon as recording begins.
+      // Safari/Firefox may not support this; retain Whisper fallback on release.
+      const speechWindow = window as Window & {
+        SpeechRecognition?: new () => LiveSpeechRecognizer;
+        webkitSpeechRecognition?: new () => LiveSpeechRecognizer;
+      };
+      const SpeechCtor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+      if (SpeechCtor) {
+        try {
+          const speech = new SpeechCtor();
+          speech.continuous = true;
+          speech.interimResults = true;
+          speech.lang = document.documentElement.lang || "en-US";
+          speech.onresult = (event) => {
+            let finalized = "";
+            let interim = "";
+            for (let i = 0; i < event.results.length; i++) {
+              const result = event.results[i];
+              if (result.isFinal) finalized += result[0].transcript + " ";
+              else interim += result[0].transcript + " ";
+            }
+            liveFinalRef.current = finalized.trim();
+            liveTextRef.current = `${finalized} ${interim}`.trim();
+            if (askHoldingRef.current) setVoiceTranscriptPreview(liveTextRef.current);
+          };
+          speech.onerror = () => { /* Whisper fallback remains available. */ };
+          speech.start();
+          liveSpeechRef.current = speech;
+        } catch { liveSpeechRef.current = null; }
+      }
 
       transcriptTimersRef.current.forEach(
         window.clearTimeout
@@ -1181,7 +1170,9 @@ export default function ReadingIntakeScreen({
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         audioChunksRef.current = [];
 
-        if (cancelled) return;
+        if (cancelled || didSubmitVoiceRef.current) return;
+        // If live recognition did not yield usable text, preserve the original
+        // Whisper path rather than navigating with a blank or partial question.
         void transcribeAskAudio(blob);
       };
 
@@ -1230,6 +1221,8 @@ export default function ReadingIntakeScreen({
     setAskError(null);
 
     stopAskMeter();
+    liveSpeechRef.current?.abort();
+    liveSpeechRef.current = null;
     stopAskRecorder(true);
     triggerIntakeHaptic();
   }, [stopAskMeter, stopAskRecorder]);
@@ -1255,6 +1248,8 @@ export default function ReadingIntakeScreen({
     setAskHolding(false);
     triggerIntakeHaptic();
     stopAskMeter();
+    liveSpeechRef.current?.stop();
+    liveSpeechRef.current = null;
 
     if (elapsed < ASK_MIN_HOLD_MS) {
       askCancelledRef.current = true;
@@ -1265,8 +1260,17 @@ export default function ReadingIntakeScreen({
       return;
     }
 
-    stopAskRecorder(false);
-  }, [stopAskMeter, stopAskRecorder]);
+    const liveText = (liveFinalRef.current || liveTextRef.current).trim();
+    if (liveText.length >= 2) {
+      didSubmitVoiceRef.current = true;
+      // Save the question and start Preparing on release, without another
+      // staged transcript reveal.
+      submitAskAnything(liveText);
+      stopAskRecorder(true);
+    } else {
+      stopAskRecorder(false);
+    }
+  }, [stopAskMeter, stopAskRecorder, submitAskAnything]);
 
   useEffect(() => {
     return () => {
@@ -1958,6 +1962,12 @@ export default function ReadingIntakeScreen({
                             className="h-[122px] w-[330px] max-w-full"
                             style={{ opacity: askHolding ? 1 : 0.42 }}
                           />
+                          {voiceTranscriptPreview && (
+                            <div aria-live="polite" className="pointer-events-none absolute inset-x-[30px] top-1/2 z-20 -translate-y-1/2 text-center">
+                              <p className="mx-auto max-h-[110px] overflow-hidden text-[18px] leading-[1.4] text-white"
+                                style={{textShadow:"0 2px 16px rgba(0,0,0,0.96)"}}>{voiceTranscriptPreview}</p>
+                            </div>
+                          )}
                           {!askHolding && (isTranscribingAsk || voiceNavigating) ? (
                             <motion.p
                               initial={{ opacity: 0 }}
@@ -1994,7 +2004,7 @@ export default function ReadingIntakeScreen({
                                 "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
                             }}
                           >
-                            Astrology Readings
+                            Astrological Predictions
                           </h1>
 
                           <p
@@ -2080,93 +2090,6 @@ export default function ReadingIntakeScreen({
               </div>
             </div>
           </section>
-
-          {/* ── Voice transcript preview — appears above the reading-choice
-              cards during Ask Anything reveal. Kept separate from the hero so
-              the waveform inside the hero remains untouched. ── */}
-          <AnimatePresence>
-            {voiceVisualActive &&
-              voiceTranscriptPreview && (
-                <motion.div
-                  key="voice-transcript"
-                  initial={{
-                    opacity: 0,
-                    y: 8,
-                    filter: "blur(4px)",
-                  }}
-                  animate={{
-                    opacity: 1,
-                    y: 0,
-                    filter: "blur(0px)",
-                  }}
-                  exit={{
-                    opacity: 0,
-                    y: -10,
-                    filter: "blur(5px)",
-                  }}
-                  transition={{
-                    duration: shouldReduceMotion
-                      ? 0.08
-                      : 0.38,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
-                  className="pointer-events-none relative z-20 mx-auto mb-3 mt-1 w-[88%] max-w-[360px] text-center"
-                >
-                  <div
-                    className="mx-auto max-h-[72px] overflow-hidden px-3"
-                    style={{
-                      WebkitMaskImage:
-                        "linear-gradient(to bottom, transparent 0%, black 18%, black 88%, transparent 100%)",
-                      maskImage:
-                        "linear-gradient(to bottom, transparent 0%, black 18%, black 88%, transparent 100%)",
-                    }}
-                  >
-                    <motion.p
-                      key={voiceTranscriptPreview}
-                      initial={{
-                        opacity: 0.38,
-                        y: 5,
-                      }}
-                      animate={{
-                        opacity: 0.94,
-                        y: 0,
-                      }}
-                      transition={{
-                        duration: shouldReduceMotion
-                          ? 0
-                          : 0.22,
-                      }}
-                      className="line-clamp-3 text-[15px] font-normal leading-[1.55] tracking-[0.01em] text-slate-100/90"
-                      style={{
-                        fontFamily:
-                          'var(--font-display, Georgia, "Times New Roman", serif)',
-                        textShadow:
-                          "0 2px 14px rgba(0,0,0,0.95), 0 0 18px rgba(199,210,254,0.08)",
-                      }}
-                    >
-                      {voiceTranscriptPreview}
-                    </motion.p>
-                  </div>
-
-                  <motion.div
-                    aria-hidden="true"
-                    animate={{
-                      opacity: [0.22, 0.52, 0.22],
-                    }}
-                    transition={{
-                      duration: 1.8,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="mx-auto mt-2 h-px w-12"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, transparent, rgba(226,232,240,0.52), transparent)",
-                    }}
-                  />
-                </motion.div>
-              )}
-          </AnimatePresence>
 
           {/* ── Dynamic reading header ──
               The heading keeps one visual treatment; selection only changes the word. */}
@@ -2342,15 +2265,15 @@ export default function ReadingIntakeScreen({
                 background: "rgba(255,255,255,0.012)",
                 border: canSubmit && !isCreatingReading && beginReadingStyle
                   ? `1px solid ${beginReadingStyle.border}`
-                  : "1px solid rgba(203,213,225,0.16)",
+                  : "1px solid rgba(203,213,225,0.48)",
                 color: canSubmit && !isCreatingReading && beginReadingStyle
                   ? beginReadingStyle.text
-                  : "rgba(203,213,225,0.34)",
-                opacity: canSubmit && !isCreatingReading ? 1 : 0.58,
-                transform: canSubmit && !isCreatingReading ? "scale(1)" : "scale(0.975)",
+                  : "rgba(226,232,240,0.90)",
+                opacity: 1,
+                transform: "scale(1)",
                 boxShadow: canSubmit && !isCreatingReading && beginReadingStyle
                   ? `0 0 0 1px ${beginReadingStyle.ring}, 0 0 18px 2px ${beginReadingStyle.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
-                  : "0 14px 28px rgba(0,0,0,0.56)",
+                  : "0 14px 28px rgba(0,0,0,0.56), 0 0 18px rgba(203,213,225,0.08)",
               }}
             >
               <span
