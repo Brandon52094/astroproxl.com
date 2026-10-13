@@ -1893,7 +1893,14 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          <p className="mb-[12px] text-center text-[10px] font-medium uppercase tracking-[0.28em] text-indigo-200/65">
+          {/* Page discovery hint — visible without competing with the hero. */}
+          <p
+            className="mb-[9px] text-center text-[10px] font-medium uppercase tracking-[0.26em]"
+            style={{
+              color: "rgba(203,213,225,0.88)",
+              textShadow: "0 0 11px rgba(147,197,253,0.32)",
+            }}
+          >
             Swipe left to explore
           </p>
           {/* ── HERO — locked at exactly 236px for every state ── */}
@@ -1914,7 +1921,7 @@ export default function ReadingIntakeScreen({
                 aria-label={
                   voiceVisualActive
                     ? "Ask Anything voice flow is active"
-                    : "Astro Pro XL astrological readings"
+                    : "Astrological readings and your natal Big Three"
                 }
                 style={{
                   cursor: "default",
@@ -1975,56 +1982,58 @@ export default function ReadingIntakeScreen({
                           ) : null}
                         </div>
                       ) : (
-                        /* HERO — identity pill, readings, engine, elemental Big Three */
-                        <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[19px] pb-[12px] text-center">
-                          <div className="rounded-full border border-indigo-300/35 bg-indigo-300/[0.09] px-[19px] py-[7px] shadow-[0_0_18px_rgba(129,140,248,0.12)]">
-                            <span className="text-[12px] font-semibold uppercase tracking-[0.25em] text-indigo-100/90">
-                              Astro Pro XL
-                            </span>
+                        /* HERO — compact brand pill, dominant title, and full Big Three details */
+                        <div className="absolute inset-0 flex flex-col items-center px-[13px] pt-[10px] pb-[10px] text-center">
+                          <div
+                            className="inline-flex h-[25px] items-center justify-center rounded-full border border-indigo-300/45 bg-indigo-300/[0.07] px-[13px] text-[9px] font-medium uppercase tracking-[0.18em] text-indigo-100/90"
+                            style={{ boxShadow: "0 0 13px rgba(129,140,248,0.10)" }}
+                          >
+                            ASTROPROXL
                           </div>
 
                           <h1
-                            className="mt-[12px] whitespace-nowrap text-[31px] font-semibold leading-none tracking-[-0.04em] text-white"
+                            className="mt-[11px] whitespace-nowrap text-[40px] font-semibold leading-[1.04] tracking-[-0.058em] text-white"
                             style={{
-                              textShadow:
-                                "0 5px 6px rgba(0,0,0,0.94), 0 12px 22px rgba(0,0,0,0.75), 0 0 24px rgba(148,163,184,0.17)",
+                              transform: "scaleY(1.06)",
+                              textShadow: "0 4px 6px rgba(0,0,0,.9), 0 11px 22px rgba(0,0,0,.7)",
                             }}
                           >
                             Astrological Readings
                           </h1>
-
-                          <p className="mt-[7px] text-[9px] font-medium uppercase tracking-[0.24em] text-slate-300/65">
+                          <p className="mt-[7px] text-[9px] uppercase tracking-[0.23em] text-slate-300/75">
                             The Astrology Engine
                           </p>
 
-                          {/* Big Three: elemental rings with the signs centered inside. */}
-                          <div className="mt-[24px] grid w-full grid-cols-3 gap-[10px] px-[7px]">
+                          <div className="mt-[17px] grid w-full grid-cols-3 gap-[6px] px-[4px]">
                             {heroData.personal.map((item) => {
                               const element = SIGN_ELEMENTS[item.sign];
-                              const accent = element ? HERO_ELEMENT_COLORS[element] : null;
+                              const hue = element ? HERO_ELEMENT_COLORS[element] : null;
                               return (
-                                <div key={`brand-${item.role}`} className="flex min-w-0 flex-col items-center text-center">
+                                <div key={`brand-${item.role}`} className="flex min-w-0 flex-col items-center">
                                   <div
-                                    className="flex h-[66px] w-[66px] flex-col items-center justify-center rounded-full border-[1.5px]"
+                                    className="flex h-[49px] w-[49px] items-center justify-center rounded-full border-[1.5px] bg-slate-950/20"
                                     style={{
-                                      borderColor: accent?.border ?? "rgba(203,213,225,0.35)",
-                                      background: accent ? `radial-gradient(circle, ${accent.glow}, transparent 75%)` : "rgba(148,163,184,0.06)",
-                                      boxShadow: accent ? `0 0 16px ${accent.glow}, inset 0 0 12px ${accent.glow}` : "none",
+                                      borderColor: hue?.bar ?? "#94a3b8",
+                                      boxShadow: `0 0 14px ${hue?.glow ?? "rgba(148,163,184,0.16)"}, inset 0 0 12px ${hue?.glow ?? "rgba(148,163,184,0.1)"}`,
                                     }}
                                   >
-                                    <span
-                                      className="max-w-[60px] truncate text-[12px] font-semibold leading-tight"
-                                      style={{ color: signAccentColor(item.sign) }}
-                                    >
-                                      {item.sign}
+                                    <span className="text-[27px] leading-none text-slate-100">
+                                      {item.role === "Sun" ? "☉" : item.role === "Moon" ? "☽" : "ASC"}
                                     </span>
                                   </div>
-                                  <span className="mt-[7px] text-[9px] font-medium uppercase tracking-[0.14em] text-slate-300/75">
-                                    {item.role}
-                                  </span>
+                                  <div className="mt-[8px] max-w-full whitespace-nowrap text-[11px] leading-tight text-slate-100/90">
+                                    <span className="font-semibold tabular-nums">{item.degree ?? "—"}</span>{" "}
+                                    {item.sign} {item.role}
+                                  </div>
                                 </div>
                               );
                             })}
+                          </div>
+
+                          <div className="mt-[7px] h-px w-[85%] bg-slate-300/20" aria-hidden="true" />
+                          <div className="mt-[7px] space-y-[2px] text-[10px] text-slate-300/65">
+                            <p>Sun in {transits.find((p) => p.name.toLowerCase() === "sun")?.sign ?? "—"} · Moon in {transits.find((p) => p.name.toLowerCase() === "moon")?.sign ?? "—"}</p>
+                            <p>Mercury in {transits.find((p) => p.name.toLowerCase() === "mercury")?.sign ?? "—"} · Venus in {transits.find((p) => p.name.toLowerCase() === "venus")?.sign ?? "—"}</p>
                           </div>
                         </div>
                       )}
@@ -2320,7 +2329,7 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
-          <section className="mt-6">
+          <section className="mt-6 pt-5">
   <div className="flex w-full items-center justify-center">
     <div className="relative h-[86px] w-[72%] max-w-[304px]">
       <button
