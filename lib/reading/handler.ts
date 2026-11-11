@@ -320,13 +320,14 @@ export async function handleReading(request: NextRequest) {
     console.log("[DEBUG] =============================");
 
     // ── GENERATE READING WITH GPT-5.6 LUNA ──
-    let rawText: string;
+     let rawText: string;
 
     try {
       rawText = await generateOpenAIText({
         system: buildSystemPrompt(topic.system),
         prompt,
         maxTokens: topic.maxTokens ?? 4000,
+        webSearch: true,
       });
     } catch (error) {
       console.error("[readings] OpenAI Luna error:", error);

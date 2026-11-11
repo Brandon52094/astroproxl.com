@@ -2,12 +2,14 @@ type OpenAITextRequest = {
   system: string;
   prompt: string;
   maxTokens?: number;
+  webSearch?: boolean;
 };
 
 export async function generateOpenAIText({
   system,
   prompt,
   maxTokens = 8000, // ── EDIT: Raised default ceiling
+  webSearch = false,
 }: OpenAITextRequest): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -29,6 +31,13 @@ export async function generateOpenAIText({
       // ── EDIT: Reasoning knobs ──
       reasoning: { effort: "medium" },
       text: { verbosity: "high" },
+      // ── EDIT: Optional web search ──
+      ...(webSearch
+        ? {
+            tools: [{ type: "web_search" }],
+            tool_choice: "auto",
+          }
+        : {}),
     }),
   });
 
