@@ -779,77 +779,103 @@ function ReadingDeck({
 
         <main className="reading-flow">
           <section className={`reading-hero ${mounted ? "in" : ""}`} aria-label="Reading overview">
-            <div className="hero-topic">
-              <span className="hero-topic-glow" aria-hidden="true" />
-              <span className="hero-mark" aria-hidden="true">✦</span>
-              <span className="hero-topic-text">{topic}</span>
+            <div className="astral-orbit" aria-hidden="true">
+              <span className="astral-orbit-ring orbit-outer" />
+              <span className="astral-orbit-ring orbit-inner" />
+              <span className="astral-orbit-glyph">✧</span>
+              <span className="astral-point point-one">✦</span>
+              <span className="astral-point point-two">✧</span>
+              <span className="astral-point point-three">✳</span>
             </div>
-
-            <h1 className="focus-heading">
-              {groups.focus || "What the chart is showing now"}
-            </h1>
-
+            <div className="hero-topic">
+              <span className="hero-topic-text">{topic || "Your Reading"}</span>
+            </div>
+            <p className="hero-eyebrow">A reading of your unfolding sky</p>
+            <h1 className="focus-heading">{groups.focus || "What the chart is showing now"}</h1>
             {groups.confirmation && (
               <p className="confirmation-copy">{renderWithDates(groups.confirmation)}</p>
             )}
-
             {groups.prediction && (
               <div className="prediction-block">
-                <p className="reading-section-label">The First Glimpse</p>
+                <div className="prediction-symbol" aria-hidden="true">✦</div>
+                <p className="reading-section-label">The first glimpse</p>
                 <p className="prediction-copy">{renderWithDates(groups.prediction)}</p>
               </div>
             )}
+            <div className="hero-footer" aria-hidden="true"><span>THE STORY IN THE STARS</span><i /></div>
           </section>
 
-          <div className="journey-chapters">
+          <div className="celestial-reading">
             {[
-              { id: "recognition", number: "01", title: "Where You Stand", body: groups.where },
-              { id: "truth", number: "02", title: "What Needs Your Attention", body: groups.why },
-              { id: "shift", number: "03", title: "The Turning Point", body: groups.next },
+              { id: "recognition", number: "01", kicker: "THE PRESENT", title: "Where You Stand", body: groups.where, symbol: "☉" },
+              { id: "truth", number: "02", kicker: "BENEATH THE SURFACE", title: "What Needs Your Attention", body: groups.why, symbol: "☾" },
+              { id: "shift", number: "03", kicker: "THE SHIFT", title: "The Turning Point", body: groups.next, symbol: "✧" },
             ].filter((chapter) => chapter.body).map((chapter) => (
-              <section key={chapter.id} className={`journey-chapter journey-${chapter.id}`} aria-labelledby={`journey-${chapter.id}`}>
-                <span className="journey-number" aria-hidden="true">{chapter.number}</span>
-                <h2 id={`journey-${chapter.id}`} className="journey-title">{chapter.title}</h2>
-                <div className="journey-copy">{renderWithDates(chapter.body)}</div>
+              <section key={chapter.id} className={`celestial-chapter chapter-${chapter.id}`} aria-labelledby={`chapter-${chapter.id}`}>
+                <div className="chapter-axis" aria-hidden="true"><span className="chapter-sigil">{chapter.symbol}</span></div>
+                <div className="chapter-content">
+                  <div className="chapter-meta"><span>{chapter.number} / THE READING</span><span>{chapter.kicker}</span></div>
+                  <h2 id={`chapter-${chapter.id}`} className="chapter-title">{chapter.title}</h2>
+                  <div className="chapter-prose">{renderWithDates(chapter.body)}</div>
+                </div>
               </section>
             ))}
             {groups.fallbackProse.filter(Boolean).length > 0 && (
-              <section className="journey-chapter" aria-label="Reading context">
-                <h2 className="journey-title">Your Reading</h2>
-                {groups.fallbackProse.filter(Boolean).map((body, index) => (
-                  <div key={index} className="journey-copy">{renderWithDates(body)}</div>
-                ))}
+              <section className="celestial-chapter chapter-context" aria-label="Further chart interpretation">
+                <div className="chapter-axis" aria-hidden="true"><span className="chapter-sigil">✶</span></div>
+                <div className="chapter-content">
+                  <div className="chapter-meta"><span>THE INTERPRETATION</span><span>ADDITIONAL CONTEXT</span></div>
+                  <h2 className="chapter-title">A Closer Look</h2>
+                  {groups.fallbackProse.filter(Boolean).map((body, index) => (
+                    <div key={index} className="chapter-prose">{renderWithDates(body)}</div>
+                  ))}
+                </div>
               </section>
             )}
           </div>
 
           {groups.timing.length > 0 && (
-            <section className="journey-chapter journey-timing" aria-labelledby="journey-timing">
-              <span className="journey-number" aria-hidden="true">04</span>
-              <h2 id="journey-timing" className="journey-title">When It Unfolds</h2>
-              <div className="journey-timeline">
+            <section className="cosmic-timing" aria-labelledby="cosmic-timing-heading">
+              <div className="section-constellation" aria-hidden="true">✦ <span>──────</span> ✧ <span>──────</span> ✦</div>
+              <p className="cosmic-overline">04 / THE COSMIC CLOCK</p>
+              <h2 id="cosmic-timing-heading" className="cosmic-heading">When It Unfolds</h2>
+              <p className="cosmic-intro">The moments to watch as this story develops.</p>
+              <div className="cosmic-windows">
                 {groups.timing.map((section, index) => (
-                  <div className="journey-window" key={index}>
-                    {section.date && <p className="journey-date">{section.date}</p>}
-                    <div className="journey-copy">{renderWithDates(section.body)}</div>
+                  <div className="cosmic-window" key={index}>
+                    <div className="window-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
+                    <div>
+                      <p className="window-date">{section.date || `Window ${index + 1}`}</p>
+                      <div className="chapter-prose">{renderWithDates(section.body)}</div>
+                    </div>
                   </div>
                 ))}
               </div>
+              {groups.calendarLabels.length > 0 && (
+                <div className="cosmic-calendar"><ReadingCalendar labels={groups.calendarLabels} /></div>
+              )}
             </section>
           )}
-          {groups.calendarLabels.length > 0 && (
-            <div className="journey-calendar"><ReadingCalendar labels={groups.calendarLabels} /></div>
+          {groups.timing.length === 0 && groups.calendarLabels.length > 0 && (
+            <section className="cosmic-calendar standalone-calendar"><ReadingCalendar labels={groups.calendarLabels} /></section>
           )}
+
           {groups.directives.length > 0 && (
-            <section className="journey-chapter journey-action" aria-labelledby="journey-action">
-              <span className="journey-number" aria-hidden="true">05</span>
-              <h2 id="journey-action" className="journey-title">Your Move</h2>
-              <ol className="journey-actions">
+            <section className="cosmic-action" aria-labelledby="cosmic-action-heading">
+              <div className="action-halo" aria-hidden="true">✶</div>
+              <p className="cosmic-overline">05 / THE PATH FORWARD</p>
+              <h2 id="cosmic-action-heading" className="cosmic-heading">Your Move</h2>
+              <p className="cosmic-intro">Turn insight into intention.</p>
+              <ol className="cosmic-actions">
                 {groups.directives.map((section, index) => (
-                  <li key={index}>
-                    {section.directive !== "GENERAL" && <p className="journey-date">{section.label}</p>}
-                    {section.date && <p className="journey-date">{section.date}</p>}
-                    <div className="journey-copy">{renderWithDates(section.body)}</div>
+                  <li key={index} className="cosmic-action-item">
+                    <span className="action-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                    <div>
+                      {(section.directive !== "GENERAL" || section.date) && (
+                        <p className="action-date">{section.directive !== "GENERAL" ? section.label : "Timing"}{section.date ? ` · ${section.date}` : ""}</p>
+                      )}
+                      <div className="chapter-prose">{renderWithDates(section.body)}</div>
+                    </div>
                   </li>
                 ))}
               </ol>
@@ -2723,6 +2749,120 @@ const css = `
   @media (prefers-reduced-motion: reduce) {
     .reading-results .journey-chapters, .reading-results .journey-chapter, .reading-results .journey-calendar { transition: none; }
   }
+
+  /* ASTROPROXL — unified celestial reading design system (v2) */
+  .reading-results {
+    --sky-ink: #070b1b;
+    --sky-panel: rgba(16,25,46,.76);
+    --sky-line: rgba(186,205,236,.17);
+    --sky-silver: #d8e5fa;
+    --sky-muted: #aab9d0;
+    --sky-gold: #d9c59a;
+    --sky-mint: #9ac9c5;
+  }
+  .reading-results .scroll-content {
+    background:
+      radial-gradient(ellipse 80% 12% at 50% 3%, rgba(42,71,117,.27), transparent 80%),
+      radial-gradient(ellipse 60% 18% at 50% 50%, rgba(34,40,86,.17), transparent 85%),
+      linear-gradient(180deg,#080f25 0%,#070c1c 31%,#060918 62%,#03050e 88%,#020309 100%);
+  }
+  .reading-results .reading-flow { width: min(100%, 800px); max-width: 800px; padding: 0 24px 90px; }
+  .reading-results .reading-hero { position: relative; min-height: 91dvh; padding: 118px 0 105px; text-align: center; align-items: center; }
+  .reading-results .astral-orbit { position: relative; width: 174px; height: 174px; display: grid; place-items: center; margin: 0 auto 22px; }
+  .reading-results .astral-orbit::before { content: ''; position:absolute; inset: 12%; border-radius: 50%; background: radial-gradient(circle,rgba(144,180,234,.16),rgba(91,123,179,.04) 55%,transparent 72%); filter: blur(8px); }
+  .reading-results .astral-orbit-ring { position: absolute; inset: 8px; border: 1px solid rgba(184,204,236,.22); border-radius: 50%; transform: rotate(-23deg) scaleY(.65); }
+  .reading-results .astral-orbit-ring.orbit-inner { inset: 27px; border-color: rgba(217,197,154,.34); transform: rotate(48deg) scaleY(.77); }
+  .reading-results .astral-orbit-glyph { color: #d9e6ff; font: 64px Georgia,serif; text-shadow: 0 0 36px rgba(169,202,255,.62); }
+  .reading-results .astral-point { position:absolute; color:#e4d7b6; font-size: 15px; }
+  .reading-results .point-one { top: 26px; right: 19px; }
+  .reading-results .point-two { bottom: 21px; left: 26px; }
+  .reading-results .point-three { top: 54px; left: 8px; font-size: 10px; }
+  .reading-results .hero-topic { margin: 0 0 17px; padding:0; font: 600 11px/1.4 ui-sans-serif,system-ui; letter-spacing:.3em; color: var(--sky-gold); text-shadow:none; }
+  .reading-results .hero-eyebrow { font: 11px/1.5 ui-sans-serif,system-ui; letter-spacing:.12em; color:#8da4c3; margin:0 0 22px; }
+  .reading-results .focus-heading { max-width: 640px; margin:0 auto; font-size:clamp(36px,6.6vw,62px); font-weight:400; line-height:1.13; letter-spacing:-.035em; }
+  .reading-results .focus-heading::after { margin-top:27px; background:linear-gradient(90deg,transparent,var(--sky-gold),transparent); }
+  .reading-results .confirmation-copy { max-width:550px; margin-top:26px; text-align:center; font: 17px/1.85 Georgia,serif; color:#bcc9dc; }
+  .reading-results .prediction-block { position:relative; width:100%; max-width:570px; text-align:left; margin:49px auto 0; padding:31px 32px 29px; border: 1px solid rgba(200,211,231,.19); border-radius: 22px; background:linear-gradient(145deg,rgba(33,45,75,.52),rgba(12,21,41,.52)); box-shadow: 0 20px 65px rgba(0,0,0,.15),inset 0 1px rgba(255,255,255,.05); }
+  .reading-results .prediction-symbol { position:absolute; top:-17px; left:28px; display:grid;place-items:center; width:34px;height:34px; border:1px solid rgba(218,197,151,.45); background:#121a30; color:var(--sky-gold); border-radius:50%; }
+  .reading-results .prediction-block .reading-section-label { color:var(--sky-gold); font-size:10px; letter-spacing:.22em; }
+  .reading-results .prediction-copy { font: 18px/1.8 Georgia,serif; color:#e5eaf4; margin-top:12px; text-align:left; }
+  .reading-results .hero-footer { display:flex; align-items:center; flex-direction:column; gap:17px; margin-top:56px; font:9px ui-sans-serif,system-ui; letter-spacing:.28em; color:#7d94b4; }
+  .reading-results .hero-footer i { width:1px;height:45px;background:linear-gradient(var(--sky-gold),transparent); }
+
+  .reading-results .celestial-reading { max-width:690px; position:relative; margin:0 auto; padding: 15px 0 35px; }
+  .reading-results .celestial-reading::before { content:""; position:absolute; left:29px; top:44px; bottom:60px; width:1px; background:linear-gradient(180deg,transparent,rgba(184,208,235,.27) 7%,rgba(184,208,235,.19) 87%,transparent); }
+  .reading-results .celestial-chapter { display:grid;grid-template-columns:60px minmax(0,1fr);gap:21px;position:relative;padding:28px 0 52px; }
+  .reading-results .chapter-axis { display:flex; justify-content:center; padding-top:13px;z-index:1; }
+  .reading-results .chapter-sigil { display:grid;place-items:center; width:45px;height:45px; border-radius:50%; border:1px solid rgba(185,205,235,.3); background:radial-gradient(circle at 40% 35%,#1e304d,#091124 75%); box-shadow:0 0 0 7px #080e20,0 0 25px rgba(110,145,198,.13); color:#d6e3fa; font:24px Georgia,serif; }
+  .reading-results .chapter-content { position:relative; min-width:0; border:1px solid var(--sky-line); border-radius:20px; background:linear-gradient(145deg,rgba(24,36,64,.48),rgba(10,17,34,.58)); padding:31px 32px 35px; box-shadow:inset 0 1px rgba(255,255,255,.035); }
+  .reading-results .chapter-meta { display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;color:#91a9c8;font:600 10px/1.5 ui-sans-serif,system-ui;letter-spacing:.13em; }
+  .reading-results .chapter-meta span:last-child { color:var(--sky-gold); }
+  .reading-results .chapter-title { margin:21px 0 22px; font:400 clamp(28px,4.5vw,37px)/1.18 Georgia,serif;letter-spacing:-.03em;color:#f2f5fa; }
+  .reading-results .chapter-prose { font:17px/1.86 Georgia,serif; color:#c8d4e6; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .reading-results .chapter-prose + .chapter-prose { margin-top:20px; }
+  .reading-results .chapter-truth .chapter-content { border-color:rgba(202,167,149,.31);background:linear-gradient(145deg,rgba(60,37,48,.44),rgba(20,20,35,.67)); }
+  .reading-results .chapter-truth .chapter-sigil { color:#e3c3b5;border-color:rgba(219,174,151,.43);background:radial-gradient(circle at 35% 30%,#42303f,#141525 80%); }
+  .reading-results .chapter-truth .chapter-meta span:last-child { color:#deb8a7; }
+  .reading-results .chapter-shift .chapter-content { border-color:rgba(156,207,202,.28);background:linear-gradient(145deg,rgba(23,61,69,.37),rgba(10,25,41,.61)); }
+  .reading-results .chapter-shift .chapter-sigil { color:#b7e8e0; border-color:rgba(156,207,202,.45); }
+  .reading-results .chapter-shift .chapter-meta span:last-child { color:var(--sky-mint); }
+
+  .reading-results .cosmic-timing, .reading-results .cosmic-action { max-width:630px;margin:45px auto 0;padding:51px 43px 44px;border:1px solid var(--sky-line);border-radius:28px;background:linear-gradient(165deg,rgba(24,35,62,.68),rgba(9,15,31,.73));box-shadow:0 24px 75px rgba(0,0,0,.19); }
+  .reading-results .section-constellation { text-align:center; color:var(--sky-gold); font:18px Georgia,serif; letter-spacing:.14em;margin-bottom:27px; }
+  .reading-results .section-constellation span { font-size:9px; vertical-align:middle;opacity:.5; }
+  .reading-results .cosmic-overline { margin:0; text-align:center; color:var(--sky-gold); font:600 10px ui-sans-serif,system-ui;letter-spacing:.24em; }
+  .reading-results .cosmic-heading { margin:14px 0 10px;text-align:center;color:#f4f4fa;font:400 clamp(31px,5vw,41px)/1.2 Georgia,serif;letter-spacing:-.03em; }
+  .reading-results .cosmic-intro { margin:0 auto 38px;text-align:center;color:var(--sky-muted);font:15px/1.65 Georgia,serif; }
+  .reading-results .cosmic-windows { margin-top:32px; border-top:1px solid var(--sky-line); }
+  .reading-results .cosmic-window { display:grid;grid-template-columns:43px 1fr;gap:18px;padding:26px 0;border-bottom:1px solid var(--sky-line); }
+  .reading-results .window-index { font:14px Georgia,serif;color:#7e9cbb;padding-top:2px; }
+  .reading-results .window-date { margin:0 0 12px;color:#e0cfac;font:600 12px/1.5 ui-sans-serif,system-ui;letter-spacing:.12em; }
+  .reading-results .cosmic-calendar { margin-top:36px; }
+  .reading-results .cosmic-calendar .reading-calendar { max-width:100%; }
+  .reading-results .calendar-surface { border-radius:18px; background:rgba(4,10,25,.58); box-shadow:none; }
+  .reading-results .standalone-calendar { max-width:560px;margin:48px auto; }
+  .reading-results .cosmic-action { position:relative;margin-top:32px;background:linear-gradient(160deg,rgba(26,48,60,.61),rgba(9,20,35,.78));border-color:rgba(161,206,206,.24);overflow:hidden; }
+  .reading-results .action-halo { position:absolute;top:-88px;right:-55px;color:rgba(177,226,224,.09);font:270px Georgia,serif;pointer-events:none; }
+  .reading-results .cosmic-actions { padding:0;margin:0;list-style:none;position:relative; }
+  .reading-results .cosmic-action-item { display:grid;grid-template-columns:42px 1fr;gap:18px;padding:24px 0;border-top:1px solid var(--sky-line); }
+  .reading-results .action-index { width:32px;height:32px;border:1px solid rgba(159,199,201,.34);border-radius:50%;display:grid;place-items:center;color:#beddd8;font:12px Georgia,serif; }
+  .reading-results .action-date { margin:0 0 10px;color:#afd7d1;font:600 11px/1.6 ui-sans-serif,system-ui;letter-spacing:.1em;text-transform:uppercase; }
+  .reading-results .reading-ending { max-width:630px; margin:40px auto 0; }
+  .reading-results .bottom-line-wrap { margin:0 auto;padding:70px 25px 60px;border-top:1px solid rgba(210,197,158,.28);background:radial-gradient(ellipse at 50% 40%,rgba(147,172,203,.10),transparent 70%); }
+  .reading-results .bottom-line-label { color:var(--sky-gold); }
+  .reading-results .post-closing { margin-top:15px;padding:0 12px; }
+  .reading-results .sources-wrap { border-color:var(--sky-line); }
+  .reading-results .followup-input { background:rgba(12,20,38,.75); border-color:rgba(156,190,210,.28); }
+  .reading-results .followup-input:focus { border-color:#9bc8ca; box-shadow:0 0 22px rgba(156,200,205,.12); }
+  .reading-results.bottom-line-focus .scroll-content::before { opacity:0; }
+  .reading-results.bottom-line-focus .celestial-reading,
+  .reading-results.bottom-line-focus .cosmic-timing,
+  .reading-results.bottom-line-focus .cosmic-action,
+  .reading-results.bottom-line-focus .post-closing,
+  .reading-results.bottom-line-focus .end-actions { opacity:1;filter:none;pointer-events:auto; }
+  @media (max-width:580px) {
+    .reading-results .reading-flow { padding-inline:17px; }
+    .reading-results .reading-hero { min-height:88dvh; padding-top:70px; padding-bottom:75px; }
+    .reading-results .astral-orbit { width:140px;height:140px; }
+    .reading-results .astral-orbit-glyph {font-size:54px;}
+    .reading-results .prediction-block { padding:29px 22px 24px; }
+    .reading-results .celestial-reading::before { left:19px; }
+    .reading-results .celestial-chapter {grid-template-columns:40px minmax(0,1fr);gap:10px;padding-bottom:30px;}
+    .reading-results .chapter-axis {padding-top:9px;}
+    .reading-results .chapter-sigil {width:35px;height:35px;font-size:19px;box-shadow:0 0 0 5px #080e20;}
+    .reading-results .chapter-content { padding:24px 19px 27px; border-radius:17px; }
+    .reading-results .chapter-meta { font-size:9px; }
+    .reading-results .chapter-title {margin:18px 0;font-size:28px;}
+    .reading-results .chapter-prose {font-size:16px;line-height:1.8;}
+    .reading-results .cosmic-timing,.reading-results .cosmic-action {padding:37px 20px 32px;border-radius:21px;}
+    .reading-results .cosmic-window,.reading-results .cosmic-action-item {grid-template-columns:30px minmax(0,1fr);gap:12px;}
+    .reading-results .window-index {font-size:12px;}
+    .reading-results .bottom-line-wrap {margin-inline:0;padding-inline:14px;}
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reading-results .reading-hero {opacity:1;transform:none;}
+  }
+
 `;
 
 
