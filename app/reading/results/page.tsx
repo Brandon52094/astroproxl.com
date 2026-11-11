@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -895,6 +896,13 @@ function ReadingDeck({
             </FadeIn>
           </section>
 
+          {groups.calendarLabels.length > 0 && (
+            <>
+              <div className="reading-separator" aria-hidden="true" />
+              <ReadingCalendar labels={groups.calendarLabels} />
+            </>
+          )}
+
           {groups.directives.length > 0 && (
             <>
               <div className="reading-separator" aria-hidden="true" />
@@ -914,13 +922,6 @@ function ReadingDeck({
                   </div>
                 </FadeIn>
               </section>
-            </>
-          )}
-
-          {groups.calendarLabels.length > 0 && (
-            <>
-              <div className="reading-separator" aria-hidden="true" />
-              <ReadingCalendar labels={groups.calendarLabels} />
             </>
           )}
 
@@ -2758,3 +2759,5 @@ const css = `
   }
 
 `;
+
+

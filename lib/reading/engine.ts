@@ -1,3 +1,4 @@
+
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import type { TransitAspect } from "@/lib/transitAspects";
 import type {
@@ -406,7 +407,19 @@ export function buildReadingPrompt(
     "Prioritize outcomes, manifestations, timing, and useful specifics.",
     "Astrological explanation exists to support the prediction, not overwhelm it.",
     "Do not use five sentences when two communicate the same information.",
-    "Every paragraph must add new predictive value.",
+    "Every paragraph must add a distinct insight, emotional understanding, supported development, or useful direction; do not repeat the opening answer.",
+    ""
+  );
+
+  sections.push(
+    "EMOTIONAL STORY ARC — INTERNAL DELIVERY GUIDANCE ONLY",
+    "Shape one connected reading: recognition and a brief answer, understanding, honest confrontation, a believable turning point, timing and direction, then resolution.",
+    "Use these chakra-inspired undertones flexibly and invisibly: Root/fear brings grounding; Sacral/guilt allows feelings and desires; Solar Plexus/shame preserves dignity while confronting a challenge; Heart/grief makes room for compassion and acceptance; Throat/truth supports honest acknowledgment and action; Third Eye/illusion brings perspective and timing; Crown/attachment integrates the answer without promising one guaranteed outcome.",
+    "Never mention chakras, release stages, or this framework in the reading. Do not assume the user feels guilt, shame, grief, fear, or attachment. Use only undertones that fit their actual question and evidence; let them overlap naturally.",
+    "The serious moment must arise from a supported constraint, tension, tradeoff, or consequence. Never invent danger, blame, or distress for engagement. A gentle question may need only a gentle acknowledgment of uncertainty.",
+    "Bridge the difficult truth into a realistic opening, choice, boundary, or acceptance. Do not force a happy ending or imply that the user controls other people or every outcome.",
+    "Give a useful answer at the beginning; sustain interest through deeper understanding rather than withholding essential information or using cliffhangers.",
+    "This arc shapes delivery only. It must not change chart evidence or manufacture predictions to fit a story. SignVoice continues to govern voice and wording.",
     ""
   );
 
@@ -432,8 +445,8 @@ export function buildReadingPrompt(
     "",
 
     "Part 2: The Prediction",
-    "Give the strongest answer and prediction immediately.",
-    "Keep this to 2-4 sentences.",
+    "Give a brief, meaningful glimpse of the strongest answer immediately; develop its implications and turning point in Context.",
+    "Keep this opening glimpse to 1-2 sentences, without teasing or withholding the direct answer.",
     "Prediction first. Include only context that materially sharpens the outcome.",
     "Do not repeat the Confirmation.",
     "Do not open with chart mechanics.",
@@ -442,13 +455,13 @@ export function buildReadingPrompt(
     "Part 3: Where You Are Now",
     "Keep this tight: normally 2-3 sentences, maximum 4.",
     "State only the present condition, pressure, momentum, transition, or turning point that directly matters to the prediction.",
-    "Get to the useful part immediately.",
+    "Recognize the feelings or desires the user actually expressed; make the present situation understandable without assigning them an invented emotional state.",
     "Do not summarize the whole chart and do not repeat Parts 1-2.",
     "",
 
     "Part 4: Why This Is Happening",
     "Keep this tight: normally 2-3 sentences, maximum 4.",
-    "Explain only the strongest astrological reason this is happening now.",
+    "Explain the strongest astrological reason this is happening now, then name the supported serious pressure, limitation, tradeoff, or consequence. Confront the situation without shaming the person; do not force darkness where none is supported.",
     "Synthesize the astrology rather than listing techniques one by one.",
     "Mention only evidence that materially explains the situation.",
     "Do not turn this into an astrology lesson.",
@@ -458,7 +471,7 @@ export function buildReadingPrompt(
     "Keep this tight: normally 2-3 sentences, maximum 4.",
     `Translate the astrology into the ${topic.label.toLowerCase()} area concretely.`,
     "State the strongest next real-life development, shift, manifestation, consequence, or turning point.",
-    "Prioritize what happens over explaining why.",
+    "Develop the fuller answer and turning point: connect the difficulty just named to a plausible next development and the opening, choice, or acceptance it creates. Acknowledge hurt when relevant, without promising relief or inventing a positive reversal.",
     "Do not list generic scenarios or multiple weak possibilities.",
     "",
 
@@ -469,7 +482,8 @@ export function buildReadingPrompt(
     "Always include the 4-digit year inside the marker so the Reading Results calendar can place it correctly.",
     "For each window: marker first, then 1-2 sentences stating what is likely to happen and why that period matters.",
     "Use only timing that is actually supported by supplied calculated astrology.",
-    "Do not repeat the full explanation from Part 4.",
+    "Help the reader see the broader sequence of developments without repeating Part 4. The UI places its calendar after these windows and before Your Move.",
+    "If no supported timing is available, retain this header and explain the timing uncertainty briefly without inventing a date marker.",
     "If the strongest timing is broader than a single day, use a supported calendar range when appropriate rather than inventing false precision.",
     "",
 
@@ -478,7 +492,7 @@ export function buildReadingPrompt(
     "Each directive should stand on its own cleanly so the Reading Results UI can display it as a context card.",
     "If an action is specifically tied to one of the approved dated windows, you may repeat that same [[DATE: ...]] marker.",
     "Otherwise leave the directive undated.",
-    "No generic self-help filler.",
+    "Translate the turning point into honest acknowledgment, communication, boundaries, or practical action relevant to this question. Distinguish what the user can influence from what remains outside their control. No generic self-help filler.",
     "",
 
     "Part 8: Bottom Line",
@@ -486,7 +500,7 @@ export function buildReadingPrompt(
     "Keep this to 1-3 sentences.",
     "Do not introduce a brand-new major prediction.",
     "Do not ask the user a follow-up question.",
-    "This is the final statement of the reading and should feel complete.",
+    "Return to the opening glimpse with fuller meaning. Integrate the challenge, central insight, and available agency into a complete close; leave room for uncertainty and avoid making peace depend on one exact outcome.",
     ""
   );
 
@@ -521,3 +535,5 @@ export function buildReadingPrompt(
 
   return sections.join("\n");
 }
+
+
