@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
@@ -479,17 +480,33 @@ export default function PagerContainer() {
 
   return (
     <div
-      className="fixed inset-x-0 top-0 w-full min-w-0 max-w-full overflow-hidden text-slate-100"
+      className="astro-pager fixed inset-0 w-full min-w-0 max-w-full overflow-hidden text-slate-100"
       ref={containerRef}
       style={{
-        background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
-        height: "100dvh",
-        minHeight: "100dvh",
+        background: "radial-gradient(ellipse 80% 12% at 50% 3%, rgba(42,71,117,.27), transparent 80%), linear-gradient(180deg, #080f25, #070c1c 31%, #060918 62%, #020309)",
+        isolation: "isolate",
         boxSizing: "border-box",
       }}
     >
       <style jsx>{`
+        .astro-pager {
+          /* Fallback first; dynamic viewport sizing when available. */
+          height: 100vh;
+          min-height: 100vh;
+          height: 100dvh;
+          min-height: 100dvh;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          border-radius: 0;
+        }
         .pager-panel {
+          /* The sky reaches the edges; only scrollable content is inset. */
+          box-sizing: border-box;
+          padding-top: env(safe-area-inset-top, 0px);
+          padding-right: env(safe-area-inset-right, 0px);
+          padding-bottom: env(safe-area-inset-bottom, 0px);
+          padding-left: env(safe-area-inset-left, 0px);
           -ms-overflow-style: none;
           scrollbar-width: none;
         }
@@ -505,16 +522,7 @@ export default function PagerContainer() {
         className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         aria-hidden="true"
       >
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%), " +
-              "radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%), " +
-              "radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%)",
-          }}
-        />
-              <StarfieldBackground />
+        <StarfieldBackground />
     </div>
 
     {/* APP / PAGER CONTENT */}
@@ -573,15 +581,10 @@ export default function PagerContainer() {
       </div>
     </div>
 
-    {/*
-<div
-  className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
-  aria-hidden="true"
->
-  <StarfieldForeground />
-</div>
-*/}
+
 
 </div>
 );
 }
+
+

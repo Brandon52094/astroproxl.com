@@ -1,321 +1,135 @@
+
 "use client";
 
 import React, { useEffect, useRef } from "react";
 
+/** Transparent sky layer. Its positioned parent owns viewport sizing. */
 export default function StarfieldBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    type Star = {
-      x: number;
-      y: number;
-      r: number;
-      a: number;
-    };
-
-    type TStar = {
-      x: number;
-      y: number;
-      r: number;
-      ph: number;
-      sp: number;
-    };
-
-    type CStar = {
-      x: number;
-      y: number;
-      r: number;
-    };
-
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-
-    const viewportSize = () => {
-      const vv = window.visualViewport;
-
-      const width = Math.max(
-        window.innerWidth,
-        document.documentElement.clientWidth,
-        vv?.width ?? 0
-      );
-
-      /*
-       * Use the visible viewport's lower edge rather than only its height.
-       * On iOS Safari, visualViewport.offsetTop can be non-zero.
-       */
-      const visibleBottom = vv
-        ? vv.offsetTop + vv.height
-        : window.innerHeight;
-
-      const height = Math.max(
-        window.innerHeight,
-        document.documentElement.clientHeight,
-        visibleBottom
-      );
-
-      return { width, height };
-    };
-
-    const staticStars: Star[] = Array.from({ length: 52 }, () => ({
-      x: Math.random(),
-      y: Math.random(),
-      r: Math.random() * 1.05 + 0.3,
-      a: Math.random() * 0.48 + 0.22,
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const stars = Array.from({ length: 52 }, () => ({
+      x: Math.random(), y: Math.random(),
+      r: Math.random() * 1.05 + 0.3, a: Math.random() * 0.48 + 0.22,
+    }));
+    const twinkles = Array.from({ length: 28 }, () => ({
+      x: Math.random(), y: Math.random(), r: Math.random() * 1.05 + 0.4,
+      phase: Math.random() * Math.PI * 2,
+      speed: (Math.random() * 0.018 + 0.006) * 30,
+    }));
+    const constellation = Array.from({ length: 10 }, () => ({
+      x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.65,
     }));
 
-    const twink: TStar[] = Array.from({ length: 28 }, () => ({
-      x: Math.random(),
-      y: Math.random(),
-      r: Math.random() * 1.05 + 0.4,
-      ph: Math.random() * Math.PI * 2,
-      sp: Math.random() * 0.018 + 0.006,
-    }));
-
-    const con: CStar[] = Array.from({ length: 10 }, () => ({
-      x: Math.random(),
-      y: Math.random(),
-      r: Math.random() * 1.1 + 0.65,
-    }));
-
-    const resize = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-
-      const { width, height } = viewportSize();
-
-      /*
-       * Size both the CSS canvas and its actual drawing buffer.
-       * This prevents the starfield from inheriting a short parent height.
-       */
-      canvas.style.width = `${Math.ceil(width)}px`;
-      canvas.style.height = `${Math.ceil(height)}px`;
-
-      canvas.width = Math.max(
-        1,
-        Math.round(width * dpr)
-      );
-
-      canvas.height = Math.max(
-        1,
-        Math.round(height * dpr)
-      );
-
-      ctx.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-      );
-    };
-
-    resize();
-
-    window.addEventListener("resize", resize);
-    window.addEventListener("orientationchange", resize);
-
-    window.visualViewport?.addEventListener(
-      "resize",
-      resize
-    );
-
-    window.visualViewport?.addEventListener(
-      "scroll",
-      resize
-    );
-
+    let width = 0;
+    let height = 0;
+    let dpr = 0;
     let raf = 0;
-    let running = true;
-    let lastFrame = 0;
-
+    let previousTime = 0;
+    let elapsed = 0;
+    let disposed = false;
     const frameInterval = 1000 / 30;
 
-    const draw = (now: number) => {
-      if (!running) return;
+    const dot = (x: number, y: number, radius: number, color: string) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x * width, y * height, radius, 0, Math.PI * 2);
+      ctx.fill();
+    };
 
-      raf = requestAnimationFrame(draw);
-
-      if (now - lastFrame < frameInterval) {
-        return;
+    const paint = () => {
+      ctx.clearRect(0, 0, width, height);
+      for (const star of stars) {
+        dot(star.x, star.y, star.r, `rgba(219,234,254,${star.a})`);
       }
-
-      lastFrame =
-        now -
-        ((now - lastFrame) % frameInterval);
-
-      const { width: w, height: h } =
-        viewportSize();
-
-      ctx.clearRect(0, 0, w, h);
-
-      /* Static stars */
-      for (const star of staticStars) {
-        ctx.fillStyle =
-          `rgba(219,234,254,${star.a})`;
-
-        ctx.beginPath();
-
-        ctx.arc(
-          star.x * w,
-          star.y * h,
-          star.r,
-          0,
-          Math.PI * 2
-        );
-
-        ctx.fill();
-      }
-
-      /* Ambient constellation/network */
-      for (let i = 0; i < con.length; i++) {
-        for (
-          let j = i + 1;
-          j < con.length;
-          j++
-        ) {
-          const a = con[i];
-          const b = con[j];
-
-          const dx =
-            (a.x - b.x) * w;
-
-          const dy =
-            (a.y - b.y) * h;
-
-          const distance =
-            Math.sqrt(dx * dx + dy * dy);
-
-          if (distance < 80) {
-            ctx.strokeStyle =
-              `rgba(
-                147,
-                197,
-                253,
-                ${0.18 * (1 - distance / 80)}
-              )`;
-
-            ctx.lineWidth = 0.6;
-
-            ctx.beginPath();
-
-            ctx.moveTo(
-              a.x * w,
-              a.y * h
-            );
-
-            ctx.lineTo(
-              b.x * w,
-              b.y * h
-            );
-
-            ctx.stroke();
-          }
+      for (let i = 0; i < constellation.length; i++) {
+        const a = constellation[i];
+        for (let j = i + 1; j < constellation.length; j++) {
+          const b = constellation[j];
+          const distance = Math.hypot((a.x - b.x) * width, (a.y - b.y) * height);
+          if (distance >= 80) continue;
+          ctx.strokeStyle = `rgba(147,197,253,${0.18 * (1 - distance / 80)})`;
+          ctx.lineWidth = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(a.x * width, a.y * height);
+          ctx.lineTo(b.x * width, b.y * height);
+          ctx.stroke();
         }
       }
-
-      for (const star of con) {
-        ctx.fillStyle =
-          "rgba(191,219,254,0.72)";
-
-        ctx.beginPath();
-
-        ctx.arc(
-          star.x * w,
-          star.y * h,
-          star.r,
-          0,
-          Math.PI * 2
-        );
-
-        ctx.fill();
+      for (const star of constellation) {
+        dot(star.x, star.y, star.r, "rgba(191,219,254,0.72)");
       }
-
-      /* Twinkle layer */
-      for (const star of twink) {
-        star.ph += star.sp;
-
-        const twinkle =
-          (Math.sin(star.ph) + 1) / 2;
-
-        ctx.fillStyle =
-          `rgba(
-            226,
-            232,
-            240,
-            ${0.18 + twinkle * 0.52}
-          )`;
-
-        ctx.beginPath();
-
-        ctx.arc(
-          star.x * w,
-          star.y * h,
-          star.r *
-            (0.76 + twinkle * 0.28),
-          0,
-          Math.PI * 2
-        );
-
-        ctx.fill();
+      for (const star of twinkles) {
+        const glow = (Math.sin(star.phase + elapsed * star.speed) + 1) / 2;
+        dot(star.x, star.y, star.r * (0.76 + glow * 0.28),
+          `rgba(226,232,240,${0.18 + glow * 0.52})`);
       }
     };
 
-    const handleVisibility = () => {
-      if (document.hidden) {
-        running = false;
-        cancelAnimationFrame(raf);
-        return;
-      }
-
-      if (!running) {
-        running = true;
-        lastFrame = 0;
-        resize();
-        raf = requestAnimationFrame(draw);
-      }
+    const resize = () => {
+      if (disposed) return;
+      // Measure the CSS box, not the document: the pager already handles iOS sizing.
+      const box = canvas.getBoundingClientRect();
+      const nextWidth = box.width;
+      const nextHeight = box.height;
+      const nextDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      if (nextWidth <= 0 || nextHeight <= 0) return;
+      if (width === nextWidth && height === nextHeight && dpr === nextDpr) return;
+      width = nextWidth;
+      height = nextHeight;
+      dpr = nextDpr;
+      canvas.width = Math.max(1, Math.round(width * dpr));
+      canvas.height = Math.max(1, Math.round(height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paint(); // Redraw immediately after clearing the drawing buffer.
     };
 
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibility
-    );
+    const frame = (now: number) => {
+      raf = 0;
+      if (disposed || document.hidden || motion.matches) return;
+      if (!previousTime) previousTime = now;
+      const delta = now - previousTime;
+      if (delta >= frameInterval) {
+        elapsed += delta / 1000;
+        previousTime = now;
+        paint();
+      }
+      raf = requestAnimationFrame(frame);
+    };
 
-    raf = requestAnimationFrame(draw);
+    const syncAnimation = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      previousTime = 0;
+      if (disposed || document.hidden) return;
+      resize();
+      paint();
+      // Reduced-motion users still see the complete sky, without twinkling.
+      if (!motion.matches) raf = requestAnimationFrame(frame);
+    };
+
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+    window.addEventListener("resize", resize);
+    window.addEventListener("pageshow", syncAnimation);
+    document.addEventListener("visibilitychange", syncAnimation);
+    motion.addEventListener("change", syncAnimation);
+    syncAnimation();
 
     return () => {
-      running = false;
-
+      disposed = true;
       cancelAnimationFrame(raf);
-
-      window.removeEventListener(
-        "resize",
-        resize
-      );
-
-      window.removeEventListener(
-        "orientationchange",
-        resize
-      );
-
-      window.visualViewport?.removeEventListener(
-        "resize",
-        resize
-      );
-
-      window.visualViewport?.removeEventListener(
-        "scroll",
-        resize
-      );
-
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibility
-      );
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("pageshow", syncAnimation);
+      document.removeEventListener("visibilitychange", syncAnimation);
+      motion.removeEventListener("change", syncAnimation);
     };
   }, []);
 
@@ -324,20 +138,16 @@ export default function StarfieldBackground() {
       ref={canvasRef}
       aria-hidden="true"
       style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-
-        /*
-         * Do not inherit the PagerContainer's dimensions.
-         * The starfield owns the physical viewport.
-         */
-        width: "100vw",
-        height: "100dvh",
-
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        display: "block",
         pointerEvents: "none",
         zIndex: 0,
       }}
     />
   );
 }
+
+
