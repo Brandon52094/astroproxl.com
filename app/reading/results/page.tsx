@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -652,36 +653,6 @@ function useReducedMotion(): boolean {
 }
 
 // Fires once, when the element first scrolls into view. Drives per-section reveals.
-function useInView<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, boolean] {
-  const ref = useRef<T>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setInView(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setInView(true);
-            observer.disconnect();
-            break;
-          }
-        }
-      },
-      { threshold: 0.2, rootMargin: "0px 0px -8% 0px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, inView];
-}
-
-// Activates as the focal section enters the middle of the viewport, then
-// releases when its top reaches the phone's safe-area / Dynamic Island zone.
 function useCenterFocus<T extends HTMLElement = HTMLElement>(): [React.RefObject<T | null>, boolean] {
   const ref = useRef<T>(null);
   const [focused, setFocused] = useState(false);
@@ -725,30 +696,6 @@ function useCenterFocus<T extends HTMLElement = HTMLElement>(): [React.RefObject
   return [ref, focused];
 }
 
-// True while the element sits in the vertical center band of the viewport.
-function FadeIn({
-  active,
-  delay = 0,
-  children,
-  className = "",
-}: {
-  active: boolean;
-  delay?: number;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    if (!active) {
-      setShown(false);
-      return;
-    }
-    const timer = setTimeout(() => setShown(true), delay);
-    return () => clearTimeout(timer);
-  }, [active, delay]);
-  return <div className={`fade ${shown ? "on" : ""} ${className}`}>{children}</div>;
-}
-
 function ReadingDeck({
   topic,
   content,
@@ -768,8 +715,6 @@ function ReadingDeck({
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const [contextRef, contextActive] = useInView<HTMLDivElement>();
-  const [moveRef, moveActive] = useInView<HTMLDivElement>();
 
   const groups = useMemo(() => {
     const join = (kind: ParsedSection["kind"]) =>
@@ -850,82 +795,67 @@ function ReadingDeck({
 
             {groups.prediction && (
               <div className="prediction-block">
-                <p className="reading-section-label">The Prediction</p>
+                <p className="reading-section-label">The First Glimpse</p>
                 <p className="prediction-copy">{renderWithDates(groups.prediction)}</p>
               </div>
             )}
           </section>
 
-          <div className="reading-separator" aria-hidden="true" />
-
-          <section ref={contextRef} className="reading-main" aria-label="Context">
-            <p className="reading-section-label centered">Context</p>
-            <FadeIn active={contextActive || reduceMotion} className="reading-section-block">
-              <div className="combined-context-copy">
-                {[groups.where, groups.why, groups.next]
-                  .filter(Boolean)
-                  .map((body, index) => (
-                    <p key={index} className="reading-section-copy">
-                      {renderWithDates(body)}
-                    </p>
-                  ))}
-
-                {!groups.where && !groups.why && !groups.next &&
-                  groups.fallbackProse.map((body, index) => (
-                    <p key={index} className="reading-section-copy">
-                      {renderWithDates(body)}
-                    </p>
-                  ))}
-
-                {groups.timing.length > 0 && (
-                  <div className="context-dated-windows">
-                    <p className="reading-section-label centered dated-context-heading">
-                      Dated Context
-                    </p>
-                    {groups.timing.map((section, index) => (
-                      <div key={index} className="act-card">
-                        <div className="act-head">
-                          {section.date && <span className="date-badge">{section.date}</span>}
-                        </div>
-                        <p className="act-body">{renderWithDates(section.body)}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </FadeIn>
-          </section>
-
-          {groups.calendarLabels.length > 0 && (
-            <>
-              <div className="reading-separator" aria-hidden="true" />
-              <ReadingCalendar labels={groups.calendarLabels} />
-            </>
-          )}
-
-          {groups.directives.length > 0 && (
-            <>
-              <div className="reading-separator" aria-hidden="true" />
-              <section ref={moveRef} className="move-block" aria-label="Your Move">
-                <p className="reading-section-label centered">Your Move</p>
-                <FadeIn active={moveActive || reduceMotion} delay={80}>
-                  <div className="act-card merged-directive-card">
-                    {groups.directives.map((section, index) => (
-                      <div key={index} className="merged-directive-line">
-                        <div className="act-head">
-                          <span className="act-label">{section.label}</span>
-                          {section.date && <span className="date-badge">{section.date}</span>}
-                        </div>
-                        <p className="act-body">{renderWithDates(section.body)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </FadeIn>
+          <div className="journey-chapters">
+            {[
+              { id: "recognition", number: "01", title: "Where You Stand", body: groups.where },
+              { id: "truth", number: "02", title: "What Needs Your Attention", body: groups.why },
+              { id: "shift", number: "03", title: "The Turning Point", body: groups.next },
+            ].filter((chapter) => chapter.body).map((chapter) => (
+              <section key={chapter.id} className={`journey-chapter journey-${chapter.id}`} aria-labelledby={`journey-${chapter.id}`}>
+                <span className="journey-number" aria-hidden="true">{chapter.number}</span>
+                <h2 id={`journey-${chapter.id}`} className="journey-title">{chapter.title}</h2>
+                <div className="journey-copy">{renderWithDates(chapter.body)}</div>
               </section>
-            </>
+            ))}
+            {groups.fallbackProse.filter(Boolean).length > 0 && (
+              <section className="journey-chapter" aria-label="Reading context">
+                <h2 className="journey-title">Your Reading</h2>
+                {groups.fallbackProse.filter(Boolean).map((body, index) => (
+                  <div key={index} className="journey-copy">{renderWithDates(body)}</div>
+                ))}
+              </section>
+            )}
+          </div>
+
+          {groups.timing.length > 0 && (
+            <section className="journey-chapter journey-timing" aria-labelledby="journey-timing">
+              <span className="journey-number" aria-hidden="true">04</span>
+              <h2 id="journey-timing" className="journey-title">When It Unfolds</h2>
+              <div className="journey-timeline">
+                {groups.timing.map((section, index) => (
+                  <div className="journey-window" key={index}>
+                    {section.date && <p className="journey-date">{section.date}</p>}
+                    <div className="journey-copy">{renderWithDates(section.body)}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+          {groups.calendarLabels.length > 0 && (
+            <div className="journey-calendar"><ReadingCalendar labels={groups.calendarLabels} /></div>
+          )}
+          {groups.directives.length > 0 && (
+            <section className="journey-chapter journey-action" aria-labelledby="journey-action">
+              <span className="journey-number" aria-hidden="true">05</span>
+              <h2 id="journey-action" className="journey-title">Your Move</h2>
+              <ol className="journey-actions">
+                {groups.directives.map((section, index) => (
+                  <li key={index}>
+                    {section.directive !== "GENERAL" && <p className="journey-date">{section.label}</p>}
+                    {section.date && <p className="journey-date">{section.date}</p>}
+                    <div className="journey-copy">{renderWithDates(section.body)}</div>
+                  </li>
+                ))}
+              </ol>
+            </section>
           )}
 
-          <div className="reading-separator" aria-hidden="true" />
           <section className="reading-ending" aria-label="Reading conclusion">
             {children}
           </section>
@@ -1419,7 +1349,7 @@ export default function ReadingResultsPage() {
       >
         {closingSections.length > 0 && (
           <div ref={bottomLineRef} className="bottom-line-wrap">
-            <p className="bottom-line-label">Bottom Line</p>
+            <p className="bottom-line-label">06 · Bottom Line</p>
 
             {closingSections.map((section, i) => (
               <p key={i} className="closing-line">
@@ -2758,6 +2688,43 @@ const css = `
     .reading-results .hero-topic-glow { animation: none !important; }
   }
 
+
+  /* Editorial journey: recognition, confrontation, turning point, timing, agency. */
+  .reading-results .reading-flow { max-width: 760px; margin-inline: auto; }
+  .reading-results .reading-hero { padding-top: 52px; padding-bottom: 36px; }
+  .reading-results .focus-heading { max-width: 28rem; font-size: clamp(30px, 7vw, 46px); line-height: 1.18; letter-spacing: -0.035em; }
+  .reading-results .confirmation-copy { text-align: left; line-height: 1.85; }
+  .reading-results .prediction-block { margin-top: 30px; padding: 22px; border: 1px solid rgba(156,180,213,.18); border-radius: 4px 22px 22px 22px; background: rgba(124,160,209,.05); }
+  .reading-results .prediction-copy { text-align: left; font-size: 18px; }
+  .reading-results .journey-chapter { position: relative; max-width: 34rem; margin: 0 auto; padding: 48px 0; border-top: 1px solid rgba(170,190,220,.13); }
+  .reading-results .journey-number { display: block; margin-bottom: 14px; color: #8fa4c2; font: 11px ui-sans-serif, system-ui; letter-spacing: .22em; }
+  .reading-results .journey-title { margin: 0 0 24px; font: 400 clamp(25px,6vw,32px)/1.25 Georgia,serif; color: #e4eaf4; letter-spacing: -.025em; }
+  .reading-results .journey-copy { color: #c8d2e2; font: 17px/1.9 Georgia,serif; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+  .reading-results .journey-copy + .journey-copy { margin-top: 22px; }
+  .reading-results .journey-truth { padding: 38px 22px; margin-block: 16px 30px; border: 1px solid rgba(183,153,146,.23); border-left: 2px solid #a68b85; border-radius: 2px 18px 18px 2px; background: linear-gradient(135deg,rgba(68,47,52,.18),rgba(0,0,0,.3)); }
+  .reading-results .journey-truth .journey-number { color: #baa09a; }
+  .reading-results .journey-shift { padding-block: 52px; background: radial-gradient(ellipse at 10% 10%,rgba(110,154,173,.07),transparent 70%); }
+  .reading-results .journey-shift .journey-number { color: #9fbebf; }
+  .reading-results .journey-timeline { border-left: 1px solid #354659; padding-left: 24px; }
+  .reading-results .journey-window { position: relative; padding-bottom: 30px; }
+  .reading-results .journey-window:last-child { padding-bottom: 0; }
+  .reading-results .journey-window::before { content: ''; position: absolute; left: -28px; top: 6px; width: 7px; height: 7px; border-radius: 50%; background: #a3b8d4; }
+  .reading-results .journey-date { margin: 0 0 12px; color: #b5c8df; font: 600 12px/1.6 ui-sans-serif,system-ui; letter-spacing: .08em; }
+  .reading-results .journey-calendar { padding: 8px 0 48px; }
+  .reading-results .journey-actions { padding-left: 24px; margin: 0; }
+  .reading-results .journey-actions li { padding: 0 0 24px 12px; }
+  .reading-results .journey-actions li::marker { color: #b0c6d4; font: 14px Georgia,serif; }
+  .reading-results .journey-action { padding-bottom: 36px; }
+  .reading-results .bottom-line-wrap { margin-top: 16px; padding-top: 62px; }
+  .reading-results .journey-chapters, .reading-results .journey-chapter, .reading-results .journey-calendar { transition: opacity .46s ease, filter .46s ease; }
+  .reading-results.bottom-line-focus .reading-flow > .journey-chapters,
+  .reading-results.bottom-line-focus .reading-flow > .journey-chapter,
+  .reading-results.bottom-line-focus .reading-flow > .journey-calendar { opacity: .08; filter: grayscale(1) brightness(.25); }
+  @media (prefers-reduced-motion: reduce) {
+    .reading-results .journey-chapters, .reading-results .journey-chapter, .reading-results .journey-calendar { transition: none; }
+  }
 `;
+
+
 
 

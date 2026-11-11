@@ -1,4 +1,5 @@
 
+
 import { buildVoiceCalibrationBlock } from "@/lib/signVoice";
 import type { TransitAspect } from "@/lib/transitAspects";
 import type {
@@ -453,26 +454,26 @@ export function buildReadingPrompt(
     "",
 
     "Part 3: Where You Are Now",
-    "Keep this tight: normally 2-3 sentences, maximum 4.",
+    "Use one or two short paragraphs, with enough room to develop this movement. Avoid padding and repeated conclusions.",
     "State only the present condition, pressure, momentum, transition, or turning point that directly matters to the prediction.",
     "Recognize the feelings or desires the user actually expressed; make the present situation understandable without assigning them an invented emotional state.",
-    "Do not summarize the whole chart and do not repeat Parts 1-2.",
+    "Build recognition: connect their stated situation, feelings or desires to the present pattern. Explain what is at stake. End by naturally leading into the pressure examined next. Do not repeat the opening forecast.",
     "",
 
     "Part 4: Why This Is Happening",
-    "Keep this tight: normally 2-3 sentences, maximum 4.",
+    "Use one or two short paragraphs, with enough room to develop this movement. Avoid padding and repeated conclusions.",
     "Explain the strongest astrological reason this is happening now, then name the supported serious pressure, limitation, tradeoff, or consequence. Confront the situation without shaming the person; do not force darkness where none is supported.",
     "Synthesize the astrology rather than listing techniques one by one.",
     "Mention only evidence that materially explains the situation.",
-    "Do not turn this into an astrology lesson.",
+    "This is the honest confrontation. Develop the central tension and its practical consequences, including limits or tradeoffs when supported. Preserve dignity and distinguish inference from facts supplied by the user. Let the seriousness fit the evidence; never manufacture a crisis. End with the question or tension the next development resolves, without a contrived cliffhanger.",
     "",
 
     "Part 5: What Happens Next",
-    "Keep this tight: normally 2-3 sentences, maximum 4.",
+    "Use one or two short paragraphs, with enough room to develop this movement. Avoid padding and repeated conclusions.",
     `Translate the astrology into the ${topic.label.toLowerCase()} area concretely.`,
     "State the strongest next real-life development, shift, manifestation, consequence, or turning point.",
     "Develop the fuller answer and turning point: connect the difficulty just named to a plausible next development and the opening, choice, or acceptance it creates. Acknowledge hurt when relevant, without promising relief or inventing a positive reversal.",
-    "Do not list generic scenarios or multiple weak possibilities.",
+    "This is the main reveal, not a repeat of Part 2. Explain the likely development in fuller detail and why it changes the situation. Connect directly to the challenge from Part 4. Give a believable bridge toward action or acceptance, without forcing optimism. Do not list generic scenarios.",
     "",
 
     "Part 6: Dated Windows",
@@ -497,7 +498,7 @@ export function buildReadingPrompt(
 
     "Part 8: Bottom Line",
     "Answer the original question one final time in the clearest possible language.",
-    "Keep this to 1-3 sentences.",
+    "Use 2-4 connected sentences to resolve the original question, integrate the difficult truth and central insight, and leave one clear takeaway. Do not merely summarize each preceding section.",
     "Do not introduce a brand-new major prediction.",
     "Do not ask the user a follow-up question.",
     "Return to the opening glimpse with fuller meaning. Integrate the challenge, central insight, and available agency into a complete close; leave room for uncertainty and avoid making peace depend on one exact outcome.",
@@ -535,5 +536,7 @@ export function buildReadingPrompt(
 
   return sections.join("\n");
 }
+
+
 
 
