@@ -419,14 +419,16 @@ export default function PagerContainer() {
     return () => window.removeEventListener("pageshow", normalizeHorizontalPosition);
   }, []);
 
-  // Sizing note: the pager is pinned with `position: fixed; inset: 0` and is
-  // never measured in JS. Installed iOS PWAs report a short innerHeight /
-  // visualViewport height for a moment at launch, so a measured height left an
-  // empty strip at the bottom until a pull-down forced a re-measure.
+  // Sizing note: the pager is an in-flow block (like the Preparing screen), not
+  // position: fixed, and is never measured in JS. On iOS, fixed elements in an
+  // installed PWA (black-translucent status bar, iOS 26) can stop short of the
+  // bottom edge, which showed up as a dark bar. Height comes from CSS only:
+  // 100vh when installed (the full screen), 100dvh in the browser so panel
+  // content isn't hidden behind Safari's toolbar.
 
   return (
     <div
-      className="fixed inset-0 w-full min-w-0 max-w-full overflow-hidden text-slate-100"
+      className="pager-root w-full min-w-0 max-w-full overflow-hidden text-slate-100"
       ref={containerRef}
       style={{
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
@@ -435,6 +437,15 @@ export default function PagerContainer() {
       }}
     >
       <style jsx>{`
+        .pager-root {
+          position: relative;
+          height: 100dvh;
+        }
+        @media (display-mode: standalone) {
+          .pager-root {
+            height: 100vh;
+          }
+        }
         .pager-panel {
           -ms-overflow-style: none;
           scrollbar-width: none;
@@ -446,15 +457,9 @@ export default function PagerContainer() {
         }
       `}</style>
 
-      {/* Persistent AstroProXL sky: this never enters the translating pager track.
-          Fixed to the top and sized to 100lvh (the largest the viewport can ever
-          be), so the sky always reaches the bottom edge, even before iOS settles. */}
+      {/* Persistent AstroProXL sky: this never enters the translating pager track. */}
       <div
-        className="pointer-events-none fixed inset-x-0 top-0 z-0 overflow-hidden"
-        style={{
-          height: "100lvh",
-          background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
-        }}
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         aria-hidden="true"
       >
         <div
