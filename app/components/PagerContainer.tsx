@@ -419,73 +419,19 @@ export default function PagerContainer() {
     return () => window.removeEventListener("pageshow", normalizeHorizontalPosition);
   }, []);
 
-  // iOS Safari's `100dvh` at initial page load resolves to the URL-bar-visible
-  // height, but iOS then renders the page with a slightly larger visual area
-  // underneath the URL bar. That mismatch leaves a 40–80px strip of body
-  // background visible at the bottom until a scroll forces a re-measure. This
-  // effect sets the pager's height directly from `visualViewport.height`,
-  // which is the only number on iOS that matches what's actually drawn. It
-  // re-runs on viewport resize (URL bar show/hide, keyboard, rotation) and on
-  // the first frame after mount.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const el = containerRef.current;
-    if (!el) return;
-
-    let raf = 0;
-
-    const apply = () => {
-      const vv = window.visualViewport;
-      // visualViewport.height can stop short of the visible bottom when
-      // Safari reports a non-zero offsetTop. Measure from layout top to the
-      // actual bottom edge of the visible viewport.
-      const visualBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-      const h = Math.max(window.innerHeight, visualBottom);
-      el.style.height = `${Math.ceil(h)}px`;
-      el.style.minHeight = `${Math.ceil(h)}px`;
-    };
-
-    const scheduleApply = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        // A second frame after mount handles the initial-paint race where
-        // visualViewport hasn't reported the settled height yet.
-        raf = requestAnimationFrame(apply);
-      });
-    };
-
-    scheduleApply();
-
-    const vv = window.visualViewport;
-    if (vv) {
-      vv.addEventListener("resize", scheduleApply);
-      vv.addEventListener("scroll", apply);
-    }
-    window.addEventListener("resize", scheduleApply);
-    window.addEventListener("orientationchange", scheduleApply);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      if (vv) {
-        vv.removeEventListener("resize", scheduleApply);
-        vv.removeEventListener("scroll", apply);
-      }
-      window.removeEventListener("resize", scheduleApply);
-      window.removeEventListener("orientationchange", scheduleApply);
-      el.style.height = "";
-      el.style.minHeight = "";
-    };
-  }, []);
+  // Sizing note: the pager is pinned with `position: fixed; inset: 0` and is
+  // never measured in JS. Installed iOS PWAs report a short innerHeight /
+  // visualViewport height for a moment at launch, so a measured height left an
+  // empty strip at the bottom until a pull-down forced a re-measure.
 
   return (
     <div
-      className="fixed inset-x-0 top-0 w-full min-w-0 max-w-full overflow-hidden text-slate-100"
+      className="fixed inset-0 w-full min-w-0 max-w-full overflow-hidden text-slate-100"
       ref={containerRef}
       style={{
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
-        height: "100dvh",
-        minHeight: "100dvh",
         boxSizing: "border-box",
+        overscrollBehavior: "none",
       }}
     >
       <style jsx>{`
@@ -500,9 +446,15 @@ export default function PagerContainer() {
         }
       `}</style>
 
-      {/* Persistent AstroProXL sky: this never enters the translating pager track. */}
+      {/* Persistent AstroProXL sky: this never enters the translating pager track.
+          Fixed to the top and sized to 100lvh (the largest the viewport can ever
+          be), so the sky always reaches the bottom edge, even before iOS settles. */}
       <div
-        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+        className="pointer-events-none fixed inset-x-0 top-0 z-0 overflow-hidden"
+        style={{
+          height: "100lvh",
+          background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
+        }}
         aria-hidden="true"
       >
         <div

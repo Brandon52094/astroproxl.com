@@ -125,7 +125,7 @@ html {
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
-  overscroll-behavior-x: none;
+  overscroll-behavior: none;
 }
 
 @layer base {
@@ -135,7 +135,7 @@ html {
     max-width: 100%;
     min-width: 0;
     overflow-x: hidden;
-    overscroll-behavior-x: none;
+    overscroll-behavior: none;
   }
 
   * {
