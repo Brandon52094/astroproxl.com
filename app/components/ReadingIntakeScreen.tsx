@@ -2235,7 +2235,7 @@ export default function ReadingIntakeScreen({
               <Crown className="h-3.5 w-3.5" style={{ color: "rgba(248,250,252,0.88)", filter: "drop-shadow(0 0 5px rgba(255,255,255,0.20))" }} />
             </div>
 
-            <div className="relative h-full rounded-[20px] bg-transparent px-4 py-2 pr-12">
+            <div className="relative h-full rounded-[20px] bg-transparent px-4 py-2 pr-16">
               {!contextFocused && question.length === 0 && (
                 <div className="context-placeholder pointer-events-none absolute inset-0 flex items-center justify-center text-center">
                   {!canUseAddContext && lockedFeaturePrompt === "context"
