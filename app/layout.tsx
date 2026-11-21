@@ -1,6 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Cinzel, Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
@@ -12,6 +12,23 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Display serif for headlines and labels on the intake screen.
+const cormorant = Cormorant_Garamond({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
+// Inscription-style capitals for small uppercase lines.
+const cinzel = Cinzel({
+  variable: "--font-caps",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
 // ── FIX: Merge viewport config into one export ──
@@ -43,7 +60,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark antialiased bg-[#040611]`}
+      className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} ${cinzel.variable} dark antialiased bg-[#040611]`}
     >
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />

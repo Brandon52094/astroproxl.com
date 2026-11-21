@@ -455,6 +455,52 @@ export default function PagerContainer() {
           width: 0;
           height: 0;
         }
+
+        /* Nebula: three soft clouds that drift and breathe very slowly. */
+        .sky-cloud {
+          position: absolute;
+          border-radius: 50%;
+          will-change: transform, opacity;
+          animation-timing-function: ease-in-out;
+          animation-iteration-count: infinite;
+          animation-direction: alternate;
+        }
+        .sky-cloud-violet {
+          width: 95vmax; height: 70vmax; left: -35vmax; top: -22vmax;
+          background: radial-gradient(closest-side, rgba(110,60,210,0.15), rgba(91,33,182,0.05) 55%, transparent);
+          animation-name: skyDriftViolet; animation-duration: 110s;
+        }
+        .sky-cloud-blue {
+          width: 85vmax; height: 62vmax; right: -38vmax; top: 28%;
+          background: radial-gradient(closest-side, rgba(37,99,235,0.12), rgba(30,64,175,0.04) 55%, transparent);
+          animation-name: skyDriftBlue; animation-duration: 130s;
+        }
+        .sky-cloud-teal {
+          width: 80vmax; height: 55vmax; left: 0; bottom: -28vmax;
+          background: radial-gradient(closest-side, rgba(13,148,136,0.09), rgba(20,120,110,0.03) 55%, transparent);
+          animation-name: skyDriftTeal; animation-duration: 150s;
+        }
+        @keyframes skyDriftViolet { from { transform: translate3d(0,0,0) scale(1); opacity: .8; } to { transform: translate3d(8%,6%,0) scale(1.12); opacity: 1; } }
+        @keyframes skyDriftBlue { from { transform: translate3d(0,0,0) scale(1.05); opacity: 1; } to { transform: translate3d(-9%,-5%,0) scale(.95); opacity: .7; } }
+        @keyframes skyDriftTeal { from { transform: translate3d(0,0,0) scale(1); opacity: .7; } to { transform: translate3d(6%,-7%,0) scale(1.1); opacity: 1; } }
+
+        /* Focus darkness: the intake screen sets <html data-astro-focus="1|2|3"> during a
+           press-and-hold. This layer sits above the nebula but BELOW the stars, so the
+           sky goes black while the stars keep shining. */
+        .sky-dim {
+          position: absolute;
+          inset: 0;
+          background: #000;
+          opacity: 0;
+          transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        :global(html[data-astro-focus="1"]) .sky-dim { opacity: 0.66; transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+        :global(html[data-astro-focus="2"]) .sky-dim { opacity: 0.9; transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+        :global(html[data-astro-focus="3"]) .sky-dim { opacity: 1; transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+
+        @media (prefers-reduced-motion: reduce) {
+          .sky-cloud { animation: none; }
+        }
       `}</style>
 
       {/* Persistent AstroProXL sky: this never enters the translating pager track. */}
@@ -462,17 +508,13 @@ export default function PagerContainer() {
         className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         aria-hidden="true"
       >
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 40% at 20% 25%, rgba(91,33,182,0.18), transparent 60%), " +
-              "radial-gradient(ellipse 50% 35% at 80% 60%, rgba(37,99,235,0.14), transparent 60%), " +
-              "radial-gradient(ellipse 45% 40% at 55% 85%, rgba(20,120,110,0.10), transparent 60%)",
-          }}
-        />
-              <StarfieldBackground />
-    </div>
+        <span className="sky-cloud sky-cloud-violet" />
+        <span className="sky-cloud sky-cloud-blue" />
+        <span className="sky-cloud sky-cloud-teal" />
+        {/* Darkens everything above except the stars during a press-and-hold. */}
+        <div className="sky-dim" />
+        <StarfieldBackground />
+      </div>
 
     {/* APP / PAGER CONTENT */}
     <div

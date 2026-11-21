@@ -9,10 +9,10 @@ import {
   Wallet,
   Mic,
   Crown,
+  ChevronLeft,
 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { useRouter } from "next/navigation";
 import {
@@ -68,33 +68,75 @@ function trackTtq(event: string, params?: Record<string, unknown>) {
   }
 }
 
+/** Crystal ball, drawn to match lucide's 24px stroke icons. */
+function CrystalBall({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      style={style}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="10" r="7" />
+      <path d="M8.4 15.9 7 19.5h10l-1.4-3.6" />
+      <path d="M5.5 19.5h13" />
+      <path d="M8.6 7.6a3.8 3.8 0 0 1 2.4-1.9" />
+      <path d="m14 9.2.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5Z" />
+    </svg>
+  );
+}
+
 const AREAS = [
   {
     id: "love",
     title: "Love",
     icon: Heart,
+    description: "Relationships, romance, or emotional patterns",
     defaultQuestion: "What is coming for me in love over the next 30–45 days?",
   },
   {
     id: "money",
     title: "Money",
     icon: Wallet,
+    description: "Income, stability, opportunities, and financial timing",
     defaultQuestion: "What is coming for me with money over the next 30–45 days?",
   },
   {
     id: "career",
     title: "Career",
     icon: Briefcase,
+    description: "Work, recognition, direction, and next steps",
     defaultQuestion: "What is coming for me in my career over the next 30–45 days?",
   },
   {
-  id: "other",
-  title: "What's Coming",
-  icon: null,
-  marker: "✦",
-  defaultQuestion: "What is coming for me in the next 30–45 days?",
-},
+    id: "other",
+    title: "What's Coming",
+    icon: CrystalBall,
+    description: "What to expect in the next 30–45 days.",
+    defaultQuestion: "What is coming for me in the next 30–45 days?",
+  },
 ];
+
+// Rotating line under the hero headline. Every line describes something the
+// reading engine actually does, so the claims stay true.
+const HERO_TAGLINES = [
+  "Built from 20+ layers of your chart.",
+  "Real dates, not vague horoscopes.",
+  "Every prediction traced to your chart.",
+  "Transits, progressions, eclipses & more.",
+  "Personalized to your exact birth time.",
+];
+
+// Press-and-hold timing (ms). A short grace period keeps ordinary taps from
+// darkening the screen; each following second deepens the focus one step.
+const HOLD_ARM_MS = 220;
+const HOLD_STEP_MS = 1000;
+const HOLD_TOTAL_MS = 3000;
 
 // One luminous cosmic aura for the current app theme. Personalized theme
 // palettes can be introduced later as an intentional Astro Plus experience.
@@ -153,75 +195,6 @@ interface ReadingIntakeScreenProps {
   isActive?: boolean;
 }
 
-/* ── Chart shapes used by the hero information system ─────────────── */
-interface Placement {
-  name: string;
-  sign: string;
-  degree?: string;
-  house?: number;
-}
-
-interface MoonPhaseData {
-  phaseName?: string;
-  illuminationPercent: number;
-  nextEventName?: "New Moon" | "Full Moon";
-  daysUntilNextEvent?: number;
-  moonSign?: string;
-  moonDegree?: string;
-  nextSignName?: string;
-  nextSignIngressAt?: string;
-}
-
-type ElementName = "Earth" | "Fire" | "Water" | "Air";
-
-const SIGN_ELEMENTS: Record<string, ElementName> = {
-  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
-  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
-  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
-  Gemini: "Air", Libra: "Air", Aquarius: "Air",
-};
-
-// Keep the intake hero aligned with the elemental language already used by BirthChartPanel.
-const HERO_ELEMENT_COLORS: Record<
-  ElementName,
-  { text: string; bar: string; glow: string; border: string }
-> = {
-  Earth: {
-    text: "#6EE7B7",
-    bar: "#34D399",
-    glow: "rgba(16,185,129,0.30)",
-    border: "rgba(52,211,153,0.65)",
-  },
-  Fire: {
-    text: "#FDBA74",
-    bar: "#F97316",
-    glow: "rgba(239,68,68,0.32)",
-    border: "rgba(249,115,22,0.75)",
-  },
-  Water: {
-    text: "#93C5FD",
-    bar: "#60A5FA",
-    glow: "rgba(59,130,246,0.30)",
-    border: "rgba(96,165,250,0.70)",
-  },
-  Air: {
-    text: "#BAE6FD",
-    bar: "#7DD3FC",
-    glow: "rgba(125,211,252,0.26)",
-    border: "rgba(186,230,253,0.60)",
-  },
-};
-
-function signAccentColor(sign: string): string {
-  const element = SIGN_ELEMENTS[sign];
-  return element ? HERO_ELEMENT_COLORS[element].text : "rgba(203,213,225,0.72)";
-}
-
-function signAccentGlow(sign: string): string {
-  const element = SIGN_ELEMENTS[sign];
-  return element ? HERO_ELEMENT_COLORS[element].glow : "rgba(148,163,184,0.12)";
-}
-
 interface ThemeColors {
   areaColors: {
     love: { bg: string; border: string; glow: string; text: string };
@@ -262,39 +235,6 @@ const THEMES: Record<"cosmic", ThemeColors> = {
   },
 };
 
-// Topic-adjacent CTA colors: connected to the selected reading without simply
-// duplicating the card color. Add Context keeps its separate gold/white role.
-const BEGIN_READING_STYLES = {
-  love: {
-    background: "linear-gradient(180deg, rgba(162,28,175,0.18), rgba(88,28,135,0.08))",
-    border: "rgba(240,171,252,0.80)",
-    text: "#F5D0FE",
-    glow: "rgba(217,70,239,0.25)",
-    ring: "rgba(240,171,252,0.12)",
-  },
-  money: {
-    background: "linear-gradient(180deg, rgba(13,148,136,0.17), rgba(15,118,110,0.07))",
-    border: "rgba(94,234,212,0.80)",
-    text: "#99F6E4",
-    glow: "rgba(45,212,191,0.25)",
-    ring: "rgba(94,234,212,0.12)",
-  },
-  career: {
-    background: "linear-gradient(180deg, rgba(79,70,229,0.17), rgba(49,46,129,0.07))",
-    border: "rgba(165,180,252,0.80)",
-    text: "#C7D2FE",
-    glow: "rgba(99,102,241,0.25)",
-    ring: "rgba(165,180,252,0.12)",
-  },
-  other: {
-    background: "linear-gradient(180deg, rgba(147,51,234,0.17), rgba(88,28,135,0.07))",
-    border: "rgba(216,180,254,0.80)",
-    text: "#E9D5FF",
-    glow: "rgba(192,132,252,0.25)",
-    ring: "rgba(216,180,254,0.12)",
-  },
-} as const;
-
 export default function ReadingIntakeScreen({
   userStatus: propUserStatus,
   onSwipeLeft,
@@ -327,18 +267,25 @@ export default function ReadingIntakeScreen({
     voice: 0,
   });
 
-  // Chart-derived data for the hero information system.
-  const [natal, setNatal] = useState<Placement[]>([]);
-  const [transits, setTransits] = useState<Placement[]>([]);
-
-  // Tap through three information panels; Ask Anything replaces the hero while recording.
-  const [heroInfoIndex, setHeroInfoIndex] = useState(0);
-  const cycleHeroInfo = useCallback(() => setHeroInfoIndex((index) => (index + 1) % 3), []);
+  // Hero: scale the fixed 374px composition to the card, play the glass sweep on entry.
   const [heroCompositionScale, setHeroCompositionScale] = useState(1);
   const heroStageRef = useRef<HTMLDivElement | null>(null);
   const [heroSweepActive, setHeroSweepActive] = useState(false);
   const heroWasActiveRef = useRef(false);
-  const previousSelectedAreaRef = useRef<string | null>(null);
+  const [taglineIndex, setTaglineIndex] = useState(0);
+  const [taglineVisible, setTaglineVisible] = useState(true);
+
+  // Press-and-hold to begin. The reading is only "selected" while it is held.
+  // holdStage: 0 = idle/pressed, 1 = dim, 2 = darkness, 3 = complete darkness.
+  const [holdStage, setHoldStage] = useState<0 | 1 | 2 | 3>(0);
+  const [holdingArea, setHoldingArea] = useState<string | null>(null);
+  const [teaseArea, setTeaseArea] = useState<string | null>(null);
+  const [sentArea, setSentArea] = useState<string | null>(null);
+  const [readingFade, setReadingFade] = useState(false);
+  const holdTimersRef = useRef<number[]>([]);
+  const armTimerRef = useRef<number | null>(null);
+  const pressStartRef = useRef(0);
+  const sendingRef = useRef(false);
 
   // Ask Anything live-listening state.
   const [micEnabled, setMicEnabled] = useState(false);
@@ -399,20 +346,6 @@ export default function ReadingIntakeScreen({
     return () => window.cancelAnimationFrame(frame);
   }, [isActive, shouldReduceMotion]);
 
-  // When the user dismisses a reading choice, sweep once as the full page
-  // returns. Switching directly between reading choices does not retrigger it.
-  useEffect(() => {
-    const hadReadingFocus = previousSelectedAreaRef.current !== null;
-    const hasReadingFocus = selectedArea !== null;
-    previousSelectedAreaRef.current = selectedArea;
-
-    if (!hadReadingFocus || hasReadingFocus || !isActive || shouldReduceMotion) return;
-
-    setHeroSweepActive(false);
-    const frame = window.requestAnimationFrame(() => setHeroSweepActive(true));
-    return () => window.cancelAnimationFrame(frame);
-  }, [selectedArea, isActive, shouldReduceMotion]);
-
   useEffect(() => {
     const stage = heroStageRef.current;
     if (!stage) return;
@@ -431,23 +364,6 @@ export default function ReadingIntakeScreen({
     observer.observe(stage);
     return () => observer.disconnect();
   }, []);
-
-  // If a reading is selected but the user does not continue into context or Begin Reading,
-  // gently return the interface to its neutral state.
-  const selectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearSelectionTimeout = useCallback(() => {
-    if (selectionTimeoutRef.current) {
-      clearTimeout(selectionTimeoutRef.current);
-      selectionTimeoutRef.current = null;
-    }
-  }, []);
-
-  const clearReadingFocus = useCallback(() => {
-    clearSelectionTimeout();
-    setSelectedArea(null);
-    setQuestion("");
-    setContextFocused(false);
-  }, [clearSelectionTimeout]);
 
   const handleLockedFeature = useCallback(
     (feature: LockedFeature) => {
@@ -558,60 +474,6 @@ export default function ReadingIntakeScreen({
     ensureChart();
   }, [router]);
 
-  // Once the chart is ready, read natal placements/angles + current transits.
-  // Chart payloads are not guaranteed to store `angles` as an array, so normalize
-  // arrays and keyed objects before putting them into React state.
-  useEffect(() => {
-    if (chartStatus !== "ready") return;
-
-    const normalizePlacements = (value: unknown): Placement[] => {
-      if (Array.isArray(value)) {
-        return value.flatMap((raw) => {
-          if (!raw || typeof raw !== "object") return [];
-          const item = raw as Record<string, unknown>;
-          if (typeof item.sign !== "string") return [];
-          return [{
-            name: typeof item.name === "string" ? item.name : "",
-            sign: item.sign,
-            degree: typeof item.degree === "string" ? item.degree : undefined,
-            house: typeof item.house === "number" ? item.house : undefined,
-          }];
-        });
-      }
-
-      if (value && typeof value === "object") {
-        return Object.entries(value as Record<string, unknown>).flatMap(([key, raw]) => {
-          if (!raw || typeof raw !== "object") return [];
-          const item = raw as Record<string, unknown>;
-          if (typeof item.sign !== "string") return [];
-          return [{
-            name: typeof item.name === "string" && item.name ? item.name : key,
-            sign: item.sign,
-            degree: typeof item.degree === "string" ? item.degree : undefined,
-            house: typeof item.house === "number" ? item.house : undefined,
-          }];
-        });
-      }
-
-      return [];
-    };
-
-    const chart = loadChart();
-
-    const data = chart?.chartData as unknown as {
-      tropical?: { planets?: unknown; angles?: unknown };
-      transits?: unknown;
-    } | undefined;
-
-    if (!data) return;
-
-    setNatal([
-      ...normalizePlacements(data.tropical?.planets),
-      ...normalizePlacements(data.tropical?.angles),
-    ]);
-    setTransits(normalizePlacements(data.transits));
-  }, [chartStatus]);
-
   const fetchInFlight = useRef(false);
   const fetchStatus = useCallback(async () => {
     if (fetchInFlight.current) return;
@@ -658,9 +520,6 @@ export default function ReadingIntakeScreen({
 
   const selectedAreaConfig = useMemo(() => AREAS.find(a => a.id === selectedArea) ?? null, [selectedArea]);
   const heroPalette = HERO_PALETTE;
-  const beginReadingStyle = selectedArea
-    ? BEGIN_READING_STYLES[selectedArea as keyof typeof BEGIN_READING_STYLES]
-    : null;
 
   // ── Access flags derived from the expanded userStatus ─────────────────────
 
@@ -683,27 +542,6 @@ export default function ReadingIntakeScreen({
   const hasVoiceReadingAccess =
     hasIncludedVoiceReading ||
     hasPurchasedVoiceReading;
-
-  /* ── Hero information — Brand + Big Three ─── */
-  const heroData = useMemo(() => {
-    const find = (arr: Placement[], names: string[]) =>
-      arr.find((p) =>
-        typeof p?.name === "string" &&
-        names.some((name) => p.name.toLowerCase() === name.toLowerCase())
-      );
-
-    const natalSun = find(natal, ["Sun"]);
-    const natalMoon = find(natal, ["Moon"]);
-    const natalRising = find(natal, ["Ascendant", "Rising", "ASC"]);
-
-    return {
-      personal: [
-        { role: "Sun", sign: natalSun?.sign ?? "—", degree: natalSun?.degree, house: natalSun?.house },
-        { role: "Moon", sign: natalMoon?.sign ?? "—", degree: natalMoon?.degree, house: natalMoon?.house },
-        { role: "Rising", sign: natalRising?.sign ?? "—", degree: natalRising?.degree, house: natalRising?.house },
-      ],
-    };
-  }, [natal]);
 
   const stopAskRecorder = useCallback((discard = false) => {
     const recorder = mediaRecorderRef.current;
@@ -1355,48 +1193,33 @@ export default function ReadingIntakeScreen({
     };
   }, [disconnectMicrophone]);
 
-  const buttonCopy = useMemo(() => {
-    if (chartStatus === "recalculating") return "Loading your chart…";
-    if (isCreatingReading) return "Preparing reading...";
-    if (!selectedAreaConfig) return "Begin Reading";
-    const hasCredits = Number(userStatus?.credits ?? 0) > 0;
-    const isSubscribed = userStatus?.isSubscribed === true;
-    if (!hasCredits && !isSubscribed) {
-      return `Begin Reading — ${formatUsd(PRICING.reading.price)}`;
-    }
-    return "Begin Reading";
-  }, [chartStatus, isCreatingReading, selectedAreaConfig, userStatus]);
+  const needsPayment =
+    Number(userStatus?.credits ?? 0) <= 0 && userStatus?.isSubscribed !== true;
 
-  // Context is optional now — only a selection + a ready chart are required.
-  const canSubmit = useMemo(() => {
-    if (!selectedArea) return false;
-    if (chartStatus !== "ready") return false;
-    return true;
-  }, [selectedArea, chartStatus]);
-
-  const selectArea = useCallback((id: string) => {
-    clearSelectionTimeout();
-    setSelectedArea(id);
-    setQuestion("");
-    const area = AREAS.find((a) => a.id === id);
-    trackTtq("ViewContent", { content_id: id, content_name: area?.title });
-
-    selectionTimeoutRef.current = setTimeout(() => {
-      setSelectedArea(null);
-      setQuestion("");
-      selectionTimeoutRef.current = null;
-    }, 8000);
-  }, [clearSelectionTimeout]);
-
+  // A reading can begin once the chart is ready and nothing is already starting.
+  const canBegin = chartStatus === "ready" && !isCreatingReading;
+  const canBeginRef = useRef(canBegin);
   useEffect(() => {
-    return () => {
-      clearSelectionTimeout();
-    };
-  }, [clearSelectionTimeout]);
+    canBeginRef.current = canBegin;
+  }, [canBegin]);
 
-  const handleStartReading = async () => {
-    if (!canSubmit || !selectedArea) return;
-    clearSelectionTimeout();
+  // The single line under the reading choices: status, countdown, or the invitation.
+  const hintCopy = useMemo(() => {
+    if (chartStatus === "recalculating" || chartStatus === "checking") return "Loading your chart…";
+    if (chartStatus === "error") return "Chart unavailable · Try again";
+    if (isCreatingReading || sentArea) return "Opening your reading…";
+    if (holdStage > 0) return `Keep holding · ${4 - holdStage}`;
+    return needsPayment
+      ? `Press & Hold to Begin · ${formatUsd(PRICING.reading.price)}`
+      : "Press & Hold to Begin";
+  }, [chartStatus, isCreatingReading, sentArea, holdStage, needsPayment]);
+
+  const handleStartReading = async (areaId: string) => {
+    const selectedArea = areaId;
+    if (!canBeginRef.current || !selectedArea) {
+      resetHoldVisuals();
+      return;
+    }
     setIsCreatingReading(true);
     setSubmitError(null);
     trackTtq("AddToCart", { content_id: selectedArea });
@@ -1446,6 +1269,7 @@ export default function ReadingIntakeScreen({
 
       if (!status) {
         setSubmitError("Couldn't verify your credits. Please try again.");
+        resetHoldVisuals();
         return;
       }
 
@@ -1478,6 +1302,7 @@ export default function ReadingIntakeScreen({
       if (checkoutData?.clientSecret) {
         setCheckoutIntent("reading");
         setClientSecret(checkoutData.clientSecret);
+        resetHoldVisuals();
         return;
       }
 
@@ -1487,12 +1312,126 @@ export default function ReadingIntakeScreen({
       }
 
       setSubmitError("Couldn't start checkout. Please try again.");
+      resetHoldVisuals();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Something went wrong");
+      resetHoldVisuals();
     } finally {
       setIsCreatingReading(false);
     }
   };
+
+  // ── Press-and-hold ─────────────────────────────────────────────────
+  const clearHoldTimers = () => {
+    holdTimersRef.current.forEach((id) => window.clearTimeout(id));
+    holdTimersRef.current = [];
+    if (armTimerRef.current) {
+      window.clearTimeout(armTimerRef.current);
+      armTimerRef.current = null;
+    }
+  };
+
+  // Return the page to its resting state (used on release, checkout, and errors).
+  function resetHoldVisuals() {
+    clearHoldTimers();
+    sendingRef.current = false;
+    setHoldStage(0);
+    setHoldingArea(null);
+    setSentArea(null);
+    setReadingFade(false);
+    setSelectedArea(null);
+  }
+
+  const completeHold = (areaId: string) => {
+    clearHoldTimers();
+    sendingRef.current = true;
+    setHoldingArea(null);
+    setSentArea(areaId);
+    triggerIntakeHaptic();
+    // The tile flashes, then the screen fades to black while the reading starts.
+    holdTimersRef.current.push(window.setTimeout(() => setReadingFade(true), 420));
+    void handleStartReading(areaId);
+  };
+
+  const beginHold = (areaId: string) => {
+    if (sendingRef.current || !canBeginRef.current) return;
+    setHoldingArea(areaId);
+    setHoldStage(1);
+    triggerIntakeHaptic();
+    holdTimersRef.current.push(
+      window.setTimeout(() => { setHoldStage(2); triggerIntakeHaptic(); }, HOLD_STEP_MS),
+      window.setTimeout(() => { setHoldStage(3); triggerIntakeHaptic(); }, HOLD_STEP_MS * 2),
+      window.setTimeout(() => completeHold(areaId), HOLD_TOTAL_MS),
+    );
+  };
+
+  const handleTilePointerDown = (event: React.PointerEvent<HTMLButtonElement>, areaId: string) => {
+    if (sendingRef.current || voiceVisualActiveRef.current) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pressStartRef.current = Date.now();
+    clearHoldTimers();
+    setSubmitError(null);
+    setSelectedArea(areaId);
+    const area = AREAS.find((a) => a.id === areaId);
+    trackTtq("ViewContent", { content_id: areaId, content_name: area?.title });
+    armTimerRef.current = window.setTimeout(() => beginHold(areaId), HOLD_ARM_MS);
+  };
+
+  const handleTilePointerUp = (areaId: string, cancelled = false) => {
+    if (sendingRef.current) return;
+    const quickTap = !cancelled && Date.now() - pressStartRef.current < HOLD_ARM_MS;
+    clearHoldTimers();
+    setHoldStage(0);
+    setHoldingArea(null);
+    // Lifting the finger lets the selection go, with a smooth fade.
+    setSelectedArea(null);
+    if (quickTap && !shouldReduceMotion) {
+      // A quick tap shows how to begin: the ring starts tracing, then slides back.
+      setTeaseArea(null);
+      window.requestAnimationFrame(() => setTeaseArea(areaId));
+      window.setTimeout(() => setTeaseArea((current) => (current === areaId ? null : current)), 1150);
+    }
+  };
+
+  const handleTileKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, areaId: string) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    if (sendingRef.current || !canBeginRef.current) return;
+    // Keyboard: first press chooses the reading, second press begins it.
+    if (selectedArea === areaId) completeHold(areaId);
+    else setSelectedArea(areaId);
+  };
+
+  useEffect(() => () => clearHoldTimers(), []);
+
+  // Tell the pager how dark the sky behind the stars should be.
+  useEffect(() => {
+    const root = document.documentElement;
+    const level = sentArea ? 3 : holdStage;
+    if (level > 0) root.dataset.astroFocus = String(level);
+    else delete root.dataset.astroFocus;
+    return () => {
+      delete root.dataset.astroFocus;
+    };
+  }, [holdStage, sentArea]);
+
+  // Rotate the hero's sales line.
+  useEffect(() => {
+    if (shouldReduceMotion) return;
+    let swapTimer = 0;
+    const interval = window.setInterval(() => {
+      setTaglineVisible(false);
+      swapTimer = window.setTimeout(() => {
+        setTaglineIndex((index) => (index + 1) % HERO_TAGLINES.length);
+        setTaglineVisible(true);
+      }, 520);
+    }, 3800);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(swapTimer);
+    };
+  }, [shouldReduceMotion]);
 
   const getAreaColors = useCallback((areaId: string) => {
     const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
@@ -1526,11 +1465,21 @@ export default function ReadingIntakeScreen({
   }, []);
 
   const voiceVisualActive = voiceJourneyActive || askHolding || isTranscribingAsk || voiceNavigating;
+  const voiceVisualActiveRef = useRef(voiceVisualActive);
+  voiceVisualActiveRef.current = voiceVisualActive;
+
+  // Darkness level for the whole screen: 0 rest · 1 dim · 2 darkness · 3 complete darkness.
+  const focusLevel = sentArea ? 3 : holdStage;
+  const contextActive = !!selectedArea || contextFocused;
+  // Keep the last description so it can fade out rather than vanish.
+  const lastDescriptionRef = useRef("");
+  if (selectedAreaConfig) lastDescriptionRef.current = selectedAreaConfig.description;
+  const lastDescription = lastDescriptionRef.current;
 
   return (
-      <div
+    <div
       ref={intakeRootRef}
-      className="relative h-full min-h-full w-full min-w-0 max-w-full overflow-x-hidden bg-transparent text-slate-100"
+      className={`astro-intake focus-${focusLevel} relative h-full min-h-full w-full min-w-0 max-w-full overflow-x-hidden bg-transparent text-slate-100`}
       style={{
         height: "100%",
         minHeight: "100%",
@@ -1542,6 +1491,16 @@ export default function ReadingIntakeScreen({
         :global(.astro-intake-panel-no-scrollbar::-webkit-scrollbar) { display: none !important; width: 0 !important; height: 0 !important; }
         .tap-fix { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
+        /* Typefaces: Cormorant Garamond (display, labels) and Cinzel (small capitals),
+           loaded in layout.tsx as --font-display and --font-caps. */
+        .astro-intake {
+          --display: var(--font-display), "Cormorant Garamond", Georgia, "Times New Roman", serif;
+          --caps: var(--font-caps), Cinzel, Georgia, serif;
+          --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+          --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ── HERO GLASS SWEEP (on entry) ── */
         @keyframes heroShine {
           0% { transform: translateX(-140%) skewX(-18deg); }
           100% { transform: translateX(240%) skewX(-18deg); }
@@ -1557,17 +1516,14 @@ export default function ReadingIntakeScreen({
           pointer-events: none;
           z-index: 1;
         }
-        .hero-shine-sweep::after {
-          animation: heroShine 2.75s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
-        }
+        .hero-shine-sweep::after { animation: heroShine 2.75s var(--ease-out) 1 forwards; }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── HERO AURA — separate from hero content so focus can remove only the glow ── */
+        /* ── HERO AURA ── */
         @property --hero-c1-color { syntax: "<color>"; inherits: true; initial-value: rgb(52, 211, 153); }
         @property --hero-c2-color { syntax: "<color>"; inherits: true; initial-value: rgb(34, 211, 238); }
         @property --hero-c3-color { syntax: "<color>"; inherits: true; initial-value: rgb(56, 189, 248); }
         @property --hero-c4-color { syntax: "<color>"; inherits: true; initial-value: rgb(168, 85, 247); }
-
         .hero-glow-shell {
           position: relative;
           border-radius: 28px;
@@ -1580,20 +1536,13 @@ export default function ReadingIntakeScreen({
           z-index: 0;
           border-radius: inherit;
           pointer-events: none;
-          opacity: 1;
           border: 1px solid color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
           box-shadow:
             0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent),
             0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent),
             0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent);
           animation: heroBorderGlow 9s ease-in-out infinite;
-          /* Focus release: return quickly, without a hard snap. */
-          transition: opacity 350ms cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .hero-glow-shell-focus::before {
-          opacity: 0;
-          /* Enter focus responsively; the reverse transition uses 350ms above. */
-          transition-duration: 900ms;
+          transition: opacity 0.7s var(--ease-soft);
         }
         @keyframes heroBorderGlow {
           0%, 100% {
@@ -1614,24 +1563,241 @@ export default function ReadingIntakeScreen({
           }
         }
 
-        .standard-shadow {
-          box-shadow:
-            0 18px 38px rgba(0,0,0,0.78),
-            0 34px 72px rgba(0,0,0,0.58),
-            0 48px 96px rgba(0,0,0,0.34);
+        /* ── HERO BRAND ── */
+        .brand-pill {
+          position: absolute;
+          top: 16px;
+          left: 50%;
+          transform: translateX(-50%);
+          white-space: nowrap;
+          padding: 6px 14px 6px 18px;
+          border-radius: 9999px;
+          border: 1px solid rgba(165,180,252,0.32);
+          background: rgba(49,46,129,0.22);
+          font-family: var(--caps);
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: 0.34em;
+          text-transform: uppercase;
+          color: rgba(226,232,240,0.92);
+        }
+        .brand-pill sup {
+          position: relative;
+          top: -0.55em;
+          margin-left: 0.15em;
+          font-size: 0.6em;
+          letter-spacing: 0.16em;
+          line-height: 0;
+          vertical-align: baseline;
+        }
+        .brand-title {
+          margin: 0;
+          text-align: center;
+          font-family: var(--display);
+          font-size: 44px;
+          font-weight: 600;
+          line-height: 1;
+          letter-spacing: -0.01em;
+          color: rgba(240,242,249,0.96);
+          animation: breatheTitle 5.5s ease-in-out infinite;
+        }
+        @keyframes breatheTitle {
+          0%, 100% {
+            transform: scale(1);
+            text-shadow: 0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17);
+          }
+          50% {
+            transform: scale(1.015);
+            text-shadow: 0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 30px rgba(255,236,196,0.30);
+          }
+        }
+        .brand-foot {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 20px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .brand-rule {
+          width: 82px;
+          height: 1px;
+          margin-bottom: 10px;
+          background: linear-gradient(90deg, transparent, rgba(203,213,225,0.42), transparent);
+        }
+        .brand-tagline {
+          margin: 0;
+          white-space: nowrap;
+          font-family: var(--display);
+          font-style: italic;
+          font-weight: 500;
+          font-size: 15.5px;
+          line-height: 1.3;
+          letter-spacing: 0.01em;
+          color: rgba(203,213,225,0.85);
+          transition: opacity 0.5s ease, transform 0.6s var(--ease-out);
+        }
+        .brand-tagline.is-out { opacity: 0; transform: translateY(4px); }
+
+        /* ── HEADING (swipe prompt / held reading) ── */
+        .astro-heading {
+          font-family: var(--caps);
+          font-size: 13px;
+          font-weight: 500;
+          letter-spacing: 0.28em;
+          text-transform: uppercase;
+          color: #f1f5f9;
+          text-shadow: 0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22);
         }
 
-        /* ── PREMIUM CONTEXT — soft circulating pearl/champagne invitation ── */
+        /* ── READING TILES ── */
+        .astro-tile {
+          position: relative;
+          overflow: hidden;
+          height: 84px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background-color: rgba(255,255,255,0.03);
+          box-shadow: 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
+          cursor: pointer;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
+          touch-action: manipulation;
+          transition: border-color .9s var(--ease-soft), background-color .9s var(--ease-soft), box-shadow .9s var(--ease-soft),
+            transform .9s var(--ease-soft), opacity .9s var(--ease-soft), filter .9s var(--ease-soft);
+        }
+        .astro-tile > * { position: relative; z-index: 1; }
+        .astro-tile .tile-icon {
+          width: 24px;
+          height: 24px;
+          color: rgba(203,213,225,0.68);
+          transition: color .9s var(--ease-out), filter .9s var(--ease-out), transform .9s var(--ease-out);
+        }
+        .astro-tile .tile-label {
+          font-family: var(--display);
+          font-size: 19px;
+          font-weight: 600;
+          letter-spacing: 0.015em;
+          color: rgba(226,232,240,0.86);
+          transition: color .9s var(--ease-out);
+        }
+        .astro-tile.is-on {
+          border-color: var(--b);
+          background-color: var(--bg);
+          transform: translateY(-1px);
+          box-shadow: 0 0 0 1px var(--b), 0 0 18px 2px var(--g), 0 0 34px 5px var(--g), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
+          transition-duration: .5s;
+        }
+        .astro-tile.is-on .tile-icon { color: var(--t); filter: drop-shadow(0 0 7px var(--g)); transform: scale(1.035); transition-duration: .5s; }
+        .astro-tile.is-on .tile-label { color: var(--t); transition-duration: .5s; }
+
+        /* Hold: color fills from the bottom, a ring traces the edge, the tile pulses. */
+        .astro-tile::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          background: linear-gradient(0deg, var(--g), transparent 110%);
+          transform: scaleY(0);
+          transform-origin: bottom;
+          transition: transform .3s ease;
+        }
+        .astro-tile.is-holding::after { transform: scaleY(1); transition: transform ${HOLD_TOTAL_MS}ms linear; }
+        @property --hold-progress { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+        .astro-tile::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 2;
+          border-radius: inherit;
+          padding: 2px;
+          pointer-events: none;
+          background: conic-gradient(from 0deg, var(--t) var(--hold-progress), transparent 0);
+          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          opacity: 0;
+          --hold-progress: 0deg;
+          transition: --hold-progress .35s ease, opacity .3s ease;
+        }
+        .astro-tile.is-holding::before { opacity: 1; --hold-progress: 360deg; transition: --hold-progress ${HOLD_TOTAL_MS}ms linear, opacity .2s ease; }
+        @keyframes tileTease { 0% { --hold-progress: 0deg; opacity: 1; } 45% { --hold-progress: 165deg; opacity: 1; } 80% { --hold-progress: 0deg; opacity: 1; } 100% { --hold-progress: 0deg; opacity: 0; } }
+        .astro-tile.is-tease::before {
+          background: conic-gradient(from 0deg, rgba(255,255,255,0.95) var(--hold-progress), transparent 0);
+          animation: tileTease 1.1s var(--ease-out);
+        }
+        @keyframes holdPulse {
+          0%, 100% { transform: scale(1.025); box-shadow: 0 0 0 1px var(--b), 0 0 18px 2px var(--g), 0 0 36px 6px var(--g), 0 18px 34px rgba(0,0,0,0.78); }
+          50% { transform: scale(1.05); box-shadow: 0 0 0 1px var(--b), 0 0 32px 8px var(--g), 0 0 70px 18px var(--g), 0 18px 34px rgba(0,0,0,0.78); }
+        }
+        .astro-tile.is-holding { animation: holdPulse 1s ease-in-out infinite; z-index: 3; }
+        .focus-3 .astro-tile.is-holding { animation-duration: .6s; }
+        @keyframes sendFlash {
+          0% { transform: scale(1.05); }
+          40% { transform: scale(1.1); box-shadow: 0 0 0 2px #fff, 0 0 50px 16px var(--g), 0 0 120px 40px var(--g); }
+          100% { transform: scale(1.02); opacity: 0; }
+        }
+        .astro-tile.is-sent { animation: sendFlash .6s var(--ease-out) forwards; z-index: 3; }
+        .astro-tile.is-sent::before { opacity: 1; --hold-progress: 360deg; }
+
+        /* ── DESCRIPTION + HINT (fixed placement) ── */
+        .astro-desc p {
+          min-height: 1.35em;
+          margin: 0;
+          font-family: var(--display);
+          font-style: italic;
+          font-weight: 500;
+          font-size: 18.5px;
+          line-height: 1.35;
+          color: rgba(203,213,225,0.82);
+          opacity: 0;
+          transform: translateY(6px);
+          transition: opacity .9s var(--ease-soft), transform .9s var(--ease-soft);
+        }
+        .astro-desc p.is-shown { opacity: 1; transform: none; transition: opacity .45s ease, transform .55s var(--ease-out); }
+        .astro-desc small {
+          display: block;
+          margin-top: 8px;
+          font-family: var(--caps);
+          font-size: 10.5px;
+          font-weight: 500;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: var(--hint, rgba(248,250,252,0.9));
+          transition: color .9s var(--ease-soft), font-size .4s ease, letter-spacing .4s ease;
+        }
+        .focus-1 .astro-desc small, .focus-2 .astro-desc small, .focus-3 .astro-desc small { font-size: 12px; letter-spacing: 0.24em; }
+
+        /* ── FOCUS STEPS: dim → darkness → complete darkness (the stars stay, in the pager) ── */
+        .astro-fade { transition: opacity .7s var(--ease-soft), filter .7s var(--ease-soft); }
+        .focus-1 .astro-fade, .focus-2 .astro-fade, .focus-3 .astro-fade { transition: opacity .8s var(--ease-out), filter .8s var(--ease-out); }
+        .focus-1 .astro-fade { opacity: .3; filter: brightness(.55) saturate(.5); }
+        .focus-2 .astro-fade { opacity: .06; filter: blur(2px) brightness(.3); }
+        .focus-3 .astro-fade { opacity: 0; filter: blur(3px) brightness(.2); }
+        .focus-1 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .3; filter: brightness(.55) saturate(.5); transition-duration: .8s; }
+        .focus-2 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .06; filter: blur(2px) brightness(.3); transition-duration: .8s; }
+        .focus-3 .astro-tile:not(.is-holding):not(.is-sent) { opacity: 0; filter: blur(3px) brightness(.2); transition-duration: .8s; }
+        .focus-2 .astro-desc p.is-shown { opacity: .4; }
+        .focus-3 .astro-desc p.is-shown { opacity: 0; }
+        .focus-1 .hero-glow-shell::before { opacity: .3; }
+        .focus-2 .hero-glow-shell::before, .focus-3 .hero-glow-shell::before { opacity: 0; }
+
+        /* ── ADD CONTEXT — soft circulating pearl/champagne edge ── */
         @property --context-orbit {
           syntax: "<angle>";
           inherits: false;
           initial-value: 0deg;
         }
-
         @keyframes contextOrbit {
           to { --context-orbit: 360deg; }
         }
-
         .premium-context {
           position: relative;
           isolation: isolate;
@@ -1641,8 +1807,6 @@ export default function ReadingIntakeScreen({
             0 18px 34px rgba(0,0,0,0.78),
             0 34px 68px rgba(0,0,0,0.46);
         }
-
-        /* The visible edge: intentionally soft, not a hard metallic stroke. */
         .premium-context::before {
           content: "";
           position: absolute;
@@ -1671,37 +1835,8 @@ export default function ReadingIntakeScreen({
           opacity: 0;
           filter: blur(0.35px);
           animation: contextOrbit 8s linear infinite;
-          transition:
-            opacity 700ms cubic-bezier(0.22,1,0.36,1),
-            filter 700ms cubic-bezier(0.22,1,0.36,1);
+          transition: opacity .9s var(--ease-soft);
         }
-
-        /* A blurred aura beneath the edge makes the motion read as light, not a border. */
-        .premium-context::after {
-          content: "";
-          position: absolute;
-          inset: -5px;
-          z-index: -1;
-          border-radius: 25px;
-          pointer-events: none;
-          background: conic-gradient(
-            from var(--context-orbit) at 50% 50%,
-            rgba(255,255,255,0.24) 0deg,
-            rgba(255,255,255,0.08) 62deg,
-            rgba(218,183,105,0.30) 90deg,
-            rgba(185,139,55,0.12) 152deg,
-            rgba(255,255,255,0.22) 180deg,
-            rgba(255,255,255,0.07) 242deg,
-            rgba(218,183,105,0.28) 270deg,
-            rgba(185,139,55,0.11) 332deg,
-            rgba(255,255,255,0.24) 360deg
-          );
-          opacity: 0;
-          filter: blur(10px);
-          animation: contextOrbit 8s linear infinite;
-          transition: opacity 700ms cubic-bezier(0.22,1,0.36,1);
-        }
-
         .premium-context:focus-within::before,
         .premium-context-active::before {
           opacity: 0.88;
@@ -1709,45 +1844,36 @@ export default function ReadingIntakeScreen({
             drop-shadow(0 0 4px rgba(255,255,255,0.16))
             drop-shadow(0 0 8px rgba(205,164,82,0.18));
         }
-
-        .premium-context:focus-within::after,
-        .premium-context-active::after {
-          opacity: 0.78;
+        .premium-context > * { z-index: 1; }
+        .context-placeholder {
+          font-family: var(--display);
+          font-size: 18px;
+          font-weight: 500;
+          letter-spacing: 0.01em;
+          color: rgba(170,182,202,0.78);
         }
 
-        .premium-context > * {
-          z-index: 1;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .premium-context::before,
-          .premium-context::after {
-            animation: none;
-          }
-        }
-
-        /* Focus mode: Ask Anything recedes as one unit, including the microphone. */
-        .ask-focus-veil {
-          position: absolute !important;
-          inset: 0;
-          z-index: 5 !important;
-          border-radius: 24px;
-          pointer-events: none;
-          background: rgba(0, 2, 9, 0.72);
-          transition: opacity 950ms cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        /* ── ASK ANYTHING — premium voice control, borrowing the Your Readings visual language ── */
+        /* ── ASK ANYTHING — gold/white orbiting edge with a breathing aura ── */
         @property --voice-angle {
           syntax: "<angle>";
           inherits: false;
           initial-value: 0deg;
         }
-
         @keyframes voiceOrbit {
           to { --voice-angle: 360deg; }
         }
-
+        @property --voice-glow-angle {
+          syntax: "<angle>";
+          inherits: false;
+          initial-value: 0deg;
+        }
+        @keyframes voiceGlowOrbit {
+          to { --voice-glow-angle: 360deg; }
+        }
+        @keyframes voiceGlowBreathe {
+          0%, 100% { opacity: 0.45; }
+          50% { opacity: 0.7; }
+        }
         @keyframes askMicBreathe {
           0%, 100% {
             transform: scale(1);
@@ -1758,13 +1884,38 @@ export default function ReadingIntakeScreen({
             box-shadow: 0 0 18px rgba(218,183,104,0.18), 0 0 28px rgba(255,255,255,0.08);
           }
         }
-
+        .ask-box::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 86px;
+          border-radius: 26px;
+          z-index: 0;
+          pointer-events: none;
+          background: conic-gradient(
+            from var(--voice-glow-angle),
+            rgba(255,255,255,0.75),
+            rgba(255,239,195,0.35) 60deg,
+            rgba(218,183,104,0.85) 115deg,
+            rgba(255,255,255,0.30) 175deg,
+            rgba(255,255,255,0.80) 228deg,
+            rgba(193,151,67,0.80) 296deg,
+            rgba(255,255,255,0.75)
+          );
+          filter: blur(16px);
+          opacity: 0.55;
+          transform: scale(1.04);
+          animation: voiceGlowOrbit 8s linear infinite, voiceGlowBreathe 4.5s ease-in-out infinite;
+        }
         /* Gold border is painted as a layered background rather than a
          * masked pseudo-element. This keeps the animated conic gradient
          * stable across iOS Safari's back/forward cache, where the mask
          * layer could otherwise repaint incorrectly and fill the button. */
         .ask-premium {
           position: relative;
+          z-index: 1;
           overflow: hidden;
           user-select: none;
           -webkit-user-select: none;
@@ -1772,18 +1923,9 @@ export default function ReadingIntakeScreen({
           isolation: isolate;
           border: 1.25px solid transparent;
           border-radius: 24px;
-
           background:
-            radial-gradient(
-              circle at 50% -70%,
-              rgba(255,255,255,0.11),
-              transparent 66%
-            ) padding-box,
-            linear-gradient(
-              145deg,
-              rgba(19,18,24,0.96),
-              rgba(7,10,21,0.97)
-            ) padding-box,
+            radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%) padding-box,
+            linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97)) padding-box,
             conic-gradient(
               from var(--voice-angle),
               rgba(255,255,255,0.94) 0deg,
@@ -1794,36 +1936,23 @@ export default function ReadingIntakeScreen({
               rgba(193,151,67,0.86) 296deg,
               rgba(255,255,255,0.94) 360deg
             ) border-box;
-
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.08),
-            0 0 22px rgba(203,164,78,0.12),
+            inset 0 1px 0 rgba(255,255,255,0.10),
+            0 0 0 1px rgba(255,239,195,0.10),
+            0 0 18px rgba(218,183,104,0.30),
+            0 0 36px rgba(255,255,255,0.10),
             0 16px 38px rgba(0,0,0,0.46);
-
           animation: voiceOrbit 8s linear infinite;
         }
-
         .ask-premium::before,
-        .ask-premium::after {
-          content: none;
-        }
-
+        .ask-premium::after { content: none; }
         .ask-premium:hover,
         .ask-premium:focus-visible {
           transform: translateY(-1px);
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.11),
-            0 0 28px rgba(203,164,78,0.18),
-            0 18px 42px rgba(0,0,0,0.50);
           outline: none;
         }
-
-        .ask-premium:active {
-          transform: translateY(0);
-        }
-
+        .ask-premium:active { transform: translateY(0); }
         .ask-premium > * { position: relative; z-index: 2; }
-
         .ask-mic-halo {
           display: flex;
           height: 42px;
@@ -1839,6 +1968,13 @@ export default function ReadingIntakeScreen({
             inset 0 1px 0 rgba(255,255,255,0.07),
             0 0 14px rgba(218,183,104,0.12);
           animation: askMicBreathe 3.4s ease-in-out infinite;
+        }
+        .ask-caption {
+          font-family: var(--caps);
+          font-size: 10.5px;
+          font-weight: 500;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
         }
 
         .mic-ready-toggle {
@@ -1859,7 +1995,6 @@ export default function ReadingIntakeScreen({
             box-shadow 420ms cubic-bezier(0.22,1,0.36,1),
             filter 420ms cubic-bezier(0.22,1,0.36,1);
         }
-
         .mic-ready-toggle[data-enabled="true"] {
           border-color: rgba(165,180,252,0.16);
           box-shadow:
@@ -1867,13 +2002,11 @@ export default function ReadingIntakeScreen({
             0 0 10px rgba(99,102,241,0.05),
             0 10px 22px rgba(0,0,0,0.24);
         }
-
         .mic-ready-toggle[data-enabled="true"]:hover,
         .mic-ready-toggle[data-enabled="true"]:focus-visible {
           opacity: 0.44 !important;
           filter: brightness(0.9) saturate(0.65) !important;
         }
-
         .mic-ready-knob {
           position: absolute;
           left: 50%;
@@ -1891,11 +2024,7 @@ export default function ReadingIntakeScreen({
             background 420ms cubic-bezier(0.22,1,0.36,1),
             box-shadow 420ms cubic-bezier(0.22,1,0.36,1);
         }
-
-        .mic-ready-toggle[data-enabled="false"] .mic-ready-knob {
-          top: 39px;
-        }
-
+        .mic-ready-toggle[data-enabled="false"] .mic-ready-knob { top: 39px; }
         .mic-ready-toggle[data-enabled="true"] .mic-ready-knob {
           top: 7px;
           background: linear-gradient(145deg, rgba(255,246,218,0.98), rgba(218,183,104,0.92));
@@ -1908,41 +2037,21 @@ export default function ReadingIntakeScreen({
 
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
+          .brand-title,
           .ask-premium,
-          .ask-mic-halo { animation: none !important; }
+          .ask-box::before,
+          .ask-mic-halo,
+          .astro-tile,
+          .astro-tile::before { animation: none !important; }
           .mic-ready-toggle,
           .mic-ready-knob { transition: none !important; }
         }
       `}</style>
 
-      {/* Match the Birth Chart focus depth: selected readings sit against a
-          near-black sky while the active card and controls remain above it. */}
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[5] bg-black"
-        initial={false}
-        animate={{ opacity: selectedArea ? 0.48 : 0 }}
-        transition={{
-          duration: shouldReduceMotion ? 0 : selectedArea ? 0.95 : 0.3,
-          ease: [0.22, 1, 0.36, 1],
-        }}
-      />
-
       <div
         className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col px-[clamp(12px,4vw,16px)]"
-        onClickCapture={(e) => {
-          if (!selectedArea) return;
-          const target = e.target as HTMLElement;
-          if (
-            target.closest('[data-reading-choice="true"]') ||
-            target.closest('[data-reading-context="true"]') ||
-            target.closest('[data-begin-reading="true"]')
-          ) return;
-          clearReadingFocus();
-          e.stopPropagation();
-        }}
         style={{
-          paddingTop: "calc(env(safe-area-inset-top) + 8px)",
+          paddingTop: "calc(env(safe-area-inset-top) + 16px)",
           paddingBottom: "calc(2rem + env(safe-area-inset-bottom))",
         }}
       >
@@ -1952,20 +2061,10 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
-          {/* Page navigation is separate from the tap-through hero information. */}
-          <button
-            type="button"
-            onClick={() => onSwipeLeft?.()}
-            className="tap-fix mx-auto mb-2 mt-1 text-[11px] font-medium uppercase tracking-[0.22em] text-slate-300/85"
-            style={{ textShadow: "0 2px 10px rgba(0,0,0,0.85), 0 0 12px rgba(148,163,184,0.14)" }}
-          >
-            Swipe Left To Explore
-          </button>
-
-          {/* ── HERO — locked at exactly 236px for every state ── */}
-          <section className="mb-[14px] pt-0">
+          {/* ── HERO — fixed 236px brand card; becomes the live waveform while asking aloud ── */}
+          <section className="astro-fade mb-[20px] pt-0">
             <div
-              className={`hero-glow-shell ${selectedArea && !voiceVisualActive ? "hero-glow-shell-focus" : ""}`}
+              className="hero-glow-shell"
               style={{
                 "--hero-c1-color": `rgb(${heroPalette[0]})`,
                 "--hero-c2-color": `rgb(${heroPalette[1]})`,
@@ -1975,29 +2074,11 @@ export default function ReadingIntakeScreen({
             >
               <div
                 ref={heroStageRef}
-                className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center transition-[opacity,filter] ease-[cubic-bezier(0.22,1,0.36,1)]`}
-                onClick={voiceVisualActive ? undefined : cycleHeroInfo}
-                role="button"
-                tabIndex={voiceVisualActive ? -1 : 0}
-                onKeyDown={(e) => { if (!voiceVisualActive && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); cycleHeroInfo(); } }}
+                className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center`}
                 onContextMenu={(e) => e.preventDefault()}
-                aria-label={
-                  voiceVisualActive
-                    ? "Ask Anything voice flow is active"
-                    : "Tap to change astrological information"
-                }
-                style={{
-                  cursor: voiceVisualActive ? "default" : "pointer",
-                  opacity: voiceVisualActive ? 1 : selectedArea ? 0.68 : 1,
-                  filter: voiceVisualActive
-                    ? "brightness(1) saturate(1)"
-                    : selectedArea
-                      ? "grayscale(0.72) brightness(0.56) saturate(0.42)"
-                      : "grayscale(0) brightness(1) saturate(1)",
-                  transitionDuration: voiceVisualActive || selectedArea ? "700ms" : "350ms",
-                }}
+                aria-label={voiceVisualActive ? "Ask Anything voice flow is active" : undefined}
               >
-                {/* One master canvas: every hero uses the exact same 374 × 236 composition. */}
+                {/* One master canvas: the composition is designed at 374 × 236 and scaled to fit. */}
                 <div
                   className="absolute left-1/2 top-1/2 z-10 h-[236px] w-[374px]"
                   style={{
@@ -2007,137 +2088,50 @@ export default function ReadingIntakeScreen({
                 >
                   {voiceVisualActive ? (
                     <div className="absolute inset-0">
-
-
-                        <div className="absolute inset-0 flex items-center justify-center px-[30px]">
-                          <canvas
-                            ref={canvasRef}
-                            aria-hidden="true"
-                            className="h-[122px] w-[330px] max-w-full"
-                            style={{ opacity: askHolding ? 1 : 0.42 }}
-                          />
-                          {voiceTranscriptPreview && (
-                            <div aria-live="polite" className="pointer-events-none absolute inset-x-[30px] top-1/2 z-20 -translate-y-1/2 text-center">
-                              <p className="mx-auto max-h-[110px] overflow-hidden text-[18px] leading-[1.4] text-white"
-                                style={{textShadow:"0 2px 16px rgba(0,0,0,0.96)"}}>{voiceTranscriptPreview}</p>
-                            </div>
-                          )}
-                          {!askHolding && (isTranscribingAsk || voiceNavigating) ? (
-                            <motion.p
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              className="absolute bottom-[31px] left-0 right-0 text-[9px] font-medium uppercase tracking-[0.2em] text-slate-300/72"
+                      <div className="absolute inset-0 flex items-center justify-center px-[30px]">
+                        <canvas
+                          ref={canvasRef}
+                          aria-hidden="true"
+                          className="h-[122px] w-[330px] max-w-full"
+                          style={{ opacity: askHolding ? 1 : 0.42 }}
+                        />
+                        {voiceTranscriptPreview && (
+                          <div aria-live="polite" className="pointer-events-none absolute inset-x-[30px] top-1/2 z-20 -translate-y-1/2 text-center">
+                            <p
+                              className="mx-auto max-h-[110px] overflow-hidden text-[18px] leading-[1.4] text-white"
+                              style={{ textShadow: "0 2px 16px rgba(0,0,0,0.96)" }}
                             >
-                              {voiceNavigating ? "Opening your reading…" : "Understanding your question…"}
-                            </motion.p>
-                          ) : null}
-                        </div>
-                                          </div>
+                              {voiceTranscriptPreview}
+                            </p>
+                          </div>
+                        )}
+                        {!askHolding && (isTranscribingAsk || voiceNavigating) ? (
+                          <motion.p
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="absolute bottom-[31px] left-0 right-0 text-[9px] font-medium uppercase tracking-[0.2em] text-slate-300/72"
+                          >
+                            {voiceNavigating ? "Opening your reading…" : "Understanding your question…"}
+                          </motion.p>
+                        ) : null}
+                      </div>
+                    </div>
                   ) : (
-                    <div className="absolute inset-0 flex flex-col items-center px-[18px] pt-[23px] pb-[18px] text-center">
-
-
-                          <p
-                            className="text-[22px] font-normal leading-none tracking-[0.015em] text-slate-100/88"
-                            style={{
-                              fontFamily:
-                                '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
-                              textShadow:
-                                "0 3px 13px rgba(0,0,0,0.92), 0 0 18px rgba(199,210,254,0.18)",
-                            }}
-                          >
-                            Personalized
-                          </p>
-
-                          <h1
-                            className="mt-[1px] whitespace-nowrap text-[39px] font-semibold leading-[0.98] tracking-[-0.048em] text-white"
-                            style={{
-                              transform: "scaleY(1.045)",
-                              transformOrigin: "center bottom",
-                              textShadow:
-                                "0 5px 6px rgba(0,0,0,0.94), 0 13px 24px rgba(0,0,0,0.78), 0 0 26px rgba(148,163,184,0.17)",
-                            }}
-                          >
-                            Astrological Predictions
-                          </h1>
-
-                          <p
-                            className="mt-[6px] whitespace-nowrap text-[8px] font-medium uppercase tracking-[0.22em] text-slate-300/52"
-                            style={{
-                              textShadow:
-                                "0 2px 10px rgba(0,0,0,0.72)",
-                            }}
-                          >
-                            <span className="text-indigo-200/72">
-                              AstroProXL
-                            </span>
-
-                            <span className="mx-2 text-slate-500/70">
-                              |
-                            </span>
-
-                            <span>The Astrology Engine</span>
-                          </p>
-
-                          {/* Divider moved BELOW AstroProXL / The Astrology Engine */}
-                          <span
-                            className="mt-[7px] h-px w-[82px]"
-                            style={{
-                              background:
-                                "linear-gradient(90deg, transparent, rgba(203,213,225,0.42), transparent)",
-                            }}
-                            aria-hidden="true"
-                          />
-
-
-                          <AnimatePresence mode="wait" initial={false}>
-                            <motion.div
-                              key={heroInfoIndex}
-                              initial={shouldReduceMotion ? {opacity:0} : {opacity:0,y:6}}
-                              animate={{opacity:1,y:0}}
-                              exit={shouldReduceMotion ? {opacity:0} : {opacity:0,y:-5}}
-                              transition={{duration:shouldReduceMotion ? 0.1 : 0.28}}
-                              className="absolute inset-x-[14px] top-[119px] bottom-[20px] flex items-center justify-center"
-                            >
-                              {heroInfoIndex === 0 ? (
-                                <div className="grid w-full grid-cols-3 justify-items-center gap-[9px]">
-                                  {heroData.personal.map((item) => (
-                                    <div key={item.role} className="flex h-[86px] w-[86px] flex-col items-center justify-center rounded-full border text-center"
-                                      style={{borderColor:"rgba(203,213,225,0.28)",background:"rgba(15,23,42,0.30)",boxShadow:`0 0 14px ${signAccentGlow(item.sign)}`}}>
-                                      <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-slate-300/70">{item.role}</span>
-                                      <span className="mt-[3px] text-[16px] font-medium leading-none" style={{color:signAccentColor(item.sign)}}>{item.sign}</span>
-                                      <span className="mt-[5px] text-[10px] tabular-nums text-slate-300/72">{item.degree ?? "—"}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : heroInfoIndex === 1 ? (
-                                <div className="flex w-full flex-col items-center gap-[14px]">
-                                  <span className="text-[9px] uppercase tracking-[0.2em] text-slate-300/65">Elemental Balance</span>
-                                  <div className="flex w-full items-end justify-evenly px-[22px]">
-                                    {(["Earth","Fire","Water","Air"] as const).map((element) => {
-                                      const count=natal.filter(p=>SIGN_ELEMENTS[p.sign]===element && ["Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto"].includes(p.name)).length;
-                                      return <div key={element} className="flex flex-col items-center gap-[7px]">
-                                        <div className="flex h-[47px] items-end"><span className="w-[6px] rounded-full" style={{height:`${Math.max(11,count*9)}px`,maxHeight:"47px",background:HERO_ELEMENT_COLORS[element].bar,boxShadow:`0 0 12px ${HERO_ELEMENT_COLORS[element].glow}`}} /></div>
-                                        <span className="text-[9px] font-medium uppercase tracking-[0.12em] text-slate-300/75">{element}</span>
-                                      </div>;
-                                    })}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="grid w-full grid-cols-2 gap-[24px] px-[40px]">
-                                  {(["Sun","Moon"] as const).map((name)=>{
-                                    const item=transits.find(p=>p.name?.toLowerCase()===name.toLowerCase());
-                                    return <div key={name} className="flex flex-col items-center gap-[6px] text-center">
-                                      <span className="text-[9px] font-semibold uppercase tracking-[0.17em] text-slate-300/65">Current {name}</span>
-                                      <span className="text-[20px] leading-tight" style={{color:signAccentColor(item?.sign ?? "")}}>{item?.sign ?? "—"}</span>
-                                      <span className="text-[11px] tabular-nums text-slate-300/70">{item?.degree ?? "—"}</span>
-                                    </div>;
-                                  })}
-                                </div>
-                              )}
-                            </motion.div>
-                          </AnimatePresence>
-                          <span className="absolute bottom-[7px] text-[8px] uppercase tracking-[0.18em] text-slate-400/50">Tap for more</span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center px-[18px] text-center">
+                      <span className="brand-pill" aria-label="AstroProXL">
+                        AstroPro<sup aria-hidden="true">XL</sup>
+                      </span>
+                      <h1 className="brand-title">
+                        Real Astrological
+                        <br />
+                        Predictions
+                      </h1>
+                      <div className="brand-foot">
+                        <span className="brand-rule" aria-hidden="true" />
+                        <p className={`brand-tagline ${taglineVisible ? "" : "is-out"}`} aria-live="polite">
+                          {HERO_TAGLINES[taglineIndex]}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2145,92 +2139,101 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── Dynamic reading header ──
-              The heading keeps one visual treatment; selection only changes the word. */}
-          <div
-            className="relative mb-[14px] h-[26px] overflow-hidden text-center"
+          {/* ── HEADING — the swipe prompt; shows the reading's name while it is held ── */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="astro-fade astro-heading tap-fix relative mb-[14px] flex h-[26px] items-center justify-center transition-opacity duration-500"
+            style={{ opacity: voiceVisualActive ? 0 : undefined }}
             aria-live="polite"
           >
-            <p
-              className="absolute inset-x-0 top-0 flex h-[26px] items-center justify-center text-[14px] font-semibold uppercase leading-[20px] tracking-[0.245em] text-slate-100 transition-[opacity,filter] duration-500 sm:text-[14.5px]"
-              style={{
-                opacity: voiceVisualActive ? 0 : 1,
-                filter: voiceVisualActive ? "blur(4px)" : "blur(0px)",
-                textShadow:
-                  "0 4px 5px rgba(0,0,0,0.98), 0 9px 18px rgba(0,0,0,0.78), 0 0 18px rgba(148,163,184,0.22)",
-              }}
-            >
-              {selectedAreaConfig ? selectedAreaConfig.title : "Select A Reading"}
-            </p>
-          </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={selectedAreaConfig?.id ?? "swipe"}
+                className="flex items-center"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: shouldReduceMotion ? 0.1 : 0.45, ease: [0.4, 0, 0.2, 1] }}
+                style={{ color: selectedAreaConfig ? getAreaColors(selectedAreaConfig.id).text : undefined }}
+              >
+                {selectedAreaConfig ? (
+                  selectedAreaConfig.title
+                ) : (
+                  <>
+                    <ChevronLeft className="mr-[10px] h-[14px] w-[14px] opacity-80" aria-hidden="true" />
+                    Swipe Left To Explore
+                  </>
+                )}
+              </motion.span>
+            </AnimatePresence>
+          </button>
 
-          {/* ── READING GRID (2×2) — symbols only ── */}
-          <section className="grid grid-cols-2 gap-x-3 gap-y-4">
+          {/* ── READING TILES (2×2) — press and hold one for 3 seconds to begin ── */}
+          <section
+            className="grid grid-cols-2 gap-x-3 gap-y-4 transition-opacity duration-700"
+            style={{ opacity: voiceVisualActive ? 0 : 1, pointerEvents: voiceVisualActive ? "none" : "auto" }}
+            aria-label="Choose a reading. Press and hold for three seconds to begin."
+          >
             {AREAS.map((area) => {
               const Icon = area.icon;
-              const isSelected = selectedArea === area.id;
               const c = getAreaColors(area.id);
+              const classes = [
+                "astro-tile tap-fix",
+                selectedArea === area.id ? "is-on" : "",
+                holdingArea === area.id ? "is-holding" : "",
+                teaseArea === area.id ? "is-tease" : "",
+                sentArea === area.id ? "is-sent" : "",
+              ].join(" ");
               return (
                 <button
                   key={area.id}
                   type="button"
-                  data-reading-choice="true"
-                  onClick={() => selectArea(area.id)}
-                  aria-pressed={isSelected}
-                  aria-label={area.title}
-                  className="tap-fix flex h-[84px] flex-col items-center justify-center gap-2 rounded-[20px] border transition-[border-color,background-color,box-shadow,transform,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  data-no-swipe
+                  className={classes}
+                  aria-pressed={selectedArea === area.id}
+                  aria-label={`${area.title}. ${area.description}. Press and hold to begin.`}
+                  onPointerDown={(e) => handleTilePointerDown(e, area.id)}
+                  onPointerUp={() => handleTilePointerUp(area.id)}
+                  onPointerCancel={() => handleTilePointerUp(area.id, true)}
+                  onKeyDown={(e) => handleTileKeyDown(e, area.id)}
+                  onContextMenu={(e) => e.preventDefault()}
                   style={{
-                    borderColor: isSelected ? c.border : "rgba(255,255,255,0.10)",
-                    backgroundColor: isSelected ? c.bg : "rgba(255,255,255,0.03)",
-                    boxShadow: isSelected
-                      ? `0 0 0 1px ${c.border}, 0 0 18px 2px ${c.glow}, 0 0 34px 5px ${c.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
-                      : "0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)",
-                    transform: isSelected ? "translateY(-1px)" : "translateY(0px)",
-                    opacity: voiceVisualActive ? 0 : selectedArea && !isSelected ? 0.74 : 1,
-                    filter: askHolding
-                      ? "blur(4px) brightness(0.18)"
-                      : selectedArea && !isSelected
-                        ? "grayscale(0.70) brightness(0.54) saturate(0.45)"
-                        : "brightness(1) saturate(1)",
-                    transitionDuration: selectedArea || voiceVisualActive ? "700ms" : "350ms",
-                  }}
+                    "--t": c.text,
+                    "--b": c.border,
+                    "--bg": c.bg,
+                    "--g": c.glow,
+                  } as React.CSSProperties}
                 >
-                  {Icon ? (
-                    <Icon
-                      className="h-7 w-7 transition-[color,filter,transform] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-                      style={{
-                        color: isSelected ? c.text : "rgba(203,213,225,0.68)",
-                        filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
-                        transform: isSelected ? "scale(1.035)" : "scale(1)",
-                      }}
-                    />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className="text-[19px] font-semibold leading-6 tracking-[-0.025em] transition-[color,filter,transform] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-                      style={{
-                        color: isSelected ? c.text : "rgba(203,213,225,0.72)",
-                        filter: isSelected ? `drop-shadow(0 0 7px ${c.glow})` : "none",
-                        transform: isSelected ? "scale(1.035)" : "scale(1)",
-                      }}
-                    >
-                      {area.marker}
-                    </span>
-                  )}
+                  <Icon className="tile-icon" />
+                  <span className="tile-label">{area.title}</span>
                 </button>
               );
             })}
           </section>
 
-          {/* ── OPTIONAL CONTEXT / PREMIUM ACCENT ── */}
+          {/* ── DESCRIPTION + HINT — fixed placement so nothing below moves ── */}
           <div
-            data-reading-context="true"
-            className={`premium-context relative mt-3 h-[84px] rounded-[20px] border bg-transparent standard-shadow transition-[border-color,box-shadow,background,opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${selectedArea ? "premium-context-active" : ""}`}
+            className="astro-desc flex h-[64px] flex-col items-center justify-center px-3 text-center transition-opacity duration-700"
+            aria-live="polite"
             style={{
               opacity: voiceVisualActive ? 0 : 1,
-              filter: voiceVisualActive ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
+              "--hint": selectedAreaConfig ? getAreaColors(selectedAreaConfig.id).text : undefined,
+            } as React.CSSProperties}
+          >
+            <p className={selectedAreaConfig ? "is-shown" : ""}>
+              {selectedAreaConfig?.description ?? lastDescription}
+            </p>
+            <small>{submitError ?? hintCopy}</small>
+          </div>
+
+          {/* ── ADD DETAILS (members) — soft gold edge while a reading is held ── */}
+          <div
+            data-reading-context="true"
+            className={`astro-fade premium-context relative h-[84px] rounded-[20px] border bg-transparent ${contextActive ? "premium-context-active" : ""}`}
+            style={{
+              opacity: voiceVisualActive ? 0 : undefined,
               pointerEvents: voiceVisualActive ? "none" : "auto",
-              transitionDuration: selectedArea || voiceVisualActive ? "700ms" : "350ms",
             }}
           >
             <div
@@ -2247,10 +2250,10 @@ export default function ReadingIntakeScreen({
 
             <div className="relative h-full rounded-[20px] bg-transparent px-4 py-2 pr-12">
               {!contextFocused && question.length === 0 && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-[14px] font-medium text-slate-400/72">
+                <div className="context-placeholder pointer-events-none absolute inset-0 flex items-center justify-center text-center">
                   {!canUseAddContext && lockedFeaturePrompt === "context"
                     ? "Become a Member"
-                    : "Add Context (Optional)"}
+                    : "Add Details for Deeper Insights"}
                 </div>
               )}
 
@@ -2258,11 +2261,9 @@ export default function ReadingIntakeScreen({
                 <button
                   type="button"
                   className="absolute inset-0 z-20 rounded-[20px]"
-                  aria-label="Add Context is included with Astro Plus"
+                  aria-label="Add details is included with Astro Plus"
                   onClick={() => handleLockedFeature("context")}
-                  style={{
-                    background: "transparent",
-                  }}
+                  style={{ background: "transparent" }}
                 />
               )}
 
@@ -2271,168 +2272,96 @@ export default function ReadingIntakeScreen({
                 rows={2}
                 value={question}
                 disabled={!canUseAddContext}
-                onFocus={() => {
-                  clearSelectionTimeout();
-                  setContextFocused(true);
-                }}
-                onBlur={() => {
-                  setContextFocused(false);
-                  if (selectedArea) {
-                    clearSelectionTimeout();
-                    selectionTimeoutRef.current = setTimeout(() => {
-                      setSelectedArea(null);
-                      setQuestion("");
-                      selectionTimeoutRef.current = null;
-                    }, 8000);
-                  }
-                }}
-                onChange={(e) => {
-                  clearSelectionTimeout();
-                  setQuestion(e.target.value);
-                }}
+                aria-label="Add details for deeper insights (optional)"
+                onFocus={() => setContextFocused(true)}
+                onBlur={() => setContextFocused(false)}
+                onChange={(e) => setQuestion(e.target.value)}
                 placeholder=""
-                className="h-full min-h-0 w-full resize-none rounded-[14px] !border-0 !bg-transparent px-1 py-1 text-[16px] leading-6 text-white !shadow-none focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
+                className="h-full min-h-0 w-full resize-none rounded-[14px] !border-0 !bg-transparent px-1 py-1 text-center text-[16px] leading-6 text-white !shadow-none focus:!border-0 focus:outline-none focus:!ring-0 focus-visible:!border-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 focus-visible:!shadow-none"
                 style={{ backgroundColor: "transparent" }}
               />
             </div>
           </div>
 
-          <div>
-          {/* ── BEGIN READING (always present) ── */}
-          <div
-            className="mt-3 flex flex-col items-center transition-[opacity,filter] duration-[950ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{
-              opacity: voiceVisualActive ? 0 : 1,
-              filter: voiceVisualActive ? "blur(4px) brightness(0.18)" : "brightness(1) saturate(1)",
-              pointerEvents: voiceVisualActive ? "none" : "auto",
-              transitionDuration: voiceVisualActive ? "700ms" : "350ms",
-            }}
-          >
-            {submitError && <p className="mb-2 text-center text-xs text-red-300">{submitError}</p>}
-            <Button
-              type="button"
-              data-begin-reading="true"
-              onClick={handleStartReading}
-              disabled={!canSubmit || isCreatingReading}
-              className="standard-shadow relative h-12 w-[calc(50%_-_6px)] overflow-hidden rounded-[20px] text-[14px] font-medium transition-[border-color,color,opacity,transform,box-shadow] duration-500 ease-out hover:-translate-y-[1px] hover:opacity-95 active:translate-y-0 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-              style={{
-                background: "rgba(255,255,255,0.012)",
-                border: canSubmit && !isCreatingReading && beginReadingStyle
-                  ? `1px solid ${beginReadingStyle.border}`
-                  : "1px solid rgba(203,213,225,0.48)",
-                color: canSubmit && !isCreatingReading && beginReadingStyle
-                  ? beginReadingStyle.text
-                  : "rgba(226,232,240,0.90)",
-                opacity: 1,
-                transform: "scale(1)",
-                boxShadow: canSubmit && !isCreatingReading && beginReadingStyle
-                  ? `0 0 0 1px ${beginReadingStyle.ring}, 0 0 18px 2px ${beginReadingStyle.glow}, 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46)`
-                  : "0 14px 28px rgba(0,0,0,0.56), 0 0 18px rgba(203,213,225,0.08)",
-              }}
-            >
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 transition-opacity duration-500 ease-out"
-                style={{
-                  background: beginReadingStyle?.background ?? "transparent",
-                  opacity: canSubmit && !isCreatingReading && beginReadingStyle ? 1 : 0,
-                }}
-              />
-              <span className="relative z-10">{buttonCopy}</span>
-            </Button>
-          </div>
-
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
-          <section className="mt-6 pt-5">
-  <div className="flex w-full items-center justify-center">
-    <div className="relative h-[86px] w-[72%] max-w-[304px]">
-      <button
-        type="button"
-        onPointerDown={startAskHold}
-        onPointerMove={moveAskHold}
-        onPointerUp={endAskHold}
-        onPointerCancel={endAskHold}
-        onContextMenu={(e) => e.preventDefault()}
-        onDragStart={(e) => e.preventDefault()}
-        onSelect={(e) => e.preventDefault()}
-        className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-        aria-label="Press and hold to speak. Swipe up to cancel."
-        style={{
-          opacity: selectedArea && !voiceVisualActive ? 0.76 : 1,
-          filter: selectedArea && !voiceVisualActive
-            ? "grayscale(0.68) brightness(0.54) saturate(0.46)"
-            : "brightness(1) saturate(1)",
-          transform: voiceVisualActive ? "scale(1.012)" : undefined,
-          WebkitUserSelect: "none",
-          userSelect: "none",
-          WebkitTouchCallout: "none",
-        }}
-      >
-        <span className="ask-mic-halo h-[48px] w-[48px]">
-          <Mic
-            className="h-[24px] w-[24px]"
-            style={{
-              color: "rgba(248,250,252,0.96)",
-              filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
-            }}
-          />
-        </span>
+          <section className="astro-fade mt-6 pt-5">
+            <div className="flex w-full items-center justify-center">
+              <div className="ask-box relative h-[86px] w-[72%] max-w-[304px]">
+                <button
+                  type="button"
+                  onPointerDown={startAskHold}
+                  onPointerMove={moveAskHold}
+                  onPointerUp={endAskHold}
+                  onPointerCancel={endAskHold}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onDragStart={(e) => e.preventDefault()}
+                  onSelect={(e) => e.preventDefault()}
+                  className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  aria-label="Press and hold to speak. Swipe up to cancel."
+                  style={{
+                    transform: voiceVisualActive ? "scale(1.012)" : undefined,
+                    WebkitUserSelect: "none",
+                    userSelect: "none",
+                    WebkitTouchCallout: "none",
+                  }}
+                >
+                  <span className="ask-mic-halo h-[48px] w-[48px]">
+                    <Mic
+                      className="h-[24px] w-[24px]"
+                      style={{
+                        color: "rgba(248,250,252,0.96)",
+                        filter: "drop-shadow(0 0 6px rgba(218,183,104,0.16))",
+                      }}
+                    />
+                  </span>
+                </button>
 
-        <span
-          aria-hidden="true"
-          className="ask-focus-veil"
-          style={{ opacity: selectedArea && !voiceVisualActive ? 0.48 : 0 }}
-        />
-      </button>
+                <button
+                  type="button"
+                  className="mic-ready-toggle tap-fix"
+                  data-enabled={micEnabled ? "true" : "false"}
+                  aria-pressed={micEnabled}
+                  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+                  onClick={toggleMicrophone}
+                  disabled={micConnecting || isTranscribingAsk}
+                  style={{
+                    position: "absolute",
+                    left: "calc(100% + 6px)",
+                    top: "8px",
+                    zIndex: 2,
+                    cursor: micConnecting || isTranscribingAsk ? "wait" : "pointer",
+                    opacity: micEnabled ? 0.18 : 0.74,
+                    filter: micEnabled
+                      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
+                      : "brightness(0.92) saturate(0.82)",
+                  }}
+                >
+                  <span className="mic-ready-knob" />
+                </button>
+              </div>
+            </div>
 
-      <button
-  type="button"
-  className="mic-ready-toggle tap-fix"
-  data-enabled={micEnabled ? "true" : "false"}
-  aria-pressed={micEnabled}
-  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-  onClick={toggleMicrophone}
-  disabled={micConnecting || isTranscribingAsk}
-  style={{
-    position: "absolute",
-    left: "calc(100% + 6px)",
-    top: "8px",
-    cursor: micConnecting || isTranscribingAsk ? "wait" : "pointer",
-    opacity: micEnabled ? 0.18 : 0.74,
-    filter: micEnabled
-      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-      : "brightness(0.92) saturate(0.82)",
-  }}
->
-  <span className="mic-ready-knob" />
-</button>
-    </div>
-  </div>
-
-  {askError && !voiceVisualActive ? (
-    <p className="mt-2 text-center text-[11px] text-slate-400/78">
-      {askError}
-    </p>
-  ) : (
-    <p className="mt-2 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400/78">
-      {lockedFeaturePrompt === "voice"
-        ? "Get Credits"
-        : micEnabled
-          ? "Press · Hold · Speak"
-          : "Turn on the microphone"}
-    </p>
-  )}
-</section>
-          </div>
-
+            {askError && !voiceVisualActive ? (
+              <p className="mt-3 text-center text-[11px] text-slate-400/78">{askError}</p>
+            ) : (
+              <p className="ask-caption mt-3 text-center text-slate-400/78">
+                {lockedFeaturePrompt === "voice"
+                  ? "Get Credits"
+                  : micEnabled
+                    ? "Press · Hold · Speak"
+                    : "Turn on the microphone"}
+              </p>
+            )}
+          </section>
         </motion.div>
       </div>
 
+      {/* Full-screen fade to black when a reading (voice or held tile) is opening. */}
       <motion.div
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 z-[9998] bg-black"
         initial={false}
-        animate={{ opacity: voiceNavigating ? 1 : 0 }}
+        animate={{ opacity: voiceNavigating || readingFade ? 1 : 0 }}
         transition={{ duration: shouldReduceMotion ? 0.08 : 0.5, ease: [0.22, 1, 0.36, 1] }}
       />
 
