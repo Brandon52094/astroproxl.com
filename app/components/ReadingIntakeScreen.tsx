@@ -9,7 +9,6 @@ import {
   Wallet,
   Mic,
   Crown,
-  ChevronLeft,
 } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
@@ -23,7 +22,7 @@ import {
   clearIntake,
   clearReading,
 } from "@/lib/chartStore";
-import { PRICING, formatUsd } from "@/lib/paywallConfig";
+import { PRICING } from "@/lib/paywallConfig";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -1195,9 +1194,6 @@ export default function ReadingIntakeScreen({
     };
   }, [disconnectMicrophone]);
 
-  const needsPayment =
-    Number(userStatus?.credits ?? 0) <= 0 && userStatus?.isSubscribed !== true;
-
   // A reading can begin once the chart is ready and nothing is already starting.
   const canBegin = chartStatus === "ready" && !isCreatingReading;
   const canBeginRef = useRef(canBegin);
@@ -1205,16 +1201,15 @@ export default function ReadingIntakeScreen({
     canBeginRef.current = canBegin;
   }, [canBegin]);
 
-  // The single line under the reading choices: status, countdown, or the invitation.
-  const hintCopy = useMemo(() => {
+  // The line above the reading choices: "Select Your Reading" at rest, or a
+  // short status when something is happening. No countdown: the ring and the
+  // fade show the timing.
+  const directiveCopy = useMemo(() => {
     if (chartStatus === "recalculating" || chartStatus === "checking") return "Loading your chart…";
     if (chartStatus === "error") return "Chart unavailable · Try again";
     if (isCreatingReading || sentArea) return "Opening your reading…";
-    if (holdStage > 0) return `Keep holding · ${4 - holdStage}`;
-    return needsPayment
-      ? `Press & Hold to Begin · ${formatUsd(PRICING.reading.price)}`
-      : "Press & Hold to Begin";
-  }, [chartStatus, isCreatingReading, sentArea, holdStage, needsPayment]);
+    return "Select Your Reading";
+  }, [chartStatus, isCreatingReading, sentArea]);
 
   const handleStartReading = async (areaId: string) => {
     const selectedArea = areaId;
@@ -1643,7 +1638,69 @@ export default function ReadingIntakeScreen({
         }
         .brand-tagline.is-out { opacity: 0; transform: translateY(4px); }
 
-        /* ── HEADING (swipe prompt / held reading) ── */
+        /* ── SWIPE PROMPT — sits above the hero ── */
+        .swipe-top {
+          height: 32px;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-family: var(--caps);
+          font-size: 10.5px;
+          font-weight: 500;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(203,213,225,0.7);
+        }
+        .swipe-arrow {
+          font-family: var(--font-geist-sans, system-ui), sans-serif;
+          font-size: 15px;
+          letter-spacing: 0;
+          animation: swipeNudge 2.8s ease-in-out infinite;
+        }
+        @keyframes swipeNudge {
+          0%, 60%, 100% { transform: translateX(0); opacity: .6; }
+          30% { transform: translateX(4px); opacity: 1; }
+        }
+
+        /* ── INFO SPACE — "Select Your Reading" at rest; the pressed reading's description ── */
+        .info-space { position: relative; height: 52px; }
+        .info-layer {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0;
+          padding: 0 8px;
+          text-align: center;
+          transition: opacity .9s var(--ease-soft) .15s, transform .9s var(--ease-soft) .15s;
+        }
+        .info-select {
+          font-family: var(--caps);
+          font-size: 12.5px;
+          font-weight: 500;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          color: rgba(248,250,252,0.9);
+        }
+        .info-select.is-error { color: rgba(253,164,175,0.92); font-size: 10.5px; letter-spacing: 0.2em; }
+        .info-select.is-hidden { opacity: 0; transform: translateY(-4px); transition: opacity .3s ease, transform .3s ease; }
+        .info-desc {
+          font-family: var(--display);
+          font-style: italic;
+          font-weight: 500;
+          font-size: 17px;
+          line-height: 1.25;
+          color: var(--hint, rgba(226,232,240,0.88));
+          opacity: 0;
+          transform: translateY(5px);
+          pointer-events: none;
+          transition: opacity .9s var(--ease-soft), transform .9s var(--ease-soft), color .9s var(--ease-soft);
+        }
+        .info-desc.is-shown { opacity: 1; transform: none; transition: opacity .45s ease, transform .55s var(--ease-out); }
+
         .astro-heading {
           font-family: var(--caps);
           font-size: 13px;
@@ -1750,34 +1807,6 @@ export default function ReadingIntakeScreen({
         .astro-tile.is-sent { animation: sendFlash .6s var(--ease-out) forwards; z-index: 3; }
         .astro-tile.is-sent::before { opacity: 1; --hold-progress: 360deg; }
 
-        /* ── DESCRIPTION + HINT (fixed placement) ── */
-        .astro-desc p {
-          min-height: 1.35em;
-          margin: 0;
-          font-family: var(--display);
-          font-style: italic;
-          font-weight: 500;
-          font-size: 18.5px;
-          line-height: 1.35;
-          color: rgba(203,213,225,0.82);
-          opacity: 0;
-          transform: translateY(6px);
-          transition: opacity .9s var(--ease-soft), transform .9s var(--ease-soft);
-        }
-        .astro-desc p.is-shown { opacity: 1; transform: none; transition: opacity .45s ease, transform .55s var(--ease-out); }
-        .astro-desc small {
-          display: block;
-          margin-top: 8px;
-          font-family: var(--caps);
-          font-size: 10.5px;
-          font-weight: 500;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: var(--hint, rgba(248,250,252,0.9));
-          transition: color .9s var(--ease-soft), font-size .4s ease, letter-spacing .4s ease;
-        }
-        .focus-1 .astro-desc small, .focus-2 .astro-desc small, .focus-3 .astro-desc small { font-size: 12px; letter-spacing: 0.24em; }
-
         /* ── FOCUS STEPS: dim → darkness → complete darkness (the stars stay, in the pager) ── */
         /* Opacity only: iOS Safari paints filter layers here as hard-edged dark boxes. */
         .astro-fade { transition: opacity .7s var(--ease-soft), text-shadow .7s var(--ease-soft); }
@@ -1789,8 +1818,10 @@ export default function ReadingIntakeScreen({
         .focus-1 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .22; transition-duration: .8s; }
         .focus-2 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .05; transition-duration: .8s; }
         .focus-3 .astro-tile:not(.is-holding):not(.is-sent) { opacity: 0; transition-duration: .8s; }
-        .focus-2 .astro-desc p.is-shown { opacity: .4; }
-        .focus-3 .astro-desc p.is-shown { opacity: 0; }
+        /* The reading's description stays readable through the whole hold. */
+        .focus-1 .info-space, .focus-2 .info-space, .focus-3 .info-space { opacity: 1; }
+        /* Context the user typed doesn't fade: it's part of what's being sent. */
+        .focus-1 .astro-fade.has-context, .focus-2 .astro-fade.has-context, .focus-3 .astro-fade.has-context { opacity: 1; }
         .focus-1 .hero-glow-shell, .focus-2 .hero-glow-shell, .focus-3 .hero-glow-shell { box-shadow: none; }
         .focus-1 .hero-glow-shell::before { opacity: .3; }
         .focus-2 .hero-glow-shell::before, .focus-3 .hero-glow-shell::before { opacity: 0; }
@@ -1852,11 +1883,12 @@ export default function ReadingIntakeScreen({
         }
         .premium-context > * { z-index: 1; }
         .context-placeholder {
-          font-family: var(--display);
-          font-size: 18px;
+          font-family: var(--caps);
+          font-size: 10.5px;
           font-weight: 500;
-          letter-spacing: 0.01em;
-          color: rgba(170,182,202,0.78);
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(248,250,252,0.9);
         }
 
         /* ── ASK ANYTHING — gold/white orbiting edge with a breathing aura ── */
@@ -1896,8 +1928,8 @@ export default function ReadingIntakeScreen({
           left: 0;
           top: 0;
           width: 100%;
-          height: 86px;
-          border-radius: 26px;
+          height: 104px;
+          border-radius: 28px;
           z-index: 0;
           pointer-events: none;
           background: conic-gradient(
@@ -1979,14 +2011,15 @@ export default function ReadingIntakeScreen({
           font-family: var(--caps);
           font-size: 10.5px;
           font-weight: 500;
-          letter-spacing: 0.2em;
+          letter-spacing: 0.34em;
           text-transform: uppercase;
+          color: rgba(236,214,170,0.72);
         }
 
         .mic-ready-toggle {
           position: relative;
           width: 34px;
-          height: 66px;
+          height: 80px;
           border-radius: 9999px;
           border: 1px solid rgba(203,213,225,0.14);
           background:
@@ -2030,7 +2063,7 @@ export default function ReadingIntakeScreen({
             background 420ms cubic-bezier(0.22,1,0.36,1),
             box-shadow 420ms cubic-bezier(0.22,1,0.36,1);
         }
-        .mic-ready-toggle[data-enabled="false"] .mic-ready-knob { top: 39px; }
+        .mic-ready-toggle[data-enabled="false"] .mic-ready-knob { top: 53px; }
         .mic-ready-toggle[data-enabled="true"] .mic-ready-knob {
           top: 7px;
           background: linear-gradient(145deg, rgba(255,246,218,0.98), rgba(218,183,104,0.92));
@@ -2047,6 +2080,7 @@ export default function ReadingIntakeScreen({
           .ask-premium,
           .ask-box::before,
           .ask-mic-halo,
+          .swipe-arrow,
           .astro-tile,
           .astro-tile::before { animation: none !important; }
           .mic-ready-toggle,
@@ -2055,8 +2089,9 @@ export default function ReadingIntakeScreen({
       `}</style>
 
       <div
-        className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col px-[clamp(12px,4vw,16px)]"
+        className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col justify-start px-[clamp(12px,4vw,16px)]"
         style={{
+          minHeight: "100%",
           paddingTop: "calc(env(safe-area-inset-top) + 16px)",
           paddingBottom: "calc(2rem + env(safe-area-inset-bottom))",
         }}
@@ -2067,8 +2102,19 @@ export default function ReadingIntakeScreen({
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col top-section"
         >
+          {/* ── SWIPE PROMPT — above the hero ── */}
+          <button
+            type="button"
+            onClick={() => onSwipeLeft?.()}
+            className="astro-fade swipe-top tap-fix"
+            style={{ opacity: voiceVisualActive ? 0 : undefined }}
+          >
+            Swipe Left to Explore
+            <span className="swipe-arrow" aria-hidden="true">&rsaquo;</span>
+          </button>
+
           {/* ── HERO — fixed 236px brand card; becomes the live waveform while asking aloud ── */}
-          <section className="astro-fade mb-[20px] pt-0">
+          <section className="astro-fade mb-0 pt-0">
             <div
               className="hero-glow-shell"
               style={{
@@ -2145,16 +2191,22 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── HEADING — the swipe prompt ── */}
-          <button
-            type="button"
-            onClick={() => onSwipeLeft?.()}
-            className="astro-fade astro-heading tap-fix relative mb-[14px] flex h-[26px] items-center justify-center transition-opacity duration-500"
-            style={{ opacity: voiceVisualActive ? 0 : undefined }}
+          {/* ── INFO SPACE — "Select Your Reading" at rest; the pressed reading's description ── */}
+          <div
+            className="info-space transition-opacity duration-700"
+            aria-live="polite"
+            style={{
+              opacity: voiceVisualActive ? 0 : undefined,
+              "--hint": selectedAreaConfig ? getAreaColors(selectedAreaConfig.id).text : undefined,
+            } as React.CSSProperties}
           >
-            <ChevronLeft className="mr-[10px] h-[14px] w-[14px] opacity-80" aria-hidden="true" />
-            Swipe Left To Explore
-          </button>
+            <p className={`info-layer info-select ${submitError ? "is-error" : ""} ${selectedAreaConfig ? "is-hidden" : ""}`}>
+              {submitError ?? directiveCopy}
+            </p>
+            <p className={`info-layer info-desc ${selectedAreaConfig ? "is-shown" : ""}`}>
+              {selectedAreaConfig?.description ?? lastDescription}
+            </p>
+          </div>
 
           {/* ── READING TILES (2×2) — press and hold one for 3 seconds to begin ── */}
           <section
@@ -2199,25 +2251,10 @@ export default function ReadingIntakeScreen({
             })}
           </section>
 
-          {/* ── DESCRIPTION + HINT — fixed placement so nothing below moves ── */}
-          <div
-            className="astro-desc flex h-[64px] flex-col items-center justify-center px-3 text-center transition-opacity duration-700"
-            aria-live="polite"
-            style={{
-              opacity: voiceVisualActive ? 0 : 1,
-              "--hint": selectedAreaConfig ? getAreaColors(selectedAreaConfig.id).text : undefined,
-            } as React.CSSProperties}
-          >
-            <p className={selectedAreaConfig ? "is-shown" : ""}>
-              {selectedAreaConfig?.description ?? lastDescription}
-            </p>
-            <small>{submitError ?? hintCopy}</small>
-          </div>
-
-          {/* ── ADD DETAILS (members) — soft gold edge while a reading is held ── */}
+          {/* ── ADD CONTEXT (members) — soft gold edge while a reading is held ── */}
           <div
             data-reading-context="true"
-            className={`astro-fade premium-context relative h-[84px] rounded-[20px] border bg-transparent ${contextActive ? "premium-context-active" : ""}`}
+            className={`astro-fade premium-context relative mt-6 h-[84px] rounded-[20px] border bg-transparent ${contextActive ? "premium-context-active" : ""} ${question.trim().length > 0 ? "has-context" : ""}`}
             style={{
               opacity: voiceVisualActive ? 0 : undefined,
               pointerEvents: voiceVisualActive ? "none" : "auto",
@@ -2240,7 +2277,7 @@ export default function ReadingIntakeScreen({
                 <div className="context-placeholder pointer-events-none absolute inset-0 flex items-center justify-center text-center">
                   {!canUseAddContext && lockedFeaturePrompt === "context"
                     ? "Become a Member"
-                    : "Add Details for Deeper Insights"}
+                    : "Add Context for a Detailed Reading"}
                 </div>
               )}
 
@@ -2248,7 +2285,7 @@ export default function ReadingIntakeScreen({
                 <button
                   type="button"
                   className="absolute inset-0 z-20 rounded-[20px]"
-                  aria-label="Add details is included with Astro Plus"
+                  aria-label="Adding context is included with Astro Plus"
                   onClick={() => handleLockedFeature("context")}
                   style={{ background: "transparent" }}
                 />
@@ -2259,7 +2296,7 @@ export default function ReadingIntakeScreen({
                 rows={2}
                 value={question}
                 disabled={!canUseAddContext}
-                aria-label="Add details for deeper insights (optional)"
+                aria-label="Add context for a detailed reading (optional)"
                 onFocus={() => setContextFocused(true)}
                 onBlur={() => setContextFocused(false)}
                 onChange={(e) => setQuestion(e.target.value)}
@@ -2271,9 +2308,9 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
-          <section className="astro-fade mt-6 pt-5">
+          <section className="astro-fade mt-[26px] pt-0">
             <div className="flex w-full items-center justify-center">
-              <div className="ask-box relative h-[86px] w-[72%] max-w-[304px]">
+              <div className="ask-box relative h-[104px] w-[72%] max-w-[304px]">
                 <button
                   type="button"
                   onPointerDown={startAskHold}
@@ -2283,7 +2320,7 @@ export default function ReadingIntakeScreen({
                   onContextMenu={(e) => e.preventDefault()}
                   onDragStart={(e) => e.preventDefault()}
                   onSelect={(e) => e.preventDefault()}
-                  className="ask-premium tap-fix relative flex h-[86px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  className="ask-premium tap-fix relative flex h-[104px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                   aria-label="Press and hold to speak. Swipe up to cancel."
                   style={{
                     transform: voiceVisualActive ? "scale(1.012)" : undefined,
@@ -2314,7 +2351,7 @@ export default function ReadingIntakeScreen({
                   style={{
                     position: "absolute",
                     left: "calc(100% + 6px)",
-                    top: "8px",
+                    top: "12px",
                     zIndex: 2,
                     cursor: micConnecting || isTranscribingAsk ? "wait" : "pointer",
                     opacity: micEnabled ? 0.18 : 0.74,
@@ -2331,12 +2368,8 @@ export default function ReadingIntakeScreen({
             {askError && !voiceVisualActive ? (
               <p className="mt-3 text-center text-[11px] text-slate-400/78">{askError}</p>
             ) : (
-              <p className="ask-caption mt-3 text-center text-slate-400/78">
-                {lockedFeaturePrompt === "voice"
-                  ? "Get Credits"
-                  : micEnabled
-                    ? "Press · Hold · Speak"
-                    : "Turn on the microphone"}
+              <p className="ask-caption mt-[14px] text-center">
+                {lockedFeaturePrompt === "voice" ? "Get Credits" : "Press · Hold · Speak"}
               </p>
             )}
           </section>
