@@ -282,6 +282,8 @@ export default function ReadingIntakeScreen({
   const [teaseArea, setTeaseArea] = useState<string | null>(null);
   const [sentArea, setSentArea] = useState<string | null>(null);
   const [readingFade, setReadingFade] = useState(false);
+  const [fadePortalReady, setFadePortalReady] = useState(false);
+  useEffect(() => { setFadePortalReady(true); }, []);
   const holdTimersRef = useRef<number[]>([]);
   const armTimerRef = useRef<number | null>(null);
   const pressStartRef = useRef(0);
@@ -1505,7 +1507,7 @@ export default function ReadingIntakeScreen({
           0% { transform: translateX(-140%) skewX(-18deg); }
           100% { transform: translateX(240%) skewX(-18deg); }
         }
-        .hero-shine { position: relative; overflow: hidden; isolation: isolate; }
+        .hero-shine { position: relative; overflow: hidden; }
         .hero-shine::after {
           content: "";
           position: absolute;
@@ -1528,6 +1530,7 @@ export default function ReadingIntakeScreen({
           position: relative;
           border-radius: 28px;
           box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          transition: box-shadow .8s var(--ease-out);
         }
         .hero-glow-shell::before {
           content: "";
@@ -1777,8 +1780,9 @@ export default function ReadingIntakeScreen({
 
         /* ── FOCUS STEPS: dim → darkness → complete darkness (the stars stay, in the pager) ── */
         /* Opacity only: iOS Safari paints filter layers here as hard-edged dark boxes. */
-        .astro-fade { transition: opacity .7s var(--ease-soft); }
-        .focus-1 .astro-fade, .focus-2 .astro-fade, .focus-3 .astro-fade { transition: opacity .8s var(--ease-out); }
+        .astro-fade { transition: opacity .7s var(--ease-soft), text-shadow .7s var(--ease-soft); }
+        .focus-1 .astro-fade, .focus-2 .astro-fade, .focus-3 .astro-fade { transition: opacity .8s var(--ease-out), text-shadow .8s var(--ease-out); }
+        .focus-1 .astro-heading, .focus-2 .astro-heading, .focus-3 .astro-heading { text-shadow: none; }
         .focus-1 .astro-fade { opacity: .22; }
         .focus-2 .astro-fade { opacity: .05; }
         .focus-3 .astro-fade { opacity: 0; }
@@ -1787,6 +1791,7 @@ export default function ReadingIntakeScreen({
         .focus-3 .astro-tile:not(.is-holding):not(.is-sent) { opacity: 0; transition-duration: .8s; }
         .focus-2 .astro-desc p.is-shown { opacity: .4; }
         .focus-3 .astro-desc p.is-shown { opacity: 0; }
+        .focus-1 .hero-glow-shell, .focus-2 .hero-glow-shell, .focus-3 .hero-glow-shell { box-shadow: none; }
         .focus-1 .hero-glow-shell::before { opacity: .3; }
         .focus-2 .hero-glow-shell::before, .focus-3 .hero-glow-shell::before { opacity: 0; }
 
@@ -2339,13 +2344,16 @@ export default function ReadingIntakeScreen({
       </div>
 
       {/* Full-screen fade to black when a reading (voice or held tile) is opening. */}
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-[9998] bg-black"
-        initial={false}
-        animate={{ opacity: voiceNavigating || readingFade ? 1 : 0 }}
-        transition={{ duration: shouldReduceMotion ? 0.08 : 0.5, ease: [0.22, 1, 0.36, 1] }}
-      />
+      {fadePortalReady && createPortal(
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-[9998] bg-black"
+          initial={false}
+          animate={{ opacity: voiceNavigating || readingFade ? 1 : 0 }}
+          transition={{ duration: shouldReduceMotion ? 0.08 : 0.5, ease: [0.22, 1, 0.36, 1] }}
+        />,
+        document.body
+      )}
 
       {/* ── Embedded Stripe checkout (portaled) ── */}
       {clientSecret && typeof document !== "undefined" &&
