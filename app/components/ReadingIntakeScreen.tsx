@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Heart,
   Briefcase,
@@ -1776,14 +1776,15 @@ export default function ReadingIntakeScreen({
         .focus-1 .astro-desc small, .focus-2 .astro-desc small, .focus-3 .astro-desc small { font-size: 12px; letter-spacing: 0.24em; }
 
         /* ── FOCUS STEPS: dim → darkness → complete darkness (the stars stay, in the pager) ── */
-        .astro-fade { transition: opacity .7s var(--ease-soft), filter .7s var(--ease-soft); }
-        .focus-1 .astro-fade, .focus-2 .astro-fade, .focus-3 .astro-fade { transition: opacity .8s var(--ease-out), filter .8s var(--ease-out); }
-        .focus-1 .astro-fade { opacity: .3; filter: brightness(.55) saturate(.5); }
-        .focus-2 .astro-fade { opacity: .06; filter: blur(2px) brightness(.3); }
-        .focus-3 .astro-fade { opacity: 0; filter: blur(3px) brightness(.2); }
-        .focus-1 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .3; filter: brightness(.55) saturate(.5); transition-duration: .8s; }
-        .focus-2 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .06; filter: blur(2px) brightness(.3); transition-duration: .8s; }
-        .focus-3 .astro-tile:not(.is-holding):not(.is-sent) { opacity: 0; filter: blur(3px) brightness(.2); transition-duration: .8s; }
+        /* Opacity only: iOS Safari paints filter layers here as hard-edged dark boxes. */
+        .astro-fade { transition: opacity .7s var(--ease-soft); }
+        .focus-1 .astro-fade, .focus-2 .astro-fade, .focus-3 .astro-fade { transition: opacity .8s var(--ease-out); }
+        .focus-1 .astro-fade { opacity: .22; }
+        .focus-2 .astro-fade { opacity: .05; }
+        .focus-3 .astro-fade { opacity: 0; }
+        .focus-1 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .22; transition-duration: .8s; }
+        .focus-2 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .05; transition-duration: .8s; }
+        .focus-3 .astro-tile:not(.is-holding):not(.is-sent) { opacity: 0; transition-duration: .8s; }
         .focus-2 .astro-desc p.is-shown { opacity: .4; }
         .focus-3 .astro-desc p.is-shown { opacity: 0; }
         .focus-1 .hero-glow-shell::before { opacity: .3; }
@@ -2139,34 +2140,15 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── HEADING — the swipe prompt; shows the reading's name while it is held ── */}
+          {/* ── HEADING — the swipe prompt ── */}
           <button
             type="button"
             onClick={() => onSwipeLeft?.()}
             className="astro-fade astro-heading tap-fix relative mb-[14px] flex h-[26px] items-center justify-center transition-opacity duration-500"
             style={{ opacity: voiceVisualActive ? 0 : undefined }}
-            aria-live="polite"
           >
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.span
-                key={selectedAreaConfig?.id ?? "swipe"}
-                className="flex items-center"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: shouldReduceMotion ? 0.1 : 0.45, ease: [0.4, 0, 0.2, 1] }}
-                style={{ color: selectedAreaConfig ? getAreaColors(selectedAreaConfig.id).text : undefined }}
-              >
-                {selectedAreaConfig ? (
-                  selectedAreaConfig.title
-                ) : (
-                  <>
-                    <ChevronLeft className="mr-[10px] h-[14px] w-[14px] opacity-80" aria-hidden="true" />
-                    Swipe Left To Explore
-                  </>
-                )}
-              </motion.span>
-            </AnimatePresence>
+            <ChevronLeft className="mr-[10px] h-[14px] w-[14px] opacity-80" aria-hidden="true" />
+            Swipe Left To Explore
           </button>
 
           {/* ── READING TILES (2×2) — press and hold one for 3 seconds to begin ── */}
