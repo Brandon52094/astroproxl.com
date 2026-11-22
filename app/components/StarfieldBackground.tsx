@@ -6,8 +6,9 @@ import React, { useEffect, useRef } from "react";
  * AstroProXL night sky — transparent; its positioned parent owns sizing.
  *
  * Designed to look like a real sky, not an effect:
- *  - ~150 stars at three depths. Distant ones are tiny, dim and slow; closer
- *    ones are larger, brighter and drift a little faster (parallax).
+ *  - ~380 stars at three depths. Distant ones are tiny, dim and slow; closer
+ *    ones are larger, brighter and drift a little faster (parallax). Most of the
+ *    count is far, faint stars, so the sky feels deep rather than busy.
  *  - A faint Milky Way band of distant stars with a whisper of haze.
  *  - A gentle shimmer instead of blinking, near-white colors.
  *  - Every second or two a nearby star catches the light (a brief glint).
@@ -28,13 +29,15 @@ interface Depth {
 }
 
 const DEPTHS: Depth[] = [
-  { share: 0.62, r: [0.3, 0.6], a: [0.18, 0.42], z: 0.5 }, // far
-  { share: 0.28, r: [0.6, 0.95], a: [0.42, 0.7], z: 1.0 }, // middle
-  { share: 0.1, r: [1.05, 1.5], a: [0.72, 0.95], z: 1.8 }, // near
+  { share: 0.7, r: [0.25, 0.55], a: [0.14, 0.38], z: 0.5 }, // far (the deep field)
+  { share: 0.23, r: [0.6, 0.95], a: [0.42, 0.7], z: 1.0 },  // middle
+  { share: 0.07, r: [1.05, 1.5], a: [0.72, 0.95], z: 1.8 }, // near (bright, with glow)
 ];
 
-const FIELD_STARS = 112;
-const BAND_STARS = 38;
+// More stars so the sky reads as deep space. Mostly far, faint ones; the bright
+// near stars grow only a little, so it stays calm.
+const FIELD_STARS = 270;
+const BAND_STARS = 110;
 const DRIFT_PX_PER_SEC = 1.6; // distant stars; nearer ones move proportionally faster
 const MAX_DPR = 2;
 const MAX_STEP = 0.05;

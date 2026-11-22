@@ -42,15 +42,20 @@ declare global {
  * an error, or nothing heard). Nothing is shown on screen while speaking. */
 const ASK_MIN_HOLD_MS = 450;
 
-// Waveform: the JXL panel's calmer settings (smooth rise and fall, no jumpy boost).
+// Waveform: follows the speaker's voice. Loudness drives the height (normalized
+// to each person's own speaking level, so quiet voices still move it), a fast
+// attack / slower release makes it rise with each syllable and settle naturally,
+// and brighter, more animated speech speeds the motion and lifts the glow.
 const ASK_WAVE = {
-  sensitivity: 1.1,
-  idle: 0.19,
+  sensitivity: 0.95, // how tall the wave gets at the speaker's own loudest
+  idle: 0.12,        // gentle movement during silence
   lines: 3,
   speed: 1.8,
   glow: 16,
   thickness: 2.3,
-  smoothing: 0.18,
+  attack: 0.45,      // how fast it rises when the voice gets louder (0–1)
+  release: 0.12,     // how fast it settles when the voice drops (0–1)
+  noiseGate: 0.012,  // ignore room hiss below this loudness
   colors: ["#22c55e", "#3b82f6", "#a855f7", "#ef4444", "#f59e0b"],
 };
 
@@ -173,15 +178,6 @@ const HOLD_STEP_MS = 1000;
 const HOLD_TOTAL_MS = 3000;
 // The chosen reading's ambience (its themed symbols) fades in at 75% of the hold.
 const HOLD_AMBIENCE_MS = Math.round(HOLD_TOTAL_MS * 0.75);
-
-// One luminous cosmic aura for the current app theme. Personalized theme
-// palettes can be introduced later as an intentional Astro Plus experience.
-const HERO_PALETTE: [string, string, string, string] = [
-  "52, 211, 153",  // emerald
-  "34, 211, 238",  // cyan
-  "56, 189, 248",  // sky
-  "168, 85, 247",  // violet
-];
 
 // The hero's information is designed once at this width, then the entire
 // composition scales together to fit the live card.
@@ -332,6 +328,7 @@ export default function ReadingIntakeScreen({
   const speechBaseRef = useRef("");      // text kept across an automatic restart
   const speechStoppingRef = useRef(false);
   const didSubmitVoiceRef = useRef(false);
+  const lastSpeechAtRef = useRef(0);      // when the browser last heard words (wave fallback)
 
   // The mic toggle shakes when someone presses the mic while it's still off.
   const [micNudge, setMicNudge] = useState(false);
@@ -672,6 +669,33 @@ export default function ReadingIntakeScreen({
     void enableMicrophone();
   }, [disconnectMicrophone, enableMicrophone, micEnabled]);
 
+  // Creates the audio analyser. Called straight from the press handler: iOS only
+  // lets an AudioContext run if it is created (or resumed) during a tap, and a
+  // suspended context reads pure silence, which left the wave flat.
+  const primeAskMeter = useCallback((stream: MediaStream) => {
+    try {
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      void ctx.resume?.().catch(() => {});
+      audioCtxRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.5;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+    } catch {
+      analyserRef.current = null;
+    }
+  }, []);
+
   const startAskMeter = useCallback(async () => {
     const stream = meterStreamRef.current;
     if (!stream || !micEnabled) return;
@@ -683,21 +707,18 @@ export default function ReadingIntakeScreen({
     if (!hasLiveAudio || !askHoldingRef.current) return;
 
     try {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AudioCtx();
-      audioCtxRef.current = ctx;
+      // Normally primed during the press; create it here only as a fallback.
+      if (!analyserRef.current) primeAskMeter(stream);
+      const analyser = analyserRef.current;
+      if (!analyser) return;
+      void audioCtxRef.current?.resume?.().catch(() => {});
 
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.78;
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
+      const timeData = new Uint8Array(analyser.fftSize);
       const freq = new Uint8Array(analyser.frequencyBinCount);
-      let smooth = 0;
+      let level = 0;       // how loud they are right now, 0–1, relative to their own voice
+      let bright = 0;      // how animated/bright the voice sounds, 0–1
+      let peak = 0.06;     // the speaker's recent loudest, for automatic gain
+      let silentFrames = 0;
       let time = 0;
 
       // Size the canvas once per hold (and on resize), not on every frame.
@@ -737,14 +758,16 @@ export default function ReadingIntakeScreen({
         c2d.lineJoin = "round";
         c2d.globalCompositeOperation = "lighter";
 
-        const amp =
-          (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) *
-          (ch * 0.44);
+        // Height follows loudness; glow and line weight swell a little with it.
+        const amp = (ASK_WAVE.idle + level * ASK_WAVE.sensitivity) * (ch * 0.44);
+        const glow = ASK_WAVE.glow * (0.6 + level * 0.9 + bright * 0.3);
 
         for (let line = 0; line < ASK_WAVE.lines; line++) {
           const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
           const phase = time * (1 + lf * 0.45) + line * 0.7;
           const lineAmp = amp * (1 - lf * 0.14);
+          // Brighter speech adds a little more ripple to the shape.
+          const ripple = 7 + bright * 3;
 
           c2d.beginPath();
           for (let x = 0; x <= cw; x += 3) {
@@ -755,20 +778,20 @@ export default function ReadingIntakeScreen({
               env *
                 lineAmp *
                 (Math.sin(tx * Math.PI * 4 + phase) * 0.6 +
-                  Math.sin(tx * Math.PI * 7 - phase * 0.7 + line) * 0.4);
+                  Math.sin(tx * Math.PI * ripple - phase * 0.7 + line) * 0.4);
             x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
           }
 
           c2d.strokeStyle = grad;
-          c2d.globalAlpha = 0.16 + (1 - lf) * 0.22;
-          c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8);
-          c2d.shadowBlur = ASK_WAVE.glow;
+          c2d.globalAlpha = 0.16 + (1 - lf) * 0.22 + level * 0.12;
+          c2d.lineWidth = ASK_WAVE.thickness * (0.7 + (1 - lf) * 0.8) * (0.9 + level * 0.3);
+          c2d.shadowBlur = glow;
           c2d.shadowColor = "rgba(129,140,248,0.5)";
           c2d.stroke();
         }
 
         const coreAmp =
-          (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) *
+          (ASK_WAVE.idle * 0.5 + level * ASK_WAVE.sensitivity * 1.1) *
           (ch * 0.44);
         c2d.beginPath();
         for (let x = 0; x <= cw; x += 2) {
@@ -783,10 +806,10 @@ export default function ReadingIntakeScreen({
           x === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y);
         }
 
-        c2d.globalAlpha = 0.3 + smooth * 0.5;
+        c2d.globalAlpha = 0.25 + level * 0.65;
         c2d.strokeStyle = "rgba(255,255,255,0.92)";
         c2d.lineWidth = Math.max(1, ASK_WAVE.thickness * 0.6);
-        c2d.shadowBlur = ASK_WAVE.glow * 1.3;
+        c2d.shadowBlur = glow * 1.3;
         c2d.shadowColor = "rgba(255,255,255,0.7)";
         c2d.stroke();
 
@@ -798,20 +821,50 @@ export default function ReadingIntakeScreen({
       const draw = () => {
         if (!askHoldingRef.current) return;
 
-        time += 0.016 * ASK_WAVE.speed;
-        analyser.getByteFrequencyData(freq);
+        // Loudness: RMS of the raw waveform (what the ear hears as volume).
+        analyser.getByteTimeDomainData(timeData);
+        let sumSq = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const v = (timeData[i] - 128) / 128;
+          sumSq += v * v;
+        }
+        const rms = Math.sqrt(sumSq / timeData.length);
 
-        let sum = 0;
-        let count = 0;
-        const lo = 2;
-        const hi = Math.max(lo + 1, Math.floor(freq.length * 0.5));
-        for (let i = lo; i < hi; i++) {
-          sum += freq[i];
-          count++;
+        // Excitement: how much of the voice's energy sits in the brighter, upper range.
+        analyser.getByteFrequencyData(freq);
+        const n = freq.length;
+        let low = 0;
+        let high = 0;
+        const split = Math.floor(n * 0.06);
+        const top = Math.floor(n * 0.35);
+        for (let i = 2; i < split; i++) low += freq[i];
+        for (let i = split; i < top; i++) high += freq[i];
+        const brightTarget = low + high > 0 ? Math.min(1, (high / (low + high)) * 1.6) : 0;
+
+        let target: number;
+        if (rms < 0.002) {
+          // Digital silence. On some phones the browser's speech recognition takes
+          // the microphone; if words are still arriving, move the wave with them.
+          silentFrames += 1;
+          const speaking = performance.now() - lastSpeechAtRef.current < 700;
+          target =
+            silentFrames > 30 && speaking
+              ? 0.45 + 0.4 * Math.abs(Math.sin(performance.now() / 110)) * (0.6 + Math.random() * 0.4)
+              : 0;
+        } else {
+          silentFrames = 0;
+          // Automatic gain: compare to their own recent loudest, so a soft voice
+          // still fills the wave and a loud one doesn't just max out.
+          peak = Math.max(rms, peak * 0.996, 0.02);
+          target = rms < ASK_WAVE.noiseGate ? 0 : Math.pow(Math.min(1, rms / peak), 0.75);
         }
 
-        const energy = count ? (sum / count) / 255 : 0;
-        smooth += (energy - smooth) * ASK_WAVE.smoothing;
+        // Rise quickly with each syllable, settle a little more slowly.
+        level += (target - level) * (target > level ? ASK_WAVE.attack : ASK_WAVE.release);
+        bright += (brightTarget - bright) * 0.08;
+
+        // Livelier, louder speech moves the wave faster.
+        time += 0.016 * ASK_WAVE.speed * (1 + level * 1.1 + bright * 0.5);
 
         drawWave(canvasRef.current);
 
@@ -823,7 +876,7 @@ export default function ReadingIntakeScreen({
     } catch {
       stopAskMeter();
     }
-  }, [micEnabled, stopAskMeter]);
+  }, [micEnabled, primeAskMeter, stopAskMeter]);
 
   const submitAskAnything = useCallback(
     (transcript: string) => {
@@ -919,6 +972,7 @@ export default function ReadingIntakeScreen({
     rec.interimResults = true;
 
     rec.onresult = (event) => {
+      lastSpeechAtRef.current = performance.now();
       let heard = "";
       for (let i = 0; i < event.results.length; i++) {
         heard += " " + event.results[i][0].transcript;
@@ -1002,6 +1056,10 @@ export default function ReadingIntakeScreen({
       speechBaseRef.current = "";
       didSubmitVoiceRef.current = false;
       stopSpeechRecognition();
+      lastSpeechAtRef.current = 0;
+
+      // Audio analyser for the waveform: created during the press so iOS lets it run.
+      primeAskMeter(stream);
 
       // 1) Browser speech recognition, started right away so the first words are caught.
       const speechStarted = startSpeechRecognition();
@@ -1106,6 +1164,7 @@ export default function ReadingIntakeScreen({
       isTranscribingAsk,
       micEnabled,
       nudgeMicToggle,
+      primeAskMeter,
       startAskMeter,
       startSpeechRecognition,
       stopAskMeter,
@@ -1213,14 +1272,14 @@ export default function ReadingIntakeScreen({
     canBeginRef.current = canBegin;
   }, [canBegin]);
 
-  // The line above the reading choices: "Select Your Reading" at rest, or a
+  // The line above the reading choices: "Please Select" at rest, or a
   // short status when something is happening. No countdown: the ring and the
   // fade show the timing.
   const directiveCopy = useMemo(() => {
     if (chartStatus === "recalculating" || chartStatus === "checking") return "Loading your chart…";
     if (chartStatus === "error") return "Chart unavailable · Try again";
     if (isCreatingReading || sentArea) return "Opening your reading…";
-    return "Select Your Reading";
+    return "Please Select";
   }, [chartStatus, isCreatingReading, sentArea]);
 
   const handleStartReading = async (areaId: string) => {
@@ -1547,11 +1606,7 @@ export default function ReadingIntakeScreen({
         .hero-shine-sweep::after { animation: heroShine 2.75s var(--ease-out) 1 forwards; }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── HERO AURA ── */
-        @property --hero-c1-color { syntax: "<color>"; inherits: true; initial-value: rgb(52, 211, 153); }
-        @property --hero-c2-color { syntax: "<color>"; inherits: true; initial-value: rgb(34, 211, 238); }
-        @property --hero-c3-color { syntax: "<color>"; inherits: true; initial-value: rgb(56, 189, 248); }
-        @property --hero-c4-color { syntax: "<color>"; inherits: true; initial-value: rgb(168, 85, 247); }
+        /* ── HERO GLOW — one soft white glow, matched to the gold mic button's intensity ── */
         .hero-glow-shell {
           position: relative;
           border-radius: 28px;
@@ -1565,31 +1620,11 @@ export default function ReadingIntakeScreen({
           z-index: 0;
           border-radius: inherit;
           pointer-events: none;
-          border: 1px solid color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
+          border: 1px solid rgba(236,241,255,0.70);
           box-shadow:
-            0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent),
-            0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent),
-            0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent);
-          animation: heroBorderGlow 9s ease-in-out infinite;
+            0 0 18px rgba(236,241,255,0.30),
+            0 0 36px rgba(236,241,255,0.10);
           transition: opacity 0.7s var(--ease-soft);
-        }
-        @keyframes heroBorderGlow {
-          0%, 100% {
-            border-color: color-mix(in srgb, var(--hero-c1-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c1-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c1-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c1-color) 26%, transparent);
-          }
-          25% {
-            border-color: color-mix(in srgb, var(--hero-c2-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c2-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c2-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c2-color) 26%, transparent);
-          }
-          50% {
-            border-color: color-mix(in srgb, var(--hero-c3-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c3-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c3-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c3-color) 26%, transparent);
-          }
-          75% {
-            border-color: color-mix(in srgb, var(--hero-c4-color) 90%, transparent);
-            box-shadow: 0 0 26px 2px color-mix(in srgb, var(--hero-c4-color) 70%, transparent), 0 0 70px 10px color-mix(in srgb, var(--hero-c4-color) 42%, transparent), 0 0 130px 26px color-mix(in srgb, var(--hero-c4-color) 26%, transparent);
-          }
         }
 
         /* ── HERO BRAND ── */
@@ -1601,14 +1636,39 @@ export default function ReadingIntakeScreen({
           white-space: nowrap;
           padding: 6px 14px 6px 18px;
           border-radius: 9999px;
-          border: 1px solid rgba(165,180,252,0.32);
-          background: rgba(49,46,129,0.22);
+          border: 1px solid transparent;
+          background: rgba(49,46,129,0.14);
           font-family: var(--caps);
           font-size: 10px;
           font-weight: 500;
           letter-spacing: 0.34em;
           text-transform: uppercase;
-          color: rgba(226,232,240,0.92);
+          color: rgb(246,248,255);
+          text-shadow: 0 0 12px rgba(236,241,255,0.40);
+        }
+        /* The pill shares the page outline's glow (outline glow 0.60 × pill balance 1.00). */
+        .brand-pill::before {
+          content: "";
+          position: absolute;
+          inset: -1px;
+          border-radius: inherit;
+          pointer-events: none;
+          box-shadow:
+            0 0 6px 0.6px rgba(232,238,255,0.36),
+            0 0 15.6px 1.8px rgba(241,245,255,0.18);
+        }
+        .brand-pill::after {
+          content: "";
+          position: absolute;
+          inset: -1px;
+          border-radius: inherit;
+          padding: 1px;
+          pointer-events: none;
+          background: linear-gradient(45deg, #f1f5ff, #e8eeff 50%, #ffffff);
+          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          opacity: 0.75;
         }
         .brand-pill sup {
           position: relative;
@@ -1695,7 +1755,7 @@ export default function ReadingIntakeScreen({
           30% { transform: translateX(4px); opacity: 1; }
         }
 
-        /* ── INFO SPACE — "Select Your Reading" at rest; the pressed reading's description ── */
+        /* ── INFO SPACE — "Please Select" at rest; the pressed reading's description ── */
         .info-space { position: relative; height: 52px; }
         .info-layer {
           position: absolute;
@@ -1716,6 +1776,7 @@ export default function ReadingIntakeScreen({
           text-transform: uppercase;
           color: rgba(248,250,252,0.9);
         }
+        .info-select:not(.is-error) { color: rgb(250,251,255); text-shadow: 0 0 12px rgba(236,241,255,0.40); }
         .info-select.is-error { color: rgba(253,164,175,0.92); font-size: 10.5px; letter-spacing: 0.2em; }
         .info-select.is-hidden { opacity: 0; transform: translateY(-4px); transition: opacity .3s ease, transform .3s ease; }
         .info-desc {
@@ -1730,7 +1791,8 @@ export default function ReadingIntakeScreen({
           pointer-events: none;
           transition: opacity .9s var(--ease-soft), transform .9s var(--ease-soft), color .9s var(--ease-soft);
         }
-        .info-desc.is-shown { opacity: 1; transform: none; transition: opacity .45s ease, transform .55s var(--ease-out); }
+        /* The description shows softer than "Please Select" (60%). */
+        .info-desc.is-shown { opacity: 0.6; transform: none; transition: opacity .45s ease, transform .55s var(--ease-out); }
 
         /* ── READING TILES ── */
         .astro-tile {
@@ -1744,8 +1806,12 @@ export default function ReadingIntakeScreen({
           gap: 8px;
           border-radius: 20px;
           border: 1px solid rgba(255,255,255,0.10);
-          background-color: rgba(255,255,255,0.03);
-          box-shadow: 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
+          /* Glass: lit from above and fading down, a fine highlight on the top edge,
+             and the stars softly blurred behind. */
+          background: linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.02) 55%, rgba(255,255,255,0.01) 100%);
+          -webkit-backdrop-filter: blur(6px);
+          backdrop-filter: blur(6px);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
           cursor: pointer;
           user-select: none;
           -webkit-user-select: none;
@@ -1771,7 +1837,7 @@ export default function ReadingIntakeScreen({
         }
         .astro-tile.is-on {
           border-color: var(--b);
-          background-color: var(--bg);
+          background: linear-gradient(var(--bg), var(--bg)), linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.02) 55%, rgba(255,255,255,0.01) 100%);
           transform: translateY(-1px);
           box-shadow: 0 0 0 1px var(--b), 0 0 18px 2px var(--g), 0 0 34px 5px var(--g), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
           transition-duration: .5s;
@@ -1906,7 +1972,13 @@ export default function ReadingIntakeScreen({
           font-weight: 500;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: rgba(248,250,252,0.9);
+          color: rgba(255,255,255,0.96);
+          animation: contextPulse 3.6s ease-in-out infinite;
+        }
+        /* A slow breath of white glow on the Add Context label. */
+        @keyframes contextPulse {
+          0%, 100% { opacity: 0.84; text-shadow: 0 0 6px rgba(255,255,255,0.18); }
+          50%      { opacity: 1;    text-shadow: 0 0 12px rgba(255,255,255,0.55), 0 0 26px rgba(255,255,255,0.22); }
         }
 
         /* ── ASK ANYTHING — gold/white orbiting edge with a breathing aura ── */
@@ -2169,7 +2241,8 @@ export default function ReadingIntakeScreen({
           .mic-ready-toggle,
           .mic-ready-knob { transition: none !important; }
           .ask-ring,
-          .mic-ready-toggle.is-nudging { animation: none !important; }
+          .mic-ready-toggle.is-nudging,
+          .context-placeholder { animation: none !important; }
         }
       `}</style>
 
@@ -2208,15 +2281,7 @@ export default function ReadingIntakeScreen({
 
           {/* ── HERO — fixed 236px brand card; fades out while asking aloud ── */}
           <section className="astro-fade mb-0 pt-0" style={{ opacity: voiceVisualActive ? 0 : undefined }}>
-            <div
-              className="hero-glow-shell"
-              style={{
-                "--hero-c1-color": `rgb(${HERO_PALETTE[0]})`,
-                "--hero-c2-color": `rgb(${HERO_PALETTE[1]})`,
-                "--hero-c3-color": `rgb(${HERO_PALETTE[2]})`,
-                "--hero-c4-color": `rgb(${HERO_PALETTE[3]})`,
-              } as React.CSSProperties}
-            >
+            <div className="hero-glow-shell">
               <div
                 ref={heroStageRef}
                 className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center`}
@@ -2251,7 +2316,7 @@ export default function ReadingIntakeScreen({
             </div>
           </section>
 
-          {/* ── INFO SPACE — "Select Your Reading" at rest; the pressed reading's description ── */}
+          {/* ── INFO SPACE — "Please Select" at rest; the pressed reading's description ── */}
           <div
             className="info-space transition-opacity duration-700"
             aria-live="polite"
@@ -2337,7 +2402,7 @@ export default function ReadingIntakeScreen({
                 <div className="context-placeholder pointer-events-none absolute inset-0 flex items-center justify-center text-center">
                   {!canUseAddContext && lockedFeaturePrompt === "context"
                     ? "Become a Member"
-                    : "Add Context for a Detailed Reading"}
+                    : "Add Context"}
                 </div>
               )}
 
