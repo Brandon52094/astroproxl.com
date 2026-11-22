@@ -36,6 +36,19 @@ declare global {
 
 /* ── Recorded voice capture for Ask Anything ────────────────────────── */
 const ASK_MIN_HOLD_MS = 450;
+// Close an idle pre-warmed streaming connection after this long without a hold.
+// (Live transcription is billed by streamed audio time, so don't leave it open.)
+const REALTIME_IDLE_MS = 45_000;
+// Show the finished question briefly before fading into the reading.
+const VOICE_CONFIRM_MS = 650;
+
+type RealtimeEvent = {
+  type?: string;
+  item_id?: string;
+  delta?: string;
+  transcript?: string;
+  error?: { code?: string; message?: string };
+};
 
 const ASK_WAVE = {
   sensitivity: 1.5,
@@ -318,17 +331,56 @@ export default function ReadingIntakeScreen({
   const transcriptTimersRef =
     useRef<number[]>([]);
 
+  // Live text arrives a phrase at a time. Reveal it word by word, at roughly
+  // speaking pace, so it reads like the app is following along rather than
+  // appearing in bursts. Speeds up when it falls behind so it never lags much.
+  const previewWords = useMemo(
+    () => voiceTranscriptPreview.split(/\s+/).filter(Boolean),
+    [voiceTranscriptPreview]
+  );
+  const [shownWordCount, setShownWordCount] = useState(0);
+
+  useEffect(() => {
+    const total = previewWords.length;
+    if (shownWordCount > total || shouldReduceMotion) {
+      if (shownWordCount !== total) setShownWordCount(total);
+      return;
+    }
+    if (shownWordCount === total) return;
+
+    const behind = total - shownWordCount;
+    const delay = behind > 10 ? 28 : behind > 4 ? 55 : 90;
+    const timer = window.setTimeout(
+      () => setShownWordCount((count) => Math.min(count + 1, total)),
+      delay
+    );
+    return () => window.clearTimeout(timer);
+  }, [previewWords, shownWordCount, shouldReduceMotion]);
+
   // Streaming OpenAI transcription (WebRTC): browser receives an ephemeral token,
-  // never the server API key. Keep the completed-audio Whisper route as fallback.
+  // never the server API key. The connection is opened when the mic toggle is
+  // turned on, with its own muted copy of the mic track that is only switched on
+  // while the button is held — so the first words of a question aren't lost to
+  // the handshake. The full recording still goes to Whisper as a fallback.
   const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
   const realtimeChannelRef = useRef<RTCDataChannel | null>(null);
-  const realtimeFinalRef = useRef("");
-  const realtimePartialRef = useRef<Record<string, string>>({});
-  const realtimeReadyRef = useRef(false);
-  const releasedRef = useRef(false);
-  const realtimeWaitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fallbackAudioRef = useRef<Blob | null>(null);
-  const awaitingRealtimeRef = useRef(false);
+  const realtimeTrackRef = useRef<MediaStreamTrack | null>(null);
+  const realtimeConnectingRef = useRef(false);
+  const realtimeIdleTimerRef = useRef<number | null>(null);
+  const realtimeEventRef = useRef<(event: RealtimeEvent) => void>(() => {});
+  // "live" = gpt-live-transcribe (text while speaking); "fallback" = gpt-4o-transcribe.
+  const realtimeModeRef = useRef<"live" | "fallback">("live");
+  // Once the live model fails on this device, use the fallback for the rest of the visit.
+  const realtimeForceFallbackRef = useRef(false);
+  const realtimeGotTextRef = useRef(false);
+  const connectRealtimeRef = useRef<(stream: MediaStream) => Promise<void>>(async () => {});
+  // Per-hold transcript, kept as ordered segments (one per phrase OpenAI closes).
+  const segmentOrderRef = useRef<string[]>([]);
+  const segmentFinalRef = useRef<Record<string, string>>({});
+  const segmentPartialRef = useRef<Record<string, string>>({});
+  const ignoredItemsRef = useRef<Set<string>>(new Set());
+  // True from press until the question is submitted or the attempt is abandoned.
+  const voiceSessionActiveRef = useRef(false);
   const didSubmitVoiceRef = useRef(false);
 
 
@@ -581,9 +633,181 @@ export default function ReadingIntakeScreen({
     }
   }, []);
 
+  // ── Streaming connection helpers ──────────────────────────────────────
+  const closeRealtime = useCallback(() => {
+    if (realtimeIdleTimerRef.current != null) window.clearTimeout(realtimeIdleTimerRef.current);
+    realtimeIdleTimerRef.current = null;
+    try { realtimeChannelRef.current?.close(); } catch {}
+    try { realtimePeerRef.current?.close(); } catch {}
+    try { realtimeTrackRef.current?.stop(); } catch {}
+    realtimeChannelRef.current = null;
+    realtimePeerRef.current = null;
+    realtimeTrackRef.current = null;
+    realtimeConnectingRef.current = false;
+  }, []);
+
+  const scheduleRealtimeIdleClose = useCallback(() => {
+    if (realtimeIdleTimerRef.current != null) window.clearTimeout(realtimeIdleTimerRef.current);
+    realtimeIdleTimerRef.current = window.setTimeout(() => {
+      realtimeIdleTimerRef.current = null;
+      if (!voiceSessionActiveRef.current) closeRealtime();
+    }, REALTIME_IDLE_MS);
+  }, [closeRealtime]);
+
+  const muteRealtime = useCallback(() => {
+    if (realtimeTrackRef.current) realtimeTrackRef.current.enabled = false;
+  }, []);
+
+  const sendRealtime = useCallback((payload: Record<string, unknown>) => {
+    const channel = realtimeChannelRef.current;
+    if (channel?.readyState !== "open") return false;
+    try {
+      channel.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Forget the previous attempt's transcript. Anything still in flight from it
+  // is ignored when it arrives.
+  const resetRealtimeHoldState = useCallback(() => {
+    for (const id of segmentOrderRef.current) ignoredItemsRef.current.add(id);
+    segmentOrderRef.current = [];
+    segmentFinalRef.current = {};
+    segmentPartialRef.current = {};
+  }, []);
+
+  const buildRealtimeTranscript = useCallback(
+    () =>
+      segmentOrderRef.current
+        .map((id) => (segmentFinalRef.current[id] ?? segmentPartialRef.current[id] ?? "").trim())
+        .filter(Boolean)
+        .join(" "),
+    []
+  );
+
+  const connectRealtime = useCallback(
+    async (stream: MediaStream) => {
+      if (realtimeConnectingRef.current || realtimePeerRef.current) return;
+      const source = stream.getAudioTracks()[0];
+      if (!source || source.readyState !== "live") return;
+
+      realtimeConnectingRef.current = true;
+      let pc: RTCPeerConnection | null = null;
+      let retryWithFallback = false;
+      const requestedFallback = realtimeForceFallbackRef.current;
+
+      try {
+        const tokenRes = await fetch("/api/reading/transcribe/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestedFallback ? { mode: "fallback" } : {}),
+        });
+        if (!tokenRes.ok) {
+          console.error("[reading/transcribe] Session request failed:", tokenRes.status);
+          return;
+        }
+        const tokenData = await tokenRes.json();
+        const secret = tokenData?.value ?? tokenData?.client_secret?.value;
+        if (typeof secret !== "string" || !secret) {
+          console.error("[reading/transcribe] Missing streaming token");
+          return;
+        }
+        const mode: "live" | "fallback" = tokenData?.mode === "fallback" ? "fallback" : "live";
+        if (mode === "fallback") realtimeForceFallbackRef.current = true;
+        // The mic was turned off while the token was on its way.
+        if (meterStreamRef.current !== stream) return;
+
+        pc = new RTCPeerConnection();
+        const track = source.clone();
+        // Silent unless the button is held right now.
+        track.enabled = askHoldingRef.current;
+        pc.addTrack(track, new MediaStream([track]));
+        const dc = pc.createDataChannel("oai-events");
+        dc.onmessage = (message) => {
+          let event: RealtimeEvent;
+          try {
+            event = JSON.parse(message.data);
+          } catch {
+            return;
+          }
+          realtimeEventRef.current(event);
+        };
+
+        realtimePeerRef.current = pc;
+        realtimeChannelRef.current = dc;
+        realtimeTrackRef.current = track;
+
+        const thisPc = pc;
+        pc.onconnectionstatechange = () => {
+          if (
+            realtimePeerRef.current === thisPc &&
+            (thisPc.connectionState === "failed" || thisPc.connectionState === "closed")
+          ) {
+            closeRealtime();
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        const answerRes = await fetch("https://api.openai.com/v1/realtime/calls", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/sdp" },
+          body: offer.sdp,
+        });
+        if (!answerRes.ok) {
+          console.error("[reading/transcribe] WebRTC handshake failed:", answerRes.status, mode);
+          // The live model may not be offered over WebRTC: try the fallback once.
+          if (mode === "live") {
+            realtimeForceFallbackRef.current = true;
+            retryWithFallback = true;
+          }
+          throw new Error("handshake failed");
+        }
+        if (realtimePeerRef.current !== pc) return; // closed meanwhile
+        await pc.setRemoteDescription({ type: "answer", sdp: await answerRes.text() });
+        pc = null; // connected: the refs own it now
+        realtimeModeRef.current = mode;
+        realtimeGotTextRef.current = false;
+        console.info("[reading/transcribe] Live preview connected:", mode === "live" ? "gpt-live-transcribe" : "gpt-4o-transcribe");
+        if (!voiceSessionActiveRef.current) scheduleRealtimeIdleClose();
+      } catch (error) {
+        console.error("[reading/transcribe] Streaming connection failed:", error);
+      } finally {
+        realtimeConnectingRef.current = false;
+        if (pc) {
+          if (realtimePeerRef.current === pc) closeRealtime();
+          else pc.close();
+        }
+      }
+
+      if (retryWithFallback && meterStreamRef.current === stream) {
+        await connectRealtimeRef.current(stream);
+      }
+    },
+    [closeRealtime, scheduleRealtimeIdleClose]
+  );
+  connectRealtimeRef.current = connectRealtime;
+
+  // Return the voice UI to rest after a failed attempt, with a message.
+  const failVoice = useCallback(
+    (message: string) => {
+      voiceSessionActiveRef.current = false;
+      muteRealtime();
+      setVoiceJourneyActive(false);
+      setVoiceNavigating(false);
+      setVoiceTranscriptPreview("");
+      setAskError(message);
+    },
+    [muteRealtime]
+  );
+
   const disconnectMicrophone = useCallback(() => {
     stopAskRecorder(true);
     stopAskMeter();
+    closeRealtime();
+    voiceSessionActiveRef.current = false;
 
     if (meterStreamRef.current) {
       meterStreamRef.current.getTracks().forEach((track) => {
@@ -598,7 +822,7 @@ export default function ReadingIntakeScreen({
     setAskHolding(false);
     setMicEnabled(false);
     setMicConnecting(false);
-  }, [stopAskMeter, stopAskRecorder]);
+  }, [closeRealtime, stopAskMeter, stopAskRecorder]);
 
   const enableMicrophone = useCallback(async () => {
     if (micEnabled || micConnecting) return;
@@ -633,6 +857,7 @@ export default function ReadingIntakeScreen({
             meterStreamRef.current = null;
             stopAskRecorder(true);
             stopAskMeter();
+            closeRealtime();
             askHoldingRef.current = false;
             setAskHolding(false);
             setMicEnabled(false);
@@ -641,13 +866,24 @@ export default function ReadingIntakeScreen({
       });
 
       setMicEnabled(true);
+
+      // Pre-warm streaming so it's already listening when the button is held.
+      if (hasVoiceReadingAccess) void connectRealtime(stream);
     } catch {
       setAskError("Microphone access was not enabled.");
       setMicEnabled(false);
     } finally {
       setMicConnecting(false);
     }
-  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecorder]);
+  }, [
+    micConnecting,
+    micEnabled,
+    stopAskMeter,
+    stopAskRecorder,
+    closeRealtime,
+    connectRealtime,
+    hasVoiceReadingAccess,
+  ]);
 
   const toggleMicrophone = useCallback(() => {
     if (micEnabled) {
@@ -813,9 +1049,16 @@ export default function ReadingIntakeScreen({
       const spokenQuestion = transcript.trim();
 
       if (spokenQuestion.length < 2) {
-        setAskError("We didn't catch that. Hold the button and try again.");
+        failVoice("We didn't catch that. Hold the button and try again.");
         return;
       }
+
+      didSubmitVoiceRef.current = true;
+      voiceSessionActiveRef.current = false;
+      muteRealtime();
+
+      // Show the final (Whisper) question in the hero while the reading opens.
+      setVoiceTranscriptPreview(spokenQuestion);
 
       clearIntake();
       clearReading();
@@ -830,24 +1073,31 @@ export default function ReadingIntakeScreen({
         timeframeValue: "next-45-days",
       });
 
-      setVoiceNavigating(true);
-
-      router.push("/reading/preparing?source=voice");
+      window.setTimeout(
+        () => {
+          setVoiceNavigating(true);
+          router.push("/reading/preparing?source=voice");
+        },
+        shouldReduceMotion ? 0 : VOICE_CONFIRM_MS
+      );
     },
-    [router, shouldReduceMotion]
+    [failVoice, muteRealtime, router, shouldReduceMotion]
   );
 
   const revealVoiceTranscript = useCallback((transcript: string) => {
     const clean = transcript.trim();
     setVoiceTranscript(clean);
-    setVoiceTranscriptPreview(clean);
     submitAskAnything(clean);
   }, [submitAskAnything]);
 
+  // The question itself always comes from here: the complete recording sent to
+  // Whisper through the same route the JXL feature uses.
   const transcribeAskAudio = useCallback(
     async (blob: Blob) => {
+      if (didSubmitVoiceRef.current) return;
+
       if (blob.size === 0) {
-        setAskError("We didn't catch that. Hold the button and try again.");
+        failVoice("We didn't catch that. Hold the button and try again.");
         return;
       }
 
@@ -864,96 +1114,85 @@ export default function ReadingIntakeScreen({
         });
 
         const data = await response.json();
+        if (didSubmitVoiceRef.current) return;
 
         if (!response.ok || typeof data?.text !== "string" || !data.text.trim()) {
-          setAskError(data?.error || "Couldn't hear that clearly. Try again.");
+          failVoice(data?.error || "Couldn't hear that clearly. Try again.");
           return;
         }
 
-        if (!didSubmitVoiceRef.current) {
-          didSubmitVoiceRef.current = true;
-          revealVoiceTranscript(data.text);
-        }
+        revealVoiceTranscript(data.text);
       } catch {
-        setVoiceJourneyActive(false);
-        setVoiceNavigating(false);
-        setAskError("Something went wrong with voice input. Try again.");
+        if (!didSubmitVoiceRef.current) {
+          failVoice("Something went wrong with voice input. Try again.");
+        }
       } finally {
         setIsTranscribingAsk(false);
       }
     },
-    [revealVoiceTranscript]
+    [failVoice, revealVoiceTranscript]
   );
 
-  const closeRealtime = useCallback(() => {
-    if (realtimeWaitRef.current) clearTimeout(realtimeWaitRef.current);
-    realtimeWaitRef.current = null;
-    realtimeChannelRef.current?.close();
-    realtimeChannelRef.current = null;
-    realtimePeerRef.current?.close();
-    realtimePeerRef.current = null;
-    realtimeReadyRef.current = false;
-  }, []);
-
-  const completeStreaming = useCallback((text: string) => {
-    if (!releasedRef.current || didSubmitVoiceRef.current || text.trim().length < 2) return;
-    didSubmitVoiceRef.current = true;
-    closeRealtime();
-    submitAskAnything(text.trim());
-  }, [closeRealtime, submitAskAnything]);
-
-  const connectRealtime = useCallback(async (stream: MediaStream) => {
-    try {
-      const tokenRes = await fetch("/api/reading/transcribe/session", { method: "POST" });
-      if (!tokenRes.ok || !askHoldingRef.current) {
-        if (!tokenRes.ok) console.error("[reading/transcribe] Session request failed:", tokenRes.status);
+  // Messages from the live-preview connection. They only update the words shown
+  // on screen; they never decide what gets submitted. Assigned on each render so
+  // the data channel always calls the latest version.
+  realtimeEventRef.current = (event: RealtimeEvent) => {
+    // The live model refused the session after connecting (e.g. not available
+    // for this account): switch to the fallback model and reconnect.
+    if (event.type === "error" && realtimeModeRef.current === "live" && !realtimeGotTextRef.current) {
+      const err = event.error ?? {};
+      const text = `${err.code ?? ""} ${err.message ?? ""}`;
+      if (!/input_audio_buffer/i.test(text) && /model|transcri|session|not supported|invalid/i.test(text)) {
+        console.warn("[reading/transcribe] gpt-live-transcribe failed, switching to fallback:", err);
+        realtimeForceFallbackRef.current = true;
+        closeRealtime();
+        const stream = meterStreamRef.current;
+        if (stream) void connectRealtimeRef.current(stream);
         return;
       }
-      const tokenData = await tokenRes.json();
-      const secret = tokenData?.value ?? tokenData?.client_secret?.value;
-      if (typeof secret !== "string" || !secret || !askHoldingRef.current) {
-        console.error("[reading/transcribe] Missing streaming token or hold released");
-        return;
-      }
-      const pc = new RTCPeerConnection();
-      realtimePeerRef.current = pc;
-      const audioTrack = stream.getAudioTracks()[0];
-      if (!audioTrack) { pc.close(); return; }
-      pc.addTrack(audioTrack, stream);
-      const dc = pc.createDataChannel("oai-events");
-      realtimeChannelRef.current = dc;
-      dc.onmessage = (message) => {
-        let event: {type?:string;item_id?:string;delta?:string;transcript?:string};
-        try { event = JSON.parse(message.data); } catch { return; }
-        const item = event.item_id || "current";
-        if (event.type === "conversation.item.input_audio_transcription.delta") {
-          realtimePartialRef.current[item] = (realtimePartialRef.current[item] || "") + (event.delta || "");
-          if (askHoldingRef.current) setVoiceTranscriptPreview((realtimeFinalRef.current + " " + Object.values(realtimePartialRef.current).join(" ")).trim());
-        } else if (event.type === "conversation.item.input_audio_transcription.completed") {
-          delete realtimePartialRef.current[item];
-          const phrase = (event.transcript || "").trim();
-          if (phrase) realtimeFinalRef.current = (realtimeFinalRef.current + " " + phrase).trim();
-          setVoiceTranscriptPreview(realtimeFinalRef.current);
-          if (releasedRef.current) completeStreaming(realtimeFinalRef.current);
-        }
-      };
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      const answerRes = await fetch("https://api.openai.com/v1/realtime/calls", {
-        method: "POST", headers: {Authorization: `Bearer ${secret}`, "Content-Type":"application/sdp"},
-        body: offer.sdp,
-      });
-      if (!answerRes.ok || !askHoldingRef.current) {
-        if (!answerRes.ok) console.error("[reading/transcribe] WebRTC handshake failed:", answerRes.status);
-        pc.close(); return;
-      }
-      await pc.setRemoteDescription({ type: "answer", sdp: await answerRes.text() });
-      realtimeReadyRef.current = true;
-    } catch (error) {
-      console.error("[reading/transcribe] Streaming connection failed:", error);
-      // Existing Whisper endpoint remains the fallback.
     }
-  }, [completeStreaming]);
+
+    const id = event.item_id;
+    if (id && ignoredItemsRef.current.has(id)) return;
+    if (!voiceSessionActiveRef.current || didSubmitVoiceRef.current) {
+      if (id) ignoredItemsRef.current.add(id);
+      return;
+    }
+
+    const rememberSegment = () => {
+      if (id && !segmentOrderRef.current.includes(id)) segmentOrderRef.current.push(id);
+    };
+
+    switch (event.type) {
+      case "input_audio_buffer.speech_started":
+      case "input_audio_buffer.committed":
+        rememberSegment();
+        break;
+
+      case "conversation.item.input_audio_transcription.delta":
+        if (!id) break;
+        realtimeGotTextRef.current = true;
+        rememberSegment();
+        segmentPartialRef.current[id] = (segmentPartialRef.current[id] || "") + (event.delta || "");
+        setVoiceTranscriptPreview(buildRealtimeTranscript());
+        break;
+
+      case "conversation.item.input_audio_transcription.completed":
+        if (!id) break;
+        realtimeGotTextRef.current = true;
+        rememberSegment();
+        segmentFinalRef.current[id] = (event.transcript || "").trim();
+        delete segmentPartialRef.current[id];
+        setVoiceTranscriptPreview(buildRealtimeTranscript());
+        break;
+
+      case "error":
+        if (event.error?.code !== "input_audio_buffer_commit_empty") {
+          console.warn("[reading/transcribe] Live preview error:", event.error);
+        }
+        break;
+    }
+  };
 
   const startAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -965,7 +1204,7 @@ export default function ReadingIntakeScreen({
         return;
       }
 
-      if (!micEnabled || isTranscribingAsk) return;
+      if (!micEnabled || isTranscribingAsk || voiceSessionActiveRef.current) return;
 
       const stream = meterStreamRef.current;
       if (!stream) {
@@ -985,16 +1224,14 @@ export default function ReadingIntakeScreen({
       askCancelledRef.current = false;
       audioChunksRef.current = [];
 
-      // Clear any previous transcript reveal for the new recording.
+      // Clear any previous transcript for the new recording.
       setVoiceTranscript("");
       setVoiceTranscriptPreview("");
-      realtimeFinalRef.current = "";
-      realtimePartialRef.current = {};
-      releasedRef.current = false;
-      fallbackAudioRef.current = null;
-      awaitingRealtimeRef.current = false;
+      resetRealtimeHoldState();
+      voiceSessionActiveRef.current = true;
       didSubmitVoiceRef.current = false;
-      closeRealtime();
+      if (realtimeIdleTimerRef.current != null) window.clearTimeout(realtimeIdleTimerRef.current);
+      realtimeIdleTimerRef.current = null;
 
       transcriptTimersRef.current.forEach(
         window.clearTimeout
@@ -1015,7 +1252,7 @@ export default function ReadingIntakeScreen({
           ? new MediaRecorder(stream, { mimeType: preferredType })
           : new MediaRecorder(stream);
       } catch {
-        setAskError("Voice recording couldn't start. Try again.");
+        failVoice("Voice recording couldn't start. Try again.");
         return;
       }
 
@@ -1029,10 +1266,8 @@ export default function ReadingIntakeScreen({
         askCancelledRef.current = true;
         askHoldingRef.current = false;
         setAskHolding(false);
-        setVoiceJourneyActive(false);
-        setVoiceNavigating(false);
         stopAskMeter();
-        setAskError("Voice recording was interrupted. Try again.");
+        failVoice("Voice recording was interrupted. Try again.");
       };
 
       recorder.onstop = () => {
@@ -1052,13 +1287,7 @@ export default function ReadingIntakeScreen({
         audioChunksRef.current = [];
 
         if (cancelled || didSubmitVoiceRef.current) return;
-        fallbackAudioRef.current = blob;
-        // If streaming could not complete promptly, fall back to the existing
-        // high-quality Whisper endpoint rather than losing the question.
-        if (!awaitingRealtimeRef.current) {
-          closeRealtime();
-          void transcribeAskAudio(blob);
-        }
+        void transcribeAskAudio(blob);
       };
 
       askHoldStartRef.current = Date.now();
@@ -1071,14 +1300,22 @@ export default function ReadingIntakeScreen({
       } catch {
         askHoldingRef.current = false;
         setAskHolding(false);
-        setVoiceJourneyActive(false);
-        setVoiceNavigating(false);
         mediaRecorderRef.current = null;
-        setAskError("Voice recording couldn't start. Try again.");
+        failVoice("Voice recording couldn't start. Try again.");
         return;
       }
 
-      void connectRealtime(stream);
+      // Live preview: switch on the streaming copy of the mic. If it isn't
+      // connected yet, start connecting; the recording is unaffected either way.
+      const rtTrack = realtimeTrackRef.current;
+      if (rtTrack && rtTrack.readyState === "live") {
+        sendRealtime({ type: "input_audio_buffer.clear" });
+        rtTrack.enabled = true;
+      } else {
+        if (rtTrack) closeRealtime();
+        void connectRealtime(stream);
+      }
+
       requestAnimationFrame(() => {
         requestAnimationFrame(() => { void startAskMeter(); });
       });
@@ -1091,25 +1328,49 @@ export default function ReadingIntakeScreen({
       startAskMeter,
       stopAskMeter,
       transcribeAskAudio,
-      connectRealtime, closeRealtime,
+      connectRealtime,
+      closeRealtime,
+      failVoice,
+      resetRealtimeHoldState,
+      sendRealtime,
+    ]
+  );
+
+  // Abandon the current hold without submitting anything.
+  const abandonAskHold = useCallback(
+    (message: string | null) => {
+      askCancelledRef.current = true;
+      askHoldingRef.current = false;
+      setAskHolding(false);
+      voiceSessionActiveRef.current = false;
+
+      muteRealtime();
+      sendRealtime({ type: "input_audio_buffer.clear" });
+      resetRealtimeHoldState();
+      stopAskMeter();
+      stopAskRecorder(true);
+
+      setVoiceJourneyActive(false);
+      setVoiceNavigating(false);
+      setVoiceTranscriptPreview("");
+      setAskError(message);
+      if (realtimePeerRef.current) scheduleRealtimeIdleClose();
+    },
+    [
+      muteRealtime,
+      resetRealtimeHoldState,
+      scheduleRealtimeIdleClose,
+      sendRealtime,
+      stopAskMeter,
+      stopAskRecorder,
     ]
   );
 
   const cancelAskHold = useCallback(() => {
     if (!askHoldingRef.current) return;
-
-    askCancelledRef.current = true;
-    askHoldingRef.current = false;
-    setAskHolding(false);
-    setVoiceJourneyActive(false);
-    setVoiceNavigating(false);
-    setAskError(null);
-
-    stopAskMeter();
-    closeRealtime();
-    stopAskRecorder(true);
+    abandonAskHold(null);
     triggerIntakeHaptic();
-  }, [stopAskMeter, stopAskRecorder, closeRealtime]);
+  }, [abandonAskHold]);
 
   const moveAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -1128,42 +1389,36 @@ export default function ReadingIntakeScreen({
 
     const elapsed = Date.now() - askHoldStartRef.current;
 
+    if (elapsed < ASK_MIN_HOLD_MS) {
+      abandonAskHold("Press and hold while you speak.");
+      triggerIntakeHaptic();
+      return;
+    }
+
     askHoldingRef.current = false;
     setAskHolding(false);
     triggerIntakeHaptic();
     stopAskMeter();
-    releasedRef.current = true;
 
-    if (elapsed < ASK_MIN_HOLD_MS) {
-      askCancelledRef.current = true;
-      setVoiceJourneyActive(false);
-      setVoiceNavigating(false);
-      closeRealtime();
-      stopAskRecorder(true);
-      setAskError("Press and hold while you speak.");
-      return;
-    }
-
-    // Transition the visual immediately. The route opens only when the final
-    // transcript is saved; never submit an interim/possibly incomplete phrase.
-    setVoiceNavigating(true);
+    // Close the live phrase so its last words come through, stop the preview
+    // audio, and hand the complete recording to Whisper (the recorder's onstop
+    // does the upload). The hero keeps the waveform with "Understanding your
+    // question…" until Whisper answers; the fade to black only starts once the
+    // question is submitted. (With the fallback model, a pause may already have
+    // closed the phrase; the resulting "empty buffer" error is ignored.)
+    sendRealtime({ type: "input_audio_buffer.commit" });
+    muteRealtime();
     stopAskRecorder(false);
-    if (realtimeReadyRef.current && realtimeChannelRef.current?.readyState === "open") {
-      awaitingRealtimeRef.current = true;
-      // End the utterance even if VAD hasn't closed the last sentence yet.
-      realtimeChannelRef.current.send(JSON.stringify({type:"input_audio_buffer.commit"}));
-      // Avoid hanging forever if completion doesn't arrive.
-      realtimeWaitRef.current = setTimeout(() => {
-        if (didSubmitVoiceRef.current) return;
-        closeRealtime();
-        if (fallbackAudioRef.current) void transcribeAskAudio(fallbackAudioRef.current);
-        else setAskError("Couldn't finish transcription. Please try again.");
-      }, 3500);
-    } else {
-      // The recorder's onstop handler will send the complete audio to Whisper.
-      closeRealtime();
-    }
-  }, [stopAskMeter, stopAskRecorder, closeRealtime, completeStreaming, transcribeAskAudio]);
+
+    if (realtimePeerRef.current) scheduleRealtimeIdleClose();
+  }, [
+    abandonAskHold,
+    muteRealtime,
+    scheduleRealtimeIdleClose,
+    sendRealtime,
+    stopAskMeter,
+    stopAskRecorder,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -2074,7 +2329,19 @@ export default function ReadingIntakeScreen({
             0 3px 9px rgba(0,0,0,0.42);
         }
 
+        /* Each live-transcript word settles in as it's revealed. */
+        @keyframes voiceWordIn {
+          from { opacity: 0; filter: blur(3px); transform: translateY(3px); }
+          to { opacity: 1; filter: blur(0); transform: none; }
+        }
+        .voice-word {
+          display: inline-block;
+          white-space: pre;
+          animation: voiceWordIn 260ms cubic-bezier(0.22,1,0.36,1) both;
+        }
+
         @media (prefers-reduced-motion: reduce) {
+          .voice-word { animation: none !important; }
           .hero-shine::after,
           .brand-title,
           .ask-premium,
@@ -2147,25 +2414,43 @@ export default function ReadingIntakeScreen({
                           className="h-[122px] w-[330px] max-w-full"
                           style={{ opacity: askHolding ? 1 : 0.42 }}
                         />
-                        {voiceTranscriptPreview && (
-                          <div aria-live="polite" className="pointer-events-none absolute inset-x-[30px] top-1/2 z-20 -translate-y-1/2 text-center">
+                        {shownWordCount > 0 && (
+                          // Anchored to the bottom so a long question shows its newest words.
+                          <div
+                            aria-live="polite"
+                            className="pointer-events-none absolute inset-x-[30px] top-1/2 z-20 flex max-h-[110px] -translate-y-1/2 flex-col justify-end overflow-hidden text-center"
+                          >
                             <p
-                              className="mx-auto max-h-[110px] overflow-hidden text-[18px] leading-[1.4] text-white"
+                              className="mx-auto text-[18px] leading-[1.4] text-white"
                               style={{ textShadow: "0 2px 16px rgba(0,0,0,0.96)" }}
                             >
-                              {voiceTranscriptPreview}
+                              {previewWords.slice(0, shownWordCount).map((word, i) => (
+                                <span key={i} className="voice-word">
+                                  {word}{" "}
+                                </span>
+                              ))}
                             </p>
                           </div>
                         )}
-                        {!askHolding && (isTranscribingAsk || voiceNavigating) ? (
-                          <motion.p
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="absolute bottom-[31px] left-0 right-0 text-[9px] font-medium uppercase tracking-[0.2em] text-slate-300/72"
-                          >
-                            {voiceNavigating ? "Opening your reading…" : "Understanding your question…"}
-                          </motion.p>
-                        ) : null}
+                        {(() => {
+                          // Live text arrives a phrase at a time (after short pauses),
+                          // so say we're listening until the first words land.
+                          const status = askHolding
+                            ? voiceTranscriptPreview ? null : "Listening…"
+                            : voiceNavigating
+                            ? "Opening your reading…"
+                            : "Understanding your question…";
+                          return status ? (
+                            <motion.p
+                              key={status}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="absolute bottom-[31px] left-0 right-0 text-[9px] font-medium uppercase tracking-[0.2em] text-slate-300/72"
+                            >
+                              {status}
+                            </motion.p>
+                          ) : null;
+                        })()}
                       </div>
                     </div>
                   ) : (
