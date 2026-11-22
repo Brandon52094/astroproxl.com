@@ -529,10 +529,10 @@ export default function PagerContainer() {
           transition: opacity 3s cubic-bezier(0.37, 0, 0.63, 1);
         }
 
-        /* Page outline: a subtle white glow traced along the screen's own edge (the Edge
-           Trace's perimeter). Near-square 6px corners in a browser tab, rounded 44px corners
-           in the installed app. The glow falls inward, since outside would be off-screen.
-           Tuned in the style lab: outline glow 0.60, line thickness 1, slow breathe. */
+        /* Page outline: a subtle glow in the Edge Trace colors (teal → indigo → gold), traced
+           along the screen's own edge. Near-square 6px corners in a browser tab, rounded 44px
+           corners in the installed app. The glow falls inward, since outside would be off-screen.
+           Tuned in the style lab: outline glow 1.05, line thickness 2.25, slow breathe. */
         .page-outline {
           position: absolute;
           inset: 0;
@@ -540,8 +540,8 @@ export default function PagerContainer() {
           pointer-events: none;
           border-radius: 6px;
           box-shadow:
-            inset 0 0 9.6px 0.6px rgba(232,238,255,0.27),
-            inset 0 0 28.8px rgba(241,245,255,0.10);
+            inset 0 0 16.8px 1.05px rgba(129,140,248,0.4725),
+            inset 0 0 50.4px rgba(94,234,212,0.168);
           animation: pageOutlineBreathe 6s ease-in-out infinite;
         }
         @media (display-mode: standalone) {
@@ -552,12 +552,12 @@ export default function PagerContainer() {
           position: absolute;
           inset: 0;
           border-radius: inherit;
-          padding: 1px;
-          background: linear-gradient(45deg, #f1f5ff, #e8eeff 50%, #ffffff);
+          padding: 2.25px;
+          background: linear-gradient(45deg, #5eead4, #818cf8 50%, #fbbf24);
           -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
-          opacity: 0.52;
+          opacity: 0.7225;
         }
         @keyframes pageOutlineBreathe {
           0%, 100% { opacity: 0.72; }

@@ -1606,7 +1606,7 @@ export default function ReadingIntakeScreen({
         .hero-shine-sweep::after { animation: heroShine 2.75s var(--ease-out) 1 forwards; }
         .hero-shine > * { position: relative; z-index: 2; }
 
-        /* ── HERO GLOW — one soft white glow, matched to the gold mic button's intensity ── */
+        /* ── HERO SHELL — no glow ring (the glow lives on the AstroProXL pill), just the shadow ── */
         .hero-glow-shell {
           position: relative;
           border-radius: 28px;
@@ -1620,11 +1620,14 @@ export default function ReadingIntakeScreen({
           z-index: 0;
           border-radius: inherit;
           pointer-events: none;
-          border: 1px solid rgba(236,241,255,0.70);
-          box-shadow:
-            0 0 18px rgba(236,241,255,0.30),
-            0 0 36px rgba(236,241,255,0.10);
-          transition: opacity 0.7s var(--ease-soft);
+          opacity: 0;
+        }
+        /* Twilight fill: deep indigo at the top settling into near-black, like dusk turning to night */
+        .hero-twilight {
+          background:
+            radial-gradient(120% 70% at 50% -10%, rgba(99,102,241,0.22), transparent 70%),
+            linear-gradient(180deg, rgba(30,27,75,0.55) 0%, rgba(10,12,28,0.75) 60%, rgba(5,7,17,0.85) 100%);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
         }
 
         /* ── HERO BRAND ── */
@@ -1646,7 +1649,7 @@ export default function ReadingIntakeScreen({
           color: rgb(246,248,255);
           text-shadow: 0 0 12px rgba(236,241,255,0.40);
         }
-        /* The pill shares the page outline's glow (outline glow 0.60 × pill balance 1.00). */
+        /* The pill shares the page outline's Edge Trace glow (outline glow 1.05 × pill balance 1.00). */
         .brand-pill::before {
           content: "";
           position: absolute;
@@ -1654,8 +1657,8 @@ export default function ReadingIntakeScreen({
           border-radius: inherit;
           pointer-events: none;
           box-shadow:
-            0 0 6px 0.6px rgba(232,238,255,0.36),
-            0 0 15.6px 1.8px rgba(241,245,255,0.18);
+            0 0 10.5px 1.05px rgba(129,140,248,0.63),
+            0 0 27.3px 3.15px rgba(94,234,212,0.315);
         }
         .brand-pill::after {
           content: "";
@@ -1664,7 +1667,7 @@ export default function ReadingIntakeScreen({
           border-radius: inherit;
           padding: 1px;
           pointer-events: none;
-          background: linear-gradient(45deg, #f1f5ff, #e8eeff 50%, #ffffff);
+          background: linear-gradient(45deg, #5eead4, #818cf8 50%, #fbbf24);
           -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
@@ -1806,12 +1809,9 @@ export default function ReadingIntakeScreen({
           gap: 8px;
           border-radius: 20px;
           border: 1px solid rgba(255,255,255,0.10);
-          /* Glass: lit from above and fading down, a fine highlight on the top edge,
-             and the stars softly blurred behind. */
-          background: linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.02) 55%, rgba(255,255,255,0.01) 100%);
-          -webkit-backdrop-filter: blur(6px);
-          backdrop-filter: blur(6px);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
+          /* Nebula: a soft indigo light in one corner and teal in the other, like the sky behind. */
+          background: radial-gradient(circle at 18% 0%, rgba(129,140,248,0.16), transparent 58%), radial-gradient(circle at 92% 110%, rgba(45,212,191,0.09), transparent 55%), linear-gradient(rgba(8,11,24,0.55), rgba(8,11,24,0.55));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
           cursor: pointer;
           user-select: none;
           -webkit-user-select: none;
@@ -1837,7 +1837,7 @@ export default function ReadingIntakeScreen({
         }
         .astro-tile.is-on {
           border-color: var(--b);
-          background: linear-gradient(var(--bg), var(--bg)), linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.02) 55%, rgba(255,255,255,0.01) 100%);
+          background: linear-gradient(var(--bg), var(--bg)), radial-gradient(circle at 18% 0%, rgba(129,140,248,0.16), transparent 58%), radial-gradient(circle at 92% 110%, rgba(45,212,191,0.09), transparent 55%), linear-gradient(rgba(8,11,24,0.55), rgba(8,11,24,0.55));
           transform: translateY(-1px);
           box-shadow: 0 0 0 1px var(--b), 0 0 18px 2px var(--g), 0 0 34px 5px var(--g), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
           transition-duration: .5s;
@@ -2284,7 +2284,7 @@ export default function ReadingIntakeScreen({
             <div className="hero-glow-shell">
               <div
                 ref={heroStageRef}
-                className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center`}
+                className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] hero-twilight text-center`}
                 onContextMenu={(e) => e.preventDefault()}
               >
                 {/* One master canvas: the composition is designed at 374 × 236 and scaled to fit. */}
