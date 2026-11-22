@@ -22,6 +22,8 @@ import {
   clearReading,
 } from "@/lib/chartStore";
 import { PRICING } from "@/lib/paywallConfig";
+import ReadingAmbience from "./ReadingAmbience";
+import type { ThemeKey } from "./ReadingAmbience";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -33,18 +35,51 @@ declare global {
   }
 }
 
-/* ── Recorded voice capture for Ask Anything ────────────────────────── */
+/* ── Voice capture for Ask Anything ───────────────────────────────────
+ * The browser's own speech recognition starts the instant the button is
+ * pressed (the feel of the original JXL panel). A recording runs alongside it
+ * as a backup and goes to Whisper only when the browser can't help (Firefox,
+ * an error, or nothing heard). Nothing is shown on screen while speaking. */
 const ASK_MIN_HOLD_MS = 450;
 
+// Waveform: the JXL panel's calmer settings (smooth rise and fall, no jumpy boost).
 const ASK_WAVE = {
-  sensitivity: 1.5,
-  idle: 0.18,
+  sensitivity: 1.1,
+  idle: 0.19,
   lines: 3,
-  speed: 2.2,
-  glow: 18,
-  thickness: 2.45,
+  speed: 1.8,
+  glow: 16,
+  thickness: 2.3,
+  smoothing: 0.18,
   colors: ["#22c55e", "#3b82f6", "#a855f7", "#ef4444", "#f59e0b"],
 };
+
+/* ── Minimal SpeechRecognition typings (not in every TS DOM lib) ── */
+interface AskSpeechAlternative { readonly transcript: string }
+interface AskSpeechResult { readonly isFinal: boolean; readonly length: number; [index: number]: AskSpeechAlternative }
+interface AskSpeechResultList { readonly length: number; [index: number]: AskSpeechResult }
+interface AskSpeechEvent extends Event { readonly results: AskSpeechResultList }
+interface AskSpeechErrorEvent extends Event { readonly error: string }
+interface AskSpeechRecognition extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((e: AskSpeechEvent) => void) | null;
+  onerror: ((e: AskSpeechErrorEvent) => void) | null;
+  onend: (() => void) | null;
+}
+
+function getSpeechRecognition(): (new () => AskSpeechRecognition) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: new () => AskSpeechRecognition;
+    webkitSpeechRecognition?: new () => AskSpeechRecognition;
+  };
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
+}
 
 function triggerIntakeHaptic() {
   try {
@@ -131,10 +166,13 @@ const HERO_TAGLINES = [
 ];
 
 // Press-and-hold timing (ms). A short grace period keeps ordinary taps from
-// darkening the screen; each following second deepens the focus one step.
+// darkening the screen; then the screen fades to dark in one continuous ease
+// over the full hold. Haptic ticks still mark each second.
 const HOLD_ARM_MS = 220;
 const HOLD_STEP_MS = 1000;
 const HOLD_TOTAL_MS = 3000;
+// The chosen reading's ambience (its themed symbols) fades in at 75% of the hold.
+const HOLD_AMBIENCE_MS = Math.round(HOLD_TOTAL_MS * 0.75);
 
 // One luminous cosmic aura for the current app theme. Personalized theme
 // palettes can be introduced later as an intentional Astro Plus experience.
@@ -255,8 +293,8 @@ export default function ReadingIntakeScreen({
   const [taglineVisible, setTaglineVisible] = useState(true);
 
   // Press-and-hold to begin. The reading is only "selected" while it is held.
-  // holdStage: 0 = idle/pressed, 1 = dim, 2 = darkness, 3 = complete darkness.
-  const [holdStage, setHoldStage] = useState<0 | 1 | 2 | 3>(0);
+  // ambienceArea: the held reading once the hold passes 75% (its symbols show).
+  const [ambienceArea, setAmbienceArea] = useState<string | null>(null);
   const [holdingArea, setHoldingArea] = useState<string | null>(null);
   const [teaseArea, setTeaseArea] = useState<string | null>(null);
   const [sentArea, setSentArea] = useState<string | null>(null);
@@ -288,22 +326,15 @@ export default function ReadingIntakeScreen({
   const meterRafRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Premium voice transcript reveal.
-  const [voiceTranscriptPreview, setVoiceTranscriptPreview] =
-    useState("");
-
-  // Streaming OpenAI transcription (WebRTC): browser receives an ephemeral token,
-  // never the server API key. Keep the completed-audio Whisper route as fallback.
-  const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
-  const realtimeChannelRef = useRef<RTCDataChannel | null>(null);
-  const realtimeFinalRef = useRef("");
-  const realtimePartialRef = useRef<Record<string, string>>({});
-  const realtimeReadyRef = useRef(false);
-  const releasedRef = useRef(false);
-  const realtimeWaitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fallbackAudioRef = useRef<Blob | null>(null);
-  const awaitingRealtimeRef = useRef(false);
+  // Browser speech recognition: words are collected here silently (never shown).
+  const recognitionRef = useRef<AskSpeechRecognition | null>(null);
+  const transcriptRef = useRef("");      // everything heard so far this hold
+  const speechBaseRef = useRef("");      // text kept across an automatic restart
+  const speechStoppingRef = useRef(false);
   const didSubmitVoiceRef = useRef(false);
+
+  // The mic toggle shakes when someone presses the mic while it's still off.
+  const [micNudge, setMicNudge] = useState(false);
 
 
   // Play the glass sweep once on entry, and once again whenever the swipe
@@ -511,6 +542,21 @@ export default function ReadingIntakeScreen({
     hasIncludedVoiceReading ||
     hasPurchasedVoiceReading;
 
+  const stopSpeechRecognition = useCallback(() => {
+    const rec = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!rec) return;
+    speechStoppingRef.current = true;
+    try {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      rec.stop();
+    } catch {
+      // already stopped
+    }
+  }, []);
+
   const stopAskRecorder = useCallback((discard = false) => {
     const recorder = mediaRecorderRef.current;
     if (!recorder) return;
@@ -549,6 +595,7 @@ export default function ReadingIntakeScreen({
   }, []);
 
   const disconnectMicrophone = useCallback(() => {
+    stopSpeechRecognition();
     stopAskRecorder(true);
     stopAskMeter();
 
@@ -565,7 +612,7 @@ export default function ReadingIntakeScreen({
     setAskHolding(false);
     setMicEnabled(false);
     setMicConnecting(false);
-  }, [stopAskMeter, stopAskRecorder]);
+  }, [stopAskMeter, stopAskRecorder, stopSpeechRecognition]);
 
   const enableMicrophone = useCallback(async () => {
     if (micEnabled || micConnecting) return;
@@ -598,6 +645,7 @@ export default function ReadingIntakeScreen({
         track.onended = () => {
           if (meterStreamRef.current === stream) {
             meterStreamRef.current = null;
+            stopSpeechRecognition();
             stopAskRecorder(true);
             stopAskMeter();
             askHoldingRef.current = false;
@@ -614,7 +662,7 @@ export default function ReadingIntakeScreen({
     } finally {
       setMicConnecting(false);
     }
-  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecorder]);
+  }, [micConnecting, micEnabled, stopAskMeter, stopAskRecorder, stopSpeechRecognition]);
 
   const toggleMicrophone = useCallback(() => {
     if (micEnabled) {
@@ -644,7 +692,7 @@ export default function ReadingIntakeScreen({
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.66;
+      analyser.smoothingTimeConstant = 0.78;
       source.connect(analyser);
       analyserRef.current = analyser;
 
@@ -652,24 +700,29 @@ export default function ReadingIntakeScreen({
       let smooth = 0;
       let time = 0;
 
+      // Size the canvas once per hold (and on resize), not on every frame.
+      let cw = 0;
+      let ch = 0;
+      let dpr = 1;
+      const fitCanvas = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const r = canvas.getBoundingClientRect();
+        cw = r.width;
+        ch = r.height;
+        canvas.width = Math.round(cw * dpr);
+        canvas.height = Math.round(ch * dpr);
+      };
+      fitCanvas();
+
       const drawWave = (canvas: HTMLCanvasElement | null) => {
         if (!canvas) return;
+        if (!cw || !ch) fitCanvas();
+        if (!cw || !ch) return;
 
         const c2d = canvas.getContext("2d");
         if (!c2d) return;
-
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const r = canvas.getBoundingClientRect();
-        const cw = r.width;
-        const ch = r.height;
-        if (!cw || !ch) return;
-
-        const targetWidth = Math.round(cw * dpr);
-        const targetHeight = Math.round(ch * dpr);
-        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-          canvas.width = targetWidth;
-          canvas.height = targetHeight;
-        }
 
         c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
         c2d.clearRect(0, 0, cw, ch);
@@ -684,11 +737,9 @@ export default function ReadingIntakeScreen({
         c2d.lineJoin = "round";
         c2d.globalCompositeOperation = "lighter";
 
-        const speakingBoost = 1 + smooth * 0.95;
         const amp =
           (ASK_WAVE.idle + smooth * ASK_WAVE.sensitivity) *
-          (ch * 0.42) *
-          speakingBoost;
+          (ch * 0.44);
 
         for (let line = 0; line < ASK_WAVE.lines; line++) {
           const lf = ASK_WAVE.lines > 1 ? line / (ASK_WAVE.lines - 1) : 0;
@@ -716,11 +767,9 @@ export default function ReadingIntakeScreen({
           c2d.stroke();
         }
 
-        const coreBoost = 1 + smooth * 0.8;
         const coreAmp =
           (ASK_WAVE.idle * 0.5 + smooth * ASK_WAVE.sensitivity * 1.15) *
-          (ch * 0.42) *
-          coreBoost;
+          (ch * 0.44);
         c2d.beginPath();
         for (let x = 0; x <= cw; x += 2) {
           const tx = x / cw;
@@ -762,13 +811,14 @@ export default function ReadingIntakeScreen({
         }
 
         const energy = count ? (sum / count) / 255 : 0;
-        smooth += (energy - smooth) * 0.26;
+        smooth += (energy - smooth) * ASK_WAVE.smoothing;
 
         drawWave(canvasRef.current);
 
         meterRafRef.current = requestAnimationFrame(draw);
       };
 
+      window.addEventListener("resize", fitCanvas, { once: true });
       draw();
     } catch {
       stopAskMeter();
@@ -780,6 +830,8 @@ export default function ReadingIntakeScreen({
       const spokenQuestion = transcript.trim();
 
       if (spokenQuestion.length < 2) {
+        setVoiceJourneyActive(false);
+        setVoiceNavigating(false);
         setAskError("We didn't catch that. Hold the button and try again.");
         return;
       }
@@ -804,15 +856,11 @@ export default function ReadingIntakeScreen({
     [router]
   );
 
-  const revealVoiceTranscript = useCallback((transcript: string) => {
-    const clean = transcript.trim();
-    setVoiceTranscriptPreview(clean);
-    submitAskAnything(clean);
-  }, [submitAskAnything]);
-
   const transcribeAskAudio = useCallback(
     async (blob: Blob) => {
       if (blob.size === 0) {
+        setVoiceJourneyActive(false);
+        setVoiceNavigating(false);
         setAskError("We didn't catch that. Hold the button and try again.");
         return;
       }
@@ -832,13 +880,15 @@ export default function ReadingIntakeScreen({
         const data = await response.json();
 
         if (!response.ok || typeof data?.text !== "string" || !data.text.trim()) {
+          setVoiceJourneyActive(false);
+          setVoiceNavigating(false);
           setAskError(data?.error || "Couldn't hear that clearly. Try again.");
           return;
         }
 
         if (!didSubmitVoiceRef.current) {
           didSubmitVoiceRef.current = true;
-          revealVoiceTranscript(data.text);
+          submitAskAnything(data.text);
         }
       } catch {
         setVoiceJourneyActive(false);
@@ -848,78 +898,77 @@ export default function ReadingIntakeScreen({
         setIsTranscribingAsk(false);
       }
     },
-    [revealVoiceTranscript]
+    [submitAskAnything]
   );
 
-  const closeRealtime = useCallback(() => {
-    if (realtimeWaitRef.current) clearTimeout(realtimeWaitRef.current);
-    realtimeWaitRef.current = null;
-    realtimeChannelRef.current?.close();
-    realtimeChannelRef.current = null;
-    realtimePeerRef.current?.close();
-    realtimePeerRef.current = null;
-    realtimeReadyRef.current = false;
+  // Starts the browser's speech recognition. Must run synchronously inside the
+  // press handler (no awaits before it) so browsers allow it. Returns false when
+  // the browser doesn't offer it; the Whisper recording then carries the hold.
+  const startSpeechRecognition = useCallback((): boolean => {
+    const SR = getSpeechRecognition();
+    if (!SR) return false;
+
+    let rec: AskSpeechRecognition;
+    try {
+      rec = new SR();
+    } catch {
+      return false;
+    }
+    rec.lang = "en-US";
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    rec.onresult = (event) => {
+      let heard = "";
+      for (let i = 0; i < event.results.length; i++) {
+        heard += " " + event.results[i][0].transcript;
+      }
+      transcriptRef.current = (speechBaseRef.current + " " + heard).replace(/\s+/g, " ").trim();
+    };
+
+    rec.onerror = (event) => {
+      // Blocked or failing: stop quietly. The backup recording still has the audio.
+      if (event.error !== "no-speech" && event.error !== "aborted") {
+        speechStoppingRef.current = true;
+      }
+    };
+
+    rec.onend = () => {
+      // Some browsers end recognition after a pause even mid-hold; pick it back up.
+      if (askHoldingRef.current && !speechStoppingRef.current && recognitionRef.current === rec) {
+        speechBaseRef.current = transcriptRef.current;
+        try {
+          rec.start();
+          return;
+        } catch {
+          // fall through: the recording backup covers the rest
+        }
+      }
+      if (recognitionRef.current === rec) recognitionRef.current = null;
+    };
+
+    try {
+      rec.start();
+    } catch {
+      return false;
+    }
+    speechStoppingRef.current = false;
+    recognitionRef.current = rec;
+    return true;
   }, []);
 
-  const completeStreaming = useCallback((text: string) => {
-    if (!releasedRef.current || didSubmitVoiceRef.current || text.trim().length < 2) return;
-    didSubmitVoiceRef.current = true;
-    closeRealtime();
-    submitAskAnything(text.trim());
-  }, [closeRealtime, submitAskAnything]);
-
-  const connectRealtime = useCallback(async (stream: MediaStream) => {
+  // Shake the mic toggle to say "turn me on first".
+  const nudgeMicToggle = useCallback(() => {
+    setMicNudge(false);
+    window.requestAnimationFrame(() => setMicNudge(true));
     try {
-      const tokenRes = await fetch("/api/reading/transcribe/session", { method: "POST" });
-      if (!tokenRes.ok || !askHoldingRef.current) {
-        if (!tokenRes.ok) console.error("[reading/transcribe] Session request failed:", tokenRes.status);
-        return;
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([10, 40, 10]);
       }
-      const tokenData = await tokenRes.json();
-      const secret = tokenData?.value ?? tokenData?.client_secret?.value;
-      if (typeof secret !== "string" || !secret || !askHoldingRef.current) {
-        console.error("[reading/transcribe] Missing streaming token or hold released");
-        return;
-      }
-      const pc = new RTCPeerConnection();
-      realtimePeerRef.current = pc;
-      const audioTrack = stream.getAudioTracks()[0];
-      if (!audioTrack) { pc.close(); return; }
-      pc.addTrack(audioTrack, stream);
-      const dc = pc.createDataChannel("oai-events");
-      realtimeChannelRef.current = dc;
-      dc.onmessage = (message) => {
-        let event: {type?:string;item_id?:string;delta?:string;transcript?:string};
-        try { event = JSON.parse(message.data); } catch { return; }
-        const item = event.item_id || "current";
-        if (event.type === "conversation.item.input_audio_transcription.delta") {
-          realtimePartialRef.current[item] = (realtimePartialRef.current[item] || "") + (event.delta || "");
-          if (askHoldingRef.current) setVoiceTranscriptPreview((realtimeFinalRef.current + " " + Object.values(realtimePartialRef.current).join(" ")).trim());
-        } else if (event.type === "conversation.item.input_audio_transcription.completed") {
-          delete realtimePartialRef.current[item];
-          const phrase = (event.transcript || "").trim();
-          if (phrase) realtimeFinalRef.current = (realtimeFinalRef.current + " " + phrase).trim();
-          setVoiceTranscriptPreview(realtimeFinalRef.current);
-          if (releasedRef.current) completeStreaming(realtimeFinalRef.current);
-        }
-      };
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      const answerRes = await fetch("https://api.openai.com/v1/realtime/calls", {
-        method: "POST", headers: {Authorization: `Bearer ${secret}`, "Content-Type":"application/sdp"},
-        body: offer.sdp,
-      });
-      if (!answerRes.ok || !askHoldingRef.current) {
-        if (!answerRes.ok) console.error("[reading/transcribe] WebRTC handshake failed:", answerRes.status);
-        pc.close(); return;
-      }
-      await pc.setRemoteDescription({ type: "answer", sdp: await answerRes.text() });
-      realtimeReadyRef.current = true;
-    } catch (error) {
-      console.error("[reading/transcribe] Streaming connection failed:", error);
-      // Existing Whisper endpoint remains the fallback.
+    } catch {
+      // Haptics are optional.
     }
-  }, [completeStreaming]);
+  }, []);
 
   const startAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -931,7 +980,13 @@ export default function ReadingIntakeScreen({
         return;
       }
 
-      if (!micEnabled || isTranscribingAsk) return;
+      if (isTranscribingAsk) return;
+
+      // Mic still off: the toggle shakes to ask for a response.
+      if (!micEnabled) {
+        nudgeMicToggle();
+        return;
+      }
 
       const stream = meterStreamRef.current;
       if (!stream) {
@@ -939,105 +994,108 @@ export default function ReadingIntakeScreen({
         return;
       }
 
-      if (typeof MediaRecorder === "undefined") {
-        setAskError("Voice recording isn't available in this browser yet.");
-        return;
-      }
-
       setAskError(null);
-      setVoiceJourneyActive(true);
-      setVoiceNavigating(false);
       askPointerStartYRef.current = e.clientY;
       askCancelledRef.current = false;
       audioChunksRef.current = [];
-
-      // Clear any previous transcript reveal for the new recording.
-      setVoiceTranscriptPreview("");
-      realtimeFinalRef.current = "";
-      realtimePartialRef.current = {};
-      releasedRef.current = false;
-      fallbackAudioRef.current = null;
-      awaitingRealtimeRef.current = false;
+      transcriptRef.current = "";
+      speechBaseRef.current = "";
       didSubmitVoiceRef.current = false;
-      closeRealtime();
+      stopSpeechRecognition();
 
-      const preferredType = [
-        "audio/mp4",
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/ogg;codecs=opus",
-      ].find((type) => MediaRecorder.isTypeSupported(type));
+      // 1) Browser speech recognition, started right away so the first words are caught.
+      const speechStarted = startSpeechRecognition();
 
-      let recorder: MediaRecorder;
-      try {
-        recorder = preferredType
-          ? new MediaRecorder(stream, { mimeType: preferredType })
-          : new MediaRecorder(stream);
-      } catch {
-        setAskError("Voice recording couldn't start. Try again.");
+      // 2) Backup recording for Whisper.
+      let recorder: MediaRecorder | null = null;
+      if (typeof MediaRecorder !== "undefined") {
+        const preferredType = [
+          "audio/mp4",
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/ogg;codecs=opus",
+        ].find((type) => MediaRecorder.isTypeSupported(type));
+
+        try {
+          recorder = preferredType
+            ? new MediaRecorder(stream, { mimeType: preferredType })
+            : new MediaRecorder(stream);
+        } catch {
+          recorder = null;
+        }
+      }
+
+      if (!speechStarted && !recorder) {
+        setAskError("Voice input isn't available in this browser yet.");
         return;
       }
 
-      mediaRecorderRef.current = recorder;
+      if (recorder) {
+        const rec = recorder;
+        mediaRecorderRef.current = rec;
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data);
-      };
+        rec.ondataavailable = (event) => {
+          if (event.data.size > 0) audioChunksRef.current.push(event.data);
+        };
 
-      recorder.onerror = () => {
-        askCancelledRef.current = true;
-        askHoldingRef.current = false;
-        setAskHolding(false);
-        setVoiceJourneyActive(false);
-        setVoiceNavigating(false);
-        stopAskMeter();
-        setAskError("Voice recording was interrupted. Try again.");
-      };
+        rec.onerror = () => {
+          // The backup failed; speech recognition (if running) can still carry the hold.
+          if (mediaRecorderRef.current === rec) mediaRecorderRef.current = null;
+          if (!recognitionRef.current) {
+            askCancelledRef.current = true;
+            askHoldingRef.current = false;
+            setAskHolding(false);
+            setVoiceJourneyActive(false);
+            setVoiceNavigating(false);
+            stopAskMeter();
+            setAskError("Voice recording was interrupted. Try again.");
+          }
+        };
 
-      recorder.onstop = () => {
-        mediaRecorderRef.current = null;
+        rec.onstop = () => {
+          if (mediaRecorderRef.current === rec) mediaRecorderRef.current = null;
 
-        const cancelled = askCancelledRef.current;
-        askCancelledRef.current = false;
+          const cancelled = askCancelledRef.current;
+          askCancelledRef.current = false;
 
-        const mimeType =
-          recorder.mimeType ||
-          (audioChunksRef.current[0] instanceof Blob
-            ? (audioChunksRef.current[0] as Blob).type
-            : "") ||
-          "audio/webm";
+          const mimeType =
+            rec.mimeType ||
+            (audioChunksRef.current[0] instanceof Blob
+              ? (audioChunksRef.current[0] as Blob).type
+              : "") ||
+            "audio/webm";
 
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        audioChunksRef.current = [];
+          const blob = new Blob(audioChunksRef.current, { type: mimeType });
+          audioChunksRef.current = [];
 
-        if (cancelled || didSubmitVoiceRef.current) return;
-        fallbackAudioRef.current = blob;
-        // If streaming could not complete promptly, fall back to the existing
-        // high-quality Whisper endpoint rather than losing the question.
-        if (!awaitingRealtimeRef.current) {
-          closeRealtime();
+          // Only reached when the browser didn't catch the question: send it to Whisper.
+          if (cancelled || didSubmitVoiceRef.current) return;
           void transcribeAskAudio(blob);
-        }
-      };
+        };
+      }
 
+      setVoiceJourneyActive(true);
+      setVoiceNavigating(false);
       askHoldStartRef.current = Date.now();
       askHoldingRef.current = true;
       setAskHolding(true);
       triggerIntakeHaptic();
 
-      try {
-        recorder.start(250);
-      } catch {
-        askHoldingRef.current = false;
-        setAskHolding(false);
-        setVoiceJourneyActive(false);
-        setVoiceNavigating(false);
-        mediaRecorderRef.current = null;
-        setAskError("Voice recording couldn't start. Try again.");
-        return;
+      if (recorder) {
+        try {
+          recorder.start(250);
+        } catch {
+          mediaRecorderRef.current = null;
+          if (!speechStarted) {
+            askHoldingRef.current = false;
+            setAskHolding(false);
+            setVoiceJourneyActive(false);
+            setAskError("Voice recording couldn't start. Try again.");
+            return;
+          }
+        }
       }
 
-      void connectRealtime(stream);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => { void startAskMeter(); });
       });
@@ -1047,10 +1105,12 @@ export default function ReadingIntakeScreen({
       hasVoiceReadingAccess,
       isTranscribingAsk,
       micEnabled,
+      nudgeMicToggle,
       startAskMeter,
+      startSpeechRecognition,
       stopAskMeter,
+      stopSpeechRecognition,
       transcribeAskAudio,
-      connectRealtime, closeRealtime,
     ]
   );
 
@@ -1065,10 +1125,10 @@ export default function ReadingIntakeScreen({
     setAskError(null);
 
     stopAskMeter();
-    closeRealtime();
+    stopSpeechRecognition();
     stopAskRecorder(true);
     triggerIntakeHaptic();
-  }, [stopAskMeter, stopAskRecorder, closeRealtime]);
+  }, [stopAskMeter, stopAskRecorder, stopSpeechRecognition]);
 
   const moveAskHold = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -1091,38 +1151,39 @@ export default function ReadingIntakeScreen({
     setAskHolding(false);
     triggerIntakeHaptic();
     stopAskMeter();
-    releasedRef.current = true;
+
+    // Take what the browser heard before stopping it.
+    const heard = transcriptRef.current.trim();
+    stopSpeechRecognition();
 
     if (elapsed < ASK_MIN_HOLD_MS) {
       askCancelledRef.current = true;
       setVoiceJourneyActive(false);
       setVoiceNavigating(false);
-      closeRealtime();
       stopAskRecorder(true);
       setAskError("Press and hold while you speak.");
       return;
     }
 
-    // Transition the visual immediately. The route opens only when the final
-    // transcript is saved; never submit an interim/possibly incomplete phrase.
-    setVoiceNavigating(true);
-    stopAskRecorder(false);
-    if (realtimeReadyRef.current && realtimeChannelRef.current?.readyState === "open") {
-      awaitingRealtimeRef.current = true;
-      // End the utterance even if VAD hasn't closed the last sentence yet.
-      realtimeChannelRef.current.send(JSON.stringify({type:"input_audio_buffer.commit"}));
-      // Avoid hanging forever if completion doesn't arrive.
-      realtimeWaitRef.current = setTimeout(() => {
-        if (didSubmitVoiceRef.current) return;
-        closeRealtime();
-        if (fallbackAudioRef.current) void transcribeAskAudio(fallbackAudioRef.current);
-        else setAskError("Couldn't finish transcription. Please try again.");
-      }, 3500);
-    } else {
-      // The recorder's onstop handler will send the complete audio to Whisper.
-      closeRealtime();
+    if (heard.length >= 2) {
+      // The browser caught it: send immediately and discard the backup recording.
+      didSubmitVoiceRef.current = true;
+      stopAskRecorder(true);
+      submitAskAnything(heard);
+      return;
     }
-  }, [stopAskMeter, stopAskRecorder, closeRealtime, transcribeAskAudio]);
+
+    if (mediaRecorderRef.current) {
+      // The browser didn't catch it (or isn't available): the recorder's onstop
+      // sends the full recording to Whisper.
+      stopAskRecorder(false);
+      return;
+    }
+
+    setVoiceJourneyActive(false);
+    setVoiceNavigating(false);
+    setAskError("We didn't catch that. Hold the button and try again.");
+  }, [stopAskMeter, stopAskRecorder, stopSpeechRecognition, submitAskAnything]);
 
   useEffect(() => {
     const shutMicDownForPageExit = () => {
@@ -1276,7 +1337,7 @@ export default function ReadingIntakeScreen({
   function resetHoldVisuals() {
     clearHoldTimers();
     sendingRef.current = false;
-    setHoldStage(0);
+    setAmbienceArea(null);
     setHoldingArea(null);
     setSentArea(null);
     setReadingFade(false);
@@ -1288,6 +1349,7 @@ export default function ReadingIntakeScreen({
     sendingRef.current = true;
     setHoldingArea(null);
     setSentArea(areaId);
+    setAmbienceArea(areaId);
     triggerIntakeHaptic();
     // The tile flashes, then the screen fades to black while the reading starts.
     holdTimersRef.current.push(window.setTimeout(() => setReadingFade(true), 420));
@@ -1296,12 +1358,13 @@ export default function ReadingIntakeScreen({
 
   const beginHold = (areaId: string) => {
     if (sendingRef.current || !canBeginRef.current) return;
+    // Setting holdingArea starts the one continuous fade (see .focus-hold).
     setHoldingArea(areaId);
-    setHoldStage(1);
     triggerIntakeHaptic();
     holdTimersRef.current.push(
-      window.setTimeout(() => { setHoldStage(2); triggerIntakeHaptic(); }, HOLD_STEP_MS),
-      window.setTimeout(() => { setHoldStage(3); triggerIntakeHaptic(); }, HOLD_STEP_MS * 2),
+      window.setTimeout(triggerIntakeHaptic, HOLD_STEP_MS),
+      window.setTimeout(triggerIntakeHaptic, HOLD_STEP_MS * 2),
+      window.setTimeout(() => setAmbienceArea(areaId), HOLD_AMBIENCE_MS),
       window.setTimeout(() => completeHold(areaId), HOLD_TOTAL_MS),
     );
   };
@@ -1323,7 +1386,7 @@ export default function ReadingIntakeScreen({
     if (sendingRef.current) return;
     const quickTap = !cancelled && Date.now() - pressStartRef.current < HOLD_ARM_MS;
     clearHoldTimers();
-    setHoldStage(0);
+    setAmbienceArea(null);
     setHoldingArea(null);
     // Lifting the finger lets the selection go, with a smooth fade.
     setSelectedArea(null);
@@ -1346,16 +1409,29 @@ export default function ReadingIntakeScreen({
 
   useEffect(() => () => clearHoldTimers(), []);
 
-  // Tell the pager how dark the sky behind the stars should be.
+  // Tell the pager to fade the sky behind the stars to black (one continuous
+  // fade over the hold; releasing early brings it back).
+  const focusActive = !!holdingArea || !!sentArea;
   useEffect(() => {
     const root = document.documentElement;
-    const level = sentArea ? 3 : holdStage;
-    if (level > 0) root.dataset.astroFocus = String(level);
+    if (focusActive) root.dataset.astroFocus = "hold";
     else delete root.dataset.astroFocus;
     return () => {
       delete root.dataset.astroFocus;
     };
-  }, [holdStage, sentArea]);
+  }, [focusActive]);
+
+  // Tell the pager to fade in the aurora while voice is active
+  // ("holding" makes it a little richer while the button is held).
+  useEffect(() => {
+    const root = document.documentElement;
+    if (askHolding) root.dataset.astroVoice = "holding";
+    else if (voiceJourneyActive || isTranscribingAsk || voiceNavigating) root.dataset.astroVoice = "on";
+    else delete root.dataset.astroVoice;
+    return () => {
+      delete root.dataset.astroVoice;
+    };
+  }, [askHolding, voiceJourneyActive, isTranscribingAsk, voiceNavigating]);
 
   // Rotate the hero's sales line.
   useEffect(() => {
@@ -1409,8 +1485,17 @@ export default function ReadingIntakeScreen({
   const voiceVisualActiveRef = useRef(voiceVisualActive);
   voiceVisualActiveRef.current = voiceVisualActive;
 
-  // Darkness level for the whole screen: 0 rest · 1 dim · 2 darkness · 3 complete darkness.
-  const focusLevel = sentArea ? 3 : holdStage;
+  // Reading ambience: the held tile's theme from 75% of the hold, or the gold
+  // Ask Anything theme once a voice question is sent. Keep the last theme so
+  // the symbols fade out rather than vanish.
+  const ambienceKey: ThemeKey | null = ambienceArea
+    ? (ambienceArea as ThemeKey)
+    : voiceNavigating
+      ? "ask"
+      : null;
+  const lastAmbienceKeyRef = useRef<ThemeKey>("default");
+  if (ambienceKey) lastAmbienceKeyRef.current = ambienceKey;
+
   const contextActive = !!selectedArea || contextFocused;
   // Keep the last description so it can fade out rather than vanish.
   const lastDescriptionRef = useRef("");
@@ -1420,7 +1505,7 @@ export default function ReadingIntakeScreen({
   return (
     <div
       ref={intakeRootRef}
-      className={`astro-intake focus-${focusLevel} relative h-full min-h-full w-full min-w-0 max-w-full overflow-x-hidden bg-transparent text-slate-100`}
+      className={`astro-intake ${focusActive ? "focus-hold" : ""} ${ambienceArea ? "ambience-on" : ""} ${askHolding ? "ask-holding" : ""} relative h-full min-h-full w-full min-w-0 max-w-full overflow-x-hidden bg-transparent text-slate-100`}
       style={{
         height: "100%",
         minHeight: "100%",
@@ -1439,6 +1524,8 @@ export default function ReadingIntakeScreen({
           --caps: var(--font-caps), Cinzel, Georgia, serif;
           --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
           --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+          /* Gentle in, gentle out: the hold's fade to dark has no visible steps. */
+          --ease-hold: cubic-bezier(0.37, 0, 0.63, 1);
         }
 
         /* ── HERO GLASS SWEEP (on entry) ── */
@@ -1732,7 +1819,7 @@ export default function ReadingIntakeScreen({
           50% { transform: scale(1.05); box-shadow: 0 0 0 1px var(--b), 0 0 32px 8px var(--g), 0 0 70px 18px var(--g), 0 18px 34px rgba(0,0,0,0.78); }
         }
         .astro-tile.is-holding { animation: holdPulse 1s ease-in-out infinite; z-index: 3; }
-        .focus-3 .astro-tile.is-holding { animation-duration: .6s; }
+        .ambience-on .astro-tile.is-holding { animation-duration: .6s; }
         @keyframes sendFlash {
           0% { transform: scale(1.05); }
           40% { transform: scale(1.1); box-shadow: 0 0 0 2px #fff, 0 0 50px 16px var(--g), 0 0 120px 40px var(--g); }
@@ -1741,23 +1828,21 @@ export default function ReadingIntakeScreen({
         .astro-tile.is-sent { animation: sendFlash .6s var(--ease-out) forwards; z-index: 3; }
         .astro-tile.is-sent::before { opacity: 1; --hold-progress: 360deg; }
 
-        /* ── FOCUS STEPS: dim → darkness → complete darkness (the stars stay, in the pager) ── */
-        /* Opacity only: iOS Safari paints filter layers here as hard-edged dark boxes. */
+        /* ── FOCUS: one continuous fade to dark across the whole hold (the stars stay, in the pager) ── */
+        /* Opacity only: iOS Safari paints filter layers here as hard-edged dark boxes.
+           Releasing early uses the shorter resting transitions to come back. */
         .astro-fade { transition: opacity .7s var(--ease-soft), text-shadow .7s var(--ease-soft); }
-        .focus-1 .astro-fade, .focus-2 .astro-fade, .focus-3 .astro-fade { transition: opacity .8s var(--ease-out), text-shadow .8s var(--ease-out); }
-        .focus-1 .astro-fade { opacity: .22; }
-        .focus-2 .astro-fade { opacity: .05; }
-        .focus-3 .astro-fade { opacity: 0; }
-        .focus-1 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .22; transition-duration: .8s; }
-        .focus-2 .astro-tile:not(.is-holding):not(.is-sent) { opacity: .05; transition-duration: .8s; }
-        .focus-3 .astro-tile:not(.is-holding):not(.is-sent) { opacity: 0; transition-duration: .8s; }
+        .focus-hold .astro-fade,
+        .focus-hold .astro-tile:not(.is-holding):not(.is-sent) {
+          opacity: 0;
+          transition: opacity ${HOLD_TOTAL_MS}ms var(--ease-hold), text-shadow ${HOLD_TOTAL_MS}ms var(--ease-hold);
+        }
         /* The reading's description stays readable through the whole hold. */
-        .focus-1 .info-space, .focus-2 .info-space, .focus-3 .info-space { opacity: 1; }
+        .focus-hold .info-space { opacity: 1; }
         /* Context the user typed doesn't fade: it's part of what's being sent. */
-        .focus-1 .astro-fade.has-context, .focus-2 .astro-fade.has-context, .focus-3 .astro-fade.has-context { opacity: 1; }
-        .focus-1 .hero-glow-shell, .focus-2 .hero-glow-shell, .focus-3 .hero-glow-shell { box-shadow: none; }
-        .focus-1 .hero-glow-shell::before { opacity: .3; }
-        .focus-2 .hero-glow-shell::before, .focus-3 .hero-glow-shell::before { opacity: 0; }
+        .focus-hold .astro-fade.has-context { opacity: 1; }
+        .focus-hold .hero-glow-shell { box-shadow: none; transition: box-shadow ${HOLD_TOTAL_MS}ms var(--ease-hold); }
+        .focus-hold .hero-glow-shell::before { opacity: 0; transition: opacity ${HOLD_TOTAL_MS}ms var(--ease-hold); }
 
         /* ── ADD CONTEXT — soft circulating pearl/champagne edge ── */
         @property --context-orbit {
@@ -1961,24 +2046,89 @@ export default function ReadingIntakeScreen({
           box-shadow:
             inset 0 1px 0 rgba(255,255,255,0.055),
             0 12px 28px rgba(0,0,0,0.38);
+          opacity: 0.74;
+          filter: brightness(0.92) saturate(0.82);
           transition:
             opacity 520ms cubic-bezier(0.22,1,0.36,1),
             border-color 420ms cubic-bezier(0.22,1,0.36,1),
             box-shadow 420ms cubic-bezier(0.22,1,0.36,1),
             filter 420ms cubic-bezier(0.22,1,0.36,1);
         }
+        /* Once on, the knob slides up and then the whole toggle fades away and stops
+           taking taps. It returns when the mic switches off (e.g. leaving the app). */
         .mic-ready-toggle[data-enabled="true"] {
-          border-color: rgba(165,180,252,0.16);
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transition:
+            opacity 520ms cubic-bezier(0.22,1,0.36,1) 320ms,
+            visibility 0s linear 840ms;
+        }
+        /* Pressing the mic while the toggle is off: a short shake with a gold edge. */
+        @keyframes micNeedsYou {
+          0%, 100% { transform: translateX(0) rotate(0); }
+          12% { transform: translateX(-3px) rotate(-2deg); }
+          25% { transform: translateX(3px) rotate(2deg); }
+          37% { transform: translateX(-3px) rotate(-1.5deg); }
+          50% { transform: translateX(2.4px) rotate(1deg); }
+          62% { transform: translateX(-1.5px); }
+          75% { transform: translateX(0.9px); }
+        }
+        .mic-ready-toggle.is-nudging {
+          opacity: 1;
+          filter: none;
+          border-color: rgba(218,183,104,0.55);
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.035),
-            0 0 10px rgba(99,102,241,0.05),
-            0 10px 22px rgba(0,0,0,0.24);
+            inset 0 1px 0 rgba(255,255,255,0.055),
+            0 0 14px rgba(218,183,104,0.35),
+            0 12px 28px rgba(0,0,0,0.38);
+          animation: micNeedsYou 560ms cubic-bezier(.36,.07,.19,.97) 1;
         }
-        .mic-ready-toggle[data-enabled="true"]:hover,
-        .mic-ready-toggle[data-enabled="true"]:focus-visible {
-          opacity: 0.44 !important;
-          filter: brightness(0.9) saturate(0.65) !important;
+        .mic-ready-toggle.is-nudging .mic-ready-knob {
+          box-shadow: 0 0 10px rgba(218,183,104,0.6), 0 3px 9px rgba(0,0,0,0.46);
         }
+
+        /* Gold rings rolling out from the mic button while it's held (the button itself is unchanged). */
+        @keyframes askRingOut {
+          0%   { opacity: 0;    transform: scale(1); }
+          12%  { opacity: 0.55; }
+          100% { opacity: 0;    transform: scale(1.24); }
+        }
+        .ask-ring {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 104px;
+          border-radius: 24px;
+          z-index: 0;
+          pointer-events: none;
+          opacity: 0;
+          border: 1px solid rgba(218,183,104,0.8);
+          box-shadow: 0 0 14px rgba(218,183,104,0.28), inset 0 0 10px rgba(218,183,104,0.14);
+        }
+        .ask-holding .ask-ring { animation: askRingOut 2800ms cubic-bezier(0.2, 0.6, 0.35, 1) infinite; }
+        .ask-holding .ask-ring.ring-2 { animation-delay: 933ms; }
+        .ask-holding .ask-ring.ring-3 { animation-delay: 1867ms; }
+
+        /* Center-stage waveform: 50% down the screen, 10% in on each side. */
+        .ask-wave-stage {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 50%;
+          height: 100px;
+          transform: translateY(-50%);
+          z-index: 20;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity .5s var(--ease-soft);
+        }
+        .ask-wave-stage.is-on { opacity: 1; }
+        .ask-wave-canvas { width: 80%; max-width: 460px; height: 100%; display: block; transition: opacity .3s ease; }
         .mic-ready-knob {
           position: absolute;
           left: 50%;
@@ -2018,8 +2168,18 @@ export default function ReadingIntakeScreen({
           .astro-tile::before { animation: none !important; }
           .mic-ready-toggle,
           .mic-ready-knob { transition: none !important; }
+          .ask-ring,
+          .mic-ready-toggle.is-nudging { animation: none !important; }
         }
       `}</style>
+
+      {/* Reading ambience: the chosen reading's themed symbols, behind the content.
+          Same component and spots as the preparing screen, so the handoff is seamless. */}
+      <ReadingAmbience
+        themeKey={ambienceKey ?? lastAmbienceKeyRef.current}
+        visible={!!ambienceKey}
+        glow
+      />
 
       <div
         className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col justify-start px-[clamp(12px,4vw,16px)]"
@@ -2046,8 +2206,8 @@ export default function ReadingIntakeScreen({
             <span className="swipe-arrow" aria-hidden="true">&rsaquo;</span>
           </button>
 
-          {/* ── HERO — fixed 236px brand card; becomes the live waveform while asking aloud ── */}
-          <section className="astro-fade mb-0 pt-0">
+          {/* ── HERO — fixed 236px brand card; fades out while asking aloud ── */}
+          <section className="astro-fade mb-0 pt-0" style={{ opacity: voiceVisualActive ? 0 : undefined }}>
             <div
               className="hero-glow-shell"
               style={{
@@ -2061,7 +2221,6 @@ export default function ReadingIntakeScreen({
                 ref={heroStageRef}
                 className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] text-center`}
                 onContextMenu={(e) => e.preventDefault()}
-                aria-label={voiceVisualActive ? "Ask Anything voice flow is active" : undefined}
               >
                 {/* One master canvas: the composition is designed at 374 × 236 and scaled to fit. */}
                 <div
@@ -2071,38 +2230,7 @@ export default function ReadingIntakeScreen({
                     transformOrigin: "center center",
                   }}
                 >
-                  {voiceVisualActive ? (
-                    <div className="absolute inset-0">
-                      <div className="absolute inset-0 flex items-center justify-center px-[30px]">
-                        <canvas
-                          ref={canvasRef}
-                          aria-hidden="true"
-                          className="h-[122px] w-[330px] max-w-full"
-                          style={{ opacity: askHolding ? 1 : 0.42 }}
-                        />
-                        {voiceTranscriptPreview && (
-                          <div aria-live="polite" className="pointer-events-none absolute inset-x-[30px] top-1/2 z-20 -translate-y-1/2 text-center">
-                            <p
-                              className="mx-auto max-h-[110px] overflow-hidden text-[18px] leading-[1.4] text-white"
-                              style={{ textShadow: "0 2px 16px rgba(0,0,0,0.96)" }}
-                            >
-                              {voiceTranscriptPreview}
-                            </p>
-                          </div>
-                        )}
-                        {!askHolding && (isTranscribingAsk || voiceNavigating) ? (
-                          <motion.p
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="absolute bottom-[31px] left-0 right-0 text-[9px] font-medium uppercase tracking-[0.2em] text-slate-300/72"
-                          >
-                            {voiceNavigating ? "Opening your reading…" : "Understanding your question…"}
-                          </motion.p>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center px-[18px] text-center">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center px-[18px] text-center">
                       <span className="brand-pill" aria-label="AstroProXL">
                         AstroPro<sup aria-hidden="true">XL</sup>
                       </span>
@@ -2118,7 +2246,6 @@ export default function ReadingIntakeScreen({
                         </p>
                       </div>
                     </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -2244,6 +2371,9 @@ export default function ReadingIntakeScreen({
           <section className="astro-fade mt-[26px] pt-0">
             <div className="flex w-full items-center justify-center">
               <div className="ask-box relative h-[104px] w-[72%] max-w-[304px]">
+                <span className="ask-ring" aria-hidden="true" />
+                <span className="ask-ring ring-2" aria-hidden="true" />
+                <span className="ask-ring ring-3" aria-hidden="true" />
                 <button
                   type="button"
                   onPointerDown={startAskHold}
@@ -2275,11 +2405,12 @@ export default function ReadingIntakeScreen({
 
                 <button
                   type="button"
-                  className="mic-ready-toggle tap-fix"
+                  className={`mic-ready-toggle tap-fix ${micNudge ? "is-nudging" : ""}`}
                   data-enabled={micEnabled ? "true" : "false"}
                   aria-pressed={micEnabled}
                   aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
                   onClick={toggleMicrophone}
+                  onAnimationEnd={() => setMicNudge(false)}
                   disabled={micConnecting || isTranscribingAsk}
                   style={{
                     position: "absolute",
@@ -2287,10 +2418,6 @@ export default function ReadingIntakeScreen({
                     top: "12px",
                     zIndex: 2,
                     cursor: micConnecting || isTranscribingAsk ? "wait" : "pointer",
-                    opacity: micEnabled ? 0.18 : 0.74,
-                    filter: micEnabled
-                      ? "grayscale(0.9) brightness(0.72) saturate(0.35)"
-                      : "brightness(0.92) saturate(0.82)",
                   }}
                 >
                   <span className="mic-ready-knob" />
@@ -2307,6 +2434,15 @@ export default function ReadingIntakeScreen({
             )}
           </section>
         </motion.div>
+      </div>
+
+      {/* ── Center-stage waveform while asking aloud ── */}
+      <div className={`ask-wave-stage ${voiceVisualActive ? "is-on" : ""}`} aria-hidden="true">
+        <canvas
+          ref={canvasRef}
+          className="ask-wave-canvas"
+          style={{ opacity: askHolding ? 1 : 0.42 }}
+        />
       </div>
 
       {/* Full-screen fade to black when a reading (voice or held tile) is opening. */}

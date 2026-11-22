@@ -484,9 +484,39 @@ export default function PagerContainer() {
         @keyframes skyDriftBlue { from { transform: translate3d(0,0,0) scale(1.05); opacity: 1; } to { transform: translate3d(-9%,-5%,0) scale(.95); opacity: .7; } }
         @keyframes skyDriftTeal { from { transform: translate3d(0,0,0) scale(1); opacity: .7; } to { transform: translate3d(6%,-7%,0) scale(1.1); opacity: 1; } }
 
-        /* Focus darkness: the intake screen sets <html data-astro-focus="1|2|3"> during a
+        /* Aurora (Ask Anything): the intake sets <html data-astro-voice="on|holding"> while
+           someone is asking aloud. Soft drifting bands (from the original JXL panel) fade in
+           above the nebula and below the stars, a little richer while the button is held. */
+        .sky-aurora {
+          position: absolute;
+          inset: -30%;
+          opacity: 0;
+          transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        :global(html[data-astro-voice]) .sky-aurora { opacity: 0.9; }
+        .aurora-band {
+          position: absolute;
+          width: 80%;
+          height: 55%;
+          border-radius: 50%;
+          mix-blend-mode: screen;
+          will-change: transform, opacity;
+          transition: filter 1.2s ease;
+        }
+        :global(html[data-astro-voice="holding"]) .aurora-band { filter: saturate(1.4); }
+        .aurora-band-a { top: 2%; left: -10%; background: radial-gradient(closest-side, rgba(45,212,191,0.30) 0%, rgba(45,212,191,0.14) 42%, rgba(45,212,191,0) 72%); animation: auroraDriftA 48s ease-in-out infinite; }
+        .aurora-band-b { top: 12%; left: 22%; background: radial-gradient(closest-side, rgba(129,90,240,0.28) 0%, rgba(129,90,240,0.12) 44%, rgba(129,90,240,0) 74%); animation: auroraDriftB 62s ease-in-out infinite; }
+        .aurora-band-c { top: -4%; left: 8%; background: radial-gradient(closest-side, rgba(56,132,255,0.22) 0%, rgba(56,132,255,0.10) 46%, rgba(56,132,255,0) 74%); animation: auroraDriftC 55s ease-in-out infinite; }
+        .aurora-band-d { top: 26%; left: -4%; height: 42%; background: radial-gradient(closest-side, rgba(251,191,36,0.10) 0%, rgba(251,191,36,0.04) 44%, rgba(251,191,36,0) 72%); animation: auroraDriftD 74s ease-in-out infinite; }
+        @keyframes auroraDriftA { 0%,100% { transform: translate3d(-4%,0,0) scale(1); opacity: .85; } 50% { transform: translate3d(14%,4%,0) scale(1.18); opacity: 1; } }
+        @keyframes auroraDriftB { 0%,100% { transform: translate3d(6%,2%,0) scale(1.1); opacity: .7; } 50% { transform: translate3d(-12%,-3%,0) scale(1); opacity: .95; } }
+        @keyframes auroraDriftC { 0%,100% { transform: translate3d(8%,-2%,0) scale(1); opacity: .6; } 50% { transform: translate3d(-6%,5%,0) scale(1.22); opacity: .9; } }
+        @keyframes auroraDriftD { 0%,100% { transform: translate3d(0,3%,0) scale(1.05); opacity: .5; } 50% { transform: translate3d(10%,-4%,0) scale(1.15); opacity: .8; } }
+
+        /* Focus darkness: the intake screen sets <html data-astro-focus="hold"> for a
            press-and-hold. This layer sits above the nebula but BELOW the stars, so the
-           sky goes black while the stars keep shining. */
+           sky goes black while the stars keep shining. One continuous 3s fade (the intake's
+           HOLD_TOTAL_MS) instead of three steps; releasing early eases back in 0.7s. */
         .sky-dim {
           position: absolute;
           inset: 0;
@@ -494,12 +524,14 @@ export default function PagerContainer() {
           opacity: 0;
           transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        :global(html[data-astro-focus="1"]) .sky-dim { opacity: 0.66; transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
-        :global(html[data-astro-focus="2"]) .sky-dim { opacity: 0.9; transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
-        :global(html[data-astro-focus="3"]) .sky-dim { opacity: 1; transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
+        :global(html[data-astro-focus="hold"]) .sky-dim {
+          opacity: 1;
+          transition: opacity 3s cubic-bezier(0.37, 0, 0.63, 1);
+        }
 
         @media (prefers-reduced-motion: reduce) {
-          .sky-cloud { animation: none; }
+          .sky-cloud,
+          .aurora-band { animation: none; }
         }
       `}</style>
 
@@ -511,6 +543,13 @@ export default function PagerContainer() {
         <span className="sky-cloud sky-cloud-violet" />
         <span className="sky-cloud sky-cloud-blue" />
         <span className="sky-cloud sky-cloud-teal" />
+        {/* Aurora: fades in while someone is asking aloud. */}
+        <div className="sky-aurora">
+          <span className="aurora-band aurora-band-a" />
+          <span className="aurora-band aurora-band-b" />
+          <span className="aurora-band aurora-band-c" />
+          <span className="aurora-band aurora-band-d" />
+        </div>
         {/* Darkens everything above except the stars during a press-and-hold. */}
         <div className="sky-dim" />
         <StarfieldBackground />
