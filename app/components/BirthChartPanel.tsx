@@ -1,30 +1,22 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { Compass, Crown, Maximize2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import React, { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { loadChart } from "@/lib/chartStore";
-import {
-  PLANET_MEANING,
-  SIGN_MEANING,
-  HOUSE_MEANING,
-} from "@/lib/chartMeanings";
 
 /**
- * YOUR BIRTH CHART — sibling panel to Today's Sky.
+ * YOUR DAY — a daily view, its own panel in PagerContainer.
  *
- * Where Today's Sky is present-tense ("what's the sky doing now"), this
- * panel is timeless ("who you are"): the Big 3 elementally outlined as
- * the hero, an element-balance strip, the profection YEAR (the sign/house
- * theme coloring your current year — Time Lord stays on Today's Sky), and
- * the full placement list.
+ *   Profection Year + Today's Sky   (one card)
+ *   Daily Horoscope                 (fills the space; scrolls inside if long)
+ *   Elemental Balance               (74px slot)
+ *   Big Three                       (one card)
  *
- * Shares Today's Sky's visual language exactly — same starfield, same card
- * chrome, same elemental colors and shine — so the two read as brother and
- * sister. This panel has NO overflow of its own; PagerContainer's wrapper
- * scrolls it.
+ * The panel fills its pager slot exactly (height: 100%) and never scrolls the
+ * page, so nothing sits under the status bar or Safari's toolbar. Built from
+ * the approved mockup; the short-screen rules at the bottom of the styles keep
+ * iPhone SE in a browser (375×548) on one screen.
  */
+
 interface UserStatus {
   credits: number;
   isSubscribed: boolean;
@@ -34,285 +26,147 @@ interface UserStatus {
   canBypass: boolean;
 }
 
-interface BirthChartPanelProps {
-  userStatus: UserStatus | null;
+interface DailyPanelProps {
+  userStatus?: UserStatus | null;
+  /** True while this panel is the one on screen. The horoscope is fetched the first time it becomes active. */
+  isActive?: boolean;
   dailyHoroscope?: string | null;
   onOpenHoroscope?: () => Promise<string | null | void> | string | null | void;
-  onOpenReadings?: () => void;
-  onOpenUpgradeChart?: () => void;
 }
 
-interface NatalPlacement {
-  name: string;
-  sign: string;
-  degree: string;
-  house?: number;
+interface NatalPlacement { name: string; sign: string; degree: string; house?: number }
+interface UpgradeChartPoint { name: string; sign: string; degree: string; house: string }
+interface TransitPlanet { name: string; sign: string; degree: string; isRetrograde: boolean; house?: number }
+interface MoonPhaseData {
+  phaseName: string;
+  illuminationPercent: number;
+  nextEventName: "New Moon" | "Full Moon";
+  daysUntilNextEvent: number;
+  moonSign: string;
+  moonDegree: string;
 }
+interface ProfectionData { profectionYear: number; age: number; activatedSign: string; activatedHouse?: number; timeLord: string }
 
-interface UpgradeChartPoint {
-  id: string;
-  name: string;
-  sourceName?: string;
-  category: "placement" | "angle" | "point";
-  sign: string;
-  degree: string;
-  house: string;
-}
-
-interface NatalAspect {
-  type: string;
-  planetA: string;
-  planetB: string;
-  orbDegrees: number;
-}
-
-interface ProfectionData {
-  profectionYear: number;
-  age: number;
-  activatedSign: string;
-  activatedHouse?: number;
-  timeLord: string;
-}
-
+/* ── Vocabulary ─────────────────────────────────────────────────────── */
 // U+FE0E forces text presentation so iOS never swaps these for emoji.
-const T = "\uFE0E";
+const T = "︎";
 const GLYPHS: Record<string, string> = {
   Sun: `☉${T}`, Moon: `☽${T}`, Mercury: `☿${T}`, Venus: `♀${T}`, Mars: `♂${T}`,
-  Jupiter: `♃${T}`, Saturn: `♄${T}`, Uranus: `♅${T}`, Neptune: `♆${T}`,
-  Pluto: `♇${T}`, Chiron: `⚷${T}`, Lilith: `⚸${T}`,
-  "North Node": `☊${T}`, "South Node": `☋${T}`,
-  Ascendant: `↑${T}`, Descendant: `↓${T}`,
-  MC: "MC", IC: "IC", Vertex: "Vx", "Part of Fortune": `⊗${T}`,
+  Jupiter: `♃${T}`, Saturn: `♄${T}`, Uranus: `♅${T}`, Neptune: `♆${T}`, Pluto: `♇${T}`,
 };
 
-// Aspect sections, ordered most-harmonious → most-tense.
-// rank sets display order; color fades green → amber → dark red.
-const ASPECT_META: Record<
-  string,
-  { header: string; rank: number; text: string; border: string; glow: string }
-> = {
-  trine:       { header: "Harmony",     rank: 1, text: "#6EE7B7", border: "rgba(52,211,153,0.55)",  glow: "rgba(16,185,129,0.20)" },
-  sextile:     { header: "Opportunity", rank: 2, text: "#A7F3D0", border: "rgba(110,231,183,0.45)", glow: "rgba(16,185,129,0.14)" },
-  conjunction: { header: "Intensity",   rank: 3, text: "#FCD34D", border: "rgba(251,191,36,0.45)",  glow: "rgba(245,158,11,0.16)" },
-  square:      { header: "Challenge",   rank: 4, text: "#FDBA74", border: "rgba(249,115,22,0.50)",  glow: "rgba(249,115,22,0.18)" },
-  opposition:  { header: "Tension",     rank: 5, text: "#F87171", border: "rgba(239,68,68,0.50)",   glow: "rgba(239,68,68,0.20)" },
+const SIGN_RULERS: Record<string, string> = {
+  Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
+  Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
+  Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
 };
 
-const NATAL_ORDER = [
-  "Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars",
-  "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Chiron",
-  "North Node", "South Node", "Lilith", "Part of Fortune", "Vertex",
-  "MC", "IC", "Descendant",
-];
+// Keep element balance anchored to the original natal set (no angles or calculated points).
+const ELEMENT_BALANCE_ORDER = ["Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto"];
 
-// Keep element balance anchored to the original natal set. Counting angles and
-// calculated points would overweight whichever signs happen to contain them.
-const ELEMENT_BALANCE_ORDER = [
-  "Sun", "Moon", "Ascendant", "Mercury", "Venus", "Mars",
-  "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto",
-];
-
-const DISPLAY_NAMES: Record<string, string> = {
-  Ascendant: "Rising",
-  MC: "Midheaven",
-};
-
-const POINT_MEANING: Record<string, string> = {
-  Chiron: "Chiron describes a tender area of the chart where vulnerability can become insight, skill, and healing over time.",
-  "North Node": "The North Node points toward qualities and experiences that stretch you beyond familiar patterns and support long-term growth.",
-  "South Node": "The South Node describes familiar instincts, practiced patterns, and abilities that come easily but can become a default setting.",
-  Lilith: "Lilith highlights raw autonomy, boundaries, desire, and the parts of yourself that resist being controlled or made more acceptable for others.",
-  "Part of Fortune": "The Part of Fortune is a calculated point associated with ease, vitality, material flow, and circumstances that can support a sense of natural alignment.",
-  Vertex: "The Vertex is a calculated chart point often associated in modern astrology with consequential encounters, turning points, and experiences that arrive through other people.",
-  MC: "The Midheaven describes public direction, vocation, reputation, achievement, and the way your life becomes visible in the wider world.",
-  IC: "The IC describes roots, home, family foundations, private life, and the inner base you return to when the public world falls away.",
-  Descendant: "The Descendant describes one-to-one partnership, what you seek or meet through other people, and the qualities relationships call forward in you.",
-};
-
-/* ── The four elements ─────────────────────────────────────────────── */
 type Element = "Fire" | "Earth" | "Air" | "Water";
-
 const SIGN_ELEMENTS: Record<string, Element> = {
   Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
   Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
   Gemini: "Air", Libra: "Air", Aquarius: "Air",
   Cancer: "Water", Scorpio: "Water", Pisces: "Water",
 };
-
 const ELEMENT_COLORS: Record<Element, { border: string; glow: string; text: string; bar: string }> = {
   Fire:  { border: "rgba(249, 115, 22, 0.75)", glow: "rgba(239, 68, 68, 0.28)",  text: "#FDBA74", bar: "#F97316" },
   Earth: { border: "rgba(52, 211, 153, 0.65)", glow: "rgba(16, 185, 129, 0.24)", text: "#6EE7B7", bar: "#34D399" },
   Air:   { border: "rgba(186, 230, 253, 0.60)", glow: "rgba(125, 211, 252, 0.22)", text: "#BAE6FD", bar: "#7DD3FC" },
   Water: { border: "rgba(96, 165, 250, 0.70)",  glow: "rgba(59, 130, 246, 0.26)",  text: "#93C5FD", bar: "#60A5FA" },
 };
-
 const ELEMENT_ORDER: Element[] = ["Fire", "Earth", "Air", "Water"];
+const NEUTRAL = "#94A3B8";
 
-function elementOf(sign?: string): Element | null {
-  if (!sign) return null;
-  return SIGN_ELEMENTS[sign] ?? null;
-}
-
-function ordinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
-}
-
-type ChartViewMode = "birthchart" | "aspects";
+const elementOf = (sign?: string): Element | null => (sign ? SIGN_ELEMENTS[sign] ?? null : null);
+const colorsOf = (sign?: string) => { const el = elementOf(sign); return el ? ELEMENT_COLORS[el] : null; };
+const ordinal = (n: number) => { const s = ["th", "st", "nd", "rd"]; const v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
+const rulerPhrase = (planet: string) => (planet === "Sun" || planet === "Moon" ? `the ${planet}` : planet);
 
 function localDayKey(): string {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+const horoscopeKey = () => `astroproxl:daily-horoscope:${localDayKey()}`;
+
+function nextEventLine(m: MoonPhaseData): string {
+  const d = Math.round(m.daysUntilNextEvent);
+  if (d <= 0) return `${m.nextEventName} today`;
+  return `${m.nextEventName} in ${d} ${d === 1 ? "day" : "days"}`;
+}
+
+/* ── Moon drawn from the real illumination percent (same geometry as TodaySkyPanel) ── */
+function MoonDisc({ illumination, waxing, size = 46 }: { illumination: number; waxing: boolean; size?: number }) {
+  const gradientId = useId().replace(/:/g, "");
+  const f = Math.min(1, Math.max(0, illumination / 100));
+  const r = 46, c = 50;
+  const top = `${c} ${c - r}`, bottom = `${c} ${c + r}`;
+  const rx = Math.abs(1 - 2 * f) * r;
+  const outerSweep = waxing ? 1 : 0;
+  const terminatorSweep = f >= 0.5 ? (waxing ? 1 : 0) : (waxing ? 0 : 1);
+  const litPath = `M ${top} A ${r} ${r} 0 0 ${outerSweep} ${bottom} A ${rx} ${r} 0 0 ${terminatorSweep} ${top}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
+      <defs>
+        <radialGradient id={`dpMoon${gradientId}`} cx="38%" cy="34%" r="75%">
+          <stop offset="0%" stopColor="#F1EFF7" />
+          <stop offset="55%" stopColor="#C9C7D6" />
+          <stop offset="100%" stopColor="#9A98AC" />
+        </radialGradient>
+      </defs>
+      <circle cx={c} cy={c} r={r} fill="#151A30" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
+      {f > 0.995 ? (
+        <circle cx={c} cy={c} r={r} fill={`url(#dpMoon${gradientId})`} />
+      ) : f > 0.005 ? (
+        <path d={litPath} fill={`url(#dpMoon${gradientId})`} />
+      ) : null}
+      <circle cx="38" cy="40" r="7" fill="rgba(0,0,0,0.10)" />
+      <circle cx="60" cy="58" r="5" fill="rgba(0,0,0,0.09)" />
+      <circle cx="52" cy="30" r="3.5" fill="rgba(0,0,0,0.08)" />
+    </svg>
+  );
 }
 
 /* ── Panel ──────────────────────────────────────────────────────────── */
-export default function BirthChartPanel({
-  dailyHoroscope: dailyHoroscopeProp,
-  onOpenHoroscope,
-  onOpenReadings,
-  onOpenUpgradeChart,
-}: BirthChartPanelProps) {
-  const shouldReduceMotion = useReducedMotion();
+export default function DailyPanel({ isActive = true, dailyHoroscope: horoscopeProp, onOpenHoroscope }: DailyPanelProps) {
   const [natal, setNatal] = useState<NatalPlacement[]>([]);
-  const [aspects, setAspects] = useState<NatalAspect[]>([]);
-  const [chartOpen, setChartOpen] = useState(false);
-  const [chartView, setChartView] = useState<ChartViewMode>("birthchart");
-  const [contextMode, setContextMode] = useState<0 | 1 | 2>(0);
-  const [selectedContext, setSelectedContext] = useState<
-    | { kind: "placement"; planetName: string }
-    | { kind: "aspect"; aspect: NatalAspect }
-    | null
-  >(null);
+  const [transits, setTransits] = useState<TransitPlanet[]>([]);
+  const [moonPhase, setMoonPhase] = useState<MoonPhaseData | null>(null);
   const [profection, setProfection] = useState<ProfectionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [dailyHoroscope, setDailyHoroscope] = useState<string | null>(null);
+
+  const [horoscope, setHoroscope] = useState<string | null>(null);
   const [horoscopeLoading, setHoroscopeLoading] = useState(false);
   const [horoscopeError, setHoroscopeError] = useState<string | null>(null);
-  const [chartPaused, setChartPaused] = useState(false);
-  const chartTrackRef = useRef<HTMLDivElement | null>(null);
-  const chartDragRef = useRef({
-    pointerId: null as number | null,
-    startY: 0,
-    startTime: 0,
-  });
+  // Built on the client only, so server and client render the same markup.
+  const [dateLine, setDateLine] = useState("");
 
-  useEffect(() => {
-    const storageKey = `astroproxl:daily-horoscope:${localDayKey()}`;
-    const cached = window.localStorage.getItem(storageKey);
-    if (cached) setDailyHoroscope(cached);
-  }, []);
-
-  useEffect(() => {
-    const horoscope = dailyHoroscopeProp?.trim();
-    if (!horoscope) return;
-    setDailyHoroscope(horoscope);
-    window.localStorage.setItem(`astroproxl:daily-horoscope:${localDayKey()}`, horoscope);
-  }, [dailyHoroscopeProp]);
-
-  const revealDailyHoroscope = async () => {
-    if (dailyHoroscope || horoscopeLoading) return;
-    setHoroscopeLoading(true);
-    setHoroscopeError(null);
-    try {
-      let result: string | null | void;
-      if (onOpenHoroscope) {
-        result = await onOpenHoroscope();
-      } else {
-        const chart = loadChart();
-        const chartData = chart?.chartData as unknown as {
-          tropical?: { planets?: unknown[] };
-          transits?: unknown[];
-          transitAspects?: unknown[];
-          profection?: unknown;
-          moonPhase?: unknown;
-        } | undefined;
-        if (!chartData?.tropical?.planets?.length) {
-          throw new Error("Your chart is still loading. Please try again.");
-        }
-        const response = await fetch("/api/daily-horoscope", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            localDate: localDayKey(),
-            tropicalPlanets: chartData.tropical.planets,
-            currentTransits: chartData.transits ?? [],
-            transitAspects: chartData.transitAspects ?? [],
-            profection: chartData.profection ?? null,
-            moonPhase: chartData.moonPhase ?? null,
-          }),
-        });
-        const payload = await response.json().catch(() => null) as {
-          horoscope?: string;
-          error?: string;
-        } | null;
-        if (!response.ok) {
-          throw new Error(payload?.error || "Today’s horoscope could not be prepared.");
-        }
-        result = payload?.horoscope ?? null;
-      }
-      if (typeof result === "string" && result.trim()) {
-        const horoscope = result.trim();
-        setDailyHoroscope(horoscope);
-        window.localStorage.setItem(`astroproxl:daily-horoscope:${localDayKey()}`, horoscope);
-      } else if (!onOpenHoroscope) {
-        throw new Error("Today’s horoscope returned without a message. Please try again.");
-      }
-    } catch (error) {
-      setHoroscopeError(error instanceof Error ? error.message : "Today’s horoscope could not be prepared.");
-    } finally {
-      setHoroscopeLoading(false);
-    }
-  };
-
-  const advanceContextCard = () => {
-    if (selectedContext) {
-      setSelectedContext(null);
-      setContextMode(0);
-      return;
-    }
-
-    const next = ((contextMode + 1) % 3) as 0 | 1 | 2;
-    setContextMode(next);
-
-    if (next === 1 && !dailyHoroscope && !horoscopeLoading) {
-      void revealDailyHoroscope();
-    }
-  };
-
+  /* Load the chart (retry briefly while it is being calculated). */
   useEffect(() => {
     let cancelled = false;
     const tryLoad = () => {
       const chart = loadChart();
-      if (!chart?.chartData) return false; // not ready yet
+      if (!chart?.chartData) return false;
       const data = chart.chartData as unknown as {
-        profection?: ProfectionData;
-        tropical?: { planets?: NatalPlacement[]; aspects?: NatalAspect[] };
+        tropical?: { planets?: NatalPlacement[] };
         upgradeChartPoints?: UpgradeChartPoint[];
+        transits?: TransitPlanet[];
+        moonPhase?: MoonPhaseData;
+        profection?: ProfectionData;
       };
-      if (data.profection) setProfection(data.profection);
-      const planets = data.tropical?.planets ?? [];
-      const upgradePoints = data.upgradeChartPoints ?? [];
-      const chartPlacements: NatalPlacement[] = upgradePoints.length
-        ? upgradePoints.map((point) => ({
-            name: point.name,
-            sign: point.sign,
-            degree: point.degree,
-            house: point.house ? Number(point.house) : undefined,
-          }))
-        : planets.filter((p) => NATAL_ORDER.includes(p.name));
+      const upgrade = data.upgradeChartPoints ?? [];
       setNatal(
-        chartPlacements
-          .filter((p) => NATAL_ORDER.includes(p.name))
-          .sort((a, b) => NATAL_ORDER.indexOf(a.name) - NATAL_ORDER.indexOf(b.name))
+        upgrade.length
+          ? upgrade.map((p) => ({ name: p.name, sign: p.sign, degree: p.degree, house: p.house ? Number(p.house) : undefined }))
+          : data.tropical?.planets ?? [],
       );
-      // Major aspects only — the five your engine computes
-      setAspects(data.tropical?.aspects ?? []);
+      setTransits(data.transits ?? []);
+      setMoonPhase(data.moonPhase ?? null);
+      setProfection(data.profection ?? null);
       setIsLoading(false);
-      return true; // loaded
+      return true;
     };
     if (tryLoad()) return;
     let attempts = 0;
@@ -326,859 +180,366 @@ export default function BirthChartPanel({
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  const bigThree = useMemo(() => {
-    const find = (n: string) => natal.find((p) => p.name === n);
-    return { sun: find("Sun"), moon: find("Moon"), rising: find("Ascendant") };
-  }, [natal]);
+  /* Today's date + the cached horoscope for today. */
+  useEffect(() => {
+    setDateLine(new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }));
+    try {
+      const cached = window.localStorage.getItem(horoscopeKey());
+      if (cached) setHoroscope(cached);
+    } catch { /* storage unavailable */ }
+  }, []);
 
-  const rotatingNatal = useMemo(
-    () => (natal.length ? [...natal, ...natal] : []),
-    [natal]
-  );
+  /* A horoscope passed in from the parent wins and is cached for the day. */
+  useEffect(() => {
+    const h = horoscopeProp?.trim();
+    if (!h) return;
+    setHoroscope(h);
+    try { window.localStorage.setItem(horoscopeKey(), h); } catch { /* storage unavailable */ }
+  }, [horoscopeProp]);
 
-  const STRONG_ORB = 4;
-
-  const orderedAspects = useMemo(() => {
-    const typeRank = (type?: string) => ASPECT_META[type?.toLowerCase() ?? ""]?.rank ?? 99;
-    return [...aspects].sort((a, b) => {
-      const aStrong = a.orbDegrees <= STRONG_ORB ? 0 : 1;
-      const bStrong = b.orbDegrees <= STRONG_ORB ? 0 : 1;
-      if (aStrong !== bStrong) return aStrong - bStrong;
-      if (a.orbDegrees !== b.orbDegrees) return a.orbDegrees - b.orbDegrees;
-      return typeRank(a.type) - typeRank(b.type);
-    });
-  }, [aspects]);
-
-  const rotatingAspects = useMemo(
-    () => (orderedAspects.length ? [...orderedAspects, ...orderedAspects] : []),
-    [orderedAspects]
-  );
-
-  const activeItemCount = chartView === "birthchart" ? natal.length : orderedAspects.length;
-
-  const getChartAnimation = () => chartTrackRef.current?.getAnimations()[0] ?? null;
-
-  const beginChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (activeItemCount <= 6) return;
-    const animation = getChartAnimation();
-    const currentTime =
-      animation && typeof animation.currentTime === "number"
-        ? animation.currentTime
-        : 0;
-    chartDragRef.current = {
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      startTime: currentTime,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setChartPaused(true);
-  };
-
-  const moveChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = chartDragRef.current;
-    if (drag.pointerId !== event.pointerId || activeItemCount <= 6) return;
-    const animation = getChartAnimation();
-    if (!animation) return;
-    const rowHeight = 52;
-    const rowDurationMs = 3000;
-    const totalDuration = activeItemCount * rowDurationMs;
-    const deltaY = event.clientY - drag.startY;
-    let nextTime = drag.startTime - (deltaY / rowHeight) * rowDurationMs;
-    nextTime %= totalDuration;
-    if (nextTime < 0) nextTime += totalDuration;
-    animation.currentTime = nextTime;
-  };
-
-  const endChartDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (chartDragRef.current.pointerId !== event.pointerId) return;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+  const fetchHoroscope = useCallback(async () => {
+    if (horoscopeLoading) return;
+    setHoroscopeLoading(true);
+    setHoroscopeError(null);
+    try {
+      let result: string | null | void;
+      if (onOpenHoroscope) {
+        result = await onOpenHoroscope();
+      } else {
+        const chartData = loadChart()?.chartData as unknown as {
+          tropical?: { planets?: unknown[] };
+          transits?: unknown[];
+          transitAspects?: unknown[];
+          profection?: unknown;
+          moonPhase?: unknown;
+        } | undefined;
+        if (!chartData?.tropical?.planets?.length) throw new Error("Your chart is still loading. Please try again.");
+        const response = await fetch("/api/daily-horoscope", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            localDate: localDayKey(),
+            tropicalPlanets: chartData.tropical.planets,
+            currentTransits: chartData.transits ?? [],
+            transitAspects: chartData.transitAspects ?? [],
+            profection: chartData.profection ?? null,
+            moonPhase: chartData.moonPhase ?? null,
+          }),
+        });
+        const payload = (await response.json().catch(() => null)) as { horoscope?: string; error?: string } | null;
+        if (!response.ok) throw new Error(payload?.error || "Today’s horoscope could not be prepared.");
+        result = payload?.horoscope ?? null;
+      }
+      if (typeof result === "string" && result.trim()) {
+        const h = result.trim();
+        setHoroscope(h);
+        try { window.localStorage.setItem(horoscopeKey(), h); } catch { /* storage unavailable */ }
+      } else if (!onOpenHoroscope) {
+        throw new Error("Today’s horoscope returned without a message. Please try again.");
+      }
+    } catch (error) {
+      setHoroscopeError(error instanceof Error ? error.message : "Today’s horoscope could not be prepared.");
+    } finally {
+      setHoroscopeLoading(false);
     }
-    chartDragRef.current.pointerId = null;
-    setChartPaused(false);
-  };
+  }, [horoscopeLoading, onOpenHoroscope]);
 
-  // Element balance across all placements (planets + rising).
-  const elementBalance = useMemo(() => {
+  /* Fetch only once the panel is actually on screen, so swiping past costs nothing. */
+  useEffect(() => {
+    if (!isActive || isLoading || horoscope || horoscopeLoading || horoscopeError) return;
+    if (!natal.length) return;
+    void fetchHoroscope();
+  }, [isActive, isLoading, horoscope, horoscopeLoading, horoscopeError, natal.length, fetchHoroscope]);
+
+  /* ── Derived ── */
+  const find = useCallback((n: string) => natal.find((p) => p.name === n), [natal]);
+  const bigThree = useMemo(
+    () => [
+      { label: "Sun", p: find("Sun") },
+      { label: "Moon", p: find("Moon") },
+      { label: "Rising", p: find("Ascendant") },
+    ],
+    [find],
+  );
+
+  const elementCounts = useMemo(() => {
     const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
     natal.forEach((p) => {
       if (!ELEMENT_BALANCE_ORDER.includes(p.name)) return;
       const el = elementOf(p.sign);
       if (el) counts[el] += 1;
     });
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    const dominant = ELEMENT_ORDER.reduce((top, el) => (counts[el] > counts[top] ? el : top), "Fire");
-    return { counts, total, dominant };
+    return counts;
   }, [natal]);
+  const maxCount = Math.max(...ELEMENT_ORDER.map((el) => elementCounts[el]), 1);
 
-  const hasProfection =
-    !!profection &&
-    typeof profection.profectionYear === "number" &&
-    !!profection.activatedSign;
+  const sunNow = transits.find((p) => p.name === "Sun");
+  const moonNow = transits.find((p) => p.name === "Moon");
+  const retrogrades = transits.filter((p) => p.isRetrograde === true).map((p) => p.name);
+  const moonSign = moonPhase?.moonSign ?? moonNow?.sign;
+  const waxing = moonPhase?.nextEventName === "Full Moon";
 
-  const profectionElement = elementOf(profection?.activatedSign);
-  const profectionColors = profectionElement ? ELEMENT_COLORS[profectionElement] : null;
+  const profSign = profection?.activatedSign ?? "";
+  const profColors = colorsOf(profSign);
+  const profRuler = profection?.timeLord || SIGN_RULERS[profSign] || "";
+  const profHouse =
+    typeof profection?.activatedHouse === "number"
+      ? profection.activatedHouse
+      : typeof profection?.profectionYear === "number"
+        ? profection.profectionYear
+        : null;
 
   if (isLoading) {
     return (
-      <div className="flex min-h-full w-full min-w-0 max-w-full items-center justify-center bg-[#050816]">
-        <div className="text-sm text-slate-400">Casting your chart…</div>
+      <div className="dp dp-center">
+        <p className="dp-quiet">Reading today’s sky…</p>
+        <style jsx global>{`.dp-center { align-items: center; justify-content: center; } .dp-quiet { font-size: 13px; color: #94A3B8; }`}</style>
       </div>
     );
   }
 
   const hasChart = natal.length > 0;
-
-  // Birth-chart focus mode mirrors the Reading Intake selection treatment:
-  // surrounding content stays visible, but drains into the background so the
-  // open chart becomes the only active layer.
-  const identityFocusStyle: React.CSSProperties = {
-    opacity: 1,
-    filter: chartOpen
-      ? "grayscale(1) brightness(0.30) saturate(0)"
-      : "grayscale(0) brightness(1) saturate(1)",
-    transitionProperty: "opacity, filter",
-    transitionDuration: chartOpen ? "950ms" : "420ms",
-    transitionDelay: chartOpen ? "0ms" : "60ms",
-    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
-    pointerEvents: "auto",
-  };
-
-  const outsideFocusStyle: React.CSSProperties = {
-    // Lower profile sections disappear immediately when the chart opens, but
-    // remain mounted so their layout and state are preserved. On close, wait
-    // until the chart has fully retracted before fading them back into place.
-    opacity: 1,
-    filter: chartOpen
-      ? "grayscale(1) brightness(0.28) saturate(0)"
-      : "grayscale(0) brightness(1) saturate(1)",
-    transitionProperty: "opacity, filter",
-    transitionDuration: "420ms",
-    transitionDelay: "0ms",
-    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
-    pointerEvents: "auto",
-  };
+  const tint = bigThree.map(({ p }) => colorsOf(p?.sign)?.bar ?? NEUTRAL);
 
   return (
-    <div
-      className="relative min-h-full w-full min-w-0 max-w-full overflow-x-hidden font-sans text-slate-100"
-    >
-      <style jsx>{`
-        @keyframes elementShine {
-          0% { transform: translateX(-140%) skewX(-18deg); }
-          60% { transform: translateX(240%) skewX(-18deg); }
-          100% { transform: translateX(240%) skewX(-18deg); }
+    <div className="dp">
+      <style jsx global>{`
+        .dp {
+          --dp-display: var(--font-display), "Cormorant Garamond", Georgia, serif;
+          --dp-caps: var(--font-caps), Cinzel, Georgia, serif;
+          --dp-gold: rgba(241, 214, 148, 0.9);
+          --s100: #F1F5F9; --s200: #E2E8F0; --s300: #CBD5E1; --s400: #94A3B8; --s500: #64748B; --s600: #475569;
+          position: relative;
+          box-sizing: border-box;
+          height: 100%;
+          width: 100%;
+          max-width: 430px;
+          margin: 0 auto;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: calc(env(safe-area-inset-top) + 16px) clamp(12px, 4vw, 16px) calc(18px + env(safe-area-inset-bottom));
+          color: var(--s100);
+          font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
         }
-        .element-box { position: relative; overflow: hidden; isolation: isolate; }
-        .element-box::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          width: 45%;
-          background: linear-gradient(
-            105deg,
-            transparent 0%,
-            rgba(255, 255, 255, 0.09) 45%,
-            rgba(255, 255, 255, 0.16) 50%,
-            rgba(255, 255, 255, 0.09) 55%,
-            transparent 100%
-          );
+        .dp * { box-sizing: border-box; }
+        :where(.dp) :where(p, h2) { margin: 0; }
+        .dp-display { font-family: var(--dp-display); }
+        .dp-caps { font-family: var(--dp-caps); text-transform: uppercase; }
+
+        /* Shine sweep (symbol box, Big Three) */
+        @keyframes dpShine { 0% { transform: translateX(-140%) skewX(-18deg); } 60%, 100% { transform: translateX(240%) skewX(-18deg); } }
+        .dp-shine { position: relative; overflow: hidden; isolation: isolate; }
+        .dp-shine::after {
+          content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; pointer-events: none; z-index: 1;
+          background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,.09) 45%, rgba(255,255,255,.16) 50%, rgba(255,255,255,.09) 55%, transparent 100%);
           transform: translateX(-140%) skewX(-18deg);
-          animation: elementShine 4.6s ease-in-out infinite;
-          pointer-events: none;
-          z-index: 1;
+          animation: dpShine 4.6s ease-in-out infinite;
         }
-        .element-box > * { position: relative; z-index: 2; }
-        .chart-focus-surface {
-          background:
-            radial-gradient(circle at 18% 0%, rgba(96,165,250,0.10), transparent 44%),
-            linear-gradient(145deg, rgba(17,29,52,0.92), rgba(8,13,28,0.88));
-          -webkit-backdrop-filter: blur(14px);
-          backdrop-filter: blur(14px);
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,0.055),
-            inset 0 -1px 0 rgba(255,255,255,0.025);
+        .dp-shine > * { position: relative; z-index: 2; }
+
+        /* Card: static light edge, dark fill, no glow */
+        .dp-card { flex-shrink: 0; padding: 1.5px; border-radius: 22px; background: linear-gradient(160deg, rgba(255,255,255,.16), rgba(255,255,255,.06) 50%, rgba(255,255,255,.12)); }
+        .dp-card-in { border-radius: 20.5px; overflow: hidden; background: linear-gradient(170deg, rgba(10,13,28,.97), rgba(5,8,20,.97)); }
+
+        /* ── Profection + Today's Sky ── */
+        .dp-today .dp-card-in { padding: 9px 14px 8px; }
+        .dp-prof { position: relative; height: 74px; padding: 0 58px 2px; display: flex; align-items: center; justify-content: center; }
+        .dp-symbol { position: absolute; left: 2px; top: 50%; margin-top: -23px; width: 46px; height: 46px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.2); display: flex; align-items: center; justify-content: center; font-family: var(--dp-display); font-size: 21px; }
+        .dp-prof-text { min-width: 0; text-align: center; }
+        .dp-eyebrow { font-size: 8.5px; font-weight: 500; letter-spacing: .28em; color: var(--dp-gold); white-space: nowrap; }
+        .dp-prof-title { margin-top: 2px !important; font-size: 28px; font-weight: 500; line-height: 1.05; color: #fff; }
+        .dp-prof-sub { margin-top: 3px !important; font-size: 10.5px; color: var(--s400); white-space: nowrap; }
+
+        .dp-sky { margin-top: 6px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.06); }
+        .dp-sky .dp-eyebrow { text-align: center; }
+        .dp-sky-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-top: 4px; }
+        .dp-sky-col { min-width: 0; text-align: center; }
+        .dp-sky-label { font-size: 7.5px; font-weight: 600; letter-spacing: .18em; color: var(--s500); white-space: nowrap; }
+        .dp-sky-sign { margin-top: 1px !important; font-size: 22px; font-weight: 500; line-height: 1.05; }
+        .dp-sky-detail { margin-top: 1px !important; font-size: 10.5px; color: var(--s400); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .dp-moon { display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 0 16px rgba(226,223,240,.16)); }
+        .dp-moon-pct { margin-top: 1px !important; font-size: 9.5px; color: var(--s400); font-variant-numeric: tabular-nums; }
+        .dp-sky-foot { margin-top: 5px !important; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.06); text-align: center; font-size: 10.5px; color: var(--s400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dp-sky-foot .dp-dot { margin: 0 6px; color: var(--s600); }
+        .dp-sky-foot .dp-rx { color: rgba(252,211,77,.8); }
+
+        /* ── Daily Horoscope ── */
+        .dp-horo { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .dp-horo-title { text-align: center; font-size: clamp(25px, 7.4vw, 30px); font-weight: 500; line-height: 1.05; color: #fff; }
+        .dp-horo-date { margin-top: 4px !important; min-height: 11px; text-align: center; font-size: 8.5px; font-weight: 600; letter-spacing: .22em; color: var(--dp-gold); }
+        .dp-horo-body {
+          margin-top: 8px !important; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 0 2px;
+          font-size: 16.5px; line-height: 1.42; color: var(--s200);
+          -webkit-mask-image: linear-gradient(#000 84%, transparent); mask-image: linear-gradient(#000 84%, transparent);
         }
-        @property --readings-angle {
-          syntax: "<angle>";
-          inherits: false;
-          initial-value: 0deg;
+        .dp-horo-body::-webkit-scrollbar { display: none; }
+        .dp-horo-status { margin-top: 10px !important; text-align: center; font-family: var(--dp-display); font-style: italic; font-size: 15px; color: var(--s400); }
+        .dp-retry { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+        /* ── Elemental Balance (74px slot, title under the bars) ── */
+        .dp-elements { flex-shrink: 0; height: 74px; margin-bottom: -6px; display: flex; flex-direction: column; justify-content: flex-end; }
+        .dp-els { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 2px 22px 5px; }
+        .dp-el { height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 9px; }
+        @keyframes dpGrow { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+        @keyframes dpBreath { 0%, 100% { box-shadow: 0 0 8px var(--eb); } 50% { box-shadow: 0 0 18px var(--eb), 0 0 4px var(--eb); } }
+        @keyframes dpFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .dp-el-bar { display: block; width: 5px; height: calc(14% + var(--r) * 80%); border-radius: 3px; transform-origin: bottom;
+          animation: dpGrow .8s cubic-bezier(.22,1,.36,1) var(--d) both, dpBreath 3.2s ease-in-out calc(var(--d) + .8s) infinite; }
+        .dp-el-name { font-size: 7.5px; font-weight: 600; letter-spacing: .12em; line-height: 1.12; animation: dpFadeUp .6s ease-out calc(var(--d) + .25s) both; }
+        .dp-elements-title { text-align: center; font-size: 7.5px; font-weight: 500; letter-spacing: .26em; color: var(--s500); }
+
+        /* ── Big Three ── */
+        .dp-b3-row { height: 90px; display: flex; }
+        .dp-b3-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .dp-vdiv { width: 1px; align-self: stretch; margin: 14px 0; background: linear-gradient(180deg, transparent, rgba(255,255,255,.14), transparent); }
+        .dp-b3-label { font-size: 8.5px; font-weight: 500; letter-spacing: .2em; color: var(--s500); }
+        .dp-b3-sign { margin-top: 3px !important; font-size: clamp(19px, 5.6vw, 23px); font-weight: 600; line-height: 1.05; color: #fff; }
+        .dp-b3-deg { margin-top: 1px !important; font-size: 10.5px; color: var(--s400); font-variant-numeric: tabular-nums; }
+        .dp-b3-el { margin-top: 4px !important; font-size: 8px; font-weight: 600; letter-spacing: .22em; }
+
+        .dp-empty { margin: auto; padding: 32px 0; text-align: center; font-size: 13px; line-height: 1.6; color: var(--s400); }
+
+        /* Short screens: the horoscope absorbs the difference */
+        @media (max-height: 680px) {
+          .dp { gap: 10px; }
+          .dp-b3-row { height: 76px; }
+          .dp-b3-sign { font-size: 20px; }
+          .dp-b3-el { display: none; }
         }
-        @keyframes readingsOrbit {
-          to { --readings-angle: 360deg; }
+        @media (max-height: 560px) {
+          .dp-b3-sign { font-size: 19px; }
         }
-        @keyframes chartEscalator {
-          from { transform: translate3d(0, 0, 0); }
-          to { transform: translate3d(0, calc(var(--chart-count) * -52px), 0); }
-        }
-        .chart-viewport {
-          height: 312px;
-          overflow: hidden;
-          contain: layout paint;
-          -webkit-user-select: none;
-          user-select: none;
-          -webkit-touch-callout: none;
-          touch-action: none;
-          cursor: grab;
-        }
-        .chart-viewport[data-paused="true"] {
-          cursor: grabbing;
-        }
-        .chart-track {
-          will-change: transform;
-          animation: chartEscalator calc(var(--chart-count) * 3s) linear infinite;
-        }
-        .chart-track[data-paused="true"] {
-          animation-play-state: paused;
-        }
-        .chart-row {
-          height: 52px;
-        }
-        .chart-actions-shell {
-          position: relative;
-          isolation: isolate;
-          width: 82%;
-          min-height: 58px;
-          border-radius: 22px;
-          padding: 1.25px;
-          background:
-            conic-gradient(
-              from var(--readings-angle),
-              rgba(255,255,255,0.94) 0deg,
-              rgba(255,255,255,0.72) 52deg,
-              rgba(218,183,104,0.94) 116deg,
-              rgba(255,236,184,0.88) 178deg,
-              rgba(255,255,255,0.96) 232deg,
-              rgba(193,151,67,0.90) 300deg,
-              rgba(255,255,255,0.94) 360deg
-            );
-          box-shadow:
-            0 0 20px rgba(218,183,104,0.16),
-            0 14px 34px rgba(0,0,0,0.44);
-          animation: readingsOrbit 8s linear infinite;
-        }
-        .chart-actions-shell::after {
-          content: "";
-          position: absolute;
-          inset: -2px;
-          z-index: -1;
-          border-radius: inherit;
-          background: inherit;
-          opacity: 0.30;
-          filter: blur(8px);
-          pointer-events: none;
-        }
-        .chart-actions-inner {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          min-height: 56px;
-          overflow: hidden;
-          border-radius: 20.75px;
-          background: linear-gradient(145deg, rgba(10,10,14,0.99), rgba(4,7,16,0.99));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-        }
-        .chart-action-half {
-          position: relative;
-          display: flex;
-          flex: 1 1 0;
-          min-width: 0;
-          align-items: center;
-          justify-content: center;
-          border: 0;
-          background: transparent;
-          cursor: pointer;
-          transition: background 180ms ease, filter 180ms ease;
-        }
-        .chart-action-half:first-child {
-          padding: 0 13px 0 11px;
-          background: radial-gradient(circle at 28% 0%, rgba(218,183,104,0.12), transparent 68%);
-        }
-        .chart-action-half:last-child {
-          padding: 0 11px 0 13px;
-          background: radial-gradient(circle at 72% 0%, rgba(255,255,255,0.08), transparent 68%);
-        }
-        .chart-action-half:active { filter: brightness(1.16); }
-        .chart-actions-divider {
-          position: absolute;
-          z-index: 4;
-          left: 50%;
-          top: 7px;
-          bottom: 7px;
-          width: 1.25px;
-          transform: translateX(-50%) skewX(-18deg);
-          transform-origin: center;
-          background: linear-gradient(180deg, rgba(255,255,255,0.16), rgba(231,201,130,0.86), rgba(255,255,255,0.20));
-          box-shadow: 0 0 8px rgba(218,183,104,0.20);
-          pointer-events: none;
-        }
-        .chart-action-icon {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          display: flex;
-          height: 21px;
-          width: 21px;
-          align-items: center;
-          justify-content: center;
-          border-radius: 999px;
-          pointer-events: none;
-        }
-        .chart-action-label {
-          position: relative;
-          z-index: 2;
-          white-space: nowrap;
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.11em;
-          text-transform: uppercase;
-        }
+
         @media (prefers-reduced-motion: reduce) {
-          .element-box::after { animation: none !important; opacity: 0; }
-          .chart-track { animation: none !important; transform: none !important; }
-          .chart-actions-shell { animation: none !important; }
+          .dp-shine::after { animation: none !important; opacity: 0; }
+          .dp-el-bar, .dp-el-name { animation: none !important; }
         }
       `}</style>
 
-      {/* Deepens the entire sky during chart focus without dimming the chart UI itself. */}
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[5] bg-black"
-        initial={false}
-        animate={{ opacity: 0 }}
-        transition={{
-          duration: shouldReduceMotion ? 0 : 0.3,
-          delay: 0,
-          ease: [0.22, 1, 0.36, 1],
-        }}
-      />
+      {!hasChart ? (
+        <p className="dp-empty">Enter your birth details to reveal your day.</p>
+      ) : (
+        <>
+          {/* ── Profection Year + Today's Sky ── */}
+          <section className="dp-card dp-today" aria-label="Profection year and today's sky">
+            <div className="dp-card-in">
+              <div className="dp-prof">
+                <div
+                  className="dp-symbol dp-shine"
+                  aria-hidden="true"
+                  style={profColors ? { borderColor: profColors.border, boxShadow: `0 0 18px ${profColors.glow}, inset 0 0 12px ${profColors.glow}` } : undefined}
+                >
+                  <span style={{ color: profColors?.text ?? NEUTRAL }}>{GLYPHS[profRuler] ?? "✦"}</span>
+                </div>
+                <div className="dp-prof-text">
+                  <p className="dp-caps dp-eyebrow">Profection Year</p>
+                  <p className="dp-display dp-prof-title" style={{ color: profColors?.text ?? "#fff" }}>{profSign || "—"}</p>
+                  <p className="dp-prof-sub">
+                    {profHouse ? `${ordinal(profHouse)} house` : ""}
+                    {profHouse && profRuler ? " · " : ""}
+                    {profRuler ? `ruled by ${rulerPhrase(profRuler)}` : ""}
+                  </p>
+                </div>
+              </div>
 
-      <div
-        className="relative z-10 mx-auto w-full min-w-0 max-w-[430px] px-[clamp(12px,4vw,16px)]"
-        style={{
-          paddingTop: "calc(env(safe-area-inset-top) + 8px)",
-          paddingBottom: "calc(4rem + env(safe-area-inset-bottom))",
-        }}
-      >
-        {/* ── PROFILE IDENTITY — Big Three first, no extra hero copy ── */}
-        <motion.header
-          initial={{ opacity: 0, y: 12 }}
-          animate={{
-            opacity: 1,
-            y: 0,
-            filter: chartOpen
-              ? "grayscale(1) brightness(0.30) saturate(0)"
-              : "grayscale(0) brightness(1) saturate(1)",
-          }}
-          transition={{
-            duration: shouldReduceMotion ? 0 : chartOpen ? 0.95 : 0.42,
-            delay: 0,
-            ease: [0.22, 1, 0.36, 1],
-          }}
-          className="mb-3"
-          style={{ pointerEvents: identityFocusStyle.pointerEvents }}
-        >
-          {hasChart ? (
-            <div className="grid grid-cols-3 gap-[clamp(6px,2.5vw,10px)]">
-              {(
-                [
-                  { label: "Sun", p: bigThree.sun },
-                  { label: "Moon", p: bigThree.moon },
-                  { label: "Rising", p: bigThree.rising },
-                ] as const
-              ).map(({ label, p }) => {
-                const element = elementOf(p?.sign);
-                const colors = element ? ELEMENT_COLORS[element] : null;
+              <div className="dp-sky">
+                <p className="dp-caps dp-eyebrow">Today’s Sky</p>
+                <div className="dp-sky-row">
+                  <div className="dp-sky-col">
+                    <p className="dp-caps dp-sky-label">{GLYPHS.Sun} Sun Season</p>
+                    <p className="dp-display dp-sky-sign" style={{ color: colorsOf(sunNow?.sign)?.text ?? "#fff" }}>{sunNow?.sign ?? "—"}</p>
+                    <p className="dp-sky-detail">{sunNow?.degree ?? ""}</p>
+                  </div>
+                  {moonPhase ? (
+                    <div className="dp-moon">
+                      <MoonDisc illumination={moonPhase.illuminationPercent} waxing={waxing} size={46} />
+                      <p className="dp-moon-pct">{moonPhase.illuminationPercent}%</p>
+                    </div>
+                  ) : (
+                    <span aria-hidden="true" />
+                  )}
+                  <div className="dp-sky-col">
+                    <p className="dp-caps dp-sky-label">{GLYPHS.Moon} Moon</p>
+                    <p className="dp-display dp-sky-sign" style={{ color: colorsOf(moonSign)?.text ?? "#fff" }}>{moonSign ?? "—"}</p>
+                    <p className="dp-sky-detail">{moonPhase?.phaseName ?? moonNow?.degree ?? ""}</p>
+                  </div>
+                </div>
+                <p className="dp-sky-foot">
+                  {moonPhase ? nextEventLine(moonPhase) : "Today’s sky"}
+                  <span className="dp-dot">·</span>
+                  <span className="dp-rx">℞</span> {retrogrades.length ? retrogrades.join(", ") : "All direct"}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Daily Horoscope ── */}
+          <section className="dp-horo" aria-live="polite">
+            <h2 className="dp-display dp-horo-title">Daily Horoscope</h2>
+            <p className="dp-caps dp-horo-date">{dateLine}</p>
+            {horoscope ? (
+              <p className="dp-display dp-horo-body">{horoscope}</p>
+            ) : horoscopeError ? (
+              <p className="dp-horo-status">
+                {horoscopeError}{" "}
+                <button type="button" className="dp-retry" onClick={() => void fetchHoroscope()}>Try again</button>
+              </p>
+            ) : (
+              <p className="dp-horo-status">Preparing today’s horoscope…</p>
+            )}
+          </section>
+
+          {/* ── Elemental Balance ── */}
+          <section
+            className="dp-elements"
+            role="img"
+            aria-label={`Elemental balance: ${ELEMENT_ORDER.map((el) => `${el} ${elementCounts[el]}`).join(", ")}`}
+          >
+            <div className="dp-els" aria-hidden="true">
+              {ELEMENT_ORDER.map((el, i) => {
+                const c = ELEMENT_COLORS[el];
                 return (
-                  <div
-                    key={label}
-                    className="element-box rounded-2xl border bg-black/20 px-2 py-3 text-center"
-                    style={
-                      colors
-                        ? {
-                            borderColor: colors.border,
-                            boxShadow: `0 0 22px ${colors.glow}, inset 0 0 14px ${colors.glow}`,
-                          }
-                        : { borderColor: "rgba(255,255,255,0.10)" }
-                    }
-                  >
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                    <p className="mt-1.5 text-[clamp(15px,4.4vw,17px)] font-medium leading-tight text-white">{p?.sign ?? "—"}</p>
-                    <p className="text-[11px] text-slate-400 tabular-nums">{p?.degree ?? ""}</p>
-                    {element && colors && (
-                      <p
-                        className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em]"
-                        style={{ color: colors.text }}
-                      >
-                        {element}
-                      </p>
-                    )}
+                  <div key={el} className="dp-el">
+                    <span
+                      className="dp-el-bar"
+                      style={{ background: c.bar, ["--r" as string]: (elementCounts[el] / maxCount).toFixed(3), ["--eb" as string]: c.glow, ["--d" as string]: `${i * 0.14}s` } as React.CSSProperties}
+                    />
+                    <span className="dp-caps dp-el-name" style={{ color: c.text, ["--d" as string]: `${i * 0.14}s` } as React.CSSProperties}>{el}</span>
                   </div>
                 );
               })}
             </div>
-          ) : (
-            <p className="py-8 text-center text-[13px] leading-6 text-slate-400">
-              Enter your birth details to reveal your chart.
-            </p>
-          )}
-        </motion.header>
+            <p className="dp-caps dp-elements-title">Elemental Balance</p>
+          </section>
 
-        {hasChart && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.08, ease: "easeOut" }}
-            className="flex flex-col gap-3"
-          >
-            {/* ── INTERACTIVE CONTEXT CARD — fixed footprint, three normal states + chart override ── */}
-            {(hasProfection || elementBalance.total > 0 || dailyHoroscope || selectedContext) && (
-              <button
-                type="button"
-                onClick={advanceContextCard}
-                className="standard-shadow order-1 h-[200px] w-full overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.03] p-3.5 text-left backdrop-blur-sm"
-                style={outsideFocusStyle}
-                aria-label="Cycle personal astrology context"
-              >
-                <motion.div
-                  key={selectedContext ? `selected-${selectedContext.kind}` : `context-${contextMode}`}
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: "easeOut" }}
-                  className="h-full overflow-hidden"
-                >
-                  {selectedContext?.kind === "placement" ? (() => {
-                    const planet = natal.find((item) => item.name === selectedContext.planetName);
-                    if (!planet) return null;
-                    const element = elementOf(planet.sign);
-                    const colors = element ? ELEMENT_COLORS[element] : null;
-                    const displayName = DISPLAY_NAMES[planet.name] ?? planet.name;
-                    return (
-                      <div>
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-[19px] font-light leading-tight" style={{ color: colors?.text ?? "#F8FAFC" }}>
-                            {displayName} in {planet.sign}
-                          </p>
-                          <span
-                            className="shrink-0 self-center text-[20px] leading-none"
-                            style={{ color: colors?.text ?? "#94A3B8" }}
-                          >
-                            {GLYPHS[planet.name] ?? "✦"}
-                          </span>
-                        </div>
-                        <div className="my-2 h-px bg-white/[0.06]" />
-                        <p className="text-[13px] leading-[1.4] text-slate-300">
-                          {[
-                            POINT_MEANING[planet.name] ?? PLANET_MEANING[planet.name],
-                            SIGN_MEANING[planet.sign],
-                            planet.house ? HOUSE_MEANING[String(planet.house)] : null,
-                          ].filter(Boolean).join(" ")}
-                        </p>
+          {/* ── Big Three ── */}
+          <section className="dp-card" aria-label="Big Three">
+            <div
+              className="dp-card-in dp-shine"
+              style={{ background: `linear-gradient(90deg, ${tint[0]}1F, ${tint[1]}1A 50%, ${tint[2]}1F), linear-gradient(170deg, rgba(10,13,28,.97), rgba(5,8,20,.97))` }}
+            >
+              <div className="dp-b3-row">
+                {bigThree.map(({ label, p }, i) => {
+                  const c = colorsOf(p?.sign);
+                  return (
+                    <React.Fragment key={label}>
+                      {i > 0 && <span className="dp-vdiv" aria-hidden="true" />}
+                      <div className="dp-b3-cell">
+                        <p className="dp-caps dp-b3-label">{label}</p>
+                        <p className="dp-display dp-b3-sign" style={{ color: c?.text ?? "#fff" }}>{p?.sign ?? "—"}</p>
+                        <p className="dp-b3-deg">{p?.degree ?? ""}</p>
+                        {p && c && <p className="dp-caps dp-b3-el" style={{ color: c.text }}>{elementOf(p.sign)}</p>}
                       </div>
-                    );
-                  })() : selectedContext?.kind === "aspect" ? (() => {
-                    const asp = selectedContext.aspect;
-                    const type = asp.type?.toLowerCase() ?? "";
-                    const meta = ASPECT_META[type];
-                    const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                    const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                    return (
-                      <div>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                              Aspect Context
-                            </span>
-                            <p className="mt-1 text-[19px] font-light leading-tight text-white">
-                              {nameA} {asp.type} {nameB}
-                            </p>
-                          </div>
-                          <span
-                            className="shrink-0 text-[10px] font-medium uppercase tracking-[0.14em]"
-                            style={{ color: meta?.text ?? "#94A3B8" }}
-                          >
-                            {meta?.header ?? "Aspect"}
-                          </span>
-                        </div>
-                        <div className="my-2.5 h-px bg-white/[0.06]" />
-                        <p className="text-[14px] leading-[1.6] text-slate-300">
-                          This {asp.type.toLowerCase()} connects {nameA} and {nameB} with a {asp.orbDegrees}° orb.
-                          {meta ? ` In this chart it is categorized as ${meta.header.toLowerCase()}.` : ""}
-                        </p>
-                      </div>
-                    );
-                  })() : contextMode === 0 ? (
-                    <>
-                      {hasProfection && (
-                        <>
-                          <div className="grid grid-cols-[minmax(0,1fr)_auto_48px] items-center gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <Compass className="h-3 w-3 text-slate-500" strokeWidth={2.2} />
-                                <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                                  Profection Year
-                                </span>
-                              </div>
-                              <p className="mt-1 text-[22px] font-light leading-none text-white">
-                                {profection!.activatedSign} Year
-                              </p>
-                              <p className="mt-1 text-[10px] leading-4 text-slate-500">
-                                {typeof profection!.activatedHouse === "number"
-                                  ? `${ordinal(profection!.activatedHouse)} house activated`
-                                  : `${ordinal(profection!.profectionYear)} house year`}.
-                              </p>
-                            </div>
-                            <div className="text-center">
-                              <span className="block whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 tabular-nums">
-                                Age {profection!.age}
-                              </span>
-                            </div>
-                            {profectionColors && (
-                              <div
-                                className="element-box flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] border bg-black/20"
-                                style={{
-                                  borderColor: profectionColors.border,
-                                  boxShadow: `0 0 18px ${profectionColors.glow}, inset 0 0 12px ${profectionColors.glow}`,
-                                }}
-                              >
-                                <span className="text-[20px]" style={{ color: profectionColors.text }}>
-                                  {GLYPHS[SIGN_RULER_GLYPH(profection!.activatedSign)] ?? "✦"}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          {elementBalance.total > 0 && <div className="my-2.5 h-px bg-white/[0.06]" />}
-                        </>
-                      )}
-                      {elementBalance.total > 0 && (
-                        <div>
-                          <div className="mb-1 text-center">
-                            <span className="text-[8px] font-medium uppercase tracking-[0.19em] text-slate-500">
-                              Elemental Balance
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {ELEMENT_ORDER.map((el) => {
-                              const count = elementBalance.counts[el];
-                              const maxCount = Math.max(...ELEMENT_ORDER.map((key) => elementBalance.counts[key]), 1);
-                              const height = 8 + Math.round((count / maxCount) * 20);
-                              const colors = ELEMENT_COLORS[el];
-                              return (
-                                <div key={el} className="flex flex-col items-center">
-                                  <div className="flex h-8 items-end justify-center">
-                                    <motion.span
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height, opacity: 1 }}
-                                      transition={{ duration: 0.65, ease: "easeOut" }}
-                                      className="w-[3px] rounded-full"
-                                      style={{ backgroundColor: colors.bar, boxShadow: `0 0 10px ${colors.glow}` }}
-                                    />
-                                  </div>
-                                  <span className="mt-1 text-[8px] font-medium uppercase tracking-[0.13em]" style={{ color: colors.text }}>
-                                    {el}
-                                  </span>
-                                  <span className="mt-0.5 text-[9px] text-slate-600 tabular-nums">{count}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : contextMode === 1 ? (
-                    <div className="flex h-full flex-col justify-center text-center">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                        Your Horoscope
-                      </span>
-                      {dailyHoroscope ? (
-                        <p className="mx-auto mt-3 max-w-[355px] text-[15px] leading-[1.65] text-slate-200">{dailyHoroscope}</p>
-                      ) : (
-                        <p className="mx-auto mt-3 max-w-[355px] text-[14px] leading-6 text-slate-400">
-                          {horoscopeLoading ? "Preparing today’s horoscope…" : horoscopeError ? "Tap again to retry today’s horoscope." : "Preparing your horoscope…"}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex h-full flex-col justify-center text-center">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                        Personal Context
-                      </span>
-                      <p className="mt-2 text-[24px] font-light leading-tight text-white">
-                        Tap any placement below
-                      </p>
-                      <p className="mx-auto mt-3 max-w-[355px] text-[14px] leading-[1.6] text-slate-400">
-                        Explore your chart one placement at a time.
-                      </p>
-                    </div>
-                  )}
-                </motion.div>
-              </button>
-            )}
-
-            {/* ── CHART / ASPECTS — one continuous six-row surface ── */}
-            <section className="order-2 py-1" data-birth-chart-focus>
-              <div className="mb-2 flex items-center justify-center gap-2 text-center">
-                <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
-                  {chartView === "birthchart" ? "My Chart" : "My Aspects"}
-                </span>
-                <span className="text-[9px] text-slate-600">•</span>
-                <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-slate-500">
-                  {chartView === "birthchart"
-                    ? "Tap Each Placement To Learn"
-                    : "Tap Each Aspect To Learn"}
-                </span>
+                    </React.Fragment>
+                  );
+                })}
               </div>
-              <div
-                className="chart-viewport"
-                data-paused={chartPaused ? "true" : "false"}
-                onPointerDown={beginChartDrag}
-                onPointerMove={moveChartDrag}
-                onPointerUp={endChartDrag}
-                onPointerCancel={endChartDrag}
-              >
-                <div
-                  ref={chartTrackRef}
-                  data-chart-track
-                  className="chart-track"
-                  data-paused={chartPaused ? "true" : "false"}
-                  style={{ ["--chart-count" as string]: activeItemCount }}
-                >
-                  {chartView === "birthchart" ? (
-                    rotatingNatal.map((planet, index) => {
-                      const element = elementOf(planet.sign);
-                      const colors = element ? ELEMENT_COLORS[element] : null;
-                      const displayName = DISPLAY_NAMES[planet.name] ?? planet.name;
-                      const isSelected = selectedContext?.kind === "placement" && selectedContext.planetName === planet.name;
-                      const isDuplicate = index >= natal.length;
-                      return (
-                        <div key={`${planet.name}-${index}`} className="chart-row border-b border-white/5" aria-hidden={isDuplicate ? true : undefined}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isDuplicate) return;
-                              setSelectedContext({ kind: "placement", planetName: planet.name });
-                            }}
-                            tabIndex={isDuplicate ? -1 : 0}
-                            className="flex h-full w-full items-center gap-3 px-1 text-left"
-                          >
-                            <span
-                              className="w-8 shrink-0 text-center text-xl transition-all"
-                              style={colors ? { color: colors.text, textShadow: isSelected ? `0 0 10px ${colors.glow}` : "none" } : { color: "#64748b" }}
-                            >
-                              {GLYPHS[planet.name] ?? "•"}
-                            </span>
-                            <span className={cn("w-24 shrink-0 text-[12px] font-medium uppercase tracking-wide", isSelected ? "text-white" : "text-slate-300")}>
-                              {displayName}
-                            </span>
-                            <span className="min-w-0 flex-1 text-[15px]" style={{ color: colors?.text ?? "#CBD5E1" }}>
-                              {planet.sign}
-                            </span>
-                            <span className="shrink-0 whitespace-nowrap text-[13px] text-slate-400 tabular-nums">
-                              {planet.degree}
-                              {planet.house ? <span className="ml-1 text-slate-500">· {ordinal(planet.house)}</span> : null}
-                            </span>
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : rotatingAspects.length > 0 ? (
-                    rotatingAspects.map((asp, index) => {
-                      const sourceIndex = index % orderedAspects.length;
-                      const isDuplicate = index >= orderedAspects.length;
-                      const type = asp.type?.toLowerCase() ?? "";
-                      const meta = ASPECT_META[type];
-                      const nameA = asp.planetA === "Ascendant" ? "Rising" : asp.planetA;
-                      const nameB = asp.planetB === "Ascendant" ? "Rising" : asp.planetB;
-                      const isMajor = asp.orbDegrees <= STRONG_ORB;
-                      return (
-                        <div key={`${asp.planetA}-${asp.type}-${asp.planetB}-${sourceIndex}-${index}`} className="chart-row border-b border-white/5" aria-hidden={isDuplicate ? true : undefined}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isDuplicate) return;
-                              setSelectedContext({ kind: "aspect", aspect: asp });
-                            }}
-                            tabIndex={isDuplicate ? -1 : 0}
-                            className="flex h-full w-full items-center gap-3 px-1 text-left"
-                          >
-                            <span
-                              className="w-8 shrink-0 text-center text-[14px]"
-                              style={{ color: meta?.text ?? "#94A3B8" }}
-                            >
-                              {isMajor ? "●" : "○"}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-[13px] text-slate-200">
-                              {nameA} <span className="italic text-slate-500">{asp.type}</span> {nameB}
-                            </span>
-                            <span className="shrink-0 text-[11px] text-slate-500 tabular-nums">
-                              {asp.orbDegrees}°
-                            </span>
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="flex h-[312px] items-center justify-center text-[12px] text-slate-500">
-                      No aspects available yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="mt-3 flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChartView("birthchart");
-                    setSelectedContext(null);
-                  }}
-                  className={cn(
-                    "text-[10px] font-medium uppercase tracking-[0.16em] transition-colors",
-                    chartView === "birthchart" ? "text-slate-100" : "text-slate-600"
-                  )}
-                >
-                  Birth Chart
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChartView((current) =>
-                      current === "birthchart" ? "aspects" : "birthchart"
-                    );
-                    setSelectedContext(null);
-                  }}
-                  aria-label={`Switch to ${chartView === "birthchart" ? "My Aspects" : "Birth Chart"}`}
-                  className="relative h-[18px] w-[34px] rounded-full border border-white/10 bg-white/[0.035] p-[2px]"
-                >
-                  <motion.span
-                    animate={{ x: chartView === "birthchart" ? 0 : 16 }}
-                    transition={{
-                      duration: shouldReduceMotion ? 0 : 0.18,
-                      ease: "easeOut",
-                    }}
-                    className="block h-3 w-3 rounded-full bg-slate-200 shadow-[0_0_8px_rgba(255,255,255,0.22)]"
-                  />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChartView("aspects");
-                    setSelectedContext(null);
-                  }}
-                  className={cn(
-                    "text-[10px] font-medium uppercase tracking-[0.16em] transition-colors",
-                    chartView === "aspects" ? "text-slate-100" : "text-slate-600"
-                  )}
-                >
-                  My Aspects
-                </button>
-              </div>
-            </section>
-
-            {/* ── CHART ACTIONS — one connected premium control with diagonal split ── */}
-            <div className="order-3 flex w-full flex-col items-center gap-3">
-              <div className="chart-actions-shell" style={outsideFocusStyle}>
-                <div className="chart-actions-inner">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onOpenUpgradeChart) {
-                        onOpenUpgradeChart();
-                        return;
-                      }
-                      window.location.assign("/upgrade-chart");
-                    }}
-                    className="chart-action-half"
-                    aria-label="Upgrade your chart"
-                  >
-                    <span
-                      className="chart-action-icon left-2.5"
-                      style={{
-                        border: "1px solid rgba(218,183,104,0.38)",
-                        background: "rgba(8,8,10,0.66)",
-                        boxShadow: "0 0 10px rgba(218,183,104,0.18)",
-                      }}
-                      aria-hidden="true"
-                    >
-                      <Maximize2
-                        className="h-3 w-3"
-                        style={{ color: "rgba(238,207,133,0.96)" }}
-                      />
-                    </span>
-                    <span
-                      className="chart-action-label ml-4"
-                      style={{
-                        color: "#F1D694",
-                        textShadow: "0 2px 10px rgba(0,0,0,0.95), 0 0 14px rgba(218,183,104,0.20)",
-                      }}
-                    >
-                      Upgrade Chart
-                    </span>
-                  </button>
-
-                  <span className="chart-actions-divider" aria-hidden="true" />
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onOpenReadings) {
-                        onOpenReadings();
-                        return;
-                      }
-                      window.location.assign("/readings");
-                    }}
-                    className="chart-action-half"
-                    aria-label="Open your saved readings"
-                  >
-                    <span
-                      className="chart-action-icon right-2.5"
-                      style={{
-                        border: "1px solid rgba(248,250,252,0.24)",
-                        background: "rgba(248,250,252,0.035)",
-                        boxShadow: "0 0 10px rgba(248,250,252,0.09)",
-                      }}
-                      aria-hidden="true"
-                    >
-                      <Crown
-                        className="h-3 w-3"
-                        style={{ color: "rgba(248,250,252,0.90)" }}
-                      />
-                    </span>
-                    <span
-                      className="chart-action-label mr-4 text-slate-100"
-                      style={{
-                        textShadow: "0 2px 10px rgba(0,0,0,0.92), 0 0 16px rgba(255,255,255,0.13)",
-                      }}
-                    >
-                      Your Readings
-                    </span>
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => window.location.assign("/chart-data?recalculate=true")}
-                className="text-[9px] font-medium uppercase tracking-[0.16em] text-slate-500 transition hover:text-slate-300 focus-visible:outline-none focus-visible:text-slate-300"
-                style={outsideFocusStyle}
-                aria-label="Edit your birth details"
-              >
-                Edit Birth Details
-              </button>
             </div>
-          </motion.div>
-        )}
-      </div>
+          </section>
+        </>
+      )}
     </div>
   );
-}
-
-/* Maps a sign to its ruling planet's name (for the profection glyph). */
-function SIGN_RULER_GLYPH(sign: string): string {
-  const rulers: Record<string, string> = {
-    Aries: "Mars", Taurus: "Venus", Gemini: "Mercury", Cancer: "Moon",
-    Leo: "Sun", Virgo: "Mercury", Libra: "Venus", Scorpio: "Mars",
-    Sagittarius: "Jupiter", Capricorn: "Saturn", Aquarius: "Saturn", Pisces: "Jupiter",
-  };
-  return rulers[sign] ?? "Sun";
 }

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
+import DailyPanel from "./DailyPanel";
 import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
 import CreditsPanel from "./CreditsPanel";
@@ -77,11 +78,11 @@ function normalizeUserStatus(data: any): UserStatus {
 }
 
 /**
- * PAGER — four real panels in a circular loop:
+ * PAGER — five real panels in a circular loop:
  *
- *   Reading Intake ⇄ Birth Chart ⇄ Today's Sky ⇄ Credits ⇄ Reading Intake
+ *   Reading Intake ⇄ Your Day ⇄ Birth Chart ⇄ Today's Sky ⇄ Credits ⇄ Reading Intake
  *
- * No duplicate Reading/Credits components are mounted. Instead, the four real
+ * No duplicate Reading/Credits components are mounted. Instead, the five real
  * panels are cyclically reordered after each completed swipe while transitions
  * are disabled for one frame. To the user, every swipe still moves exactly one
  * page and the loop has no visible beginning or end.
@@ -94,8 +95,18 @@ type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 type CreditsIntent = "voice" | "context" | null;
 
+// Panel positions in the loop. Credits must stay last so it remains the
+// previous neighbor of Reading Intake (openCreditsFor swipes back to it).
+const PANEL = {
+  intake: 0,
+  daily: 1,
+  birthChart: 2,
+  todaySky: 3,
+  credits: 4,
+} as const;
+
 export default function PagerContainer() {
-  const totalPanels = 4;
+  const totalPanels = 5;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [slideOffset, setSlideOffset] = useState<-1 | 0 | 1>(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -119,13 +130,14 @@ export default function PagerContainer() {
   );
 
   // Keep the active panel in slot 1. Slot 0 is its real previous neighbor and
-  // slots 2–3 are its real next neighbors. These are the same four components,
+  // slots 2–4 are its real next neighbors. These are the same five components,
   // simply reordered after each swipe — there are no clones.
   const panelOrder = [
     wrapPanelIndex(currentIndex - 1),
     currentIndex,
     wrapPanelIndex(currentIndex + 1),
     wrapPanelIndex(currentIndex + 2),
+    wrapPanelIndex(currentIndex + 3),
   ];
 
   // ── Fetch user status + one-time chart migration ────────────────────
@@ -245,7 +257,7 @@ export default function PagerContainer() {
   // fires once per locked-feature tap.
   useEffect(() => {
     if (creditsIntent === null) return;
-    if (currentIndex !== 3) return;
+    if (currentIndex !== PANEL.credits) return;
 
     // We're on Credits now. Leave the intent in place so CreditsPanel can
     // apply it; CreditsPanel guards against re-applying it internally.
@@ -584,7 +596,7 @@ export default function PagerContainer() {
             data-pager-panel
             className={panelClass}
           >
-            {panelIndex === 0 && (
+            {panelIndex === PANEL.intake && (
               <ReadingIntakeScreen
                 userStatus={userStatus}
                 onSwipeLeft={goToNext}
@@ -592,15 +604,22 @@ export default function PagerContainer() {
               />
             )}
 
-            {panelIndex === 1 && (
+            {panelIndex === PANEL.daily && (
+              <DailyPanel
+                userStatus={userStatus}
+                isActive={currentIndex === PANEL.daily && slideOffset === 0}
+              />
+            )}
+
+            {panelIndex === PANEL.birthChart && (
               <BirthChartPanel userStatus={userStatus} />
             )}
 
-            {panelIndex === 2 && (
+            {panelIndex === PANEL.todaySky && (
               <TodaySkyPanel userStatus={userStatus} />
             )}
 
-            {panelIndex === 3 && (
+            {panelIndex === PANEL.credits && (
               <CreditsPanel
                 embedded
                 initialIntent={creditsIntent}
