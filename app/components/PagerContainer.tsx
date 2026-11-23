@@ -4,6 +4,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import DailyPanel from "./DailyPanel";
 import BirthChartPanel from "./BirthChartPanel";
+import BirthChart2Panel from "./BirthChart2Panel";
 import CreditsPanel from "./CreditsPanel";
 import SavedReadingsView from "./SavedReadingsView";
 import StarfieldBackground from "./StarfieldBackground";
@@ -78,9 +79,9 @@ function normalizeUserStatus(data: any): UserStatus {
 }
 
 /**
- * PAGER — five real panels in a circular loop:
+ * PAGER — six real panels in a circular loop:
  *
- *   Reading Intake ⇄ Your Day ⇄ Birth Chart ⇄ Credits ⇄ Your Readings ⇄ Reading Intake
+ *   Reading Intake ⇄ Your Day ⇄ Birth Chart ⇄ Birth Chart 2 ⇄ Credits ⇄ Your Readings ⇄ Reading Intake
  *
  * No duplicate components are mounted. The panels are cyclically reordered after each
  * completed swipe while transitions are disabled for one frame. Four slots are rendered
@@ -103,15 +104,16 @@ const PANEL = {
   intake: 0,
   daily: 1,
   birthChart: 2,
-  credits: 3,
-  readings: 4,
+  birthChart2: 3,
+  credits: 4,
+  readings: 5,
 } as const;
 
 // How dark the sky gets on each panel (0 = full sky, 1 = black). Indexed by PANEL.
-const SKY_DIM = [0, 0.2, 0.4, 0.7, 1];
+const SKY_DIM = [0, 0.2, 0.4, 0.55, 0.7, 1];
 
 export default function PagerContainer() {
-  const totalPanels = 5;
+  const totalPanels = 6;
   const [currentIndex, setCurrentIndex] = useState<number>(PANEL.intake);
   const [slideOffset, setSlideOffset] = useState<-1 | 0 | 1>(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -347,11 +349,20 @@ export default function PagerContainer() {
   const touchStartY = useRef(0);
   const touchDeltaX = useRef(0);
   const gestureAxis = useRef<GestureAxis>("undecided");
+  // True for a gesture that started on a [data-no-swipe] element (e.g. the chart joystick):
+  // the whole gesture is ignored, not just its first touch.
+  const ignoreGesture = useRef(false);
+
+  // Birth Chart 2 sets <html data-astro-loupe="on"> while its magnifier is open;
+  // the finger belongs to the magnifier until it lifts.
+  const loupeOpen = () =>
+    typeof document !== "undefined" && document.documentElement.dataset.astroLoupe === "on";
 
   const handleTouchStart = (e: React.TouchEvent) => {
     // Let taps on interactive opt-out elements (like the install teaser) through
     // to their own handlers instead of the swipe logic.
-    if ((e.target as HTMLElement).closest?.('[data-no-swipe]')) return;
+    ignoreGesture.current = !!(e.target as HTMLElement).closest?.('[data-no-swipe]');
+    if (ignoreGesture.current) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     touchDeltaX.current = 0;
@@ -360,6 +371,12 @@ export default function PagerContainer() {
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (ignoreGesture.current) return;
+    if (loupeOpen()) {
+      gestureAxis.current = "vertical"; // lock this gesture out of paging
+      touchDeltaX.current = 0;
+      return;
+    }
     const deltaX = e.touches[0].clientX - touchStartX.current;
     const deltaY = e.touches[0].clientY - touchStartY.current;
 
@@ -377,6 +394,10 @@ export default function PagerContainer() {
   };
 
   const handleTouchEnd = () => {
+    if (ignoreGesture.current) {
+      ignoreGesture.current = false;
+      return;
+    }
     setIsDragging(false);
     if (gestureAxis.current === "horizontal") {
       if (touchDeltaX.current < -SWIPE_COMMIT_THRESHOLD) goToNext();
@@ -394,6 +415,7 @@ export default function PagerContainer() {
   const isMouseDown = useRef(false);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest?.('[data-no-swipe]')) return;
     mouseStartX.current = e.clientX;
     mouseStartY.current = e.clientY;
     mouseDeltaX.current = 0;
@@ -404,6 +426,11 @@ export default function PagerContainer() {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isMouseDown.current) return;
+    if (loupeOpen()) {
+      mouseGestureAxis.current = "vertical";
+      mouseDeltaX.current = 0;
+      return;
+    }
     const deltaX = e.clientX - mouseStartX.current;
     const deltaY = e.clientY - mouseStartY.current;
 
@@ -659,6 +686,12 @@ export default function PagerContainer() {
               <BirthChartPanel
                 userStatus={userStatus}
                 isActive={currentIndex === PANEL.birthChart && slideOffset === 0}
+              />
+            )}
+
+            {panelIndex === PANEL.birthChart2 && (
+              <BirthChart2Panel
+                isActive={currentIndex === PANEL.birthChart2 && slideOffset === 0}
               />
             )}
 
