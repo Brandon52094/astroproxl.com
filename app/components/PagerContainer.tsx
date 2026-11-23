@@ -1,14 +1,16 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import DailyPanel from "./DailyPanel";
 import BirthChartPanel from "./BirthChartPanel";
+import BirthChart2Panel from "./BirthChart2Panel";
 import CreditsPanel from "./CreditsPanel";
 import SavedReadingsView from "./SavedReadingsView";
 import StarfieldBackground from "./StarfieldBackground";
 import { migrateChartV2 } from "@/lib/chartStore";
 
-// ── Shared with DailyPanel ────────────────────────────────────────────────────
+// ── Shared with ReadingIntakeScreen ───────────────────────────────────────────
 interface UserStatus {
   credits: number;
   jxlCredits: number;
@@ -77,16 +79,17 @@ function normalizeUserStatus(data: any): UserStatus {
 }
 
 /**
- * PAGER — four panels in a circular loop:
+ * PAGER — six real panels in a circular loop:
  *
- *   Your Day ⇄ Your Readings ⇄ Birth Chart ⇄ Credits ⇄ Your Day
+ *   Reading Intake ⇄ Your Day ⇄ Birth Chart ⇄ Birth Chart 2 ⇄ Credits ⇄ Your Readings ⇄ Reading Intake
  *
  * No duplicate components are mounted. The panels are cyclically reordered after each
  * completed swipe while transitions are disabled for one frame. Four slots are rendered
- * (previous, current, next, next+1), and with four panels that is every panel, so all of
- * them stay mounted and keep their state while offscreen.
+ * (previous, current, next, next+1), so one panel is unmounted at any time — panels that
+ * need to come back where the user left them keep that state outside React.
  *
- * Each panel sets its own sky darkness (SKY_DIM); the stars stay bright.
+ * Night falls across the loop: each panel dims the sky a little more (SKY_DIM), the stars
+ * stay bright, and the wrap from Your Readings back to Reading Intake is the "dawn".
  */
 const DIRECTION_LOCK_THRESHOLD = 12;
 const SWIPE_COMMIT_THRESHOLD = 70;
@@ -98,34 +101,33 @@ type CreditsIntent = "voice" | "context" | null;
 
 // Panel positions in the loop.
 const PANEL = {
-  daily: 0,
-  readings: 1,
+  intake: 0,
+  daily: 1,
   birthChart: 2,
-  credits: 3,
+  birthChart2: 3,
+  credits: 4,
+  readings: 5,
 } as const;
 
-const TOTAL_PANELS = 4;
-
 // How dark the sky gets on each panel (0 = full sky, 1 = black). Indexed by PANEL.
-// Your Readings is drawn for a fully dimmed sky (black with stars).
-const SKY_DIM = [0, 1, 0.4, 0.7];
+const SKY_DIM = [0, 0.2, 0.4, 0.55, 0.7, 1];
 
 export default function PagerContainer() {
-  const totalPanels = TOTAL_PANELS;
-  const [currentIndex, setCurrentIndex] = useState<number>(PANEL.daily);
+  const totalPanels = 6;
+  const [currentIndex, setCurrentIndex] = useState<number>(PANEL.intake);
   const [slideOffset, setSlideOffset] = useState<-1 | 0 | 1>(0);
   const [isDragging, setIsDragging] = useState(false);
   const [suppressTransition, setSuppressTransition] = useState(false);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
 
-  // When a locked feature is triggered from Your Day, we remember
+  // When a locked feature is triggered from Reading Intake, we remember
   // what the user was trying to buy, then hand it to CreditsPanel so the
   // correct item can visibly add itself after the panel is on screen.
   const [creditsIntent, setCreditsIntent] =
     useState<CreditsIntent>(null);
 
-  // From Your Day, Credits is the previous neighbour, so that jump is one backwards slide.
-  // From anywhere Credits isn't a neighbour, we temporarily put it in the "previous" slot,
+  // Credits is no longer Reading Intake's previous neighbour (Your Readings is).
+  // To jump there in one slide, we temporarily put Credits in the "previous" slot,
   // slide back once, and land on it.
   const [previousOverride, setPreviousOverride] = useState<number | null>(null);
   const slideTargetRef = useRef<number | null>(null);
@@ -144,19 +146,12 @@ export default function PagerContainer() {
   // Keep the active panel in slot 1. Slot 0 is its previous neighbor (or the
   // override target) and slots 2–3 are its next neighbors. These are the same
   // components, simply reordered after each swipe — there are no clones.
-  // With four panels every panel is in a slot, so when an override moves a panel
-  // into slot 0, the panel it displaced takes that panel's old slot (no duplicate keys).
-  const basePrevious = wrapPanelIndex(currentIndex - 1);
-  const panelOrder =
-    previousOverride === null || previousOverride === basePrevious
-      ? [basePrevious, currentIndex, wrapPanelIndex(currentIndex + 1), wrapPanelIndex(currentIndex + 2)]
-      : [
-          previousOverride,
-          currentIndex,
-          ...[currentIndex + 1, currentIndex + 2, currentIndex - 1]
-            .map(wrapPanelIndex)
-            .filter((panel) => panel !== previousOverride),
-        ];
+  const panelOrder = [
+    previousOverride ?? wrapPanelIndex(currentIndex - 1),
+    currentIndex,
+    wrapPanelIndex(currentIndex + 1),
+    wrapPanelIndex(currentIndex + 2),
+  ];
 
   // The panel the sky should be dimmed for: where we're going while a slide runs.
   const skyPanel =
@@ -267,20 +262,15 @@ export default function PagerContainer() {
   const goToPrevious = useCallback(() => startSlide(-1), [startSlide]);
 
   // ── Locked feature → Credits handoff ────────────────────────────────
-  // Your Day tells us WHAT the user wanted. We store that intent,
-  // then move to the Credits panel in a single slide.
+  // Reading Intake tells us WHAT the user wanted. We store that intent,
+  // then move to the Credits panel in a single backwards slide.
   const openCreditsFor = useCallback(
     (intent: "voice" | "context") => {
       setCreditsIntent(intent);
       if (slideOffsetRef.current !== 0 || handoffLockedRef.current) return;
-      if (currentIndex === PANEL.credits) return;
 
       if (wrapPanelIndex(currentIndex - 1) === PANEL.credits) {
         goToPrevious();
-        return;
-      }
-      if (wrapPanelIndex(currentIndex + 1) === PANEL.credits) {
-        goToNext();
         return;
       }
 
@@ -289,7 +279,7 @@ export default function PagerContainer() {
       pendingPreviousSlideRef.current = true;
       setPreviousOverride(PANEL.credits);
     },
-    [currentIndex, goToNext, goToPrevious, wrapPanelIndex]
+    [currentIndex, goToPrevious, wrapPanelIndex]
   );
 
   useEffect(() => {
@@ -363,7 +353,7 @@ export default function PagerContainer() {
   // the whole gesture is ignored, not just its first touch.
   const ignoreGesture = useRef(false);
 
-  // A panel can set <html data-astro-loupe="on"> while a magnifier is open;
+  // Birth Chart 2 sets <html data-astro-loupe="on"> while its magnifier is open;
   // the finger belongs to the magnifier until it lifts.
   const loupeOpen = () =>
     typeof document !== "undefined" && document.documentElement.dataset.astroLoupe === "on";
@@ -471,7 +461,7 @@ export default function PagerContainer() {
   // ── Keyboard support ─────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't hijack arrows while someone is typing.
+      // Don't hijack arrows while someone is typing in Jxl's input.
       const el = document.activeElement;
       if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
       if (e.key === "ArrowRight") goToNext();
@@ -508,8 +498,6 @@ export default function PagerContainer() {
     window.addEventListener("pageshow", normalizeHorizontalPosition);
     return () => window.removeEventListener("pageshow", normalizeHorizontalPosition);
   }, []);
-
-  const isShowing = (panel: number) => currentIndex === panel && slideOffset === 0;
 
   // Sizing note: the pager is an in-flow block (like the Preparing screen), not
   // position: fixed, and is never measured in JS. On iOS, fixed elements in an
@@ -577,9 +565,9 @@ export default function PagerContainer() {
         @keyframes skyDriftBlue { from { transform: translate3d(0,0,0) scale(1.05); opacity: 1; } to { transform: translate3d(-9%,-5%,0) scale(.95); opacity: .7; } }
         @keyframes skyDriftTeal { from { transform: translate3d(0,0,0) scale(1); opacity: .7; } to { transform: translate3d(6%,-7%,0) scale(1.1); opacity: 1; } }
 
-        /* Aurora (Ask Anything): DailyPanel sets <html data-astro-voice="on|holding"> while
-           someone is asking aloud. Soft drifting bands fade in above the nebula and below
-           the stars, a little richer while the button is held. */
+        /* Aurora (Ask Anything): the intake sets <html data-astro-voice="on|holding"> while
+           someone is asking aloud. Soft drifting bands (from the original JXL panel) fade in
+           above the nebula and below the stars, a little richer while the button is held. */
         .sky-aurora {
           position: absolute;
           inset: -30%;
@@ -608,10 +596,10 @@ export default function PagerContainer() {
 
         /* Sky dim. One black layer above the nebula and BELOW the stars, so the sky darkens
            while the stars keep shining.
-           • Per panel: SKY_DIM, set as --sky-dim on the root. It changes as a slide starts
-             and fades on the slide's own 0.5s curve.
-           • Press-and-hold: DailyPanel sets <html data-astro-focus="hold"> — one continuous 3s
-             fade to full black (its HOLD_TOTAL_MS), easing back when released. */
+           • Per panel: night falls across the loop (SKY_DIM, set as --sky-dim on the root).
+             It changes as a slide starts and fades on the slide's own 0.5s curve.
+           • Press-and-hold: the intake sets <html data-astro-focus="hold"> — one continuous 3s
+             fade to full black (the intake's HOLD_TOTAL_MS), easing back when released. */
         .sky-dim {
           position: absolute;
           inset: 0;
@@ -650,64 +638,89 @@ export default function PagerContainer() {
         <StarfieldBackground />
       </div>
 
-      {/* APP / PAGER CONTENT */}
+    {/* APP / PAGER CONTENT */}
+    <div
+      className="relative z-10 h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       <div
-        className="relative z-10 h-full w-full min-w-0 max-w-full overflow-hidden touch-pan-y"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        className="flex h-full w-full min-w-0 max-w-full"
+        onTransitionEnd={handleTrackTransitionEnd}
+        style={{
+          transform: `translateX(-${(1 + slideOffset) * 100}%)`,
+          transition: noAnimation
+            ? "none"
+            : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
+          cursor: isDragging ? "grabbing" : "grab",
+          height: "100%",
+        }}
       >
-        <div
-          className="flex h-full w-full min-w-0 max-w-full"
-          onTransitionEnd={handleTrackTransitionEnd}
-          style={{
-            transform: `translateX(-${(1 + slideOffset) * 100}%)`,
-            transition: noAnimation
-              ? "none"
-              : "transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-            cursor: isDragging ? "grabbing" : "grab",
-            height: "100%",
-          }}
-        >
-          {panelOrder.map((panelIndex) => (
-            <div
-              key={panelIndex}
-              data-pager-panel
-              className={panelClass}
-            >
-              {panelIndex === PANEL.daily && (
-                <DailyPanel
-                  userStatus={userStatus}
-                  isActive={isShowing(PANEL.daily)}
-                  onOpenCredits={openCreditsFor}
-                />
-              )}
+        {panelOrder.map((panelIndex) => (
+          <div
+            key={panelIndex}
+            data-pager-panel
+            className={panelClass}
+          >
+            {panelIndex === PANEL.intake && (
+              <ReadingIntakeScreen
+                userStatus={userStatus}
+                onSwipeLeft={goToNext}
+                onOpenCredits={openCreditsFor}
+              />
+            )}
 
-              {panelIndex === PANEL.readings && (
-                <SavedReadingsView embedded />
-              )}
+            {panelIndex === PANEL.daily && (
+              <DailyPanel
+                userStatus={userStatus}
+                isActive={currentIndex === PANEL.daily && slideOffset === 0}
+              />
+            )}
 
-              {panelIndex === PANEL.birthChart && (
-                <BirthChartPanel
-                  userStatus={userStatus}
-                  isActive={isShowing(PANEL.birthChart)}
-                />
-              )}
+            {panelIndex === PANEL.birthChart && (
+              <BirthChartPanel
+                userStatus={userStatus}
+                isActive={currentIndex === PANEL.birthChart && slideOffset === 0}
+              />
+            )}
 
-              {panelIndex === PANEL.credits && (
-                <CreditsPanel
-                  embedded
-                  initialIntent={creditsIntent}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+            {panelIndex === PANEL.birthChart2 && (
+              <BirthChart2Panel
+                isActive={currentIndex === PANEL.birthChart2 && slideOffset === 0}
+              />
+            )}
+
+            {panelIndex === PANEL.credits && (
+              <CreditsPanel
+                embedded
+                initialIntent={creditsIntent}
+              />
+            )}
+
+            {panelIndex === PANEL.readings && (
+              <SavedReadingsView embedded />
+            )}
+          </div>
+        ))}
       </div>
     </div>
-  );
+
+    {/* Subtle glowing outline around the whole screen. */}
+
+    {/*
+<div
+  className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+  aria-hidden="true"
+>
+  <StarfieldForeground />
+</div>
+*/}
+
+</div>
+);
 }
