@@ -24,19 +24,20 @@ import type { ThemeKey } from "@/app/components/ReadingAmbience";
  * Replaces ReadingIntakeScreen: every reading path it offered starts here.
  *
  *   Profection Year + Today's Sky   (hero: profection tint, hairline edge, Big Three glow)
- *   Daily Horoscope                 (7-line window, line 7 fades, the rest scrolls)
- *   ‹  Mic · Love · Money · Career · What's Coming  ›   (+ mic toggle under it)
- *   Elemental Balance               (one segmented bar, open ends)
- *   Big Three
+ *   Today's Guidance                (tap to reveal; 7-line window, line 7 fades, the rest scrolls)
+ *   Select Reading
+ *   ‹  Mic · Love · Money · Career · What's Coming  ›   (+ mic toggle under it; arrows glow until first used)
+ *   Element bar                     (one segmented bar, open ends; no title)
+ *   Big Three                       (hugs the bottom in the browser; roomier in the installed app)
  *
  * Reading buttons: press and hold 3s. Everything else fades to dark, the reading's
  * symbols (ReadingAmbience) arrive at 50%, the button flashes, the screen fades to
  * black and /reading/preparing takes over (or Stripe checkout if there are no credits).
  *
  * Mic (Ask Anything): turn the toggle on, then press and hold to speak; swipe up to
- * cancel. Everything else fades; the button pulses with the voice and sends gold /
- * Sun-color waves (with a faded trail and sparkles) to the screen edges, faster or
- * slower with the speaker's pace. Browser speech recognition first, Whisper as backup.
+ * cancel. Everything else fades; the button pulses with the voice, and each word sends out a
+ * fresh wave in the button's shape (a line + fading trail layers, gold / Sun color, sparkles)
+ * that glides to the screen edges, a little quicker with livelier speech. Browser speech recognition first, Whisper as backup.
  *
  * The panel fills its pager slot (height: 100%) and never scrolls the page.
  */
@@ -121,22 +122,45 @@ const HOLD_TOTAL_MS = 3000;
 const HOLD_AMBIENCE_MS = Math.round(HOLD_TOTAL_MS * 0.5);
 const ASK_MIN_HOLD_MS = 450;
 const ENGAGE_MS = 2000; // arrows / toggle stay in focus this long after a touch
+// Today's Guidance: the reveal takes its time (the text comes into focus top to bottom).
+const GUIDANCE_UNSEAL_MS = 650;   // title has mostly moved; the text starts to resolve
+const GUIDANCE_OPEN_MS = 2600;    // reveal finished
+const ARROWS_USED_KEY = "astroproxl:arrows-used";
+const guidanceOpenedKey = () => `astroproxl:guidance-opened:${localDayKey()}`;
 
 /* ── Voice waves ───────────────────────────────────────────────────── */
-// One continuous flow: every wave rides the same clock, so when the pace changes the
-// whole stream speeds up or slows down together. Pace = syllables/second (smoothed).
-// Loudness (normalized to the speaker's own level) sets brightness and the button's pulse.
-const WAVES = {
-  gold: [218, 183, 104] as [number, number, number],
-  attack: 0.45,
+// Every time the user speaks (each word / syllable onset) the button sends out a fresh wave in its
+// own shape: a leading line followed by trailing layers, each fainter than the one before (the
+// preparing screen's layered orb, turned into a travelling wave). Waves glide out and ease as they go.
+// Voice mechanics are Reading Intake's: auto-gain loudness, fast attack / slower release, and brighter
+// speech = a little more pace. Values below were tuned in the wave tuner.
+const WAVE_TUNE = {
+  travelSec: 5.7,      // seconds for a wave to reach the screen edge at a calm pace
+  minGap: 310,         // ms between fresh waves (at most ~3 a second)
+  glide: 1.6,          // how much a wave eases as it travels (1 = steady speed)
+  fade: 1.2,           // how quickly a wave fades on its way out
+  trailLayers: 5,      // trailing layers behind the lead
+  trailStart: 0.17,    // brightness of the first trailing layer
+  trailFalloff: 0.74,  // each next layer = previous × this
+  gapBase: 11,         // trail layer thickness near the button (px)
+  gapGrow: 21,         // extra thickness by the screen edge (px)
+  leadBright: 0.2,     // brightness of the leading line
+  lineWidth: 2,        // leading line thickness (px)
+  glowSize: 0.7,       // size of the glow in front
+  glowStrength: 0,     // strength of the glow in front (0 = off)
+  whiten: 0.2,         // how white-hot the leading line is (0 = pure color)
+  onset: 0.15,         // rise in the voice that counts as a new word (lower = more waves)
+  paceMin: 0.85,       // travel speed multiplier for calm speech
+  paceMax: 1.3,        // travel speed multiplier for lively speech
+  sparkles: 1.5,       // sparkle amount (0 = none)
+  colors: "alternate" as "alternate" | "gold" | "theme",
+};
+const VOICE = {
+  attack: 0.45,        // Reading Intake's settings
   release: 0.12,
   noiseGate: 0.012,
-  baseSpeed: 150,     // px/s at a normal speaking pace
-  baseSpacing: 0.62,  // seconds between waves at a normal pace
-  paceRef: 4,         // ~4 syllables/second = normal
-  minMul: 0.45,
-  maxMul: 2.0,
-  maxSparks: 140,
+  gold: [236, 201, 128] as [number, number, number],
+  maxSparks: 90,
 };
 
 /* ── Readings ──────────────────────────────────────────────────────── */
@@ -340,6 +364,15 @@ export default function DailyPanel({
   const [horoscopeLoading, setHoroscopeLoading] = useState(false);
   const [horoscopeError, setHoroscopeError] = useState<string | null>(null);
   const [dateLine, setDateLine] = useState(""); // built on the client only
+  // sealed → (tap) → waiting (still loading) → revealing → open. Opened once, it stays open for the day.
+  const [guidance, setGuidance] = useState<"sealed" | "waiting" | "revealing" | "open">("sealed");
+  const [unsealed, setUnsealed] = useState(false);
+  const horoSectionRef = useRef<HTMLElement | null>(null);
+  const headTitleRef = useRef<HTMLHeadingElement | null>(null);
+  const headDateRef = useRef<HTMLParagraphElement | null>(null);
+  const sealTitleRef = useRef<HTMLSpanElement | null>(null);
+  const sealDateRef = useRef<HTMLSpanElement | null>(null);
+  const guidanceTimersRef = useRef<number[]>([]);
 
   /* ── Credits ── */
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
@@ -353,6 +386,15 @@ export default function DailyPanel({
   const [slideDir, setSlideDir] = useState(1);
   const [engaged, setEngaged] = useState({ prev: false, next: false, toggle: false });
   const [tapped, setTapped] = useState({ prev: false, next: false });
+  // The arrows glow until the user has used them once (remembered on this device).
+  const [arrowsHint, setArrowsHint] = useState(false);
+  useEffect(() => {
+    try { setArrowsHint(window.localStorage.getItem(ARROWS_USED_KEY) !== "1"); } catch { setArrowsHint(true); }
+  }, []);
+  const markArrowsUsed = useCallback(() => {
+    setArrowsHint(false);
+    try { window.localStorage.setItem(ARROWS_USED_KEY, "1"); } catch { /* storage unavailable */ }
+  }, []);
   const engageTimersRef = useRef<Record<string, number>>({});
 
   /* ── Reading hold ── */
@@ -367,6 +409,12 @@ export default function DailyPanel({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [portalReady, setPortalReady] = useState(false);
   useEffect(() => { setPortalReady(true); }, []);
+  // Installed app (PWA): older iOS reports it only through navigator.standalone.
+  const [isPwa, setIsPwa] = useState(false);
+  useEffect(() => {
+    const nav = navigator as Navigator & { standalone?: boolean };
+    setIsPwa(nav.standalone === true || window.matchMedia?.("(display-mode: standalone)").matches === true);
+  }, []);
   const holdTimersRef = useRef<number[]>([]);
   const armTimerRef = useRef<number | null>(null);
   const pressStartRef = useRef(0);
@@ -546,12 +594,65 @@ export default function DailyPanel({
     }
   }, [horoscopeLoading, onOpenHoroscope]);
 
-  // Fetch only once the panel is on screen, so swiping past costs nothing.
+  // Load quietly in the background once the panel is on screen (no time limit, so a slower
+  // guidance engine can take as long as it needs); the reveal waits for it.
   useEffect(() => {
     if (!isActive || chartStatus !== "ready" || horoscope || horoscopeLoading || horoscopeError) return;
     if (!natal.length) return;
     void fetchHoroscope();
   }, [isActive, chartStatus, horoscope, horoscopeLoading, horoscopeError, natal.length, fetchHoroscope]);
+
+  /* ── Today's Guidance: tap to reveal ── */
+  useEffect(() => {
+    try { if (window.localStorage.getItem(guidanceOpenedKey()) === "1") setGuidance("open"); } catch { /* storage unavailable */ }
+    const timers = guidanceTimersRef.current;
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, []);
+
+  const startReveal = useCallback(() => {
+    const section = horoSectionRef.current;
+    // Glide the centered title + date to their top-left spots (measured from the real ones).
+    const textBox = (el: HTMLElement | null) => {
+      if (!el) return null;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect();
+    };
+    const st = sealTitleRef.current?.getBoundingClientRect(), sd = sealDateRef.current?.getBoundingClientRect();
+    const rt = textBox(headTitleRef.current), rd = textBox(headDateRef.current);
+    if (section && st && sd && rt && rd && headTitleRef.current && headDateRef.current && sealTitleRef.current && sealDateRef.current) {
+      const fs = (el: HTMLElement) => parseFloat(getComputedStyle(el).fontSize) || 1;
+      section.style.setProperty("--tx", `${rt.left - st.left}px`);
+      section.style.setProperty("--ty", `${rt.top - st.top}px`);
+      section.style.setProperty("--ts", String(fs(headTitleRef.current) / fs(sealTitleRef.current)));
+      section.style.setProperty("--dx", `${rd.left - sd.left}px`);
+      section.style.setProperty("--dy", `${rd.top - sd.top}px`);
+      section.style.setProperty("--ds", String(fs(headDateRef.current) / fs(sealDateRef.current)));
+    }
+    setGuidance("revealing");
+    triggerHaptic(8);
+    const reduce = !!shouldReduceMotion;
+    guidanceTimersRef.current.push(
+      window.setTimeout(() => setUnsealed(true), reduce ? 0 : GUIDANCE_UNSEAL_MS),
+      window.setTimeout(() => {
+        setGuidance("open");
+        try { window.localStorage.setItem(guidanceOpenedKey(), "1"); } catch { /* storage unavailable */ }
+      }, reduce ? 50 : GUIDANCE_OPEN_MS),
+    );
+  }, [shouldReduceMotion]);
+
+  const tapSeal = useCallback(() => {
+    if (guidance === "revealing" || guidance === "open") return;
+    if (horoscope) { startReveal(); return; }
+    // Not ready yet: wait as long as it takes (and retry if the last try failed).
+    setGuidance("waiting");
+    if (horoscopeError && !horoscopeLoading) void fetchHoroscope();
+  }, [guidance, horoscope, horoscopeError, horoscopeLoading, fetchHoroscope, startReveal]);
+
+  // Arrived while the user was waiting → reveal.
+  useEffect(() => {
+    if (guidance === "waiting" && horoscope) startReveal();
+  }, [guidance, horoscope, startReveal]);
 
   /* ════════════════ Credits ════════════════ */
 
@@ -765,6 +866,7 @@ export default function DailyPanel({
     const analyser = analyserRef.current;
     void audioCtxRef.current?.resume?.().catch(() => {});
 
+    const T = WAVE_TUNE;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const pr = root.getBoundingClientRect(), br = box.getBoundingClientRect();
     const W = pr.width, H = pr.height;
@@ -772,39 +874,38 @@ export default function DailyPanel({
     canvas.height = Math.round(H * dpr);
     const bx = br.left - pr.left, by = br.top - pr.top, bw = br.width, bh = br.height;
     const cx = bx + bw / 2, cy = by + bh / 2;
-    const reach = Math.hypot(Math.max(bx, W - bx - bw), Math.max(by, H - by - bh)) + 30;
+    const reach = Math.hypot(Math.max(bx, W - bx - bw), Math.max(by, H - by - bh)) + 40;
     const timeData = analyser ? new Uint8Array(analyser.fftSize) : null;
+    const freq = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
 
-    type Ring = { start: number; strength: number; rgb: [number, number, number] };
-    type Spark = { x: number; y: number; vx: number; vy: number; born: number; life: number; size: number; tw: number; rgb: [number, number, number] };
-    const rings: Ring[] = [], sparks: Spark[] = [], onsets: number[] = [];
-    let level = 0, glowLevel = 0, peak = 0.06, armed = true, mul = 1, travelled = 0, emit = 1, flip = 0, silentFrames = 0;
-    let last = performance.now();
+    type RGB = [number, number, number];
+    type Wave = { x: number; strength: number; glow: number; rgb: RGB };
+    type Spark = { x: number; y: number; vx: number; vy: number; born: number; life: number; size: number; tw: number; rgb: RGB };
+    const waves: Wave[] = [], sparks: Spark[] = [];
+    let level = 0, bright = 0, peak = 0.06, pace = 1, armed = true, floor = 0, peakSince = 0, flip = 0, silentFrames = 0;
+    let last = performance.now(), lastWave = -1e9;
 
-    // A point on a wave's outline (rounded rect ≈ superellipse), for sparkles to ride on.
-    const onWave = (d: number, th: number): [number, number] => {
+    const rgbaOf = ([R, G, B]: RGB, a: number) => `rgba(${R},${G},${B},${Math.max(0, a)})`;
+    const toWhite = (c: RGB, k: number): RGB => [c[0] + (255 - c[0]) * k, c[1] + (255 - c[1]) * k, c[2] + (255 - c[2]) * k].map(Math.round) as RGB;
+    const roundRectSupported = typeof (c2d as unknown as { roundRect?: unknown }).roundRect === "function";
+    // The button's own shape, grown by d on every side (corners round out as it grows).
+    const shape = (d: number) => {
+      const x = bx - d, y = by - d, w = bw + 2 * d, h = bh + 2 * d, r = Math.min(20 + d, w / 2, h / 2);
+      if (roundRectSupported) { c2d.roundRect(x, y, w, h, r); return; }
+      c2d.moveTo(x + r, y);
+      c2d.arcTo(x + w, y, x + w, y + h, r); c2d.arcTo(x + w, y + h, x, y + h, r);
+      c2d.arcTo(x, y + h, x, y, r); c2d.arcTo(x, y, x + w, y, r); c2d.closePath();
+    };
+    const onShape = (d: number, th: number): [number, number] => {   // a point on the wave, for sparkles
       const a = bw / 2 + d, b = bh / 2 + d, c = Math.cos(th), s = Math.sin(th), k = 2 / 5;
       return [cx + a * Math.sign(c) * Math.pow(Math.abs(c), k), cy + b * Math.sign(s) * Math.pow(Math.abs(s), k)];
     };
     const star = (x: number, y: number, r: number) => {
       c2d.beginPath();
       c2d.moveTo(x, y - r);
-      c2d.quadraticCurveTo(x, y, x + r, y);
-      c2d.quadraticCurveTo(x, y, x, y + r);
-      c2d.quadraticCurveTo(x, y, x - r, y);
-      c2d.quadraticCurveTo(x, y, x, y - r);
+      c2d.quadraticCurveTo(x, y, x + r, y); c2d.quadraticCurveTo(x, y, x, y + r);
+      c2d.quadraticCurveTo(x, y, x - r, y); c2d.quadraticCurveTo(x, y, x, y - r);
       c2d.fill();
-    };
-    const outline = (d: number, w: number) => {
-      const x = bx - d, y = by - d, ww = bw + 2 * d, hh = bh + 2 * d, r = Math.min(20 + d, ww / 2, hh / 2);
-      c2d.beginPath();
-      if (typeof (c2d as unknown as { roundRect?: unknown }).roundRect === "function") c2d.roundRect(x, y, ww, hh, r);
-      else {
-        c2d.moveTo(x + r, y); c2d.arcTo(x + ww, y, x + ww, y + hh, r); c2d.arcTo(x + ww, y + hh, x, y + hh, r);
-        c2d.arcTo(x, y + hh, x, y, r); c2d.arcTo(x, y, x + ww, y, r); c2d.closePath();
-      }
-      c2d.lineWidth = w;
-      c2d.stroke();
     };
 
     const frame = (now: number) => {
@@ -812,18 +913,23 @@ export default function DailyPanel({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
 
-      // Loudness, relative to the speaker's own recent loudest.
-      let target = 0;
-      let rms = 0;
-      if (analyser && timeData) {
+      // ── Voice in (Reading Intake mechanics) ──
+      let target = 0, brightTarget = 0.3, rms = 0;
+      if (analyser && timeData && freq) {
         analyser.getByteTimeDomainData(timeData);
         let sum = 0;
         for (let i = 0; i < timeData.length; i++) { const v = (timeData[i] - 128) / 128; sum += v * v; }
         rms = Math.sqrt(sum / timeData.length);
+        analyser.getByteFrequencyData(freq);
+        const n = freq.length, split = Math.floor(n * 0.06), top = Math.floor(n * 0.35);
+        let low = 0, high = 0;
+        for (let i = 2; i < split; i++) low += freq[i];
+        for (let i = split; i < top; i++) high += freq[i];
+        brightTarget = low + high > 0 ? Math.min(1, (high / (low + high)) * 1.6) : 0;
       }
       if (rms < 0.002) {
         // Digital silence: on some phones speech recognition takes the mic. If words are
-        // still arriving, keep the flow moving with them.
+        // still arriving, keep the waves coming with them.
         silentFrames += 1;
         const speaking = now - lastSpeechAtRef.current < 700;
         target = (silentFrames > 30 || !analyser) && speaking
@@ -831,68 +937,67 @@ export default function DailyPanel({
           : 0;
       } else {
         silentFrames = 0;
-        peak = Math.max(rms, peak * 0.996, 0.02);
-        target = rms < WAVES.noiseGate ? 0 : Math.pow(Math.min(1, rms / peak), 0.75);
+        peak = Math.max(rms, peak * 0.996, 0.02);                       // auto-gain: quiet voices still move it
+        target = rms < VOICE.noiseGate ? 0 : Math.pow(Math.min(1, rms / peak), 0.75);
       }
-      level += (target - level) * (target > level ? WAVES.attack : WAVES.release);
-      glowLevel += (level - glowLevel) * (1 - Math.exp(-dt / 0.12));
-      root.style.setProperty("--lvl", glowLevel.toFixed(3));
+      level += (target - level) * (target > level ? VOICE.attack : VOICE.release);
+      bright += (brightTarget - bright) * 0.08;
+      const paceTarget = T.paceMin + (T.paceMax - T.paceMin) * Math.min(1, level * 0.65 + bright * 0.45);
+      pace += (paceTarget - pace) * (1 - Math.exp(-dt / 0.9));         // eased, never jumps
+      root.style.setProperty("--lvl", level.toFixed(3));
 
-      // Pace: syllable onsets over the last 2s, eased so tempo changes glide.
-      if (armed && level > 0.45) { onsets.push(now); armed = false; }
-      if (level < 0.25) armed = true;
-      while (onsets.length && now - onsets[0] > 2000) onsets.shift();
-      const speakingNow = onsets.length > 0 && now - onsets[onsets.length - 1] < 900;
-      const targetMul = speakingNow
-        ? Math.min(WAVES.maxMul, Math.max(WAVES.minMul, onsets.length / 2 / WAVES.paceRef))
-        : WAVES.minMul;
-      mul += (targetMul - mul) * (1 - Math.exp(-dt / 0.8));
-
-      // Shared clock: all waves move together.
-      travelled += WAVES.baseSpeed * mul * dt;
-      emit += (dt * mul) / WAVES.baseSpacing;
-      if (emit >= 1) {
-        emit -= 1;
-        rings.push({
-          start: travelled,
-          strength: 0.22 + 0.78 * Math.max(level, speakingNow ? 0.35 : 0.1),
-          rgb: flip++ % 2 ? sunWaveRgbRef.current : WAVES.gold,
-        });
+      // ── Speaking → a fresh wave (onsets found relative to the voice's own dips) ──
+      if (armed) {
+        floor = Math.min(floor, level);
+        if (level > 0.3 && level - floor > T.onset && now - lastWave > T.minGap) {
+          const rgb: RGB = T.colors === "gold" ? VOICE.gold : T.colors === "theme" ? sunWaveRgbRef.current
+            : flip++ % 2 ? sunWaveRgbRef.current : VOICE.gold;
+          waves.push({ x: 0, strength: 0.45 + level * 0.55, glow: 0.6 + bright * 0.6, rgb });
+          armed = false; peakSince = level; lastWave = now;
+        }
+      } else {
+        peakSince = Math.max(peakSince, level);
+        if (level < peakSince - 0.12) { armed = true; floor = level; }
       }
 
       c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
       c2d.clearRect(0, 0, W, H);
       c2d.globalCompositeOperation = "lighter";
-      const trailGap = 7 + 5 * mul;
-      for (let i = rings.length - 1; i >= 0; i--) {
-        const r = rings[i], x = (travelled - r.start) / reach; // 0 at the button → 1 off screen
-        if (x >= 1) { rings.splice(i, 1); continue; }
-        const d = 3 + reach * (1 - Math.pow(1 - x, 1.35));
-        const a = r.strength * Math.min(1, x / 0.06) * Math.pow(1 - x, 1.6);
-        const [R, G, B] = r.rgb;
-        // Faded train: softer echoes following each wave.
-        for (let k = 1; k <= 4; k++) {
-          const de = d - k * trailGap;
-          if (de < 3) break;
-          c2d.strokeStyle = `rgba(${R},${G},${B},${a * 0.32 * Math.pow(0.55, k - 1)})`;
-          outline(de, Math.max(0.8, (1.4 + 1.2 * (1 - x)) * (1 - k * 0.14)));
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const w = waves[i];
+        w.x += (dt * pace) / T.travelSec;                                 // 0 at the button → 1 off screen
+        if (w.x >= 1) { waves.splice(i, 1); continue; }
+        const e = 1 - Math.pow(1 - w.x, T.glide);                         // glides out, eases as it travels
+        const d = 2 + e * reach;
+        const a = w.strength * Math.min(1, w.x / 0.05) * Math.pow(1 - w.x, T.fade);
+        const gap = T.gapBase + T.gapGrow * e;                            // the trail spreads as it grows
+
+        // Trailing layers behind the lead, each lighter.
+        for (let k = 0; k < T.trailLayers; k++) {
+          const dOut = d - k * gap, dIn = Math.max(0, d - (k + 1) * gap);
+          if (dOut <= 0) break;
+          c2d.beginPath(); shape(dOut); shape(dIn);
+          c2d.fillStyle = rgbaOf(w.rgb, a * T.trailStart * Math.pow(T.trailFalloff, k));
+          c2d.fill("evenodd");
         }
-        c2d.strokeStyle = `rgba(${R},${G},${B},${a * 0.22})`;
-        outline(d, 9 * (1 - x) + 3);           // soft halo
-        c2d.strokeStyle = `rgba(${R},${G},${B},${a * 0.85})`;
-        outline(d, 1.4 + 1.2 * (1 - x));       // crisp line
+        // The leading line.
+        const lead = toWhite(w.rgb, T.whiten), la = a * T.leadBright;
+        c2d.beginPath(); shape(d + 1);
+        if (T.glowSize > 0 && T.glowStrength > 0) {
+          c2d.shadowBlur = (14 + 18 * w.glow) * T.glowSize; c2d.shadowColor = rgbaOf(w.rgb, la);
+          c2d.strokeStyle = rgbaOf(w.rgb, la * T.glowStrength); c2d.lineWidth = 6 * T.glowSize; c2d.stroke();
+        }
+        c2d.shadowBlur = 6; c2d.shadowColor = rgbaOf(lead, la);
+        c2d.strokeStyle = rgbaOf(lead, la); c2d.lineWidth = T.lineWidth; c2d.stroke();
+        c2d.shadowBlur = 0;
 
         // Sparkles shed from the wave, more when the voice is louder.
-        if (x < 0.8 && sparks.length < WAVES.maxSparks && Math.random() < dt * (6 + 30 * level) * a) {
-          const th = Math.random() * Math.PI * 2;
-          const [px, py] = onWave(d, th);
-          const roll = Math.random();
+        if (sparks.length < VOICE.maxSparks * T.sparkles && Math.random() < dt * (5 + 18 * level) * a * T.sparkles) {
+          const th = Math.random() * Math.PI * 2, [px, py] = onShape(d, th), sp = 6 + 14 * Math.random(), roll = Math.random();
           sparks.push({
-            x: px, y: py,
-            vx: Math.cos(th) * (8 + 22 * Math.random()),
-            vy: Math.sin(th) * (8 + 22 * Math.random()) - 6,
-            born: now, life: 700 + Math.random() * 900, size: 1.4 + Math.random() * 2.4, tw: Math.random() * 6.28,
-            rgb: roll < 0.6 ? [255, 228, 160] : roll < 0.8 ? [255, 255, 255] : r.rgb,
+            x: px, y: py, vx: Math.cos(th) * sp, vy: Math.sin(th) * sp - 4, born: now, life: 900 + Math.random() * 900,
+            size: 1.2 + Math.random() * 2, tw: Math.random() * 6.28,
+            rgb: roll < 0.6 ? [255, 230, 170] : roll < 0.85 ? [255, 255, 255] : w.rgb,
           });
         }
       }
@@ -901,11 +1006,8 @@ export default function DailyPanel({
         if (age >= 1) { sparks.splice(i, 1); continue; }
         p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.985; p.vy *= 0.985;
         const alpha = Math.sin(age * Math.PI) * (0.55 + 0.45 * Math.sin(p.tw + now / 90));
-        const [R, G, B] = p.rgb;
-        c2d.fillStyle = `rgba(${R},${G},${B},${alpha * 0.35})`;
-        star(p.x, p.y, p.size * 2.6);
-        c2d.fillStyle = `rgba(${R},${G},${B},${alpha})`;
-        star(p.x, p.y, p.size);
+        c2d.fillStyle = rgbaOf(p.rgb, alpha * 0.35); star(p.x, p.y, p.size * 2.6);
+        c2d.fillStyle = rgbaOf(p.rgb, alpha); star(p.x, p.y, p.size);
       }
       c2d.globalCompositeOperation = "source-over";
       wavesRafRef.current = requestAnimationFrame(frame);
@@ -1504,7 +1606,7 @@ export default function DailyPanel({
   return (
     <div
       ref={rootRef}
-      className={`dp ${focusActive ? "focus-hold" : ""} ${ambienceArea ? "ambience-on" : ""} ${voiceVisualActive ? "voice-on" : ""}`}
+      className={`dp ${isPwa ? "is-pwa" : ""} ${focusActive ? "focus-hold" : ""} ${ambienceArea ? "ambience-on" : ""} ${voiceVisualActive ? "voice-on" : ""}`}
       style={accentStyle}
     >
       <style jsx global>{`
@@ -1535,7 +1637,7 @@ export default function DailyPanel({
           padding:
             calc(env(safe-area-inset-top) + 6px + var(--swipe-h))
             clamp(12px, 4vw, 16px)
-            calc(env(safe-area-inset-bottom) + 10px + var(--cap-mt) + 14px);
+            calc(env(safe-area-inset-bottom) + 8px);   /* browser: the Big Three hugs the bottom edge */
           color: var(--s100);
           font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
         }
@@ -1584,10 +1686,48 @@ export default function DailyPanel({
         .dp-sky-foot .dp-dot { margin: 0 6px; color: var(--s600); }
         .dp-sky-foot .dp-rx { color: rgba(252,211,77,.8); }
 
-        /* ── Daily Horoscope: 7-line window; lines 1–6 solid, line 7 fades, the rest scrolls ── */
-        .dp-horo { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
-        .dp-horo-title { text-align: center; font-size: 22px; font-weight: 500; line-height: 1.05; color: #fff; }
-        .dp-horo-date { margin-top: 4px !important; min-height: 11px; text-align: center; font-size: 8.5px; font-weight: 600; letter-spacing: .22em; color: var(--dp-gold); }
+        /* ── Today's Guidance: 7-line window; lines 1–6 solid, line 7 fades, the rest scrolls ── */
+        .dp-horo { position: relative; flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        .dp-horo-head { transition: opacity .5s ease .25s; }
+        .dp-horo-title { text-align: left; padding: 0 2px; font-size: 22px; font-weight: 500; line-height: 1.05; color: #fff; }
+        .dp-horo-date { margin-top: 4px !important; min-height: 11px; text-align: left; padding: 0 2px; font-size: 8.5px; font-weight: 600; letter-spacing: .22em; color: var(--dp-gold); }
+        .dp-horo-veil { min-height: 0; display: flex; flex-direction: column; transition: opacity 1.6s ease, filter 1.6s ease; }
+
+        /* Sealed: the title + date sit centered over a soft, blurred glimpse; "Tap to reveal". */
+        .dp-horo.is-sealed .dp-horo-head { opacity: 0; transition: none; }
+        .dp-horo.is-sealed .dp-horo-veil { opacity: .26; filter: blur(5px); min-height: calc(7 * 1.42 * 16.5px); overflow: hidden; pointer-events: none; user-select: none; -webkit-user-select: none; }
+        .dp-horo-ghost { margin-top: 8px; display: flex; flex-direction: column; gap: 11px; padding: 6px 2px 0; }
+        .dp-horo-ghost i { display: block; height: 9px; border-radius: 5px; background: rgba(226,232,240,.55); }
+        .dp-horo-seal {
+          position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+          padding: 0; border: 0; background: none; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+        }
+        .dp-horo.is-open .dp-horo-seal { display: none; }
+        .seal-title { font-family: var(--dp-display); font-size: 27px; font-weight: 500; line-height: 1.05; color: #fff; transform-origin: 0 0;
+          text-shadow: 0 2px 18px rgba(0,0,0,.6); transition: transform 1s var(--ease-out), opacity .5s ease .55s; }
+        .seal-date { font-family: var(--dp-caps); font-size: 9px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--dp-gold);
+          transform-origin: 0 0; transition: transform 1s var(--ease-out), opacity .5s ease .55s; }
+        .seal-hint { margin-top: 12px; display: flex; align-items: center; gap: 8px; font-family: var(--dp-caps); font-size: 9.5px; font-weight: 600; letter-spacing: .3em; text-transform: uppercase; transition: opacity .3s ease; }
+        .seal-hint::before, .seal-hint::after { content: "✦"; font-size: 8px; color: rgba(241,214,148,.7); animation: sealTwinkle 2.6s ease-in-out infinite; }
+        .seal-hint::after { animation-delay: 1.3s; }
+        .seal-hint span {
+          background: linear-gradient(90deg, rgba(226,232,240,.6) 0%, rgba(226,232,240,.6) 40%, #FFF6DC 50%, rgba(226,232,240,.6) 60%, rgba(226,232,240,.6) 100%);
+          background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: dpShimmer 4.5s ease-in-out infinite;
+        }
+        .dp-horo.is-waiting .seal-hint span { animation-duration: 2.8s; }
+        .seal-error { margin-top: 10px; max-width: 280px; text-align: center; font-family: var(--dp-display); font-style: italic; font-size: 14px; color: var(--s400); }
+        @keyframes sealTwinkle { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
+        @keyframes dpShimmer { 0%, 30% { background-position: 100% 0; } 70%, 100% { background-position: 0 0; } }
+        /* Reveal: the title glides to the top-left; the text resolves slowly, top to bottom. */
+        .dp-horo.is-revealing .seal-title { transform: translate(var(--tx, 0), var(--ty, 0)) scale(var(--ts, 1)); opacity: 0; }
+        .dp-horo.is-revealing .seal-date { transform: translate(var(--dx, 0), var(--dy, 0)) scale(var(--ds, 1)); opacity: 0; }
+        .dp-horo.is-revealing .seal-hint, .dp-horo.is-revealing .seal-error { opacity: 0; }
+        @keyframes guidanceSweep { from { -webkit-mask-position: 0 100%; mask-position: 0 100%; } to { -webkit-mask-position: 0 0; mask-position: 0 0; } }
+        .dp-horo.is-revealing:not(.is-sealed) .dp-horo-veil {
+          -webkit-mask-image: linear-gradient(#000 0 42%, transparent 58% 100%); mask-image: linear-gradient(#000 0 42%, transparent 58% 100%);
+          -webkit-mask-size: 100% 240%; mask-size: 100% 240%;
+          animation: guidanceSweep ${GUIDANCE_OPEN_MS - GUIDANCE_UNSEAL_MS}ms cubic-bezier(.33,0,.2,1) both;
+        }
         .dp-horo-body {
           margin-top: 8px !important; flex: 0 1 auto; min-height: 0; max-height: calc(7 * 1.42em); overflow-y: auto; scrollbar-width: none; padding: 0 2px;
           font-size: 16.5px; line-height: 1.42; color: var(--s200);
@@ -1598,15 +1738,31 @@ export default function DailyPanel({
         .dp-retry { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
         /* ── Button row: sits low, the toggle 8px above the element bar ── */
-        .dp-ask { position: relative; z-index: 2; flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: -4px; padding-top: 22px; }
+        .dp-ask { position: relative; z-index: 2; flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: -4px; padding-top: 36px; }
         .dp-switch { position: relative; width: 100%; display: flex; justify-content: center; }
-        .ask-box { position: relative; flex-shrink: 0; width: 65%; max-width: 304px; height: 68px; transition: transform .18s var(--ease-out); }
+        .ask-box { position: relative; flex-shrink: 0; width: 70%; max-width: 320px; height: 84px; transition: transform .18s var(--ease-out); }
         .dp-note {
-          position: absolute; left: 0; right: 0; bottom: calc(68px + 6px + 26px + 12px); padding: 0 12px;
+          position: absolute; left: 0; right: 0; bottom: calc(84px + 6px + 26px + 14px); padding: 0 12px;
           text-align: center; font-family: var(--dp-caps); font-size: 9.5px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase;
           color: rgba(236,214,170,.8); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .4s ease, transform .4s ease;
         }
         .dp-note.is-on { opacity: 1; transform: none; }
+
+        /* "Select Reading": small gold capitals with a slow shimmer (gives way to any message). */
+        .dp-pick {
+          position: absolute; left: 0; right: 0; bottom: calc(84px + 6px + 26px + 14px);
+          display: flex; align-items: center; justify-content: center; gap: 10px; pointer-events: none;
+          font-family: var(--dp-caps); font-size: 11px; font-weight: 600; letter-spacing: .3em; text-transform: uppercase;
+          transition: opacity .4s ease;
+        }
+        .dp-pick.is-hidden { opacity: 0 !important; }
+        .dp-pick::before, .dp-pick::after { content: ""; width: 34px; height: 1px; background: linear-gradient(90deg, transparent, rgba(241,214,148,.55)); }
+        .dp-pick::after { transform: scaleX(-1); }
+        .dp-pick span {
+          background: linear-gradient(90deg, rgba(241,214,148,.7) 0%, rgba(241,214,148,.7) 40%, #FFF6DC 50%, rgba(241,214,148,.7) 60%, rgba(241,214,148,.7) 100%);
+          background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+          animation: dpShimmer 5.5s ease-in-out infinite;
+        }
 
         .dp-slide {
           position: absolute; inset: 0; opacity: 0; visibility: hidden; pointer-events: none;
@@ -1617,12 +1773,12 @@ export default function DailyPanel({
 
         /* Arrows + toggle rest faded and softly blurred; only the one being touched comes into focus. */
         .dp-arrow {
-          position: absolute; top: 50%; width: 44px; height: 68px; margin-top: -34px; padding: 0; border: 0; background: none; cursor: pointer;
+          position: absolute; top: 50%; width: 44px; height: 84px; margin-top: -42px; padding: 0; border: 0; background: none; cursor: pointer;
           display: flex; align-items: center; justify-content: center; color: #fff;
         }
         .dp-arrow svg { width: 20px; height: 20px; filter: drop-shadow(0 0 6px rgba(255,255,255,.25)); }
-        .dp-arrow.prev { right: calc(50% + min(32.5%, 152px) + 2px); }
-        .dp-arrow.next { left: calc(50% + min(32.5%, 152px) + 2px); }
+        .dp-arrow.prev { right: calc(50% + min(35%, 160px) + 2px); --nudge: -2px; }
+        .dp-arrow.next { left: calc(50% + min(35%, 160px) + 2px); --nudge: 2px; }
         .dp-ask .dp-arrow, .dp-ask .mic-ready-toggle {
           opacity: .4; filter: blur(1.2px);
           transition: opacity .9s var(--ease-soft), filter .9s var(--ease-soft), transform .7s var(--ease-soft), border-color .4s ease, box-shadow .4s ease;
@@ -1632,6 +1788,13 @@ export default function DailyPanel({
         .dp-arrow.prev.is-tapped { transform: translateX(-3px); }
         .dp-arrow.next.is-tapped { transform: translateX(3px); }
         .dp-ask .dp-arrow:focus-visible { outline: none; opacity: 1; filter: none; }
+        /* Until the arrows have been used once, they glow softly so people know they're there. */
+        @keyframes arrowGlow {
+          0%, 100% { opacity: .7; filter: drop-shadow(0 0 2px rgba(241,214,148,.35)) drop-shadow(0 0 6px rgba(241,214,148,.15)); transform: translateX(0); }
+          50%      { opacity: 1;  filter: drop-shadow(0 0 5px rgba(241,214,148,.8)) drop-shadow(0 0 14px rgba(241,214,148,.35)); transform: translateX(var(--nudge)); }
+        }
+        .dp-ask .dp-arrow.is-hint { opacity: 1; filter: none; }
+        .dp-arrow.is-hint svg { color: #F6E3B4; animation: arrowGlow 2.8s ease-in-out infinite; }
 
         /* ── Mic button (Ask Anything) ── */
         @property --voice-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
@@ -1665,13 +1828,13 @@ export default function DailyPanel({
         .ask-premium:hover, .ask-premium:focus-visible { transform: translateY(-1px); outline: none; }
         .ask-premium:active { transform: translateY(0); }
         .ask-mic-halo {
-          display: flex; width: 40px; height: 40px; align-items: center; justify-content: center; border-radius: 9999px;
+          display: flex; width: 46px; height: 46px; align-items: center; justify-content: center; border-radius: 9999px;
           border: 1px solid rgba(255,255,255,.22);
           background: radial-gradient(circle at 50% 35%, rgba(255,255,255,.055), transparent 56%), linear-gradient(145deg, rgba(15,16,23,.98), rgba(7,9,18,.99));
           box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 0 14px rgba(218,183,104,.12);
           animation: askMicBreathe 3.4s ease-in-out infinite;
         }
-        .ask-mic-halo svg { width: 20px; height: 20px; color: rgba(248,250,252,.96); filter: drop-shadow(0 0 6px rgba(218,183,104,.16)); }
+        .ask-mic-halo svg { width: 22px; height: 22px; color: rgba(248,250,252,.96); filter: drop-shadow(0 0 6px rgba(218,183,104,.16)); }
 
         /* ── Mic toggle: under the button, on its side; stays in view (faded) once on; never gold ── */
         .mic-ready-toggle {
@@ -1716,8 +1879,8 @@ export default function DailyPanel({
           transition: border-color .9s var(--ease-soft), box-shadow .9s var(--ease-soft), transform .9s var(--ease-soft);
         }
         .dp-tile > * { position: relative; z-index: 1; }
-        .dp-tile .tile-icon { width: 22px; height: 22px; color: color-mix(in srgb, var(--t) 55%, rgba(203,213,225,.7)); transition: color .9s var(--ease-out), filter .9s var(--ease-out); }
-        .dp-tile .tile-label { font-family: var(--dp-display); font-size: 18px; font-weight: 600; line-height: 1; letter-spacing: .015em; color: rgba(226,232,240,.86); transition: color .9s var(--ease-out); }
+        .dp-tile .tile-icon { width: 24px; height: 24px; color: color-mix(in srgb, var(--t) 55%, rgba(203,213,225,.7)); transition: color .9s var(--ease-out), filter .9s var(--ease-out); }
+        .dp-tile .tile-label { font-family: var(--dp-display); font-size: 19.5px; font-weight: 600; line-height: 1; letter-spacing: .015em; color: rgba(226,232,240,.86); transition: color .9s var(--ease-out); }
         .dp-tile.is-on {
           border-color: var(--b);
           background: linear-gradient(var(--bg), var(--bg)), radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--t) 16%, transparent), transparent 62%), linear-gradient(rgba(8,11,24,.6), rgba(8,11,24,.6));
@@ -1749,7 +1912,7 @@ export default function DailyPanel({
         .dp-tile.is-sent::before { opacity: 1; --hold-progress: 360deg; }
 
         /* ── Elemental Balance: one bar split by element, open fading ends ── */
-        .dp-elements { flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch; gap: 7px; padding: 0 4px; }
+        .dp-elements { flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch; gap: 7px; padding: 0 4px; margin-bottom: -4px; }
         .dp-ebar { position: relative; display: flex; gap: 3px; height: 5px;
           -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); }
         .dp-eseg { flex: var(--n) 1 0; height: 100%; background: var(--c); box-shadow: 0 0 8px var(--eb); transform-origin: center;
@@ -1757,7 +1920,9 @@ export default function DailyPanel({
         .dp-elabels { display: flex; gap: 3px; margin-top: -2px; }
         .dp-elabels span { flex: var(--n) 1 0; min-width: 0; text-align: center; font-size: 7.5px; font-weight: 600; letter-spacing: .12em; line-height: 1;
           white-space: nowrap; overflow: hidden; animation: dpFadeUp .6s ease-out calc(var(--d) + .25s) both; }
-        .dp-elements-title { text-align: center; font-size: 7.5px; font-weight: 500; letter-spacing: .26em; color: var(--s500); }
+        /* Installed app (PWA): a roomier bottom above the home indicator. */
+        @media (display-mode: standalone) { .dp { padding-bottom: calc(env(safe-area-inset-bottom) + 10px + var(--cap-mt) + 14px); } }
+        .dp.is-pwa { padding-bottom: calc(env(safe-area-inset-bottom) + 10px + var(--cap-mt) + 14px); }
         @keyframes dpGrowX { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
         @keyframes dpBreath { 0%, 100% { box-shadow: 0 0 8px var(--eb); } 50% { box-shadow: 0 0 18px var(--eb), 0 0 4px var(--eb); } }
         @keyframes dpFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -1802,6 +1967,9 @@ export default function DailyPanel({
           .dp-tile, .dp-tile::before, .dp-slide, .dp-arrow { animation: none !important; transition: none !important; }
           .ask-premium, .slide-mic::before, .ask-mic-halo, .mic-ready-toggle.is-nudging { animation: none !important; }
           .mic-ready-toggle, .mic-ready-knob { transition: none !important; }
+          .dp-arrow.is-hint svg, .dp-pick span, .seal-hint span, .seal-hint::before, .seal-hint::after { animation: none !important; }
+          .seal-title, .seal-date, .dp-horo-veil, .dp-horo-head { transition: none !important; }
+          .dp-horo.is-revealing:not(.is-sealed) .dp-horo-veil { animation: none !important; -webkit-mask-image: none; mask-image: none; }
         }
       `}</style>
 
@@ -1875,35 +2043,71 @@ export default function DailyPanel({
             </div>
           </section>
 
-          {/* ── Daily Horoscope ── */}
-          <section className="dp-horo dp-fade" aria-live="polite">
-            <h2 className="dp-display dp-horo-title">Daily Horoscope</h2>
-            <p className="dp-caps dp-horo-date">{dateLine}</p>
-            {horoscope ? (
-              <p className="dp-display dp-horo-body">{horoscope}</p>
-            ) : horoscopeError ? (
-              <p className="dp-horo-status">
-                {horoscopeError}{" "}
-                <button type="button" className="dp-retry" onClick={() => void fetchHoroscope()}>Try again</button>
-              </p>
-            ) : (
-              <p className="dp-horo-status">Preparing today’s horoscope…</p>
+          {/* ── Today's Guidance (tap to reveal) ── */}
+          <section
+            ref={horoSectionRef}
+            className={[
+              "dp-horo dp-fade",
+              guidance === "sealed" || guidance === "waiting" || (guidance === "revealing" && !unsealed) ? "is-sealed" : "",
+              guidance === "waiting" ? "is-waiting" : "",
+              guidance === "revealing" ? "is-revealing" : "",
+              guidance === "open" ? "is-open" : "",
+            ].join(" ")}
+            aria-live="polite"
+          >
+            <div className="dp-horo-head">
+              <h2 ref={headTitleRef} className="dp-display dp-horo-title">Today’s Guidance</h2>
+              <p ref={headDateRef} className="dp-caps dp-horo-date">{dateLine}</p>
+            </div>
+            <div className="dp-horo-veil" aria-hidden={guidance !== "open" && guidance !== "revealing"}>
+              {horoscope ? (
+                <p className="dp-display dp-horo-body">{horoscope}</p>
+              ) : guidance !== "open" ? (
+                <div className="dp-horo-ghost" aria-hidden="true">
+                  {[96, 88, 93, 72, 90, 64].map((w, i) => <i key={i} style={{ width: `${w}%` }} />)}
+                </div>
+              ) : horoscopeError ? (
+                <p className="dp-horo-status">
+                  {horoscopeError}{" "}
+                  <button type="button" className="dp-retry" onClick={() => void fetchHoroscope()}>Try again</button>
+                </p>
+              ) : (
+                <p className="dp-horo-status">Preparing today’s guidance…</p>
+              )}
+            </div>
+            {guidance !== "open" && (
+              <button
+                type="button"
+                data-no-swipe
+                className="dp-horo-seal"
+                onClick={tapSeal}
+                aria-label={guidance === "waiting" ? "Today’s guidance is being prepared" : "Reveal today’s guidance"}
+              >
+                <span ref={sealTitleRef} className="seal-title">Today’s Guidance</span>
+                <span ref={sealDateRef} className="seal-date">{dateLine}</span>
+                {guidance === "waiting" && horoscopeError && !horoscopeLoading ? (
+                  <span className="seal-error">{horoscopeError} Tap to try again.</span>
+                ) : (
+                  <span className="seal-hint"><span>{guidance === "waiting" ? "Reading today’s sky" : "Tap to reveal"}</span></span>
+                )}
+              </button>
             )}
           </section>
 
           {/* ── Mic + readings ── */}
           <section className="dp-ask" aria-label="Ask anything or choose a reading">
             <p className={`dp-note ${note ? "is-on" : ""}`} role="status" aria-live="polite">{note ?? ""}</p>
+            <p className={`dp-pick dp-fade ${note ? "is-hidden" : ""}`} aria-hidden="true"><span>Select Reading</span></p>
 
             <div className="dp-switch">
               <button
                 type="button"
                 data-no-swipe
-                className={`dp-arrow prev dp-fade dp-tap ${engaged.prev ? "is-engaged" : ""} ${tapped.prev ? "is-tapped" : ""}`}
+                className={`dp-arrow prev dp-fade dp-tap ${arrowsHint ? "is-hint" : ""} ${engaged.prev ? "is-engaged" : ""} ${tapped.prev ? "is-tapped" : ""}`}
                 aria-label="Previous"
                 onPointerDown={() => engage("prev")}
                 onFocus={() => engage("prev")}
-                onClick={() => { flashArrow("prev"); go(-1); }}
+                onClick={() => { markArrowsUsed(); flashArrow("prev"); go(-1); }}
               >
                 <ChevronLeft strokeWidth={1.6} aria-hidden="true" />
               </button>
@@ -1977,11 +2181,11 @@ export default function DailyPanel({
               <button
                 type="button"
                 data-no-swipe
-                className={`dp-arrow next dp-fade dp-tap ${engaged.next ? "is-engaged" : ""} ${tapped.next ? "is-tapped" : ""}`}
+                className={`dp-arrow next dp-fade dp-tap ${arrowsHint ? "is-hint" : ""} ${engaged.next ? "is-engaged" : ""} ${tapped.next ? "is-tapped" : ""}`}
                 aria-label="Next"
                 onPointerDown={() => engage("next")}
                 onFocus={() => engage("next")}
-                onClick={() => { flashArrow("next"); go(1); }}
+                onClick={() => { markArrowsUsed(); flashArrow("next"); go(1); }}
               >
                 <ChevronRight strokeWidth={1.6} aria-hidden="true" />
               </button>
@@ -2033,7 +2237,6 @@ export default function DailyPanel({
                 </span>
               ))}
             </div>
-            <p className="dp-caps dp-elements-title">Elemental Balance</p>
           </section>
 
           {/* ── Big Three ── */}
