@@ -3,7 +3,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import DailyPanel from "./DailyPanel";
-import BirthChartPanel from "./BirthChartPanel";
 import TodaySkyPanel from "./TodaySkyPanel";
 import CreditsPanel from "./CreditsPanel";
 import StarfieldBackground from "./StarfieldBackground";
@@ -78,11 +77,11 @@ function normalizeUserStatus(data: any): UserStatus {
 }
 
 /**
- * PAGER — five real panels in a circular loop:
+ * PAGER — four real panels in a circular loop:
  *
- *   Reading Intake ⇄ Your Day ⇄ Birth Chart ⇄ Today's Sky ⇄ Credits ⇄ Reading Intake
+ *   Reading Intake ⇄ Your Day ⇄ Today's Sky ⇄ Credits ⇄ Reading Intake
  *
- * No duplicate Reading/Credits components are mounted. Instead, the five real
+ * No duplicate Reading/Credits components are mounted. Instead, the four real
  * panels are cyclically reordered after each completed swipe while transitions
  * are disabled for one frame. To the user, every swipe still moves exactly one
  * page and the loop has no visible beginning or end.
@@ -100,13 +99,12 @@ type CreditsIntent = "voice" | "context" | null;
 const PANEL = {
   intake: 0,
   daily: 1,
-  birthChart: 2,
-  todaySky: 3,
-  credits: 4,
+  todaySky: 2,
+  credits: 3,
 } as const;
 
 export default function PagerContainer() {
-  const totalPanels = 5;
+  const totalPanels = 4;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [slideOffset, setSlideOffset] = useState<-1 | 0 | 1>(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -130,14 +128,13 @@ export default function PagerContainer() {
   );
 
   // Keep the active panel in slot 1. Slot 0 is its real previous neighbor and
-  // slots 2–4 are its real next neighbors. These are the same five components,
+  // slots 2–3 are its real next neighbors. These are the same four components,
   // simply reordered after each swipe — there are no clones.
   const panelOrder = [
     wrapPanelIndex(currentIndex - 1),
     currentIndex,
     wrapPanelIndex(currentIndex + 1),
     wrapPanelIndex(currentIndex + 2),
-    wrapPanelIndex(currentIndex + 3),
   ];
 
   // ── Fetch user status + one-time chart migration ────────────────────
@@ -609,10 +606,6 @@ export default function PagerContainer() {
                 userStatus={userStatus}
                 isActive={currentIndex === PANEL.daily && slideOffset === 0}
               />
-            )}
-
-            {panelIndex === PANEL.birthChart && (
-              <BirthChartPanel userStatus={userStatus} />
             )}
 
             {panelIndex === PANEL.todaySky && (
