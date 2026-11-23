@@ -20,6 +20,7 @@ import {
   isChartFresh,
   clearIntake,
   clearReading,
+  loadChart,
 } from "@/lib/chartStore";
 import { PRICING } from "@/lib/paywallConfig";
 import ReadingAmbience from "./ReadingAmbience";
@@ -160,15 +161,39 @@ const AREAS = [
   },
 ];
 
-// Rotating line under the hero headline. Every line describes something the
-// reading engine actually does, so the claims stay true.
-const HERO_TAGLINES = [
-  "Built from 20+ layers of your chart.",
-  "Real dates, not vague horoscopes.",
-  "Every prediction traced to your chart.",
-  "Transits, progressions, eclipses & more.",
-  "Personalized to your exact birth time.",
-];
+/* ── Big Three colors ──────────────────────────────────────────────────
+ * The user's Sun, Moon and Rising element colors tint the page glow, the
+ * hero's shadow and a quarter of the mic button's gold edge. Without a chart
+ * the screen falls back to its original gold / indigo / teal. */
+type Element = "Fire" | "Earth" | "Air" | "Water";
+const SIGN_ELEMENTS: Record<string, Element> = {
+  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
+  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
+  Gemini: "Air", Libra: "Air", Aquarius: "Air",
+  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
+};
+const ELEMENT_COLORS: Record<Element, { bar: string; text: string }> = {
+  Fire:  { bar: "#F97316", text: "#FDBA74" },
+  Earth: { bar: "#34D399", text: "#6EE7B7" },
+  Air:   { bar: "#7DD3FC", text: "#BAE6FD" },
+  Water: { bar: "#60A5FA", text: "#93C5FD" },
+};
+const FALLBACK_BIG_THREE = {
+  sun:  { bar: "#DAB768", text: "#F1D694" },
+  moon: { bar: "#818CF8", text: "#A5B4FC" },
+  rise: { bar: "#5EEAD4", text: "#99F6E4" },
+};
+// Hero shadow strength (0–1) for the Big Three glow under the hero.
+const HERO_SHADOW_STRENGTH = 0.65;
+
+function rgba(hex: string, alpha: number) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${+alpha.toFixed(3)})`;
+}
+function colorsForSign(sign: string | undefined, fallback: { bar: string; text: string }) {
+  const el = sign ? SIGN_ELEMENTS[sign] : undefined;
+  return el ? ELEMENT_COLORS[el] : fallback;
+}
 
 // Press-and-hold timing (ms). A short grace period keeps ordinary taps from
 // darkening the screen; then the screen fades to dark in one continuous ease
@@ -179,9 +204,12 @@ const HOLD_TOTAL_MS = 3000;
 // The chosen reading's ambience (its themed symbols) fades in at 75% of the hold.
 const HOLD_AMBIENCE_MS = Math.round(HOLD_TOTAL_MS * 0.75);
 
-// The hero's information is designed once at this width, then the entire
-// composition scales together to fit the live card.
+// The hero's information is designed once at 374 × 236, then fits the live card:
+// a shorter hero first tightens the space between pill, title and tagline
+// (down to HERO_CANVAS_MIN_HEIGHT), then scales the whole composition.
 const HERO_CANVAS_WIDTH = 374;
+const HERO_CANVAS_HEIGHT = 236;
+const HERO_CANVAS_MIN_HEIGHT = 172;
 const HERO_HORIZONTAL_INSET = 20;
 
 type LockedFeature = "context" | "voice";
@@ -282,11 +310,13 @@ export default function ReadingIntakeScreen({
 
   // Hero: scale the fixed 374px composition to the card, play the glass sweep on entry.
   const [heroCompositionScale, setHeroCompositionScale] = useState(1);
+  const [heroCanvasHeight, setHeroCanvasHeight] = useState(HERO_CANVAS_HEIGHT);
   const heroStageRef = useRef<HTMLDivElement | null>(null);
   const [heroSweepActive, setHeroSweepActive] = useState(false);
   const heroWasActiveRef = useRef(false);
-  const [taglineIndex, setTaglineIndex] = useState(0);
-  const [taglineVisible, setTaglineVisible] = useState(true);
+
+  // The user's Big Three signs (read from the stored chart once it's ready).
+  const [bigThreeSigns, setBigThreeSigns] = useState<{ sun?: string; moon?: string; rise?: string }>({});
 
   // Press-and-hold to begin. The reading is only "selected" while it is held.
   // ambienceArea: the held reading once the hold passes 75% (its symbols show).
@@ -353,16 +383,20 @@ export default function ReadingIntakeScreen({
     const stage = heroStageRef.current;
     if (!stage) return;
 
-    const updateHeroScale = (stageWidth: number) => {
+    const updateHeroScale = (stageWidth: number, stageHeight: number) => {
+      if (!stageWidth || !stageHeight) return;
       const availableWidth = Math.max(0, stageWidth - HERO_HORIZONTAL_INSET * 2);
-      setHeroCompositionScale(Math.min(1, availableWidth / HERO_CANVAS_WIDTH));
+      const scale = Math.min(1, availableWidth / HERO_CANVAS_WIDTH, stageHeight / HERO_CANVAS_MIN_HEIGHT);
+      setHeroCompositionScale(scale);
+      setHeroCanvasHeight(Math.min(HERO_CANVAS_HEIGHT, stageHeight / scale));
     };
 
-    updateHeroScale(stage.getBoundingClientRect().width);
+    const rect = stage.getBoundingClientRect();
+    updateHeroScale(rect.width, rect.height);
 
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
-      updateHeroScale(entry.contentRect.width);
+      updateHeroScale(entry.contentRect.width, entry.contentRect.height);
     });
     observer.observe(stage);
     return () => observer.disconnect();
@@ -476,6 +510,22 @@ export default function ReadingIntakeScreen({
     }
     ensureChart();
   }, [router]);
+
+  // Big Three signs for the color accents. Re-read whenever the chart becomes ready.
+  useEffect(() => {
+    if (chartStatus !== "ready") return;
+    try {
+      const data = loadChart()?.chartData as unknown as {
+        tropical?: { planets?: { name: string; sign: string }[] };
+        upgradeChartPoints?: { name: string; sign: string }[];
+      } | undefined;
+      const points = data?.upgradeChartPoints?.length ? data.upgradeChartPoints : data?.tropical?.planets ?? [];
+      const signOf = (name: string) => points.find((p) => p.name === name)?.sign;
+      setBigThreeSigns({ sun: signOf("Sun"), moon: signOf("Moon"), rise: signOf("Ascendant") });
+    } catch {
+      // Colors are optional; the screen keeps its original palette.
+    }
+  }, [chartStatus]);
 
   const fetchInFlight = useRef(false);
   const fetchStatus = useCallback(async () => {
@@ -1492,23 +1542,6 @@ export default function ReadingIntakeScreen({
     };
   }, [askHolding, voiceJourneyActive, isTranscribingAsk, voiceNavigating]);
 
-  // Rotate the hero's sales line.
-  useEffect(() => {
-    if (shouldReduceMotion) return;
-    let swapTimer = 0;
-    const interval = window.setInterval(() => {
-      setTaglineVisible(false);
-      swapTimer = window.setTimeout(() => {
-        setTaglineIndex((index) => (index + 1) % HERO_TAGLINES.length);
-        setTaglineVisible(true);
-      }, 520);
-    }, 3800);
-    return () => {
-      window.clearInterval(interval);
-      window.clearTimeout(swapTimer);
-    };
-  }, [shouldReduceMotion]);
-
   const getAreaColors = useCallback((areaId: string) => {
     const key = (["love", "money", "career", "other"].includes(areaId) ? areaId : "other") as keyof ThemeColors["areaColors"];
     return theme.areaColors[key];
@@ -1555,6 +1588,26 @@ export default function ReadingIntakeScreen({
   const lastAmbienceKeyRef = useRef<ThemeKey>("default");
   if (ambienceKey) lastAmbienceKeyRef.current = ambienceKey;
 
+  // Big Three accents as CSS variables on the root.
+  const bigThreeStyle = useMemo(() => {
+    const sun = colorsForSign(bigThreeSigns.sun, FALLBACK_BIG_THREE.sun);
+    const moon = colorsForSign(bigThreeSigns.moon, FALLBACK_BIG_THREE.moon);
+    const rise = colorsForSign(bigThreeSigns.rise, FALLBACK_BIG_THREE.rise);
+    const k = HERO_SHADOW_STRENGTH;
+    return {
+      "--sun": sun.bar,
+      "--moon": moon.bar,
+      "--rise": rise.bar,
+      // Hero shadow: Sun from the left, Rising from the right, Moon widest underneath.
+      "--hero-shadow": `-16px 20px 46px ${rgba(sun.bar, 0.30 * k)}, 16px 24px 52px ${rgba(rise.bar, 0.24 * k)}, 0 38px 84px ${rgba(moon.bar, 0.26 * k)}`,
+      // Mic edge: white/gold with one quarter (≈96°–176°) in the Sun's element color.
+      "--ask-ring": `conic-gradient(from var(--voice-angle), rgba(255,255,255,0.94) 0deg, rgba(255,255,255,0.74) 54deg, ${sun.text} 96deg, ${sun.bar} 135deg, ${sun.text} 176deg, rgba(255,255,255,0.96) 226deg, rgba(193,151,67,0.86) 296deg, rgba(255,255,255,0.94) 360deg)`,
+      "--ask-aura": `conic-gradient(from var(--voice-glow-angle), rgba(255,255,255,0.75), rgba(255,239,195,0.35) 60deg, ${sun.bar} 115deg, ${sun.text} 150deg, rgba(255,255,255,0.30) 175deg, rgba(255,255,255,0.80) 228deg, rgba(193,151,67,0.80) 296deg, rgba(255,255,255,0.75))`,
+      "--ask-glow": `0 0 18px rgba(218,183,104,0.24), 0 0 22px ${rgba(sun.bar, 0.16)}`,
+      "--ask-sun": rgba(sun.bar, 0.22),
+    } as React.CSSProperties;
+  }, [bigThreeSigns]);
+
   const contextActive = !!selectedArea || contextFocused;
   // Keep the last description so it can fade out rather than vanish.
   const lastDescriptionRef = useRef("");
@@ -1569,6 +1622,7 @@ export default function ReadingIntakeScreen({
         height: "100%",
         minHeight: "100%",
         background: "transparent",
+        ...bigThreeStyle,
       }}
     >
       <style jsx>{`
@@ -1585,7 +1639,31 @@ export default function ReadingIntakeScreen({
           --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
           /* Gentle in, gentle out: the hold's fade to dark has no visible steps. */
           --ease-hold: cubic-bezier(0.37, 0, 0.63, 1);
+
+          /* Spacing: the screen fills the pager slot exactly and never scrolls.
+             The hero gives up height first; the tiers at the bottom step the rest
+             down on shorter screens (iPhone SE in Safari is 548px tall). */
+          --swipe-h: 32px; --info-h: 52px; --tile-h: 84px; --tile-gap: 16px; --ctx-mt: 24px;
+          --ask-h: 104px; --ask-mt: 26px; --cap-mt: 14px;
+          --hero-max: 236px; --hero-min: 132px;
         }
+
+        /* Big Three glow behind the page: Sun top-left, Moon right, Rising low. */
+        .bt-glow {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          background:
+            radial-gradient(70% 45% at 0% 0%, color-mix(in srgb, var(--sun) 16%, transparent), transparent 70%),
+            radial-gradient(70% 45% at 100% 55%, color-mix(in srgb, var(--moon) 13%, transparent), transparent 70%),
+            radial-gradient(80% 40% at 30% 105%, color-mix(in srgb, var(--rise) 12%, transparent), transparent 70%);
+          transition: opacity .7s var(--ease-soft);
+        }
+        .focus-hold .bt-glow { opacity: 0; transition: opacity ${HOLD_TOTAL_MS}ms var(--ease-hold); }
+
+        .intake-col { height: 100%; }
+        .hero-slot { flex: 0 1 var(--hero-max); min-height: var(--hero-min); max-height: var(--hero-max); }
 
         /* ── HERO GLASS SWEEP (on entry) ── */
         @keyframes heroShine {
@@ -1609,8 +1687,9 @@ export default function ReadingIntakeScreen({
         /* ── HERO SHELL — no glow ring (the glow lives on the AstroProXL pill), just the shadow ── */
         .hero-glow-shell {
           position: relative;
+          height: 100%;
           border-radius: 28px;
-          box-shadow: 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56);
+          box-shadow: var(--hero-shadow, 0 18px 44px rgba(0,0,0,0.72), 0 36px 80px rgba(0,0,0,0.56));
           transition: box-shadow .8s var(--ease-out);
         }
         .hero-glow-shell::before {
@@ -1622,12 +1701,10 @@ export default function ReadingIntakeScreen({
           pointer-events: none;
           opacity: 0;
         }
-        /* Twilight fill: deep indigo at the top settling into near-black, like dusk turning to night */
-        .hero-twilight {
-          background:
-            radial-gradient(120% 70% at 50% -10%, rgba(99,102,241,0.22), transparent 70%),
-            linear-gradient(180deg, rgba(30,27,75,0.55) 0%, rgba(10,12,28,0.75) 60%, rgba(5,7,17,0.85) 100%);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+        /* Clear fill: the sky shows straight through; only a hairline frames the card. */
+        .hero-clear {
+          background: transparent;
+          border-color: rgba(255,255,255,0.10);
         }
 
         /* ── HERO BRAND ── */
@@ -1728,13 +1805,12 @@ export default function ReadingIntakeScreen({
           line-height: 1.3;
           letter-spacing: 0.01em;
           color: rgba(203,213,225,0.85);
-          transition: opacity 0.5s ease, transform 0.6s var(--ease-out);
         }
-        .brand-tagline.is-out { opacity: 0; transform: translateY(4px); }
 
         /* ── SWIPE PROMPT — sits above the hero ── */
         .swipe-top {
-          height: 32px;
+          flex-shrink: 0;
+          height: var(--swipe-h);
           margin: 0;
           display: flex;
           align-items: center;
@@ -1759,7 +1835,7 @@ export default function ReadingIntakeScreen({
         }
 
         /* ── INFO SPACE — "Please Select" at rest; the pressed reading's description ── */
-        .info-space { position: relative; height: 52px; }
+        .info-space { position: relative; flex-shrink: 0; height: var(--info-h); }
         .info-layer {
           position: absolute;
           inset: 0;
@@ -1801,7 +1877,7 @@ export default function ReadingIntakeScreen({
         .astro-tile {
           position: relative;
           overflow: hidden;
-          height: 84px;
+          height: var(--tile-h);
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -1809,8 +1885,8 @@ export default function ReadingIntakeScreen({
           gap: 8px;
           border-radius: 20px;
           border: 1px solid rgba(255,255,255,0.10);
-          /* Nebula: a soft indigo light in one corner and teal in the other, like the sky behind. */
-          background: radial-gradient(circle at 18% 0%, rgba(129,140,248,0.16), transparent 58%), radial-gradient(circle at 92% 110%, rgba(45,212,191,0.09), transparent 55%), linear-gradient(rgba(8,11,24,0.55), rgba(8,11,24,0.55));
+          /* Reading colour tint: each tile glows softly in its own reading's colour, even at rest. */
+          background: radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--t) 16%, transparent), transparent 62%), radial-gradient(circle at 92% 110%, color-mix(in srgb, var(--t) 7%, transparent), transparent 55%), linear-gradient(rgba(8,11,24,0.6), rgba(8,11,24,0.6));
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
           cursor: pointer;
           user-select: none;
@@ -1824,7 +1900,7 @@ export default function ReadingIntakeScreen({
         .astro-tile .tile-icon {
           width: 24px;
           height: 24px;
-          color: rgba(203,213,225,0.68);
+          color: color-mix(in srgb, var(--t) 55%, rgba(203,213,225,0.7));
           transition: color .9s var(--ease-out), filter .9s var(--ease-out), transform .9s var(--ease-out);
         }
         .astro-tile .tile-label {
@@ -1837,7 +1913,7 @@ export default function ReadingIntakeScreen({
         }
         .astro-tile.is-on {
           border-color: var(--b);
-          background: linear-gradient(var(--bg), var(--bg)), radial-gradient(circle at 18% 0%, rgba(129,140,248,0.16), transparent 58%), radial-gradient(circle at 92% 110%, rgba(45,212,191,0.09), transparent 55%), linear-gradient(rgba(8,11,24,0.55), rgba(8,11,24,0.55));
+          background: linear-gradient(var(--bg), var(--bg)), radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--t) 16%, transparent), transparent 62%), linear-gradient(rgba(8,11,24,0.6), rgba(8,11,24,0.6));
           transform: translateY(-1px);
           box-shadow: 0 0 0 1px var(--b), 0 0 18px 2px var(--g), 0 0 34px 5px var(--g), 0 18px 34px rgba(0,0,0,0.78), 0 34px 68px rgba(0,0,0,0.46);
           transition-duration: .5s;
@@ -2018,20 +2094,11 @@ export default function ReadingIntakeScreen({
           left: 0;
           top: 0;
           width: 100%;
-          height: 104px;
+          height: 100%;
           border-radius: 28px;
           z-index: 0;
           pointer-events: none;
-          background: conic-gradient(
-            from var(--voice-glow-angle),
-            rgba(255,255,255,0.75),
-            rgba(255,239,195,0.35) 60deg,
-            rgba(218,183,104,0.85) 115deg,
-            rgba(255,255,255,0.30) 175deg,
-            rgba(255,255,255,0.80) 228deg,
-            rgba(193,151,67,0.80) 296deg,
-            rgba(255,255,255,0.75)
-          );
+          background: var(--ask-aura);
           filter: blur(16px);
           opacity: 0.55;
           transform: scale(1.04);
@@ -2051,23 +2118,16 @@ export default function ReadingIntakeScreen({
           isolation: isolate;
           border: 1.25px solid transparent;
           border-radius: 24px;
+          /* Inside: a soft Sun-coloured glow rising from the bottom. Edge: --ask-ring. */
           background:
+            radial-gradient(90% 120% at 50% 130%, var(--ask-sun), transparent 62%) padding-box,
             radial-gradient(circle at 50% -70%, rgba(255,255,255,0.11), transparent 66%) padding-box,
             linear-gradient(145deg, rgba(19,18,24,0.96), rgba(7,10,21,0.97)) padding-box,
-            conic-gradient(
-              from var(--voice-angle),
-              rgba(255,255,255,0.94) 0deg,
-              rgba(255,255,255,0.74) 54deg,
-              rgba(218,183,104,0.88) 112deg,
-              rgba(255,239,195,0.82) 172deg,
-              rgba(255,255,255,0.96) 226deg,
-              rgba(193,151,67,0.86) 296deg,
-              rgba(255,255,255,0.94) 360deg
-            ) border-box;
+            var(--ask-ring) border-box;
           box-shadow:
             inset 0 1px 0 rgba(255,255,255,0.10),
             0 0 0 1px rgba(255,239,195,0.10),
-            0 0 18px rgba(218,183,104,0.30),
+            var(--ask-glow),
             0 0 36px rgba(255,255,255,0.10),
             0 16px 38px rgba(0,0,0,0.46);
           animation: voiceOrbit 8s linear infinite;
@@ -2097,7 +2157,10 @@ export default function ReadingIntakeScreen({
             0 0 14px rgba(218,183,104,0.12);
           animation: askMicBreathe 3.4s ease-in-out infinite;
         }
+        .ask-section { flex-shrink: 0; margin-top: auto; padding-top: var(--ask-mt); }
+        .ask-box { height: var(--ask-h); }
         .ask-caption {
+          margin-top: var(--cap-mt);
           font-family: var(--caps);
           font-size: 10.5px;
           font-weight: 500;
@@ -2171,7 +2234,7 @@ export default function ReadingIntakeScreen({
           left: 0;
           top: 0;
           width: 100%;
-          height: 104px;
+          height: 100%;
           border-radius: 24px;
           z-index: 0;
           pointer-events: none;
@@ -2229,6 +2292,24 @@ export default function ReadingIntakeScreen({
             0 3px 9px rgba(0,0,0,0.42);
         }
 
+        /* Spacing tiers by screen height (Safari's visible height, or the full screen when installed). */
+        @media (max-height: 870px) {
+          .astro-intake { --swipe-h: 28px; --info-h: 46px; --tile-h: 76px; --tile-gap: 14px; --ctx-mt: 20px; --ask-h: 96px; --ask-mt: 22px; --cap-mt: 12px; }
+        }
+        @media (max-height: 680px) {
+          .astro-intake { --info-h: 40px; --tile-h: 68px; --tile-gap: 12px; --ctx-mt: 16px; --ask-h: 86px; --ask-mt: 16px; --cap-mt: 10px; }
+          .astro-tile { gap: 6px; }
+          .astro-tile .tile-icon { width: 22px; height: 22px; }
+          .astro-tile .tile-label { font-size: 18px; }
+          .mic-ready-toggle { height: 72px !important; top: calc(50% - 36px) !important; }
+          .mic-ready-toggle[data-enabled="false"] .mic-ready-knob { top: 46px; }
+          .mic-ready-toggle[data-enabled="true"] .mic-ready-knob { top: 6px; }
+        }
+        @media (max-height: 560px) {
+          .astro-intake { --swipe-h: 26px; --info-h: 36px; --tile-h: 62px; --tile-gap: 10px; --ctx-mt: 14px; --ask-h: 78px; --ask-mt: 14px; }
+          .ask-mic-halo { width: 44px !important; height: 44px !important; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .hero-shine::after,
           .brand-title,
@@ -2248,6 +2329,9 @@ export default function ReadingIntakeScreen({
 
       {/* Reading ambience: the chosen reading's themed symbols, behind the content.
           Same component and spots as the preparing screen, so the handoff is seamless. */}
+      {/* Big Three glow behind everything on this panel. */}
+      <div className="bt-glow" aria-hidden="true" />
+
       <ReadingAmbience
         themeKey={ambienceKey ?? lastAmbienceKeyRef.current}
         visible={!!ambienceKey}
@@ -2255,18 +2339,17 @@ export default function ReadingIntakeScreen({
       />
 
       <div
-        className="relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col justify-start px-[clamp(12px,4vw,16px)]"
+        className="intake-col relative z-10 mx-auto flex w-full min-w-0 max-w-[430px] flex-col justify-start px-[clamp(12px,4vw,16px)]"
         style={{
-          minHeight: "100%",
-          paddingTop: "calc(env(safe-area-inset-top) + 16px)",
-          paddingBottom: "calc(2rem + env(safe-area-inset-bottom))",
+          paddingTop: "calc(env(safe-area-inset-top) + 6px)",
+          paddingBottom: "calc(10px + env(safe-area-inset-bottom))",
         }}
       >
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col top-section"
+          className="flex min-h-0 flex-1 flex-col top-section"
         >
           {/* ── SWIPE PROMPT — above the hero ── */}
           <button
@@ -2280,17 +2363,18 @@ export default function ReadingIntakeScreen({
           </button>
 
           {/* ── HERO — fixed 236px brand card; fades out while asking aloud ── */}
-          <section className="astro-fade mb-0 pt-0" style={{ opacity: voiceVisualActive ? 0 : undefined }}>
+          <section className="astro-fade hero-slot mb-0 pt-0" style={{ opacity: voiceVisualActive ? 0 : undefined }}>
             <div className="hero-glow-shell">
               <div
                 ref={heroStageRef}
-                className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-[236px] select-none overflow-hidden rounded-[28px] border border-white/[0.08] hero-twilight text-center`}
+                className={`hero-shine ${heroSweepActive ? "hero-shine-sweep" : ""} relative h-full select-none overflow-hidden rounded-[28px] border hero-clear text-center`}
                 onContextMenu={(e) => e.preventDefault()}
               >
-                {/* One master canvas: the composition is designed at 374 × 236 and scaled to fit. */}
+                {/* One master canvas: designed at 374 × 236, tightened then scaled to fit the card. */}
                 <div
-                  className="absolute left-1/2 top-1/2 z-10 h-[236px] w-[374px]"
+                  className="absolute left-1/2 top-1/2 z-10 w-[374px]"
                   style={{
+                    height: heroCanvasHeight,
                     transform: `translate(-50%, -50%) scale(${heroCompositionScale})`,
                     transformOrigin: "center center",
                   }}
@@ -2302,13 +2386,11 @@ export default function ReadingIntakeScreen({
                       <h1 className="brand-title">
                         Real Astrological
                         <br />
-                        Predictions
+                        Readings
                       </h1>
                       <div className="brand-foot">
                         <span className="brand-rule" aria-hidden="true" />
-                        <p className={`brand-tagline ${taglineVisible ? "" : "is-out"}`} aria-live="polite">
-                          {HERO_TAGLINES[taglineIndex]}
-                        </p>
+                        <p className="brand-tagline">The Astrology Engine</p>
                       </div>
                     </div>
                 </div>
@@ -2335,8 +2417,8 @@ export default function ReadingIntakeScreen({
 
           {/* ── READING TILES (2×2) — press and hold one for 3 seconds to begin ── */}
           <section
-            className="grid grid-cols-2 gap-x-3 gap-y-4 transition-opacity duration-700"
-            style={{ opacity: voiceVisualActive ? 0 : 1, pointerEvents: voiceVisualActive ? "none" : "auto" }}
+            className="grid shrink-0 grid-cols-2 gap-x-3 transition-opacity duration-700"
+            style={{ rowGap: "var(--tile-gap)", opacity: voiceVisualActive ? 0 : 1, pointerEvents: voiceVisualActive ? "none" : "auto" }}
             aria-label="Choose a reading. Press and hold for three seconds to begin."
           >
             {AREAS.map((area) => {
@@ -2379,8 +2461,10 @@ export default function ReadingIntakeScreen({
           {/* ── ADD CONTEXT (members) — soft gold edge while a reading is held ── */}
           <div
             data-reading-context="true"
-            className={`astro-fade premium-context relative mt-6 h-[84px] rounded-[20px] border bg-transparent ${contextActive ? "premium-context-active" : ""} ${question.trim().length > 0 ? "has-context" : ""}`}
+            className={`astro-fade premium-context relative shrink-0 rounded-[20px] border bg-transparent ${contextActive ? "premium-context-active" : ""} ${question.trim().length > 0 ? "has-context" : ""}`}
             style={{
+              marginTop: "var(--ctx-mt)",
+              height: "var(--tile-h)", // same height as the reading tiles
               opacity: voiceVisualActive ? 0 : undefined,
               pointerEvents: voiceVisualActive ? "none" : "auto",
             }}
@@ -2433,9 +2517,10 @@ export default function ReadingIntakeScreen({
           </div>
 
           {/* ── ASK ANYTHING — centered premium voice control + subtle mic toggle ── */}
-          <section className="astro-fade mt-[26px] pt-0">
+          {/* Pinned to the bottom; any spare height collects above it. */}
+          <section className="astro-fade ask-section">
             <div className="flex w-full items-center justify-center">
-              <div className="ask-box relative h-[104px] w-[72%] max-w-[304px]">
+              <div className="ask-box relative w-[72%] max-w-[304px]">
                 <span className="ask-ring" aria-hidden="true" />
                 <span className="ask-ring ring-2" aria-hidden="true" />
                 <span className="ask-ring ring-3" aria-hidden="true" />
@@ -2448,7 +2533,7 @@ export default function ReadingIntakeScreen({
                   onContextMenu={(e) => e.preventDefault()}
                   onDragStart={(e) => e.preventDefault()}
                   onSelect={(e) => e.preventDefault()}
-                  className="ask-premium tap-fix relative flex h-[104px] w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+                  className="ask-premium tap-fix relative flex h-full w-full items-center justify-center touch-none select-none transition-[transform,opacity,filter,box-shadow] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
                   aria-label="Press and hold to speak. Swipe up to cancel."
                   style={{
                     transform: voiceVisualActive ? "scale(1.012)" : undefined,
@@ -2480,7 +2565,7 @@ export default function ReadingIntakeScreen({
                   style={{
                     position: "absolute",
                     left: "calc(100% + 6px)",
-                    top: "12px",
+                    top: "calc(50% - 40px)", // centred on the mic button (the shake animation owns transform)
                     zIndex: 2,
                     cursor: micConnecting || isTranscribingAsk ? "wait" : "pointer",
                   }}
@@ -2491,9 +2576,9 @@ export default function ReadingIntakeScreen({
             </div>
 
             {askError && !voiceVisualActive ? (
-              <p className="mt-3 text-center text-[11px] text-slate-400/78">{askError}</p>
+              <p className="text-center text-[11px] text-slate-400/78" style={{ marginTop: "var(--cap-mt)" }}>{askError}</p>
             ) : (
-              <p className="ask-caption mt-[14px] text-center">
+              <p className="ask-caption text-center">
                 {lockedFeaturePrompt === "voice" ? "Get Credits" : "Press · Hold · Speak"}
               </p>
             )}
