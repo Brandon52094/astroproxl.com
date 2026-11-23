@@ -319,7 +319,16 @@ export default function DailyPanel({ isActive = true, dailyHoroscope: horoscopeP
           display: flex;
           flex-direction: column;
           gap: 12px;
-          padding: calc(env(safe-area-inset-top) + 16px) clamp(12px, 4vw, 16px) calc(18px + env(safe-area-inset-bottom));
+          /* Lines up with Reading Intake: the Profection card's top meets the hero's top
+             (Intake's 6px + its swipe line), and the Big Three card's bottom meets the mic
+             button's bottom (Intake's 10px + caption gap + 14px caption). Keep these tokens
+             and tiers in step with ReadingIntakeScreen. */
+          --swipe-h: 32px;
+          --cap-mt: 14px;
+          padding:
+            calc(env(safe-area-inset-top) + 6px + var(--swipe-h))
+            clamp(12px, 4vw, 16px)
+            calc(env(safe-area-inset-bottom) + 10px + var(--cap-mt) + 14px);
           color: var(--s100);
           font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
         }
@@ -402,13 +411,17 @@ export default function DailyPanel({ isActive = true, dailyHoroscope: horoscopeP
         .dp-empty { margin: auto; padding: 32px 0; text-align: center; font-size: 13px; line-height: 1.6; color: var(--s400); }
 
         /* Short screens: the horoscope absorbs the difference */
+        @media (max-height: 870px) {
+          .dp { --swipe-h: 28px; --cap-mt: 12px; }
+        }
         @media (max-height: 680px) {
-          .dp { gap: 10px; }
+          .dp { gap: 10px; --cap-mt: 10px; }
           .dp-b3-row { height: 76px; }
           .dp-b3-sign { font-size: 20px; }
           .dp-b3-el { display: none; }
         }
         @media (max-height: 560px) {
+          .dp { --swipe-h: 26px; }
           .dp-b3-sign { font-size: 19px; }
         }
 

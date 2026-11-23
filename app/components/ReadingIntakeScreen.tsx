@@ -2161,6 +2161,7 @@ export default function ReadingIntakeScreen({
         .ask-box { height: var(--ask-h); }
         .ask-caption {
           margin-top: var(--cap-mt);
+          line-height: 14px; /* fixed so Your Day's Big Three can line up with the mic button */
           font-family: var(--caps);
           font-size: 10.5px;
           font-weight: 500;
