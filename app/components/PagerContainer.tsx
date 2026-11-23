@@ -3,8 +3,9 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReadingIntakeScreen from "./ReadingIntakeScreen";
 import DailyPanel from "./DailyPanel";
-import TodaySkyPanel from "./TodaySkyPanel";
+import BirthChartPanel from "./BirthChartPanel";
 import CreditsPanel from "./CreditsPanel";
+import SavedReadingsView from "./SavedReadingsView";
 import StarfieldBackground from "./StarfieldBackground";
 import { migrateChartV2 } from "@/lib/chartStore";
 
@@ -77,14 +78,17 @@ function normalizeUserStatus(data: any): UserStatus {
 }
 
 /**
- * PAGER — four real panels in a circular loop:
+ * PAGER — five real panels in a circular loop:
  *
- *   Reading Intake ⇄ Your Day ⇄ Today's Sky ⇄ Credits ⇄ Reading Intake
+ *   Reading Intake ⇄ Your Day ⇄ Birth Chart ⇄ Credits ⇄ Your Readings ⇄ Reading Intake
  *
- * No duplicate Reading/Credits components are mounted. Instead, the four real
- * panels are cyclically reordered after each completed swipe while transitions
- * are disabled for one frame. To the user, every swipe still moves exactly one
- * page and the loop has no visible beginning or end.
+ * No duplicate components are mounted. The panels are cyclically reordered after each
+ * completed swipe while transitions are disabled for one frame. Four slots are rendered
+ * (previous, current, next, next+1), so one panel is unmounted at any time — panels that
+ * need to come back where the user left them keep that state outside React.
+ *
+ * Night falls across the loop: each panel dims the sky a little more (SKY_DIM), the stars
+ * stay bright, and the wrap from Your Readings back to Reading Intake is the "dawn".
  */
 const DIRECTION_LOCK_THRESHOLD = 12;
 const SWIPE_COMMIT_THRESHOLD = 70;
@@ -94,18 +98,21 @@ type GestureAxis = "undecided" | "horizontal" | "vertical";
 
 type CreditsIntent = "voice" | "context" | null;
 
-// Panel positions in the loop. Credits must stay last so it remains the
-// previous neighbor of Reading Intake (openCreditsFor swipes back to it).
+// Panel positions in the loop.
 const PANEL = {
   intake: 0,
   daily: 1,
-  todaySky: 2,
+  birthChart: 2,
   credits: 3,
+  readings: 4,
 } as const;
 
+// How dark the sky gets on each panel (0 = full sky, 1 = black). Indexed by PANEL.
+const SKY_DIM = [0, 0.2, 0.4, 0.7, 1];
+
 export default function PagerContainer() {
-  const totalPanels = 4;
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const totalPanels = 5;
+  const [currentIndex, setCurrentIndex] = useState<number>(PANEL.intake);
   const [slideOffset, setSlideOffset] = useState<-1 | 0 | 1>(0);
   const [isDragging, setIsDragging] = useState(false);
   const [suppressTransition, setSuppressTransition] = useState(false);
@@ -117,6 +124,13 @@ export default function PagerContainer() {
   const [creditsIntent, setCreditsIntent] =
     useState<CreditsIntent>(null);
 
+  // Credits is no longer Reading Intake's previous neighbour (Your Readings is).
+  // To jump there in one slide, we temporarily put Credits in the "previous" slot,
+  // slide back once, and land on it.
+  const [previousOverride, setPreviousOverride] = useState<number | null>(null);
+  const slideTargetRef = useRef<number | null>(null);
+  const pendingPreviousSlideRef = useRef(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const slideOffsetRef = useRef<-1 | 0 | 1>(0);
   const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,15 +141,19 @@ export default function PagerContainer() {
     [totalPanels]
   );
 
-  // Keep the active panel in slot 1. Slot 0 is its real previous neighbor and
-  // slots 2–3 are its real next neighbors. These are the same four components,
-  // simply reordered after each swipe — there are no clones.
+  // Keep the active panel in slot 1. Slot 0 is its previous neighbor (or the
+  // override target) and slots 2–3 are its next neighbors. These are the same
+  // components, simply reordered after each swipe — there are no clones.
   const panelOrder = [
-    wrapPanelIndex(currentIndex - 1),
+    previousOverride ?? wrapPanelIndex(currentIndex - 1),
     currentIndex,
     wrapPanelIndex(currentIndex + 1),
     wrapPanelIndex(currentIndex + 2),
   ];
+
+  // The panel the sky should be dimmed for: where we're going while a slide runs.
+  const skyPanel =
+    slideOffset === -1 ? panelOrder[0] : slideOffset === 1 ? panelOrder[2] : currentIndex;
 
   // ── Fetch user status + one-time chart migration ────────────────────
   useEffect(() => {
@@ -204,7 +222,7 @@ export default function PagerContainer() {
   }, []);
 
   // Finish a swipe exactly once. Mobile browsers can occasionally miss a
-  // transform transitionend while the four keyed panels are being reordered,
+  // transform transitionend while the keyed panels are being reordered,
   // so every swipe also gets a small timeout fallback. This keeps the circular
   // pager from ever getting stranded with slideOffset stuck at -1 or 1.
   const completeSlide = useCallback(() => {
@@ -217,8 +235,12 @@ export default function PagerContainer() {
       handoffTimerRef.current = null;
     }
 
+    const target = slideTargetRef.current;
+    slideTargetRef.current = null;
+
     setSuppressTransition(true);
-    setCurrentIndex((prev) => wrapPanelIndex(prev + completedDirection));
+    setCurrentIndex((prev) => target ?? wrapPanelIndex(prev + completedDirection));
+    setPreviousOverride(null);
     slideOffsetRef.current = 0;
     setSlideOffset(0);
   }, [wrapPanelIndex]);
@@ -239,19 +261,41 @@ export default function PagerContainer() {
 
   // ── Locked feature → Credits handoff ────────────────────────────────
   // Reading Intake tells us WHAT the user wanted. We store that intent,
-  // then move to the Credits panel. CreditsPanel consumes the intent and
-  // plays a short delayed add-to-cart animation once it's on screen.
+  // then move to the Credits panel in a single backwards slide.
   const openCreditsFor = useCallback(
     (intent: "voice" | "context") => {
       setCreditsIntent(intent);
-      goToPrevious();
+      if (slideOffsetRef.current !== 0 || handoffLockedRef.current) return;
+
+      if (wrapPanelIndex(currentIndex - 1) === PANEL.credits) {
+        goToPrevious();
+        return;
+      }
+
+      // Put Credits in the previous slot first; the slide starts once it has rendered.
+      slideTargetRef.current = PANEL.credits;
+      pendingPreviousSlideRef.current = true;
+      setPreviousOverride(PANEL.credits);
     },
-    [goToPrevious]
+    [currentIndex, goToPrevious, wrapPanelIndex]
   );
 
-  // Once the user has actually left the Credits panel (or swiped back to
-  // Intake and then somewhere else), clear the stored intent so it only
-  // fires once per locked-feature tap.
+  useEffect(() => {
+    if (previousOverride === null || !pendingPreviousSlideRef.current) return;
+    pendingPreviousSlideRef.current = false;
+    // Two frames so the override panel is painted in slot 0 before we slide to it.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => goToPrevious());
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [previousOverride, goToPrevious]);
+
+  // Once the user has actually reached the Credits panel, clear the stored
+  // intent after a beat so it only fires once per locked-feature tap.
   useEffect(() => {
     if (creditsIntent === null) return;
     if (currentIndex !== PANEL.credits) return;
@@ -443,7 +487,8 @@ export default function PagerContainer() {
         background: "linear-gradient(180deg, #061120 0%, #050816 44%, #040611 100%)",
         boxSizing: "border-box",
         overscrollBehavior: "none",
-      }}
+        ["--sky-dim" as string]: SKY_DIM[skyPanel] ?? 0,
+      } as React.CSSProperties}
     >
       <style jsx>{`
         .pager-root {
@@ -522,16 +567,18 @@ export default function PagerContainer() {
         @keyframes auroraDriftC { 0%,100% { transform: translate3d(8%,-2%,0) scale(1); opacity: .6; } 50% { transform: translate3d(-6%,5%,0) scale(1.22); opacity: .9; } }
         @keyframes auroraDriftD { 0%,100% { transform: translate3d(0,3%,0) scale(1.05); opacity: .5; } 50% { transform: translate3d(10%,-4%,0) scale(1.15); opacity: .8; } }
 
-        /* Focus darkness: the intake screen sets <html data-astro-focus="hold"> for a
-           press-and-hold. This layer sits above the nebula but BELOW the stars, so the
-           sky goes black while the stars keep shining. One continuous 3s fade (the intake's
-           HOLD_TOTAL_MS) instead of three steps; releasing early eases back in 0.7s. */
+        /* Sky dim. One black layer above the nebula and BELOW the stars, so the sky darkens
+           while the stars keep shining.
+           • Per panel: night falls across the loop (SKY_DIM, set as --sky-dim on the root).
+             It changes as a slide starts and fades on the slide's own 0.5s curve.
+           • Press-and-hold: the intake sets <html data-astro-focus="hold"> — one continuous 3s
+             fade to full black (the intake's HOLD_TOTAL_MS), easing back when released. */
         .sky-dim {
           position: absolute;
           inset: 0;
           background: #000;
-          opacity: 0;
-          transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+          opacity: var(--sky-dim, 0);
+          transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
         }
         :global(html[data-astro-focus="hold"]) .sky-dim {
           opacity: 1;
@@ -559,7 +606,7 @@ export default function PagerContainer() {
           <span className="aurora-band aurora-band-c" />
           <span className="aurora-band aurora-band-d" />
         </div>
-        {/* Darkens everything above except the stars during a press-and-hold. */}
+        {/* Darkens everything above except the stars: per panel, and during a press-and-hold. */}
         <div className="sky-dim" />
         <StarfieldBackground />
       </div>
@@ -608,8 +655,11 @@ export default function PagerContainer() {
               />
             )}
 
-            {panelIndex === PANEL.todaySky && (
-              <TodaySkyPanel userStatus={userStatus} />
+            {panelIndex === PANEL.birthChart && (
+              <BirthChartPanel
+                userStatus={userStatus}
+                isActive={currentIndex === PANEL.birthChart && slideOffset === 0}
+              />
             )}
 
             {panelIndex === PANEL.credits && (
@@ -617,6 +667,10 @@ export default function PagerContainer() {
                 embedded
                 initialIntent={creditsIntent}
               />
+            )}
+
+            {panelIndex === PANEL.readings && (
+              <SavedReadingsView embedded />
             )}
           </div>
         ))}
