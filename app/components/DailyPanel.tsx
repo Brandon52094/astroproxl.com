@@ -24,10 +24,11 @@ import type { ThemeKey } from "@/app/components/ReadingAmbience";
  * Replaces ReadingIntakeScreen: every reading path it offered starts here.
  *
  *   Profection Year + Today's Sky   (hero: profection tint, hairline edge, Big Three glow)
- *   Today's Guidance                (tap to reveal; 7-line window, line 7 fades, the rest scrolls)
- *   Select Reading
+ *   Today's Guidance                (tap to reveal; title settles top-center; 7-line window, line 7 fades,
+ *                                    the rest scrolls; seals itself again after GUIDANCE_RESEAL_MS untouched)
+ *   Select Reading                  (28px, same size as the profection sign)
  *   ‹  Mic · Love · Money · Career · What's Coming  ›   (+ mic toggle under it; arrows glow until first used)
- *   Element bar                     (one segmented bar, open ends; no title)
+ *   Element bar                     (one merged color ribbon with a soft glow, open ends; no title)
  *   Big Three                       (hugs the bottom in the browser; roomier in the installed app)
  *
  * Reading buttons: press and hold 3s. Everything else fades to dark, the reading's
@@ -125,8 +126,9 @@ const ENGAGE_MS = 2000; // arrows / toggle stay in focus this long after a touch
 // Today's Guidance: the reveal takes its time (the text comes into focus top to bottom).
 const GUIDANCE_UNSEAL_MS = 650;   // title has mostly moved; the text starts to resolve
 const GUIDANCE_OPEN_MS = 2600;    // reveal finished
+const GUIDANCE_RESEAL_MS = 30000; // open this long without a touch or scroll → back to "Tap to reveal"
+const GUIDANCE_RETURN_MS = 1700;  // the text blurs back and the seal fades in
 const ARROWS_USED_KEY = "astroproxl:arrows-used";
-const guidanceOpenedKey = () => `astroproxl:guidance-opened:${localDayKey()}`;
 
 /* ── Voice waves ───────────────────────────────────────────────────── */
 // Every time the user speaks (each word / syllable onset) the button sends out a fresh wave in its
@@ -270,6 +272,20 @@ function rgba(hex: string, alpha: number) {
   return `rgba(${r},${g},${b},${+alpha.toFixed(3)})`;
 }
 
+// Element bar: each element holds its own color through the middle of its share and blends into its
+// neighbours across the boundaries, so the bar reads as one merged ribbon.
+function elementGradient(counts: Record<Element, number>): string {
+  const present = ELEMENT_ORDER.filter((el) => counts[el] > 0);
+  const total = present.reduce((n, el) => n + counts[el], 0) || 1;
+  let at = 0;
+  const stops = present.flatMap((el) => {
+    const w = (counts[el] / total) * 100, c = ELEMENT_COLORS[el].bar, start = at;
+    at += w;
+    return [`${c} ${(start + w * 0.3).toFixed(1)}%`, `${c} ${(start + w * 0.7).toFixed(1)}%`];
+  });
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
 function localDayKey(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -367,12 +383,15 @@ export default function DailyPanel({
   // sealed → (tap) → waiting (still loading) → revealing → open. Opened once, it stays open for the day.
   const [guidance, setGuidance] = useState<"sealed" | "waiting" | "revealing" | "open">("sealed");
   const [unsealed, setUnsealed] = useState(false);
+  const [returning, setReturning] = useState(false); // sealing itself again after being open a while
   const horoSectionRef = useRef<HTMLElement | null>(null);
   const headTitleRef = useRef<HTMLHeadingElement | null>(null);
   const headDateRef = useRef<HTMLParagraphElement | null>(null);
   const sealTitleRef = useRef<HTMLSpanElement | null>(null);
   const sealDateRef = useRef<HTMLSpanElement | null>(null);
   const guidanceTimersRef = useRef<number[]>([]);
+  const resealTimerRef = useRef<number | null>(null);
+  const horoBodyRef = useRef<HTMLParagraphElement | null>(null);
 
   /* ── Credits ── */
   const [userStatus, setUserStatus] = useState<UserStatus | null>(propUserStatus || null);
@@ -604,10 +623,40 @@ export default function DailyPanel({
 
   /* ── Today's Guidance: tap to reveal ── */
   useEffect(() => {
-    try { if (window.localStorage.getItem(guidanceOpenedKey()) === "1") setGuidance("open"); } catch { /* storage unavailable */ }
     const timers = guidanceTimersRef.current;
-    return () => timers.forEach((id) => window.clearTimeout(id));
+    return () => {
+      timers.forEach((id) => window.clearTimeout(id));
+      if (resealTimerRef.current) window.clearTimeout(resealTimerRef.current);
+    };
   }, []);
+
+  // Back to "Tap to reveal": the text blurs back, the heading fades, the centered seal fades in.
+  const resealGuidance = useCallback(() => {
+    if (resealTimerRef.current) { window.clearTimeout(resealTimerRef.current); resealTimerRef.current = null; }
+    guidanceTimersRef.current.forEach((id) => window.clearTimeout(id));
+    guidanceTimersRef.current = [];
+    const reduce = !!shouldReduceMotion;
+    setReturning(!reduce);
+    setUnsealed(false);
+    setGuidance("sealed");
+    guidanceTimersRef.current.push(window.setTimeout(() => {
+      if (horoBodyRef.current) horoBodyRef.current.scrollTop = 0;
+      setReturning(false);
+    }, reduce ? 0 : GUIDANCE_RETURN_MS));
+  }, [shouldReduceMotion]);
+
+  // While open, any touch or scroll on the guidance restarts the clock, so it never closes mid-read.
+  const armReseal = useCallback(() => {
+    if (resealTimerRef.current) window.clearTimeout(resealTimerRef.current);
+    resealTimerRef.current = window.setTimeout(resealGuidance, GUIDANCE_RESEAL_MS);
+  }, [resealGuidance]);
+  useEffect(() => {
+    if (guidance === "open") armReseal();
+    else if (resealTimerRef.current) { window.clearTimeout(resealTimerRef.current); resealTimerRef.current = null; }
+  }, [guidance, armReseal]);
+  const onGuidanceActivity = useCallback(() => { if (guidance === "open") armReseal(); }, [guidance, armReseal]);
+  // Going offscreen closes it right away (no animation), so the next visit starts sealed.
+  useEffect(() => { if (!isActive && guidance === "open") resealGuidance(); }, [isActive, guidance, resealGuidance]);
 
   const startReveal = useCallback(() => {
     const section = horoSectionRef.current;
@@ -629,15 +678,13 @@ export default function DailyPanel({
       section.style.setProperty("--dy", `${rd.top - sd.top}px`);
       section.style.setProperty("--ds", String(fs(headDateRef.current) / fs(sealDateRef.current)));
     }
+    setReturning(false);
     setGuidance("revealing");
     triggerHaptic(8);
     const reduce = !!shouldReduceMotion;
     guidanceTimersRef.current.push(
       window.setTimeout(() => setUnsealed(true), reduce ? 0 : GUIDANCE_UNSEAL_MS),
-      window.setTimeout(() => {
-        setGuidance("open");
-        try { window.localStorage.setItem(guidanceOpenedKey(), "1"); } catch { /* storage unavailable */ }
-      }, reduce ? 50 : GUIDANCE_OPEN_MS),
+      window.setTimeout(() => setGuidance("open"), reduce ? 50 : GUIDANCE_OPEN_MS),
     );
   }, [shouldReduceMotion]);
 
@@ -1687,10 +1734,12 @@ export default function DailyPanel({
         .dp-sky-foot .dp-rx { color: rgba(252,211,77,.8); }
 
         /* ── Today's Guidance: 7-line window; lines 1–6 solid, line 7 fades, the rest scrolls ── */
-        .dp-horo { position: relative; flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        .dp-horo { position: relative; flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column;
+          --guide-shadow: 0 2px 5px rgba(0,0,0,.9), 0 5px 18px rgba(0,0,0,.72), 0 0 36px rgba(0,0,0,.55); }
         .dp-horo-head { transition: opacity .5s ease .25s; }
-        .dp-horo-title { text-align: left; padding: 0 2px; font-size: 22px; font-weight: 500; line-height: 1.05; color: #fff; }
-        .dp-horo-date { margin-top: 4px !important; min-height: 11px; text-align: left; padding: 0 2px; font-size: 8.5px; font-weight: 600; letter-spacing: .22em; color: var(--dp-gold); }
+        .dp-horo-title { text-align: center; padding: 0 2px; font-size: 22px; font-weight: 500; line-height: 1.05; color: #fff; text-shadow: var(--guide-shadow); }
+        .dp-horo-date { margin-top: 4px !important; min-height: 11px; text-align: center; padding: 0 2px; font-size: 8.5px; font-weight: 600; letter-spacing: .22em; color: var(--dp-gold);
+          text-shadow: 0 1px 4px rgba(0,0,0,.85), 0 2px 10px rgba(0,0,0,.6), 0 0 16px rgba(0,0,0,.5); }
         .dp-horo-veil { min-height: 0; display: flex; flex-direction: column; transition: opacity 1.6s ease, filter 1.6s ease; }
 
         /* Sealed: the title + date sit centered over a soft, blurred glimpse; "Tap to reveal". */
@@ -1704,7 +1753,7 @@ export default function DailyPanel({
         }
         .dp-horo.is-open .dp-horo-seal { display: none; }
         .seal-title { font-family: var(--dp-display); font-size: 27px; font-weight: 500; line-height: 1.05; color: #fff; transform-origin: 0 0;
-          text-shadow: 0 2px 18px rgba(0,0,0,.6); transition: transform 1s var(--ease-out), opacity .5s ease .55s; }
+          text-shadow: var(--guide-shadow); transition: transform 1s var(--ease-out), opacity .5s ease .55s; }
         .seal-date { font-family: var(--dp-caps); font-size: 9px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--dp-gold);
           transform-origin: 0 0; transition: transform 1s var(--ease-out), opacity .5s ease .55s; }
         .seal-hint { margin-top: 12px; display: flex; align-items: center; gap: 8px; font-family: var(--dp-caps); font-size: 9.5px; font-weight: 600; letter-spacing: .3em; text-transform: uppercase; transition: opacity .3s ease; }
@@ -1728,6 +1777,10 @@ export default function DailyPanel({
           -webkit-mask-size: 100% 240%; mask-size: 100% 240%;
           animation: guidanceSweep ${GUIDANCE_OPEN_MS - GUIDANCE_UNSEAL_MS}ms cubic-bezier(.33,0,.2,1) both;
         }
+        /* Sealing itself again: the heading fades out and the centered seal fades back in. */
+        @keyframes sealReturn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .dp-horo.is-returning .dp-horo-head { opacity: 0; transition: opacity .6s ease; }
+        .dp-horo.is-returning .dp-horo-seal { animation: sealReturn 1.2s var(--ease-out) .5s both; }
         .dp-horo-body {
           margin-top: 8px !important; flex: 0 1 auto; min-height: 0; max-height: calc(7 * 1.42em); overflow-y: auto; scrollbar-width: none; padding: 0 2px;
           font-size: 16.5px; line-height: 1.42; color: var(--s200);
@@ -1738,25 +1791,29 @@ export default function DailyPanel({
         .dp-retry { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
         /* ── Button row: sits low, the toggle 8px above the element bar ── */
-        .dp-ask { position: relative; z-index: 2; flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: -4px; padding-top: 36px; }
+        /* --combo-lift raises the whole group (heading + button + toggle) off the element bar:
+           20px puts "Select Reading" 70px below the horoscope on an 844px screen. */
+        .dp-ask { position: relative; z-index: 2; flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: -4px;
+          --combo-lift: 20px; padding-top: 52px; padding-bottom: var(--combo-lift); }
         .dp-switch { position: relative; width: 100%; display: flex; justify-content: center; }
         .ask-box { position: relative; flex-shrink: 0; width: 70%; max-width: 320px; height: 84px; transition: transform .18s var(--ease-out); }
         .dp-note {
-          position: absolute; left: 0; right: 0; bottom: calc(84px + 6px + 26px + 14px); padding: 0 12px;
+          position: absolute; left: 0; right: 0; bottom: calc(84px + 6px + 26px + 12px + var(--combo-lift) + 8px); padding: 0 12px;
           text-align: center; font-family: var(--dp-caps); font-size: 9.5px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase;
           color: rgba(236,214,170,.8); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .4s ease, transform .4s ease;
         }
         .dp-note.is-on { opacity: 1; transform: none; }
 
-        /* "Select Reading": small gold capitals with a slow shimmer (gives way to any message). */
+        /* "Select Reading": same size and face as the profection sign (28px Cormorant), gold with a slow
+           shimmer. Gives way to any message (.dp-note sits in the same spot). */
         .dp-pick {
-          position: absolute; left: 0; right: 0; bottom: calc(84px + 6px + 26px + 14px);
-          display: flex; align-items: center; justify-content: center; gap: 10px; pointer-events: none;
-          font-family: var(--dp-caps); font-size: 11px; font-weight: 600; letter-spacing: .3em; text-transform: uppercase;
+          position: absolute; left: 0; right: 0; bottom: calc(84px + 6px + 26px + 12px + var(--combo-lift));
+          display: flex; align-items: center; justify-content: center; gap: 14px; pointer-events: none;
+          font-family: var(--dp-display); font-size: 28px; font-weight: 500; line-height: 1.05; letter-spacing: .02em;
           transition: opacity .4s ease;
         }
         .dp-pick.is-hidden { opacity: 0 !important; }
-        .dp-pick::before, .dp-pick::after { content: ""; width: 34px; height: 1px; background: linear-gradient(90deg, transparent, rgba(241,214,148,.55)); }
+        .dp-pick::before, .dp-pick::after { content: ""; width: 40px; height: 1px; background: linear-gradient(90deg, transparent, rgba(241,214,148,.55)); }
         .dp-pick::after { transform: scaleX(-1); }
         .dp-pick span {
           background: linear-gradient(90deg, rgba(241,214,148,.7) 0%, rgba(241,214,148,.7) 40%, #FFF6DC 50%, rgba(241,214,148,.7) 60%, rgba(241,214,148,.7) 100%);
@@ -1868,13 +1925,25 @@ export default function DailyPanel({
         /* The toggle only belongs to the mic: hidden on the reading buttons, space kept. */
         .dp-ask .mic-ready-toggle.is-away { opacity: 0 !important; visibility: hidden; pointer-events: none; transition: opacity .3s ease, visibility 0s linear .3s; }
 
-        /* ── Reading buttons (same look and hold as Reading Intake), sized like the mic ── */
+        /* ── Reading buttons: built like the mic, each in its own color. An opaque face, a slowly orbiting
+           ring, a soft glow from below, and a breathing aura behind (.slide-read::before). ── */
+        .slide-read::before {
+          content: ""; position: absolute; inset: 0; border-radius: 24px; z-index: 0; pointer-events: none;
+          background: conic-gradient(from var(--voice-glow-angle), rgba(255,255,255,.55), color-mix(in srgb, var(--t) 45%, transparent) 60deg, var(--t) 115deg, color-mix(in srgb, var(--t) 80%, #fff) 150deg, rgba(255,255,255,.25) 175deg, rgba(255,255,255,.6) 228deg, var(--t) 296deg, rgba(255,255,255,.55));
+          filter: blur(16px); opacity: .5; transform: scale(1.04);
+          animation: voiceGlowOrbit 8s linear infinite, voiceGlowBreathe 4.5s ease-in-out infinite;
+        }
         .dp-tile {
-          position: relative; overflow: hidden; width: 100%; height: 100%; padding: 0;
+          position: relative; z-index: 1; overflow: hidden; width: 100%; height: 100%; padding: 0;
           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
-          border-radius: 20px; border: 1px solid rgba(255,255,255,.10); cursor: pointer;
-          background: radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--t) 16%, transparent), transparent 62%), radial-gradient(circle at 92% 110%, color-mix(in srgb, var(--t) 7%, transparent), transparent 55%), linear-gradient(rgba(8,11,24,.6), rgba(8,11,24,.6));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 34px rgba(0,0,0,.78), 0 34px 68px rgba(0,0,0,.46);
+          border-radius: 20px; border: 1.25px solid transparent; cursor: pointer;
+          background:
+            radial-gradient(90% 120% at 50% 130%, color-mix(in srgb, var(--t) 22%, transparent), transparent 62%) padding-box,
+            radial-gradient(circle at 50% -40%, color-mix(in srgb, var(--t) 14%, transparent), transparent 64%) padding-box,
+            linear-gradient(145deg, rgba(19,18,24,.96), rgba(7,10,21,.97)) padding-box,
+            conic-gradient(from var(--voice-angle), rgba(255,255,255,.9) 0deg, rgba(255,255,255,.62) 54deg, var(--t) 100deg, color-mix(in srgb, var(--t) 70%, #000) 140deg, var(--t) 180deg, rgba(255,255,255,.92) 228deg, color-mix(in srgb, var(--t) 60%, #fff) 296deg, rgba(255,255,255,.9) 360deg) border-box;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 0 0 1px rgba(255,255,255,.06), 0 0 18px var(--g), 0 0 34px rgba(255,255,255,.06), 0 16px 38px rgba(0,0,0,.46);
+          animation: voiceOrbit 8s linear infinite;
           user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
           transition: border-color .9s var(--ease-soft), box-shadow .9s var(--ease-soft), transform .9s var(--ease-soft);
         }
@@ -1883,7 +1952,11 @@ export default function DailyPanel({
         .dp-tile .tile-label { font-family: var(--dp-display); font-size: 19.5px; font-weight: 600; line-height: 1; letter-spacing: .015em; color: rgba(226,232,240,.86); transition: color .9s var(--ease-out); }
         .dp-tile.is-on {
           border-color: var(--b);
-          background: linear-gradient(var(--bg), var(--bg)), radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--t) 16%, transparent), transparent 62%), linear-gradient(rgba(8,11,24,.6), rgba(8,11,24,.6));
+          background:
+            linear-gradient(var(--bg), var(--bg)) padding-box,
+            radial-gradient(90% 120% at 50% 130%, color-mix(in srgb, var(--t) 22%, transparent), transparent 62%) padding-box,
+            linear-gradient(145deg, rgba(19,18,24,.96), rgba(7,10,21,.97)) padding-box,
+            conic-gradient(from var(--voice-angle), rgba(255,255,255,.9) 0deg, var(--t) 100deg, rgba(255,255,255,.92) 228deg, rgba(255,255,255,.9) 360deg) border-box;
           box-shadow: 0 0 0 1px var(--b), 0 0 18px 2px var(--g), 0 0 34px 5px var(--g), 0 18px 34px rgba(0,0,0,.78);
           transition-duration: .5s;
         }
@@ -1905,26 +1978,39 @@ export default function DailyPanel({
           0%, 100% { transform: scale(1.025); box-shadow: 0 0 0 1px var(--b), 0 0 18px 2px var(--g), 0 0 36px 6px var(--g), 0 18px 34px rgba(0,0,0,.78); }
           50% { transform: scale(1.05); box-shadow: 0 0 0 1px var(--b), 0 0 32px 8px var(--g), 0 0 70px 18px var(--g), 0 18px 34px rgba(0,0,0,.78); }
         }
-        .dp-tile.is-holding { animation: holdPulse 1s ease-in-out infinite; }
-        .dp.ambience-on .dp-tile.is-holding { animation-duration: .6s; }
+        /* The ring keeps orbiting under the hold's pulse. */
+        .dp-tile.is-holding { animation: holdPulse 1s ease-in-out infinite, voiceOrbit 8s linear infinite; }
+        .dp.ambience-on .dp-tile.is-holding { animation-duration: .6s, 8s; }
         @keyframes sendFlash { 0% { transform: scale(1.05); } 40% { transform: scale(1.1); box-shadow: 0 0 0 2px #fff, 0 0 50px 16px var(--g), 0 0 120px 40px var(--g); } 100% { transform: scale(1.02); opacity: 0; } }
         .dp-tile.is-sent { animation: sendFlash .6s var(--ease-out) forwards; }
         .dp-tile.is-sent::before { opacity: 1; --hold-progress: 360deg; }
 
-        /* ── Elemental Balance: one bar split by element, open fading ends ── */
+        /* ── Elemental Balance: one continuous ribbon whose colors blend into each other (share = count),
+           open fading ends, and a soft glow above and below that adds no layout height. ── */
         .dp-elements { flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch; gap: 7px; padding: 0 4px; margin-bottom: -4px; }
-        .dp-ebar { position: relative; display: flex; gap: 3px; height: 5px;
-          -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); }
-        .dp-eseg { flex: var(--n) 1 0; height: 100%; background: var(--c); box-shadow: 0 0 8px var(--eb); transform-origin: center;
-          animation: dpGrowX .8s var(--ease-out) var(--d) both, dpBreath 3.2s ease-in-out calc(var(--d) + .8s) infinite; }
-        .dp-elabels { display: flex; gap: 3px; margin-top: -2px; }
+        .dp-ebar { position: relative; height: 4px; transform-origin: center; animation: dpGrowX 1s var(--ease-out) both; }
+        .dp-ebar > span { position: absolute; left: 0; right: 0; pointer-events: none; }
+        .dp-eglow { top: -9px; bottom: -9px; background: var(--grad); filter: blur(3px) saturate(1.3);
+          -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent), linear-gradient(transparent, #000 50%, transparent);
+          -webkit-mask-composite: source-in;
+          mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent), linear-gradient(transparent, #000 50%, transparent);
+          mask-composite: intersect;
+          opacity: .6; animation: dpGlowBreath 3.6s ease-in-out 1s infinite; }
+        .dp-ecore { top: 0; bottom: 0; border-radius: 4px;
+          background: linear-gradient(90deg, transparent 0 40%, rgba(255,255,255,.55) 50%, transparent 60% 100%) no-repeat, linear-gradient(180deg, rgba(255,255,255,.35), transparent 70%), var(--grad);
+          background-size: 30% 100%, 100% 100%, 100% 100%; background-position: -60% 0, 0 0, 0 0;
+          box-shadow: 0 0 6px rgba(255,255,255,.08);
+          -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+          animation: dpBarSweep 7s ease-in-out 1.4s infinite; }
+        @keyframes dpGlowBreath { 0%, 100% { opacity: .5; transform: scaleY(.9); } 50% { opacity: .95; transform: scaleY(1.15); } }
+        @keyframes dpBarSweep { 0% { background-position: -60% 0, 0 0, 0 0; } 45%, 100% { background-position: 160% 0, 0 0, 0 0; } }
+        .dp-elabels { display: flex; gap: 3px; margin-top: -1px; }
         .dp-elabels span { flex: var(--n) 1 0; min-width: 0; text-align: center; font-size: 7.5px; font-weight: 600; letter-spacing: .12em; line-height: 1;
-          white-space: nowrap; overflow: hidden; animation: dpFadeUp .6s ease-out calc(var(--d) + .25s) both; }
+          white-space: nowrap; overflow: hidden; text-shadow: 0 0 8px currentColor; animation: dpFadeUp .6s ease-out calc(var(--d) + .25s) both; }
         /* Installed app (PWA): a roomier bottom above the home indicator. */
         @media (display-mode: standalone) { .dp { padding-bottom: calc(env(safe-area-inset-bottom) + 10px + var(--cap-mt) + 14px); } }
         .dp.is-pwa { padding-bottom: calc(env(safe-area-inset-bottom) + 10px + var(--cap-mt) + 14px); }
         @keyframes dpGrowX { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
-        @keyframes dpBreath { 0%, 100% { box-shadow: 0 0 8px var(--eb); } 50% { box-shadow: 0 0 18px var(--eb), 0 0 4px var(--eb); } }
         @keyframes dpFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
         /* ── Big Three ── */
@@ -1963,12 +2049,13 @@ export default function DailyPanel({
 
         @media (prefers-reduced-motion: reduce) {
           .dp-shine::after { animation: none !important; opacity: 0; }
-          .dp-eseg, .dp-elabels span { animation: none !important; }
+          .dp-ebar, .dp-eglow, .dp-ecore, .dp-elabels span { animation: none !important; }
           .dp-tile, .dp-tile::before, .dp-slide, .dp-arrow { animation: none !important; transition: none !important; }
-          .ask-premium, .slide-mic::before, .ask-mic-halo, .mic-ready-toggle.is-nudging { animation: none !important; }
+          .ask-premium, .slide-mic::before, .slide-read::before, .ask-mic-halo, .mic-ready-toggle.is-nudging { animation: none !important; }
           .mic-ready-toggle, .mic-ready-knob { transition: none !important; }
           .dp-arrow.is-hint svg, .dp-pick span, .seal-hint span, .seal-hint::before, .seal-hint::after { animation: none !important; }
           .seal-title, .seal-date, .dp-horo-veil, .dp-horo-head { transition: none !important; }
+          .dp-horo.is-returning .dp-horo-seal { animation: none !important; }
           .dp-horo.is-revealing:not(.is-sealed) .dp-horo-veil { animation: none !important; -webkit-mask-image: none; mask-image: none; }
         }
       `}</style>
@@ -2052,8 +2139,12 @@ export default function DailyPanel({
               guidance === "waiting" ? "is-waiting" : "",
               guidance === "revealing" ? "is-revealing" : "",
               guidance === "open" ? "is-open" : "",
+              returning ? "is-returning" : "",
             ].join(" ")}
             aria-live="polite"
+            onPointerDown={onGuidanceActivity}
+            onWheel={onGuidanceActivity}
+            onTouchMove={onGuidanceActivity}
           >
             <div className="dp-horo-head">
               <h2 ref={headTitleRef} className="dp-display dp-horo-title">Today’s Guidance</h2>
@@ -2061,7 +2152,7 @@ export default function DailyPanel({
             </div>
             <div className="dp-horo-veil" aria-hidden={guidance !== "open" && guidance !== "revealing"}>
               {horoscope ? (
-                <p className="dp-display dp-horo-body">{horoscope}</p>
+                <p ref={horoBodyRef} className="dp-display dp-horo-body" onScroll={onGuidanceActivity}>{horoscope}</p>
               ) : guidance !== "open" ? (
                 <div className="dp-horo-ghost" aria-hidden="true">
                   {[96, 88, 93, 72, 90, 64].map((w, i) => <i key={i} style={{ width: `${w}%` }} />)}
@@ -2152,8 +2243,8 @@ export default function DailyPanel({
                   return (
                     <div
                       key={area.id}
-                      className={`dp-slide ${current ? "is-current" : ""}`}
-                      style={{ "--off": `${(prevSlide === index ? -slideDir : slideDir) * 18}px` } as React.CSSProperties}
+                      className={`dp-slide slide-read ${current ? "is-current" : ""}`}
+                      style={{ "--off": `${(prevSlide === index ? -slideDir : slideDir) * 18}px`, "--t": c.text, "--g": c.glow } as React.CSSProperties}
                       aria-hidden={!current}
                     >
                       <button
@@ -2214,17 +2305,9 @@ export default function DailyPanel({
             role="img"
             aria-label={`Elemental balance: ${ELEMENT_ORDER.map((el) => `${el} ${elementCounts[el]}`).join(", ")}`}
           >
-            <div className="dp-ebar" aria-hidden="true">
-              {presentElements.map((el, i) => {
-                const c = ELEMENT_COLORS[el];
-                return (
-                  <span
-                    key={el}
-                    className="dp-eseg"
-                    style={{ "--n": elementCounts[el], "--c": c.bar, "--eb": c.glow, "--d": `${i * 0.14}s` } as React.CSSProperties}
-                  />
-                );
-              })}
+            <div className="dp-ebar" aria-hidden="true" style={{ "--grad": elementGradient(elementCounts) } as React.CSSProperties}>
+              <span className="dp-eglow" />
+              <span className="dp-ecore" />
             </div>
             <div className="dp-elabels" aria-hidden="true">
               {presentElements.map((el, i) => (
