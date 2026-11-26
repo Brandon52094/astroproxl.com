@@ -107,8 +107,9 @@ const PANEL = {
 const TOTAL_PANELS = 4;
 
 // How dark the sky gets on each panel (0 = full sky, 1 = black). Indexed by PANEL.
-// Your Readings is drawn for a fully dimmed sky (black with stars).
-const SKY_DIM = [0, 1, 0.4, 0.7];
+// Your Readings now shares Your Day's full sky: its see-through cards, the dashboard's glow and the
+// blurred text behind the title were all designed over the nebula, not over black.
+const SKY_DIM = [0, 0, 0.4, 0.7];
 
 export default function PagerContainer() {
   const totalPanels = TOTAL_PANELS;
