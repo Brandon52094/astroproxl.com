@@ -11,20 +11,19 @@ import {
   MAX_SAVED_READINGS,
   type SavedReadingRecord,
 } from "@/lib/savedReadingsStore";
-import { loadChart } from "@/lib/chartStore";
 
 /**
  * YOUR DASHBOARD / SAVED READINGS
  *
- *   Your Dashboard   (mic-button fill: dark face, light from above, the Sun's color glowing from below)
+ *   Your Dashboard   (mic-button fill: dark face, light from above, a soft blue glow from below)
  *     Readings · Ask Anything · Replies
  *     Share — the referral link (friends get 15% off their first purchase)
  *   Saved Readings / Revisit Your Readings   (the hero; blurred guidance text behind it, like Your Day)
- *   8 places a page, 2 × 4   ("open space" cards: see-through face, faint hairline; empty places get a gold dot)
+ *   8 places a page, 2 × 4   ("outline" cards: clear face, the reading's color as a thin edge; empty places get a gold dot)
  *   ● ○ ○   three gold circles turn the pages (3 pages × 8 = Plus XL's 24)
- *   Settings   (blurred text behind it at the bottom edge)
+ *   Settings   (becomes Delete while a reading is held; blurred text behind it at the bottom edge)
  *
- * Tap a reading to open it. Press and hold (550ms) to remove it.
+ * Tap a reading to open it. Press and hold (550ms) to select it: it greys out and Settings turns into Delete.
  *
  * Used two ways:
  *   • As its own page (the readings route renders <SavedReadingsView />) — black, with a back button.
@@ -103,30 +102,8 @@ function getSavedReadingCapacity(access: AccessSummary | null) {
   return tier.includes("xl") ? MAX_SAVED_READINGS : PLUS_SLOT_COUNT;
 }
 
-/* ── The Sun's element color, for the dashboard's glow (same bar colors as Your Day) ── */
-const SIGN_ELEMENTS: Record<string, "Fire" | "Earth" | "Air" | "Water"> = {
-  Aries: "Fire", Leo: "Fire", Sagittarius: "Fire",
-  Taurus: "Earth", Virgo: "Earth", Capricorn: "Earth",
-  Gemini: "Air", Libra: "Air", Aquarius: "Air",
-  Cancer: "Water", Scorpio: "Water", Pisces: "Water",
-};
-const ELEMENT_BAR = { Fire: "#F97316", Earth: "#34D399", Air: "#7DD3FC", Water: "#60A5FA" } as const;
-const FALLBACK_SUN = "#DAB768";
-
-function sunColorFromChart(): string {
-  try {
-    const data = loadChart()?.chartData as unknown as {
-      tropical?: { planets?: { name: string; sign: string }[] };
-      upgradeChartPoints?: { name: string; sign: string }[];
-    } | undefined;
-    const points = data?.upgradeChartPoints?.length ? data.upgradeChartPoints : data?.tropical?.planets ?? [];
-    const sign = points.find((p) => p.name === "Sun")?.sign;
-    const element = sign ? SIGN_ELEMENTS[sign] : undefined;
-    return element ? ELEMENT_BAR[element] : FALLBACK_SUN;
-  } catch {
-    return FALLBACK_SUN;
-  }
-}
+/* ── The dashboard's glow: one fixed color (the soft blue from the preview), the same for everyone. ── */
+const DASH_GLOW = "#60A5FA";
 
 /* ── Blurred text behind the title and the bottom edge. Never readable; today's horoscope if it's cached. ── */
 const FALLBACK_VEIL =
@@ -211,6 +188,7 @@ const CSS = `
   .srv-stats > div { min-width: 0; text-align: center; line-height: 1; }
   .srv-stats > div + div { border-left: 1px solid rgba(255, 255, 255, 0.07); }
   .srv-stats strong { display: block; font-family: var(--srv-display); font-size: 20px; font-weight: 500; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .srv-stats .srv-inf { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; font-weight: 300; font-size: 0.95em; }
   .srv-stats strong small { font-size: 12px; color: rgba(148, 163, 184, 0.85); }
   .srv-stats span { display: block; margin-top: 4px; font-family: var(--srv-caps); font-size: 6.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
     color: rgba(148, 163, 184, 0.8); white-space: nowrap; }
@@ -261,16 +239,16 @@ const CSS = `
   .srv-grid.is-turning { animation: srvTurn 0.4s var(--ease-out); }
   .srv-grid.is-turning .srv-card { animation: none; }
 
-  /* A saved reading: "open space" — see-through face, faint hairline; just the name and date, centered. */
+  /* A saved reading: "outline" — clear face, the reading's color as a thin edge; just the name and date, centered. */
   .srv-slot { position: relative; min-width: 0; }
   .srv-card { position: relative; overflow: hidden; width: 100%; height: 100%; padding: 0 10px; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 5px; cursor: pointer; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.07);
-    background: radial-gradient(60% 60% at 50% 50%, rgba(255, 255, 255, 0.018), transparent 70%);
+    justify-content: center; gap: 5px; cursor: pointer; border-radius: 20px; border: 1px solid color-mix(in srgb, var(--t) 50%, transparent);
+    background: transparent;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
     transition: transform 0.25s var(--ease-out), border-color 0.4s ease, opacity 0.35s ease, filter 0.35s ease;
     animation: srvIn 0.5s var(--ease-out) both; animation-delay: calc(var(--i) * 35ms); }
   .srv-card:active { transform: scale(0.975); }
-  .srv-card:focus-visible { outline: none; border-color: color-mix(in srgb, var(--t) 60%, transparent); }
+  .srv-card:focus-visible { outline: none; border-color: var(--t); box-shadow: 0 0 0 1px var(--t); }
   .srv-card-title { font-family: var(--srv-display); font-size: 18px; font-weight: 600; line-height: 1; letter-spacing: 0.01em; color: rgba(236, 240, 246, 0.92); white-space: nowrap; }
   .srv-card-date { font-family: var(--srv-caps); font-size: 8px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(148, 163, 184, 0.8); white-space: nowrap; }
   .srv-card.is-new::after { content: ""; position: absolute; top: 10px; right: 12px; width: 5px; height: 5px; border-radius: 50%; background: var(--t);
@@ -283,14 +261,9 @@ const CSS = `
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
     opacity: 0; --srv-rm: 0deg; transition: --srv-rm 0.25s ease, opacity 0.2s ease; }
   .srv-card.is-pressing::before { opacity: 1; --srv-rm: 360deg; transition: --srv-rm 550ms linear, opacity 0.15s ease; }
-  .srv-slot.is-removing .srv-card { filter: grayscale(0.85) brightness(0.6); border-color: rgba(255, 255, 255, 0.18); }
-  .srv-remove { position: absolute; left: 50%; top: 50%; z-index: 3; transform: translate(-50%, -50%) scale(0.92); opacity: 0; pointer-events: none;
-    padding: 9px 16px; border-radius: 9999px; border: 1px solid rgba(254, 202, 202, 0.45); background: rgba(24, 10, 14, 0.92); cursor: pointer;
-    font-family: var(--srv-caps); font-size: 9px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: #fecaca;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); transition: opacity 0.2s ease, transform 0.25s var(--ease-out); }
-  .srv-slot.is-removing .srv-remove { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
+  /* Held: the card dims to grey and the Settings button turns into Delete. */
+  .srv-slot.is-removing .srv-card { filter: grayscale(0.9) brightness(0.6); border-color: rgba(255, 255, 255, 0.28); }
   .srv-slot.is-gone .srv-card { opacity: 0; transform: scale(0.9); }
-  .srv-slot.is-gone .srv-remove { opacity: 0; }
 
   /* An open space: a faint frame with a soft gold dot. */
   .srv-empty { position: relative; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.055); display: grid; place-items: center;
@@ -315,7 +288,10 @@ const CSS = `
 
   /* ── Settings: at the bottom, just the word. ── */
   .srv-foot { flex-shrink: 0; margin-top: auto; padding-top: 14px; display: flex; justify-content: center; }
-  .srv-settings { width: fit-content; padding: 0 26px; justify-content: center; }
+  .srv-settings { width: fit-content; min-width: 132px; padding: 0 26px; justify-content: center; }
+  .srv-settings.is-delete { border-color: rgba(254, 202, 202, 0.5); background: linear-gradient(160deg, rgba(127, 29, 29, 0.32), rgba(69, 10, 10, 0.22)); box-shadow: 0 0 16px rgba(248, 113, 113, 0.18); }
+  .srv-settings.is-delete b { color: #fecaca; }
+  .srv-settings b { transition: color 0.25s ease; }
 
   .srv-notice { position: fixed; z-index: 20; left: 50%; top: max(58px, calc(env(safe-area-inset-top) + 48px)); transform: translateX(-50%); max-width: calc(100% - 32px);
     padding: 9px 16px; border-radius: 999px; background: rgba(12, 14, 22, 0.94); color: #d8caaa; font-size: 11px; text-align: center; }
@@ -348,7 +324,7 @@ const CSS = `
 
   @media (prefers-reduced-motion: reduce) {
     .srv-dash, .srv-title, .srv-card, .srv-empty i, .srv-grid.is-turning { animation: none !important; }
-    .srv-card, .srv-remove, .srv-dot i, .srv-dot i::after { transition: none !important; }
+    .srv-card, .srv-dot i, .srv-dot i::after { transition: none !important; }
   }
 `;
 
@@ -367,7 +343,6 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [goneId, setGoneId] = useState<string | null>(null);
   const [pressingId, setPressingId] = useState<string | null>(null);
-  const [sunColor, setSunColor] = useState(FALLBACK_SUN);
   const [veilText, setVeilText] = useState(FALLBACK_VEIL);
   const [now, setNow] = useState(0); // set on the client, for the "new" dot
 
@@ -406,7 +381,6 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
 
   useEffect(() => {
     setNow(Date.now());
-    setSunColor(sunColorFromChart());
     setVeilText(todaysVeilText());
     setLimitNotice(new URLSearchParams(window.location.search).get("limit") === "1");
 
@@ -536,7 +510,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
   useEffect(() => {
     if (!removingId) return;
     const onDown = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement | null)?.closest?.(".srv-slot.is-removing")) setRemovingId(null);
+      if (!(e.target as HTMLElement | null)?.closest?.(".srv-slot.is-removing, .srv-settings")) setRemovingId(null);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setRemovingId(null); };
     document.addEventListener("pointerdown", onDown);
@@ -612,7 +586,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
     <main
       ref={rootRef}
       className={`srv${embedded ? " embedded" : ""}`}
-      style={{ "--sun-bar": sunColor } as CSSProperties}
+      style={{ "--sun-bar": DASH_GLOW } as CSSProperties}
       aria-label="Your dashboard and saved readings"
     >
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
@@ -633,7 +607,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
           {balance.map((b) => (
             <div key={b.label} aria-hidden="true">
               <strong>
-                {b.value}
+                {b.value === "∞" ? <span className="srv-inf">∞</span> : b.value}
                 {b.of != null && <small> / {b.of}</small>}
               </strong>
               <span>{b.label}</span>
@@ -711,15 +685,6 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
                     <span className="srv-card-title">{title}</span>
                     <span className="srv-card-date">{date}</span>
                   </button>
-                  <button
-                    type="button"
-                    data-no-swipe
-                    className="srv-remove"
-                    tabIndex={isRemoving ? 0 : -1}
-                    onClick={() => void removeReading(reading.id)}
-                  >
-                    Remove
-                  </button>
                 </div>
               );
             })}
@@ -748,8 +713,15 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
 
       {/* ── Settings ── */}
       <div className="srv-foot">
-        <button type="button" className="srv-btn srv-settings" data-no-swipe onClick={() => router.push("/chart-data?recalculate=true")}>
-          <b>Settings</b>
+        {/* While a reading is held, Settings becomes Delete for it. */}
+        <button
+          type="button"
+          className={`srv-btn srv-settings${removingId ? " is-delete" : ""}`}
+          data-no-swipe
+          onClick={() => (removingId ? void removeReading(removingId) : router.push("/chart-data?recalculate=true"))}
+          aria-label={removingId ? `Delete the selected ${formatTopic(readings.find((r) => r.id === removingId)?.topic ?? "")} reading` : "Settings"}
+        >
+          <b>{removingId ? "Delete" : "Settings"}</b>
         </button>
       </div>
 
