@@ -222,8 +222,12 @@ const CSS = `
     -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 72%, transparent); mask-image: linear-gradient(transparent, #000 30%, #000 72%, transparent); }
 
   /* ── Readings window: 8 places (2 × 4). On short screens it gets shorter and scrolls by whole rows. ── */
-  .srv-window { --card-h: 84px; --gap: 10px; --win-h: calc(4 * var(--card-h) + 3 * var(--gap) + 4px + var(--gap));
-    margin: 16px -6px 0; flex: 0 1 auto; height: var(--win-h); min-height: min(var(--win-h), calc(1.6 * var(--card-h))); }
+  /* The window takes the room between the title and the page circles: on a taller phone (Pro Max) the cards grow a
+     little taller, up to 104px, so the page keeps the same proportions instead of leaving a gap above Settings. */
+  .srv-window { --card-h: 82px; --card-max: 104px; --gap: 10px;
+    --win-h: calc(4 * var(--card-h) + 3 * var(--gap) + 4px + var(--gap));
+    --win-max: calc(4 * var(--card-max) + 3 * var(--gap) + 4px + var(--gap));
+    margin: 16px -6px 0; flex: 1 1 auto; height: auto; max-height: var(--win-max); min-height: min(var(--win-h), calc(1.6 * var(--card-h))); }
   .srv-scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none;
     padding: 4px 6px var(--gap); scroll-snap-type: y mandatory; scroll-padding: 4px 0 0; }
   .srv-scroll::-webkit-scrollbar { display: none; }
@@ -233,8 +237,8 @@ const CSS = `
   .srv-scroll.more-above.more-below {
     -webkit-mask-image: linear-gradient(transparent, #000 14px, #000 var(--cut, calc(100% - var(--gap))), transparent calc(var(--cut, calc(100% - var(--gap))) + var(--gap)));
     mask-image: linear-gradient(transparent, #000 14px, #000 var(--cut, calc(100% - var(--gap))), transparent calc(var(--cut, calc(100% - var(--gap))) + var(--gap))); }
-  .srv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
-  .srv-grid > * { height: var(--card-h); scroll-snap-align: start; }
+  .srv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(var(--card-h), 1fr); gap: var(--gap); min-height: 100%; }
+  .srv-grid > * { min-height: var(--card-h); scroll-snap-align: start; }
   @keyframes srvTurn { from { opacity: 0; transform: translateX(calc(var(--pg-dir, 1) * 18px)); } to { opacity: 1; transform: none; } }
   .srv-grid.is-turning { animation: srvTurn 0.4s var(--ease-out); }
   .srv-grid.is-turning .srv-card { animation: none; }
