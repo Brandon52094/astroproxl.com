@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Crown, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -21,21 +21,21 @@ import { getReadingKeyDays, getReadingPreview } from "@/lib/readingSections";
  *                           reading's color; tap one to open that reading. Tap a reading and it opens here: date,
  *                           title, the question, the start of the reading, and "Open reading" for the full page.)
  *   — My Readings —        (right under the container; 28px Cormorant with a deep shadow, a soft silver glow and fine side lines)
- *   [ 4 × 2 readings ]     (no boxes: each name and date sits over a soft glow of its reading's color that breathes)
- *     ◦           ◦        (42px arrows centered between each pair of readings; they rest faded and softly blurred,
- *                           come into focus when touched, and send a slow soft ripple on every press; pages wrap
- *                           around, so they never switch off)
+ *   [ 4 × 2 readings ]     (no boxes: each reading's symbol and date sit over a soft glow of its color that breathes)
+ *   ━━━━─────────────      (the page slider: one fine line as wide as "My Readings"; a glowing segment marks the page.
+ *                           Tap a third of the line or drag the segment; it sheds a comet of stardust as it moves.)
  *
  * Key dates and the container preview come from the saved reading itself, via @/lib/readingSections — the same
  * code the results page uses, so the calendar here always matches the reading's own "Your Calendar".
  *
- * Tap a reading: it opens in the container, everything else sinks into the dark, and the container glows softly in
- * the reading's own color (like Your Day's element bar). Tap anywhere outside it (or Escape) to come back.
+ * Tap a reading: a soft pulse of long ripples in the symbol's own shape flows out as it fades, the reading fades into
+ * the container, everything else sinks into the dark, and the container glows softly in the reading's own color.
+ * Tap anywhere outside it (or Escape) to come back.
  *
- * Press and hold a reading to delete it: its glow turns red and the right arrow becomes a red trash can.
- * Tap the trash can to remove it; tap anywhere else (or Escape) to keep it.
+ * Press and hold a reading to delete it: its glow turns red and the slider gives way to a red trash button.
+ * Tap the trash to remove it; tap anywhere else (or Escape) to keep it.
  *
- to whatever room is left on short screens, so the page never scrolls.
+ * The container gives up room first on short screens, so the page never scrolls.
  *
 
  *   • As its own page (the readings route renders <SavedReadingsView />) — full-screen, black, back button.
@@ -49,6 +49,10 @@ const PAGE_COUNT = 3;
 const FREE_SLOT_COUNT = 8;
 const PLUS_SLOT_COUNT = 16;
 const LONG_PRESS_MS = 550;
+/** How long the tap pulse runs (the last of the four ripples has faded by then). */
+const RIPPLE_MS = 4400;
+/** The four ripples: start delay (s) and peak opacity, each fainter than the last. */
+const RIPPLES = [[0, 0.46], [0.45, 0.34], [0.9, 0.24], [1.35, 0.15]] as const;
 
 interface AccessSummary {
   membershipStatus?: string;
@@ -80,6 +84,47 @@ const TOPIC_COLORS: Record<string, string> = {
   "ask-anything": "#F1D694",
 };
 const topicColor = (topic: string) => TOPIC_COLORS[topic] ?? TOPIC_COLORS.general;
+
+/** Each reading's symbol: the same icons as its button on Your Day (heart, wallet, briefcase, crystal ball, mic). */
+const SYMBOL_PATHS: Record<string, ReactNode> = {
+  love: <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />,
+  money: (<>
+    <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+    <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+  </>),
+  career: (<>
+    <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    <rect width="20" height="14" x="2" y="6" rx="2" />
+  </>),
+  general: (<>
+    <circle cx="12" cy="10" r="7" />
+    <path d="M8.4 15.9 7 19.5h10l-1.4-3.6" />
+    <path d="M5.5 19.5h13" />
+    <path d="M8.6 7.6a3.8 3.8 0 0 1 2.4-1.9" />
+    <path d="m14 9.2.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5Z" />
+  </>),
+  "ask-anything": (<>
+    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <line x1="12" x2="12" y1="19" y2="22" />
+  </>),
+};
+const isOrb = (topic: string) => !["love", "money", "career", "ask-anything"].includes(topic);
+
+function TopicSymbol({ topic }: { topic: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {SYMBOL_PATHS[topic] ?? SYMBOL_PATHS.general}
+    </svg>
+  );
+}
+
+/* Stardust: tiny four-point sparkles shed by the slider's moving segment. */
+const SPARK_PAD_X = 46;
+const SPARK_PAD_Y = 30;
+const SLIDER_H = 40;
+const SPARK_TINTS = [[255, 255, 255], [255, 244, 214], [214, 228, 255]] as const;
+type Spark = { x: number; y: number; vx: number; vy: number; born: number; life: number; r: number; tw: number; c: readonly number[]; s: number };
 
 /** Optional extras a saved reading may carry. The calendar and the container read the reading itself (see
  *  readingContent below); keyDates, question, summary and excerpt are only used if a reading has them. */
@@ -143,12 +188,22 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
   const [shownReadingId, setShownReadingId] = useState<string | null>(null);       // open in the container
   const [today, setToday] = useState<Date | null>(null);                           // set on the client
   const [calOffset, setCalOffset] = useState(0);                                   // months ahead of this one
-  const [flashing, setFlashing] = useState<"prev" | "next" | null>(null);
-  const [engaged, setEngaged] = useState({ prev: false, next: false });   // arrows in focus (they rest faded)
-  const engageTimersRef = useRef<Record<"prev" | "next", ReturnType<typeof setTimeout> | undefined>>({ prev: undefined, next: undefined });
+  const [sliderFlash, setSliderFlash] = useState(false);                         // the segment glows on a page change
+  const [sliderEngaged, setSliderEngaged] = useState(false);                     // in focus (it rests faded)
+  const [dragging, setDragging] = useState(false);
+  const [sliderW, setSliderW] = useState<number | null>(null);                   // = the "My Readings" title's width
+  const [openingId, setOpeningId] = useState<string | null>(null);               // its tap pulse is running
+  const [openedId, setOpenedId] = useState<string | null>(null);                 // pulse done: stays dissolved while open
   const [isPwa, setIsPwa] = useState(false);
 
   const rootRef = useRef<HTMLElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const sliderRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLSpanElement | null>(null);
+  const sparksRef = useRef<HTMLCanvasElement | null>(null);
+  const dragRef = useRef<{ x: number; moved: boolean } | null>(null);
+  const engageTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const rippleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
   // True when a tap only put a held reading back, so that tap doesn't also open a reading or turn a page.
@@ -185,6 +240,8 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
 
   useEffect(() => () => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    clearTimeout(engageTimerRef.current);
+    clearTimeout(rippleTimerRef.current);
   }, []);
 
   const capacity = getSavedReadingCapacity(access);
@@ -229,8 +286,22 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
     if (dismissTapRef.current) { dismissTapRef.current = false; return; }
     if (selectedReadingId) { setSelectedReadingId(null); return; }
     setShownReadingId(reading.id);
-    try { navigator.vibrate?.(5); } catch { /* haptics are optional */ }
+    // The soft pulse: ripples in the symbol's shape flow out as it fades; it stays dissolved once they're gone.
+    clearTimeout(rippleTimerRef.current);
+    setOpenedId(null);
+    setOpeningId(reading.id);
+    rippleTimerRef.current = setTimeout(() => {
+      setOpeningId(null);
+      setOpenedId(shownRef.current === reading.id ? reading.id : null);
+    }, RIPPLE_MS);
+    try { navigator.vibrate?.([6, 40, 6]); } catch { /* haptics are optional */ }
   };
+
+  // Closing (or switching) the open reading brings its symbol back.
+  useEffect(() => {
+    setOpeningId((id) => (id === shownReadingId ? id : null));
+    setOpenedId((id) => (id === shownReadingId ? id : null));
+  }, [shownReadingId]);
 
   const openReading = (id: string) => router.push(`/reading/results?saved=${encodeURIComponent(id)}`);
 
@@ -262,27 +333,148 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
     };
   }, []);
 
-  /* ── Pages ── */
-  // Pages wrap around, so both arrows always work.
-  // Touching an arrow brings it into focus; it settles back 2s after the last touch.
-  const engage = useCallback((side: "prev" | "next") => {
-    setEngaged((e) => (e[side] ? e : { ...e, [side]: true }));
-    clearTimeout(engageTimersRef.current[side]);
-    engageTimersRef.current[side] = setTimeout(() => setEngaged((e) => ({ ...e, [side]: false })), 2000);
-  }, []);
-  useEffect(() => {
-    const timers = engageTimersRef.current;
-    return () => { clearTimeout(timers.prev); clearTimeout(timers.next); };
+  /* ── Pages: the slider ── */
+  // Touching the slider brings it into focus; it settles back 2s after the last touch.
+  const engageSlider = useCallback(() => {
+    setSliderEngaged(true);
+    clearTimeout(engageTimerRef.current);
+    engageTimerRef.current = setTimeout(() => setSliderEngaged(false), 2000);
   }, []);
 
-  const setPage = (nextPage: number, side: "prev" | "next") => {
-    if (dismissTapRef.current) { dismissTapRef.current = false; return; }
-    setFlashing(null);
-    requestAnimationFrame(() => setFlashing(side)); // restart the pulse on quick repeat taps
-    try { navigator.vibrate?.(6); } catch { /* haptics are optional */ }
+  // The segment's position (in pages, fractional while dragging) is set straight on the slider, so drags don't re-render.
+  const placeThumb = (p: number) => sliderRef.current?.style.setProperty("--p", String(p));
+  useEffect(() => { placeThumb(currentPage); }, [currentPage]);
+
+  const setPage = (nextPage: number) => {
+    const next = Math.max(0, Math.min(PAGE_COUNT - 1, nextPage));
     setSelectedReadingId(null);
-    setCurrentPage((nextPage + PAGE_COUNT) % PAGE_COUNT);
+    placeThumb(next);
+    if (next === currentPage) return;
+    setSliderFlash(false);
+    requestAnimationFrame(() => setSliderFlash(true));   // restart the glow on quick repeat changes
+    try { navigator.vibrate?.(6); } catch { /* haptics are optional */ }
+    setCurrentPage(next);
   };
+
+  // Tap a third of the line to jump there, or drag the glowing segment; it snaps to the nearest page.
+  const fractionAt = (clientX: number) => {
+    const r = sliderRef.current!.getBoundingClientRect(), seg = r.width / PAGE_COUNT;
+    return Math.max(0, Math.min(PAGE_COUNT - 1, (clientX - r.left - seg / 2) / seg));
+  };
+  const onSliderDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (dismissTapRef.current) { dismissTapRef.current = false; return; }   // this tap only closed something
+    engageSlider();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = { x: e.clientX, moved: false };
+  };
+  const onSliderMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.x) < 6) return;
+    if (!drag.moved) { drag.moved = true; setDragging(true); }
+    placeThumb(Number(fractionAt(e.clientX).toFixed(3)));
+  };
+  const onSliderUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const target = drag.moved ? Math.round(fractionAt(e.clientX)) : Math.floor(((e.clientX - r.left) / r.width) * PAGE_COUNT);
+    dragRef.current = null;
+    setDragging(false);
+    engageSlider();
+    setPage(target);
+  };
+  const onSliderCancel = () => { dragRef.current = null; setDragging(false); placeThumb(currentPage); };
+  const onSliderKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); engageSlider(); setPage(currentPage + 1); }
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); engageSlider(); setPage(currentPage - 1); }
+  };
+
+  // The slider is exactly as wide as the "My Readings" title with its side lines.
+  useEffect(() => {
+    const title = titleRef.current;
+    if (!title) return;
+    const size = () => setSliderW(Math.round(title.getBoundingClientRect().width));
+    size();
+    const ro = new ResizeObserver(size);
+    ro.observe(title);
+    void document.fonts?.ready.then(size);
+    return () => ro.disconnect();
+  }, []);
+
+  /* ── Stardust: while the segment moves, its leading edge sheds tiny stars that drift back and fade ── */
+  useEffect(() => {
+    const slider = sliderRef.current, canvas = sparksRef.current, thumb = thumbRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!slider || !canvas || !thumb || !ctx) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+    let particles: Spark[] = [];
+    let raf = 0, lastX: number | null = null, lastT = 0, stillFor = 0;
+
+    const size = () => {
+      const w = slider.offsetWidth + SPARK_PAD_X * 2, h = SLIDER_H + SPARK_PAD_Y * 2, dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const star = (x: number, y: number, r: number) => {   // a soft four-point sparkle
+      ctx.beginPath(); ctx.moveTo(x, y - r);
+      ctx.quadraticCurveTo(x, y, x + r, y); ctx.quadraticCurveTo(x, y, x, y + r);
+      ctx.quadraticCurveTo(x, y, x - r, y); ctx.quadraticCurveTo(x, y, x, y - r); ctx.fill();
+    };
+    const frame = (now: number) => {
+      const dt = Math.min(0.05, (now - lastT) / 1000 || 0.016); lastT = now;
+      const sr = slider.getBoundingClientRect(), tr = thumb.getBoundingClientRect();
+      const x = tr.left + tr.width / 2 - sr.left + SPARK_PAD_X, y = SLIDER_H / 2 + SPARK_PAD_Y;
+      if (lastX !== null) {
+        const dx = x - lastX, dir = Math.sign(dx), speed = Math.abs(dx) / dt;
+        if (Math.abs(dx) > 0.3) {
+          stillFor = 0;
+          const count = Math.min(6, Math.ceil(Math.abs(dx) / 5));   // along the path travelled, at the leading edge
+          for (let k = 0; k < count && particles.length <= 90; k++) {
+            const hx = lastX + dx * (k / count) + dir * tr.width * 0.42;
+            particles.push({ x: hx + (Math.random() - 0.5) * 6, y: y + (Math.random() - 0.5) * 5,
+              vx: -dir * (8 + Math.random() * 26) - dx * 0.4, vy: (Math.random() - 0.5) * 16 - 3,
+              born: now, life: 650 + Math.random() * 650, r: 0.7 + Math.random() * 1.5, tw: Math.random() * 6.28,
+              c: SPARK_TINTS[Math.floor(Math.random() * SPARK_TINTS.length)], s: Math.min(1, 0.45 + speed / 900) });
+          }
+        } else stillFor += dt;
+      }
+      lastX = x;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = "lighter";
+      particles = particles.filter((p) => {
+        const age = (now - p.born) / p.life;
+        if (age >= 1) return false;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96;
+        const a = Math.pow(1 - age, 1.4) * (0.55 + 0.45 * Math.sin(p.tw + now / 70)) * p.s;
+        const [R, G, B] = p.c;
+        ctx.fillStyle = `rgba(${R},${G},${B},${(a * 0.3).toFixed(3)})`; star(p.x, p.y, p.r * 3);
+        ctx.fillStyle = `rgba(${R},${G},${B},${a.toFixed(3)})`; star(p.x, p.y, p.r);
+        return true;
+      });
+      ctx.globalCompositeOperation = "source-over";
+      if (particles.length || stillFor < 0.25) raf = requestAnimationFrame(frame);
+      else { raf = 0; lastX = null; }
+    };
+    const wake = () => {
+      if (raf) return;
+      stillFor = 0; lastT = performance.now(); raf = requestAnimationFrame(frame);
+    };
+
+    size();
+    const ro = new ResizeObserver(size);
+    ro.observe(slider);
+    // Any move of the segment (a drag, a tap, a key) changes the slider's --p or class: wake the stardust then.
+    const mo = new MutationObserver(wake);
+    mo.observe(slider, { attributes: true, attributeFilter: ["style", "class"] });
+    slider.addEventListener("pointerdown", wake);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect(); mo.disconnect();
+      slider.removeEventListener("pointerdown", wake);
+    };
+  }, []);
 
   const held = readings.find((r) => r.id === selectedReadingId) ?? null;
   const shown = (readings.find((r) => r.id === shownReadingId) ?? null) as ReadingPreview | null;
@@ -304,73 +496,15 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
     return map;
   }, [recent]);
 
-  const renderCalendar = () => {
-    if (!today) return null;
-    const first = new Date(today.getFullYear(), today.getMonth() + calOffset, 1);
-    const daysIn = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-    const month = first.toLocaleDateString("en-US", { month: "long" });
-    const todayKey = dayKey(today);
-    return (
-      <div className="cal">
-        <div className="cal-head">
-          <p className="cal-title">{month}<small>{first.getFullYear()}</small></p>
-          <div className="cal-nav">
-            <button type="button" data-no-swipe aria-label="Previous month" disabled={calOffset <= 0} onClick={() => setCalOffset((o) => Math.max(0, o - 1))}>
-              <ChevronLeft aria-hidden="true" />
-            </button>
-            <button type="button" data-no-swipe aria-label="Next month" disabled={calOffset >= CAL_MONTHS_AHEAD} onClick={() => setCalOffset((o) => Math.min(CAL_MONTHS_AHEAD, o + 1))}>
-              <ChevronRight aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-        <div className="cal-week" aria-hidden="true">
-          {WEEKDAYS.map((w, i) => <span key={i}>{w}</span>)}
-        </div>
-        <div className="cal-grid">
-          {Array.from({ length: first.getDay() }, (_, i) => <span key={`pad-${i}`} className="cal-day" aria-hidden="true" />)}
-          {Array.from({ length: daysIn }, (_, i) => {
-            const d = i + 1;
-            const k = dayKey(new Date(first.getFullYear(), first.getMonth(), d));
-            const hits = keyDays.get(k);
-            const cls = `cal-day${k < todayKey ? " is-past" : ""}${k === todayKey ? " is-today" : ""}${hits ? " is-key" : ""}`;
-            if (!hits) return <span key={k} className={cls}><span className="n">{d}</span></span>;
-            const label = hits.map((h) => titleCase(formatTopic(h.topic))).join(" and ");
-            return (
-              <button
-                key={k}
-                type="button"
-                data-no-swipe
-                className={cls}
-                style={{ "--c": topicColor(hits[0].topic), "--c2": topicColor((hits[1] ?? hits[0]).topic), "--kd": `${-(d % 5) * 0.6}s` } as CSSProperties}
-                aria-label={`${month} ${d}: a key date in your ${label} reading`}
-                onClick={() => setShownReadingId(hits[0].id)}
-              >
-                <span className="n">{d}</span>
-              </button>
-            );
-          })}
-        </div>
-        {recent.length > 0 && (
-          <div className="cal-legend">
-            {recent.map((r) => (
-              <button key={r.id} type="button" data-no-swipe style={{ "--c": topicColor(r.topic) } as CSSProperties} onClick={() => setShownReadingId(r.id)}>
-                <i aria-hidden="true" />{titleCase(formatTopic(r.topic))}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  // The calendar's month (its markup sits in the main return below, so the scoped styles reach it).
+  const calFirst = today ? new Date(today.getFullYear(), today.getMonth() + calOffset, 1) : null;
+  const calDaysIn = calFirst ? new Date(calFirst.getFullYear(), calFirst.getMonth() + 1, 0).getDate() : 0;
+  const calMonth = calFirst ? calFirst.toLocaleDateString("en-US", { month: "long" }) : "";
+  const calTodayKey = today ? dayKey(today) : "";
 
-  const onNext = () => {
-    if (held) {   // the red trash can
-      if (dismissTapRef.current) { dismissTapRef.current = false; return; }
-      setFlashing("next");
-      void removeReading(held.id);
-      return;
-    }
-    setPage(currentPage + 1, "next");
+  const onTrash = () => {
+    if (dismissTapRef.current) { dismissTapRef.current = false; return; }
+    if (held) void removeReading(held.id);
   };
 
   // In the pager: hide only this panel's scrollbar and let it fill the slot (same as Your Day).
@@ -387,7 +521,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
   }, [embedded]);
 
   return (
-    <main ref={rootRef} className={`dashboard-page${embedded ? " embedded" : ""}${isPwa ? " is-pwa" : ""}${shown ? " is-viewing" : ""}`}
+    <main ref={rootRef} className={`dashboard-page${embedded ? " embedded" : ""}${isPwa ? " is-pwa" : ""}${shown ? " is-viewing" : ""}${held ? " is-holding" : ""}`}
       style={shown ? ({ "--rc": topicColor(shown.topic) } as CSSProperties) : undefined}
       aria-label="Saved readings"
     >
@@ -410,9 +544,57 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
                 Open reading <ChevronRight aria-hidden="true" />
               </button>
             </div>
-          ) : (
-            renderCalendar()
-          )}
+          ) : calFirst ? (
+            <div className="cal">
+              <div className="cal-head">
+                <p className="cal-title">{calMonth}<small>{calFirst.getFullYear()}</small></p>
+                <div className="cal-nav">
+                  <button type="button" data-no-swipe aria-label="Previous month" disabled={calOffset <= 0} onClick={() => setCalOffset((o) => Math.max(0, o - 1))}>
+                    <ChevronLeft aria-hidden="true" />
+                  </button>
+                  <button type="button" data-no-swipe aria-label="Next month" disabled={calOffset >= CAL_MONTHS_AHEAD} onClick={() => setCalOffset((o) => Math.min(CAL_MONTHS_AHEAD, o + 1))}>
+                    <ChevronRight aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+              <div className="cal-week" aria-hidden="true">
+                {WEEKDAYS.map((w, i) => <span key={i}>{w}</span>)}
+              </div>
+              <div className="cal-grid">
+                {Array.from({ length: calFirst.getDay() }, (_, i) => <span key={`pad-${i}`} className="cal-day" aria-hidden="true" />)}
+                {Array.from({ length: calDaysIn }, (_, i) => {
+                  const d = i + 1;
+                  const k = dayKey(new Date(calFirst.getFullYear(), calFirst.getMonth(), d));
+                  const hits = keyDays.get(k);
+                  const cls = `cal-day${k < calTodayKey ? " is-past" : ""}${k === calTodayKey ? " is-today" : ""}${hits ? " is-key" : ""}`;
+                  if (!hits) return <span key={k} className={cls}><span className="n">{d}</span></span>;
+                  const label = hits.map((h) => titleCase(formatTopic(h.topic))).join(" and ");
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      data-no-swipe
+                      className={cls}
+                      style={{ "--c": topicColor(hits[0].topic), "--c2": topicColor((hits[1] ?? hits[0]).topic), "--kd": `${-(d % 5) * 0.6}s` } as CSSProperties}
+                      aria-label={`${calMonth} ${d}: a key date in your ${label} reading`}
+                      onClick={() => setShownReadingId(hits[0].id)}
+                    >
+                      <span className="n">{d}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {recent.length > 0 && (
+                <div className="cal-legend">
+                  {recent.map((r) => (
+                    <button key={r.id} type="button" data-no-swipe style={{ "--c": topicColor(r.topic) } as CSSProperties} onClick={() => setShownReadingId(r.id)}>
+                      <i aria-hidden="true" />{titleCase(formatTopic(r.topic))}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -424,7 +606,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
 
       <section className="readings-section" aria-label="Saved readings">
         <div className="readings-head">
-          <h2 className="rh-title">My Readings</h2>
+          <h2 ref={titleRef} className="rh-title">My Readings</h2>
           {currentPage > 0 && <Crown className="page-crown" aria-label="Astro Plus spaces" />}
         </div>
 
@@ -437,7 +619,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
               const isHeld = selectedReadingId === reading.id;
               const isShown = shownReadingId === reading.id;
               return (
-                <div className={`reading-slot${isHeld ? " is-held" : ""}`} key={reading.id} data-delete-zone={isHeld ? "" : undefined}>
+                <div className={`reading-slot${isHeld ? " is-held" : ""}${openingId === reading.id ? " is-opening" : ""}${openedId === reading.id ? " is-opened" : ""}`} key={reading.id} data-delete-zone={isHeld ? "" : undefined}>
                   <button
                     type="button"
                     data-no-swipe
@@ -450,9 +632,16 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
                     onContextMenu={(e) => e.preventDefault()}
                     onClick={() => handleReadingClick(reading)}
                     aria-pressed={isShown}
-                    aria-label={isHeld ? `${formatTopic(reading.topic)} held for deletion` : `Show the ${formatTopic(reading.topic)} reading from ${formatSavedDate(reading.savedAt)}. Press and hold to delete.`}
+                    aria-label={isHeld ? `${titleCase(formatTopic(reading.topic))} reading held for deletion` : `${titleCase(formatTopic(reading.topic))} reading from ${formatSavedDate(reading.savedAt)}. Tap to open, press and hold to delete.`}
                   >
-                    <span className="tile-topic">{formatTopic(reading.topic)}</span>
+                    <span className={`tile-icon${isOrb(reading.topic) ? " is-orb" : ""}`} aria-hidden="true">
+                      <TopicSymbol topic={reading.topic} />
+                      {openingId === reading.id && RIPPLES.map(([delay, peak], k) => (
+                        <span key={k} className={`tile-ripple${k ? " is-faint" : ""}`} style={{ "--wo": peak, animationDelay: `${delay}s` } as CSSProperties}>
+                          <TopicSymbol topic={reading.topic} />
+                        </span>
+                      ))}
+                    </span>
                     <span className="tile-date">{formatSavedDate(reading.savedAt)}</span>
                   </button>
                 </div>
@@ -472,30 +661,40 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         )}
 
         <nav className="page-navigation" aria-label="Reading pages">
-          <button
-            type="button"
+          <div
+            ref={sliderRef}
+            role="slider"
+            tabIndex={held ? -1 : 0}
             data-no-swipe
-            className={`pg-arrow prev${engaged.prev ? " is-engaged" : ""}${flashing === "prev" ? " flash" : ""}`}
-            onPointerDown={() => engage("prev")}
-            onFocus={() => engage("prev")}
-            onAnimationEnd={(e) => { if (e.pseudoElement === "::before") setFlashing(null); }}
-            onClick={() => { engage("prev"); setPage(currentPage - 1, "prev"); }}
-            aria-label="Previous readings page"
+            className={`pg-slider${sliderEngaged ? " is-engaged" : ""}${dragging ? " is-dragging" : ""}${sliderFlash ? " flash" : ""}`}
+            style={sliderW ? ({ "--slider-w": `${sliderW}px` } as CSSProperties) : undefined}
+            aria-label="Reading pages"
+            aria-valuemin={1}
+            aria-valuemax={PAGE_COUNT}
+            aria-valuenow={currentPage + 1}
+            aria-valuetext={`Page ${currentPage + 1} of ${PAGE_COUNT}`}
+            onPointerDown={onSliderDown}
+            onPointerMove={onSliderMove}
+            onPointerUp={onSliderUp}
+            onPointerCancel={onSliderCancel}
+            onKeyDown={onSliderKey}
           >
-            <ChevronLeft strokeWidth={1.7} aria-hidden="true" />
-          </button>
+            <span className="pg-track" />
+            <span ref={thumbRef} className="pg-thumb" onAnimationEnd={() => setSliderFlash(false)} />
+          </div>
+          <canvas ref={sparksRef} className="pg-sparks" aria-hidden="true" />
+          {/* While a reading is held, the slider fades and this red trash button takes its place. */}
           <button
             type="button"
             data-no-swipe
-            className={`pg-arrow next${held ? " is-trash" : ""}${engaged.next ? " is-engaged" : ""}${flashing === "next" ? " flash" : ""}`}
             data-delete-zone
-            onPointerDown={() => engage("next")}
-            onFocus={() => engage("next")}
-            onAnimationEnd={(e) => { if (e.pseudoElement === "::before") setFlashing(null); }}
-            onClick={() => { engage("next"); onNext(); }}
-            aria-label={held ? `Delete the ${formatTopic(held.topic)} reading from ${formatSavedDate(held.savedAt)}` : "Next readings page"}
+            className="pg-trash"
+            tabIndex={held ? 0 : -1}
+            aria-hidden={held ? undefined : true}
+            onClick={onTrash}
+            aria-label={held ? `Delete the ${titleCase(formatTopic(held.topic))} reading from ${formatSavedDate(held.savedAt)}` : "Delete reading"}
           >
-            {held ? <Trash2 key="trash" strokeWidth={1.7} aria-hidden="true" /> : <ChevronRight key="next" strokeWidth={1.7} aria-hidden="true" />}
+            {held && <Trash2 key={held.id} strokeWidth={1.7} aria-hidden="true" />}
           </button>
         </nav>
       </section>
@@ -595,7 +794,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         .rh-title::after { transform: scaleX(-1); }
         .readings-head :global(.page-crown) { position: absolute; right: 4px; top: 50%; width: 16px; height: 16px; margin-top: -8px;
           color: #d9c795; filter: drop-shadow(0 0 7px rgba(221,199,143,.22)); }
-        .reading-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 72px; gap: clamp(7px, 2vw, 11px); }
+        .reading-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 84px; gap: clamp(7px, 2vw, 11px); }
         .reading-slot, .empty-slot { position: relative; min-height: 0; }
         /* Readings: no box at all — just the name and date over a soft glow of the reading's own color (--t) that breathes
            slowly, like the calendar's key dates. Each one breathes on its own beat (--i). */
@@ -609,9 +808,34 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         @keyframes tileBreath { 0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.9); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } }
         .reading-tile > * { position: relative; z-index: 1; }
         .reading-tile:active { transform: scale(.95); }
-        .tile-topic { max-width: 100%; font-family: var(--display); font-size: clamp(9px, 2.5vw, 11.5px); font-weight: 600; line-height: 1.15; letter-spacing: .08em; text-align: center; text-transform: uppercase; overflow-wrap: anywhere;
-          color: color-mix(in srgb, var(--t, #fff) 40%, #fff); text-shadow: 0 0 10px color-mix(in srgb, var(--t, #fff) 60%, transparent), 0 1px 3px rgba(0,0,0,.6); }
-        .tile-date { color: rgba(203,213,225,.62); font-size: clamp(7px, 1.9vw, 9px); letter-spacing: .05em; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+        /* The reading's symbol, in its color, with a soft glow of its own. */
+        .tile-icon { position: relative; display: grid; place-items: center; color: color-mix(in srgb, var(--t, #fff) 78%, #fff); }
+        .tile-icon > :global(svg) { width: 30px; height: 30px; transition: opacity .6s ease;
+          filter: drop-shadow(0 0 6px color-mix(in srgb, var(--t, #fff) 80%, transparent)) drop-shadow(0 0 14px color-mix(in srgb, var(--t, #fff) 45%, transparent)); }
+        .tile-icon.is-orb > :global(svg) { width: 34px; height: 34px; margin: -2px 0; }
+        .tile-date { color: rgba(226,232,240,.78); font-size: clamp(8px, 2.1vw, 10px); font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+          text-shadow: 0 1px 3px rgba(0,0,0,.6); transition: opacity .6s ease; }
+
+        /* ── Tap a reading: a soft pulse with long ripples. Four outlines of the reading's own symbol drift slowly
+           outward, each fainter than the last (--wo), as the symbol fades and the reading fades into the container.
+           The lines stay fine as they grow (non-scaling stroke). ── */
+        .tile-ripple { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; pointer-events: none; z-index: 3; opacity: 0;
+          color: color-mix(in srgb, var(--t, #fff) 88%, #fff);
+          filter: blur(.3px) drop-shadow(0 0 4px color-mix(in srgb, var(--t, #fff) 46%, transparent)) drop-shadow(0 0 10px color-mix(in srgb, var(--t, #fff) 22%, transparent));
+          animation: tileRipple 2.9s cubic-bezier(.2,.5,.3,1) forwards; }
+        .tile-ripple :global(svg) { width: 100%; height: 100%; display: block; }
+        .tile-ripple :global(svg *) { vector-effect: non-scaling-stroke; stroke-width: 1.3px; }
+        .tile-ripple.is-faint :global(svg *) { stroke-width: 1px; }
+        @keyframes tileRipple { 0% { opacity: 0; transform: scale(.95); } 12% { opacity: var(--wo, .46); } 100% { opacity: 0; transform: scale(2.85); } }
+        .reading-slot.is-opening { z-index: 4; }
+        .is-viewing .reading-slot.is-opening { filter: none; opacity: 1; }
+        .reading-slot.is-opening .tile-icon > :global(svg) { animation: iconRelease 1.4s cubic-bezier(.25,.6,.35,1) forwards; }
+        .reading-slot.is-opening .tile-date { opacity: 0; transition-duration: .5s; }
+        .reading-slot.is-opening .reading-tile::before { animation: glowRelease 1.3s cubic-bezier(.25,.6,.35,1) forwards; }
+        @keyframes iconRelease { 0% { opacity: 1; transform: scale(1); } 30% { opacity: .85; transform: scale(1.07); } 100% { opacity: 0; transform: scale(1.16); filter: blur(2px); } }
+        @keyframes glowRelease { from { opacity: .58; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } }
+        /* After the ripple: the symbol stays dissolved (no flash back to full brightness) until the reading is closed. */
+        .reading-slot.is-opened .tile-icon > :global(svg), .reading-slot.is-opened .tile-date, .reading-slot.is-opened .reading-tile::before { opacity: 0; animation: none; }
         /* An open space: a faint thin circle with a small soft-glowing dot in the middle that breathes gently, like the
            readings. Spaces beyond the membership are dimmer. */
         .empty-slot { display: grid; place-items: center; }
@@ -623,39 +847,39 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         .empty-slot.locked span { border-color: rgba(255,255,255,.06); box-shadow: none; }
         .empty-slot.locked span::after { width: 3px; height: 3px; opacity: .35; animation: none; box-shadow: 0 0 6px rgba(255,255,255,.3); }
         .empty-copy { margin: 0; color: rgba(148,163,184,.48); font-family: var(--display); font-size: 10px; letter-spacing: .05em; text-align: center; }
-        /* Two halves with the tiles' gap: each arrow sits centered under a pair of tiles (between 1–2 and between 3–4). */
-        .page-navigation { position: relative; height: 42px; display: grid; grid-template-columns: 1fr 1fr; column-gap: clamp(7px, 2vw, 11px); align-items: center; justify-items: center; }
-        .page-navigation > :first-child { grid-column: 1; grid-row: 1; }
-        .page-navigation > :last-child { grid-column: 2; grid-row: 1; }
+        /* ── The page slider: one fine line as wide as the "My Readings" title (with its side lines). A short glowing
+           segment marks the page; tap a third of the line or drag the segment. While a reading is held, the slider fades
+           and a red trash button takes its place. ── */
+        .page-navigation { position: relative; height: 42px; display: grid; place-items: center; }
+        .pg-slider { position: relative; width: var(--slider-w, 240px); height: 40px; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+          opacity: .62; transition: opacity .9s cubic-bezier(.4,0,.2,1); outline: none; user-select: none; -webkit-user-select: none; }
+        .pg-slider.is-engaged, .pg-slider:focus-visible { opacity: 1; transition-duration: .25s; }
+        @media (hover: hover) { .pg-slider:hover { opacity: 1; transition-duration: .25s; } }
+        .pg-track { position: absolute; left: 0; right: 0; top: 50%; height: 1px; pointer-events: none;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.4) 14%, rgba(255,255,255,.4) 86%, transparent); box-shadow: 0 0 6px rgba(255,255,255,.16); }
+        .pg-thumb { position: absolute; left: 0; top: 50%; width: calc(100% / 3); height: 2px; margin-top: -1px; border-radius: 2px; pointer-events: none;
+          background: linear-gradient(90deg, transparent, #fff 28%, #fff 72%, transparent);
+          box-shadow: 0 0 8px rgba(255,255,255,.75), 0 0 20px rgba(210,225,255,.4);
+          transform: translateX(calc(var(--p, 0) * 100%)); transition: transform .7s cubic-bezier(.22,1,.36,1); }
+        .pg-slider.is-dragging .pg-thumb { transition: none; }
+        @keyframes thumbGlow { 0% { box-shadow: 0 0 14px rgba(255,255,255,1), 0 0 36px rgba(210,225,255,.7); } 100% { box-shadow: 0 0 8px rgba(255,255,255,.75), 0 0 20px rgba(210,225,255,.4); } }
+        .pg-slider.flash .pg-thumb { animation: thumbGlow 1.2s ease-out; }
+        .pg-slider:focus-visible .pg-track { box-shadow: 0 0 0 1px rgba(255,255,255,.25), 0 0 10px rgba(255,255,255,.3); }
+        /* A comet of stardust: the moving segment sheds tiny twinkling stars that drift behind it and fade. */
+        .pg-sparks { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 2; }
 
-        /* ── Page arrows: 42px circles, the container's face, glowing white. A soft ring pulses out on every press. ── */
-        .pg-arrow {
-          position: relative;
-          width: 42px; height: 42px; padding: 0; border-radius: 50%;
-          opacity: .38; filter: blur(1px);
-          display: grid; place-items: center; color: #fff; touch-action: manipulation;
-          border: 1px solid rgba(255,255,255,.55);
-          background:
-            radial-gradient(100% 80% at 0% 0%, rgba(218,183,104,.26), transparent 62%),
-            linear-gradient(170deg, rgba(10,13,28,.97), rgba(5,8,20,.97));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 0 14px rgba(255,255,255,.3), 0 0 34px rgba(210,225,255,.16), 0 10px 26px rgba(0,0,0,.5);
-          transition: opacity .9s cubic-bezier(.4,0,.2,1), filter .9s cubic-bezier(.4,0,.2,1), transform .35s cubic-bezier(.22,1,.36,1), box-shadow .35s ease;
-        }
-        /* At rest the arrows sit faded and softly blurred (like Your Day's); the one being touched comes into focus,
-           then settles back 2s after the last touch. The red trash can always stays in focus. */
-        .pg-arrow.is-engaged, .pg-arrow.is-trash, .pg-arrow:focus-visible { opacity: 1; filter: none; transition-duration: .25s, .25s, .35s, .35s; }
-        .pg-arrow :global(svg) { width: 22px; height: 22px; filter: drop-shadow(0 0 4px rgba(255,255,255,.75)) drop-shadow(0 0 10px rgba(210,225,255,.4)); }
-        .pg-arrow.prev :global(svg) { margin-right: 2px; }
-        .pg-arrow.next :global(svg) { margin-left: 2px; }
-        .pg-arrow:active { transform: scale(.93); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 0 20px rgba(255,255,255,.45), 0 0 44px rgba(210,225,255,.22), 0 10px 26px rgba(0,0,0,.5); }
-        .pg-arrow:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 22px rgba(255,255,255,.4), 0 10px 26px rgba(0,0,0,.5); }
-        /* The press: a slow, soft ripple — one faint ring drifts outward and fades, a fainter one follows. */
-        .pg-arrow::before, .pg-arrow::after { content: ""; position: absolute; inset: -1px; border-radius: 50%; pointer-events: none; opacity: 0;
-          border: 1px solid rgba(255,255,255,.55); box-shadow: 0 0 12px rgba(255,255,255,.2); }
-        @keyframes pgRipple { from { opacity: .42; transform: scale(1); } to { opacity: 0; transform: scale(1.85); } }
-        @keyframes pgRipple2 { from { opacity: .24; transform: scale(1); } to { opacity: 0; transform: scale(1.7); } }
-        .pg-arrow.flash::after { animation: pgRipple 2.4s cubic-bezier(.3,.55,.4,1) forwards; }
-        .pg-arrow.flash::before { animation: pgRipple2 2.6s cubic-bezier(.3,.55,.4,1) .45s forwards; }
+        /* The red trash button: hidden until a reading is held. */
+        .pg-trash { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; padding: 0; border-radius: 50%;
+          display: grid; place-items: center; color: #fee2e2; touch-action: manipulation;
+          border: 1px solid rgba(248,113,113,.75);
+          background: radial-gradient(90% 90% at 50% 110%, rgba(248,113,113,.45), transparent 70%), linear-gradient(155deg, rgba(127,29,29,.85), rgba(60,8,12,.95));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 0 14px rgba(239,68,68,.45), 0 0 34px rgba(220,38,38,.2), 0 10px 26px rgba(0,0,0,.5);
+          opacity: 0; transform: scale(.8); pointer-events: none; transition: opacity .45s ease, transform .45s cubic-bezier(.22,1,.36,1); }
+        .pg-trash :global(svg) { width: 19px; height: 19px; filter: drop-shadow(0 0 4px rgba(254,202,202,.7)) drop-shadow(0 0 10px rgba(239,68,68,.5)); animation: trashIn .45s cubic-bezier(.22,1,.36,1); }
+        .pg-trash:active { transform: scale(.93); }
+        .pg-trash:focus-visible { outline: none; box-shadow: 0 0 0 2px #fecaca, 0 0 22px rgba(239,68,68,.5); }
+        .is-holding .pg-slider { opacity: 0; pointer-events: none; }
+        .is-holding .pg-trash { opacity: 1; transform: none; pointer-events: auto; animation: trashBreath 2.4s ease-in-out infinite; }
 
         /* ── The container's reading view ── */
         .card-view { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; padding: 22px 20px 18px; transition: opacity .45s ease, filter .45s ease; }
@@ -691,7 +915,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         .cal-legend button { display: flex; align-items: center; gap: 7px; padding: 4px 2px; border: 0; background: none;
           font-family: var(--caps); font-size: 7.5px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: rgba(203,213,225,.7); }
         .cal-legend i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c), 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
-        .cv { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: cvIn .5s cubic-bezier(.22,1,.36,1); }
+        .cv { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: cvIn .95s cubic-bezier(.22,1,.36,1) .3s both; }
         @keyframes cvIn { from { opacity: 0; transform: translateY(6px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
         .cv-date { font-family: var(--caps); font-size: 8.5px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: rgba(241,214,148,.9); }
         .cv-title { margin-top: 6px; font-family: var(--display); font-size: 30px; font-weight: 500; line-height: 1.05; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
@@ -724,32 +948,28 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         .is-viewing .cv-title { color: var(--rc); text-shadow: 0 0 18px color-mix(in srgb, var(--rc) 40%, transparent), 0 2px 10px rgba(0,0,0,.6); }
         .is-viewing .cv-open { border-color: color-mix(in srgb, var(--rc) 45%, transparent); background: color-mix(in srgb, var(--rc) 8%, transparent); color: var(--rc); }
 
-        /* ── Press and hold a reading: it turns red, and the right arrow becomes a red trash can. ── */
+        /* ── Press and hold a reading: it turns red, and the slider gives way to a red trash button. ── */
         /* Held for deletion: the glow turns red and quickens. */
         .reading-slot.is-held .reading-tile::before { background: radial-gradient(closest-side, rgba(239,68,68,.62), rgba(220,38,38,.22) 58%, transparent); animation-duration: 2.4s; }
-        .reading-slot.is-held .tile-topic { color: #fecaca; text-shadow: 0 0 12px rgba(239,68,68,.8), 0 1px 3px rgba(0,0,0,.6); }
+        .reading-slot.is-held .tile-icon { color: #fecaca; }
+        .reading-slot.is-held .tile-icon > :global(svg) { filter: drop-shadow(0 0 6px rgba(239,68,68,.85)) drop-shadow(0 0 14px rgba(239,68,68,.45)); }
         .reading-slot.is-held .tile-date { color: rgba(254,202,202,.85); }
-        @keyframes heldBreath { 0%, 100% { box-shadow: 0 0 14px rgba(239,68,68,.4), 0 0 32px rgba(220,38,38,.18); } 50% { box-shadow: 0 0 22px rgba(239,68,68,.6), 0 0 50px rgba(220,38,38,.3); } }
-        .pg-arrow.is-trash { color: #fee2e2; border-color: rgba(248,113,113,.75);
-          background: radial-gradient(90% 90% at 50% 110%, rgba(248,113,113,.45), transparent 70%), linear-gradient(155deg, rgba(127,29,29,.85), rgba(60,8,12,.95));
-          animation: trashBreath 2.4s ease-in-out infinite; }
-        .pg-arrow.is-trash :global(svg) { width: 19px; height: 19px; margin: 0; filter: drop-shadow(0 0 4px rgba(254,202,202,.7)) drop-shadow(0 0 10px rgba(239,68,68,.5)); animation: trashIn .45s cubic-bezier(.22,1,.36,1); }
-        .pg-arrow.is-trash::after, .pg-arrow.is-trash::before { border-color: rgba(248,113,113,.65); box-shadow: 0 0 12px rgba(239,68,68,.3); }
         @keyframes trashBreath { 0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 0 14px rgba(239,68,68,.45), 0 0 34px rgba(220,38,38,.2), 0 10px 26px rgba(0,0,0,.5); }
           50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 0 22px rgba(239,68,68,.65), 0 0 50px rgba(220,38,38,.32), 0 10px 26px rgba(0,0,0,.5); } }
         @keyframes trashIn { from { opacity: 0; transform: scale(.6) rotate(-12deg); } to { opacity: 1; transform: none; } }
 
         /* Shorter views (Safari's bars, smaller phones): the container gives up room first, then the tiles tighten. */
         @media (max-height: 740px) {
-          .reading-grid { grid-auto-rows: 64px; }
+          .reading-grid { grid-auto-rows: 74px; }
         }
         @media (max-height: 620px) {
           .dashboard-page { gap: 10px; }
           .readings-section { gap: 6px; }
-          .reading-grid { grid-auto-rows: 56px; }
-          .page-navigation { height: 36px; }
-          .pg-arrow { width: 36px; height: 36px; }
-          .pg-arrow :global(svg) { width: 19px; height: 19px; }
+          .reading-grid { grid-auto-rows: 64px; }
+          .tile-icon > :global(svg) { width: 26px; height: 26px; }
+          .tile-icon.is-orb > :global(svg) { width: 30px; height: 30px; }
+          .page-navigation { height: 40px; }
+          .pg-trash { width: 42px; height: 42px; margin: -21px 0 0 -21px; }
           .cal-title { font-size: 20px; }
           .cal-week { margin-top: 8px; }
           .cal-day { font-size: 15px; }
@@ -758,9 +978,11 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         @media (prefers-reduced-motion: reduce) {
           .reading-tile::before { animation: none; transform: translate(-50%, -50%); }
           .empty-slot span::after { animation: none; }
-          .reading-tile, .pg-arrow, .readings-head, .reading-slot, .empty-slot, .page-navigation, .card-view { transition: none; }
-          .pg-arrow.flash::after, .pg-arrow.flash::before, .dashboard-card::after, .cv, .cal, .cal-day.is-key::before, .reading-slot.is-held .reading-tile, .is-viewing .dashboard-card::before,
-          .pg-arrow.is-trash, .pg-arrow.is-trash :global(svg) { animation: none; }
+          .reading-tile, .readings-head, .reading-slot, .empty-slot, .page-navigation, .card-view, .pg-thumb, .pg-trash { transition: none; }
+          .tile-ripple, .pg-sparks { display: none; }
+          .dashboard-card::after, .cv, .cal, .cal-day.is-key::before, .is-viewing .dashboard-card::before, .pg-slider.flash .pg-thumb,
+          .reading-slot.is-opening .tile-icon > :global(svg), .reading-slot.is-opening .reading-tile::before,
+          .is-holding .pg-trash, .pg-trash :global(svg) { animation: none; }
         }
       `}</style>
     </main>
