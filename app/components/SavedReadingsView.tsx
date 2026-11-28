@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Check, ChevronLeft, Share } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crown, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -11,27 +11,37 @@ import {
   MAX_SAVED_READINGS,
   type SavedReadingRecord,
 } from "@/lib/savedReadingsStore";
+import { getReadingKeyDays, getReadingPreview } from "@/lib/readingSections";
 
 /**
- * YOUR DASHBOARD / SAVED READINGS
+ * SAVED READINGS
  *
- *   Your Dashboard   (mic-button fill: dark face, light from above, a soft blue glow from below)
- *     Readings · Ask Anything · Replies
- *     Share — the referral link (friends get 15% off their first purchase)
- *   Saved Readings / Revisit Your Readings   (the hero; blurred guidance text behind it, like Your Day)
- *   8 places a page, 2 × 4   ("outline" cards: clear face, the reading's color as a thin edge; empty places get a gold dot)
- *   ● ○ ○   three gold circles turn the pages (3 pages × 8 = Plus XL's 24)
- *   Settings   (becomes Delete while a reading is held; blurred text behind it at the bottom edge)
+ *   [ container ]          (Profection fill, Drifting Light outline. Before a reading is open: a minimal calendar — month, weekday letters,
+ *                           dates, no boxes — where the key dates from the last three readings glow in each
+ *                           reading's color; tap one to open that reading. Tap a reading and it opens here: date,
+ *                           title, the question, the start of the reading, and "Open reading" for the full page.)
+ *   — My Readings —        (right under the container; 28px Cormorant with a deep shadow, a soft silver glow and fine side lines)
+ *   [ 4 × 2 readings ]     (no boxes: each name and date sits over a soft glow of its reading's color that breathes)
+ *     ◦           ◦        (42px arrows centered between each pair of readings; they rest faded and softly blurred,
+ *                           come into focus when touched, and send a slow soft ripple on every press; pages wrap
+ *                           around, so they never switch off)
  *
- * Tap a reading to open it. Press and hold (550ms) to select it: it greys out and Settings turns into Delete.
+ * Key dates and the container preview come from the saved reading itself, via @/lib/readingSections — the same
+ * code the results page uses, so the calendar here always matches the reading's own "Your Calendar".
  *
- * Used two ways:
- *   • As its own page (the readings route renders <SavedReadingsView />) — black, with a back button.
- *   • As a panel in PagerContainer (<SavedReadingsView embedded />) — no back button, no background of its own
- *     (the pager's sky shows through), and it sizes to the pager slot. Its top lines up with Your Day.
+ * Tap a reading: it opens in the container, everything else sinks into the dark, and the container glows softly in
+ * the reading's own color (like Your Day's element bar). Tap anywhere outside it (or Escape) to come back.
  *
- * The last balance seen is kept on this device (astroproxl:dashboard) so the counts show right away,
- * and are still there after a log out, until the server answers.
+ * Press and hold a reading to delete it: its glow turns red and the right arrow becomes a red trash can.
+ * Tap the trash can to remove it; tap anywhere else (or Escape) to keep it.
+ *
+ to whatever room is left on short screens, so the page never scrolls.
+ *
+
+ *   • As its own page (the readings route renders <SavedReadingsView />) — full-screen, black, back button.
+ *   • As the last panel in PagerContainer (<SavedReadingsView embedded />) — no back button, no
+ *     background of its own (the pager's sky shows through), and it sizes to the pager slot.
+ *     Its top lines up with Your Day's profection card.
  */
 
 const READINGS_PER_PAGE = 8;
@@ -39,26 +49,12 @@ const PAGE_COUNT = 3;
 const FREE_SLOT_COUNT = 8;
 const PLUS_SLOT_COUNT = 16;
 const LONG_PRESS_MS = 550;
-const NEW_DAYS = 2;
-const DASHBOARD_KEY = "astroproxl:dashboard";
-
-type ReferralState = "loading" | "ready" | "error";
 
 interface AccessSummary {
-  credits?: number;
-  jxlCredits?: number;
-  replyCredits?: number;
-  readingsCompleted?: number;
   membershipStatus?: string;
   isSubscribed?: boolean;
   membershipPlan?: "plus" | "plus_xl" | null;
   effectiveMembershipPlan?: "plus" | "plus_xl" | null;
-  membershipReadingsUsed?: number;
-  membershipJxlUsed?: number;
-  membershipEntitlements?: {
-    readingsPerMonth: number | null;
-    jxlPerMonth: number | null;
-  };
 }
 
 interface SavedReadingsViewProps {
@@ -66,27 +62,60 @@ interface SavedReadingsViewProps {
   embedded?: boolean;
 }
 
-/* ── Reading names and colors (the same colors as the reading buttons on Your Day) ── */
-const KINDS: Record<string, { title: string; color: string }> = {
-  love: { title: "Love", color: "#FDA4AF" },
-  money: { title: "Money", color: "#86EFAC" },
-  career: { title: "Career", color: "#93C5FD" },
-  general: { title: "What’s Coming", color: "#C4B5FD" },
-  other: { title: "What’s Coming", color: "#C4B5FD" },
-  "ask-anything": { title: "Your Question", color: "#F1D694" },
+function formatTopic(topic: string) {
+  return topic.replace(/[_-]+/g, " ").trim() || "Reading";
+}
+
+function titleCase(text: string) {
+  return text.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Each reading's own color: the reading buttons on Your Day (gold for Ask Anything). */
+const TOPIC_COLORS: Record<string, string> = {
+  love: "#FDA4AF",
+  money: "#86EFAC",
+  career: "#93C5FD",
+  general: "#C4B5FD",
+  other: "#C4B5FD",
+  "ask-anything": "#F1D694",
+};
+const topicColor = (topic: string) => TOPIC_COLORS[topic] ?? TOPIC_COLORS.general;
+
+/** Optional extras a saved reading may carry. The calendar and the container read the reading itself (see
+ *  readingContent below); keyDates, question, summary and excerpt are only used if a reading has them. */
+type ReadingPreview = SavedReadingRecord & {
+  question?: string;
+  summary?: string;
+  excerpt?: string;
+  keyDates?: Array<string | { date: string; label?: string }>;
 };
 
-function formatTopic(topic: string) {
-  const known = KINDS[topic];
-  if (known) return known.title;
-  const words = topic.replace(/[_-]+/g, " ").trim();
-  return words ? words.replace(/\b\w/g, (c) => c.toUpperCase()) : "Reading";
+/** The saved reading's own text (the same text the results page shows). */
+function readingContent(r: SavedReadingRecord): string {
+  const content = (r as unknown as { reading?: { pages?: Array<{ content?: unknown }> } }).reading?.pages?.[0]?.content;
+  return typeof content === "string" ? content : "";
+}
+
+const CAL_MONTHS_AHEAD = 2;
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+function dayKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** "YYYY-MM-DD" in the user's own calendar (a bare date is taken as-is, never shifted by time zone). */
+function toDayKey(value: string | { date: string }) {
+  const raw = typeof value === "string" ? value : value?.date;
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : dayKey(d);
 }
 
 function formatSavedDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Saved";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "2-digit" }).format(date);
 }
 
 function getSavedReadingCapacity(access: AccessSummary | null) {
@@ -102,477 +131,249 @@ function getSavedReadingCapacity(access: AccessSummary | null) {
   return tier.includes("xl") ? MAX_SAVED_READINGS : PLUS_SLOT_COUNT;
 }
 
-/* ── The dashboard's glow: one fixed color (the soft blue from the preview), the same for everyone. ── */
-const DASH_GLOW = "#60A5FA";
-
-/* ── Blurred text behind the title and the bottom edge. Never readable; today's horoscope if it's cached. ── */
-const FALLBACK_VEIL =
-  "The Sun lights up the year’s theme: play, risk and the things you make for the joy of making them. With the Moon swelling toward full, energy builds through the afternoon. Start the thing you’ve been circling rather than polishing the plan again. Growth this week comes from returning to an old idea, not chasing a new one. Say yes to one invitation you’d normally decline. By evening, let yourself rest; what you started today keeps working while you sleep.";
-
-function todaysVeilText(): string {
-  try {
-    const d = new Date();
-    const key = `astroproxl:daily-horoscope:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const cached = window.localStorage.getItem(key)?.trim();
-    return cached && cached.length > 120 ? cached : FALLBACK_VEIL;
-  } catch {
-    return FALLBACK_VEIL;
-  }
-}
-
-function readCachedAccess(): AccessSummary | null {
-  try {
-    const raw = window.localStorage.getItem(DASHBOARD_KEY);
-    return raw ? ((JSON.parse(raw) as { access?: AccessSummary }).access ?? null) : null;
-  } catch {
-    return null;
-  }
-}
-
-/* Styles (a plain <style> tag, so @property passes straight through). */
-const CSS = `
-.srv-panel-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-.srv-panel-no-scrollbar::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
-  .srv {
-    --srv-display: var(--font-display, "Cormorant Garamond"), "Cormorant Garamond", Georgia, serif;
-    --srv-caps: var(--font-caps, Cinzel), Cinzel, Georgia, serif;
-    --srv-gold: rgba(241, 214, 148, 0.9);
-    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-    --swipe-h: 32px;
-      position: relative;
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 430px;
-    height: 100svh;
-    height: 100dvh;
-    margin: 0 auto;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    /* Same frame as Your Day: the dashboard's top lines up with the profection card. */
-    padding: calc(env(safe-area-inset-top) + 6px + var(--swipe-h)) clamp(14px, 4vw, 18px) calc(env(safe-area-inset-bottom) + 10px);
-    background: #000;
-    color: #f1f5f9;
-    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
-  }
-  .srv.embedded { height: 100%; background: transparent; }
-  @media (max-height: 870px) { .srv { --swipe-h: 28px; } }
-  @media (max-height: 560px) { .srv { --swipe-h: 26px; } }
-  .srv * { box-sizing: border-box; }
-  .srv :where(p, h1, h2) { margin: 0; }
-  .srv button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
-  @keyframes srvIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-
-  .srv-back { position: absolute; z-index: 3; left: 6px; top: calc(env(safe-area-inset-top) + 2px); width: 42px; height: 42px; display: grid; place-items: center;
-    border: 0; background: transparent; color: rgba(226, 232, 240, 0.72); cursor: pointer; }
-  .srv-back svg { width: 21px; height: 21px; }
-
-  .srv > .srv-dash, .srv > .srv-title, .srv > .srv-window, .srv > .srv-pager, .srv > .srv-foot { position: relative; z-index: 1; }
-
-  /* ── Your Dashboard: the mic button's fill. It grows upward into the space above (for the eyebrow),
-     so everything below stays put. ── */
-  .srv-dash {
-    flex-shrink: 0; margin-top: -18px; padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 10px;
-    border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.12);
-    background:
-      radial-gradient(90% 120% at 50% 130%, color-mix(in srgb, var(--sun-bar) 22%, transparent), transparent 62%) padding-box,
-      radial-gradient(circle at 50% -70%, rgba(255, 255, 255, 0.11), transparent 66%) padding-box,
-      linear-gradient(145deg, rgba(19, 18, 24, 0.96), rgba(7, 10, 21, 0.97)) padding-box;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(255, 239, 195, 0.06), 0 0 18px rgba(218, 183, 104, 0.14),
-      0 0 22px color-mix(in srgb, var(--sun-bar) 14%, transparent), 0 16px 38px rgba(0, 0, 0, 0.46);
-    animation: srvIn 0.5s var(--ease-out) 0.1s both;
-  }
-  .srv-eyebrow { margin: 2px 0 -4px !important; text-align: center; font-family: var(--srv-caps); font-size: 8.5px; font-weight: 500; letter-spacing: 0.28em;
-    text-transform: uppercase; color: var(--srv-gold); white-space: nowrap; }
-  .srv-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; height: 46px; }
-  .srv-stats > div { min-width: 0; text-align: center; line-height: 1; }
-  .srv-stats > div + div { border-left: 1px solid rgba(255, 255, 255, 0.07); }
-  .srv-stats strong { display: block; font-family: var(--srv-display); font-size: 20px; font-weight: 500; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .srv-stats .srv-inf { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; font-weight: 300; font-size: 0.95em; }
-  .srv-stats strong small { font-size: 12px; color: rgba(148, 163, 184, 0.85); }
-  .srv-stats span { display: block; margin-top: 4px; font-family: var(--srv-caps); font-size: 6.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
-    color: rgba(148, 163, 184, 0.8); white-space: nowrap; }
-
-  .srv-btn { height: 48px; padding: 0 10px; display: flex; align-items: center; gap: 9px; text-align: left; cursor: pointer;
-    border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.1); background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
-    transition: border-color 0.3s ease, transform 0.2s var(--ease-out); }
-  .srv-btn:active { transform: scale(0.975); }
-  .srv-btn:hover, .srv-btn:focus-visible { outline: none; border-color: rgba(241, 214, 148, 0.45); }
-  .srv-btn b { font-family: var(--srv-display); font-size: 16px; font-weight: 600; color: #f8f4e9; white-space: nowrap; }
-  .srv-share { width: 86%; align-self: center; min-width: 0; }
-  .srv-share-ico { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #f1d694;
-    border: 1px solid rgba(241, 214, 148, 0.35); background: radial-gradient(circle at 50% 30%, rgba(241, 214, 148, 0.16), rgba(241, 214, 148, 0.03));
-    box-shadow: 0 0 12px rgba(241, 214, 148, 0.12); }
-  .srv-share-ico svg { width: 14px; height: 14px; }
-  .srv-share-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1; }
-  .srv-share-text small { font-family: var(--srv-caps); font-size: 6.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
-    color: rgba(148, 163, 184, 0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-  /* ── The hero: like "Today's Guidance" on Your Day, bigger, over blurred guidance text. ── */
-  .srv-title { flex-shrink: 0; margin-top: 26px; text-align: center; isolation: isolate; animation: srvIn 0.5s var(--ease-out) 0.05s both; }
-  .srv-title h1 { font-family: var(--srv-display); font-size: 34px; font-weight: 500; line-height: 1.05; letter-spacing: 0.01em; color: #fff;
-    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.9), 0 5px 18px rgba(0, 0, 0, 0.72), 0 0 36px rgba(0, 0, 0, 0.55); }
-  .srv-title p { margin-top: 6px !important; font-family: var(--srv-caps); font-size: 9.5px; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase;
-    color: var(--srv-gold); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85), 0 2px 10px rgba(0, 0, 0, 0.6), 0 0 16px rgba(0, 0, 0, 0.5); }
-  .srv-veil { position: absolute; z-index: -1; overflow: hidden; pointer-events: none; user-select: none; -webkit-user-select: none; }
-  .srv-veil p { margin: 0; text-align: left; font-family: var(--srv-display); font-size: 16.5px; line-height: 1.42; color: #e2e8f0; opacity: 0.26; filter: blur(5px); padding: 0 2px; }
-  .srv-title .srv-veil { left: -4px; right: -4px; top: -26px; bottom: -22px;
-    -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent); mask-image: radial-gradient(closest-side, #000 62%, transparent); }
-  .srv > .srv-veil.is-bottom { z-index: 0; left: clamp(14px, 4vw, 18px); right: clamp(14px, 4vw, 18px);
-    -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 72%, transparent); mask-image: linear-gradient(transparent, #000 30%, #000 72%, transparent); }
-
-  /* ── Readings window: 8 places (2 × 4). On short screens it gets shorter and scrolls by whole rows. ── */
-  /* The window takes the room between the title and the page circles: on a taller phone (Pro Max) the cards grow a
-     little taller, up to 104px, so the page keeps the same proportions instead of leaving a gap above Settings. */
-  .srv-window { --card-h: 82px; --card-max: 104px; --gap: 10px;
-    --win-h: calc(4 * var(--card-h) + 3 * var(--gap) + 4px + var(--gap));
-    --win-max: calc(4 * var(--card-max) + 3 * var(--gap) + 4px + var(--gap));
-    margin: 16px -6px 0; flex: 1 1 auto; height: auto; max-height: var(--win-max); min-height: min(var(--win-h), calc(1.6 * var(--card-h))); }
-  .srv-scroll { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: none;
-    padding: 4px 6px var(--gap); scroll-snap-type: y mandatory; scroll-padding: 4px 0 0; }
-  .srv-scroll::-webkit-scrollbar { display: none; }
-  .srv-scroll.more-below { -webkit-mask-image: linear-gradient(#000 var(--cut, calc(100% - var(--gap))), transparent calc(var(--cut, calc(100% - var(--gap))) + var(--gap)));
-    mask-image: linear-gradient(#000 var(--cut, calc(100% - var(--gap))), transparent calc(var(--cut, calc(100% - var(--gap))) + var(--gap))); }
-  .srv-scroll.more-above { -webkit-mask-image: linear-gradient(transparent, #000 14px); mask-image: linear-gradient(transparent, #000 14px); }
-  .srv-scroll.more-above.more-below {
-    -webkit-mask-image: linear-gradient(transparent, #000 14px, #000 var(--cut, calc(100% - var(--gap))), transparent calc(var(--cut, calc(100% - var(--gap))) + var(--gap)));
-    mask-image: linear-gradient(transparent, #000 14px, #000 var(--cut, calc(100% - var(--gap))), transparent calc(var(--cut, calc(100% - var(--gap))) + var(--gap))); }
-  .srv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(var(--card-h), 1fr); gap: var(--gap); min-height: 100%; }
-  .srv-grid > * { min-height: var(--card-h); scroll-snap-align: start; }
-  @keyframes srvTurn { from { opacity: 0; transform: translateX(calc(var(--pg-dir, 1) * 18px)); } to { opacity: 1; transform: none; } }
-  .srv-grid.is-turning { animation: srvTurn 0.4s var(--ease-out); }
-  .srv-grid.is-turning .srv-card { animation: none; }
-
-  /* A saved reading: "outline" — clear face, the reading's color as a thin edge; just the name and date, centered. */
-  .srv-slot { position: relative; min-width: 0; }
-  .srv-card { position: relative; overflow: hidden; width: 100%; height: 100%; padding: 0 10px; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 5px; cursor: pointer; border-radius: 20px; border: 1px solid color-mix(in srgb, var(--t) 50%, transparent);
-    background: transparent;
-    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
-    transition: transform 0.25s var(--ease-out), border-color 0.4s ease, opacity 0.35s ease, filter 0.35s ease;
-    animation: srvIn 0.5s var(--ease-out) both; animation-delay: calc(var(--i) * 35ms); }
-  .srv-card:active { transform: scale(0.975); }
-  .srv-card:focus-visible { outline: none; border-color: var(--t); box-shadow: 0 0 0 1px var(--t); }
-  .srv-card-title { font-family: var(--srv-display); font-size: 18px; font-weight: 600; line-height: 1; letter-spacing: 0.01em; color: rgba(236, 240, 246, 0.92); white-space: nowrap; }
-  .srv-card-date { font-family: var(--srv-caps); font-size: 8px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(148, 163, 184, 0.8); white-space: nowrap; }
-  .srv-card.is-new::after { content: ""; position: absolute; top: 10px; right: 12px; width: 5px; height: 5px; border-radius: 50%; background: var(--t);
-    box-shadow: 0 0 6px var(--t), 0 0 12px var(--t); }
-
-  /* Hold to remove: a ring traces the edge (550ms), then the card dims and offers "Remove". */
-  @property --srv-rm { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-  .srv-card::before { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; padding: 1.5px; pointer-events: none;
-    background: conic-gradient(from 0deg, rgba(255, 255, 255, 0.9) var(--srv-rm), transparent 0);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
-    opacity: 0; --srv-rm: 0deg; transition: --srv-rm 0.25s ease, opacity 0.2s ease; }
-  .srv-card.is-pressing::before { opacity: 1; --srv-rm: 360deg; transition: --srv-rm 550ms linear, opacity 0.15s ease; }
-  /* Held: the card dims to grey and the Settings button turns into Delete. */
-  .srv-slot.is-removing .srv-card { filter: grayscale(0.9) brightness(0.6); border-color: rgba(255, 255, 255, 0.28); }
-  .srv-slot.is-gone .srv-card { opacity: 0; transform: scale(0.9); }
-
-  /* An open space: a faint frame with a soft gold dot. */
-  .srv-empty { position: relative; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.055); display: grid; place-items: center;
-    background: radial-gradient(60% 60% at 50% 50%, rgba(255, 255, 255, 0.018), transparent 70%); }
-  .srv-empty i { width: 5px; height: 5px; border-radius: 50%; background: #f6e3b4; box-shadow: 0 0 5px #f1d694, 0 0 12px rgba(241, 214, 148, 0.55);
-    animation: srvTwinkle 3.6s ease-in-out infinite; animation-delay: calc(var(--i) * -0.45s); }
-  @keyframes srvTwinkle { 0%, 100% { opacity: 0.45; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.1); } }
-
-  /* ── Page circles: the gold knob from the JÁNEEL slider, three of them. ── */
-  .srv-pager { flex-shrink: 0; display: flex; justify-content: center; gap: 22px; margin-top: 18px; }
-  .srv-dot { position: relative; width: 36px; height: 36px; padding: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; }
-  .srv-dot i { position: absolute; left: 7px; top: 7px; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(242, 215, 156, 0.55); background: rgba(12, 10, 8, 0.7);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.7); transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s, border-color 0.45s; }
-  .srv-dot i::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3d4, #e7b354 65%, #b8863a);
-    opacity: 0; transform: scale(0.4); transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
-  .srv-dot.on i { border-color: rgba(242, 215, 156, 0.85); transform: scale(1.12);
-    box-shadow: 0 0 0 6px rgba(231, 179, 84, 0.09), 0 0 16px rgba(231, 179, 84, 0.22), 0 6px 16px rgba(0, 0, 0, 0.7); }
-  .srv-dot.on i::after { opacity: 1; transform: none; }
-  .srv-dot:active i { transform: scale(1.25); }
-  .srv-dot:focus-visible { outline: none; }
-  .srv-dot:focus-visible i { box-shadow: 0 0 0 2px rgba(242, 215, 156, 0.7), 0 6px 16px rgba(0, 0, 0, 0.7); }
-
-  /* ── Settings: at the bottom, just the word. ── */
-  .srv-foot { flex-shrink: 0; margin-top: auto; padding-top: 14px; display: flex; justify-content: center; }
-  .srv-settings { width: fit-content; min-width: 132px; padding: 0 26px; justify-content: center; }
-  .srv-settings.is-delete { border-color: rgba(254, 202, 202, 0.5); background: linear-gradient(160deg, rgba(127, 29, 29, 0.32), rgba(69, 10, 10, 0.22)); box-shadow: 0 0 16px rgba(248, 113, 113, 0.18); }
-  .srv-settings.is-delete b { color: #fecaca; }
-  .srv-settings b { transition: color 0.25s ease; }
-
-  .srv-notice { position: fixed; z-index: 20; left: 50%; top: max(58px, calc(env(safe-area-inset-top) + 48px)); transform: translateX(-50%); max-width: calc(100% - 32px);
-    padding: 9px 16px; border-radius: 999px; background: rgba(12, 14, 22, 0.94); color: #d8caaa; font-size: 11px; text-align: center; }
-  .srv-notice.error { color: #fda4af; }
-
-  /* Shorter screens (Safari's bars, iPhone SE): the window gets shorter; the rest tightens a little. */
-  @media (max-height: 700px) {
-    .srv-window { --card-h: 74px; --gap: 8px; margin-top: 12px; }
-    .srv-dash { padding: 6px 10px 10px; gap: 8px; }
-    .srv-stats { height: 42px; }
-    .srv-stats strong { font-size: 18px; }
-    .srv-btn { height: 44px; }
-    .srv-title { margin-top: 18px; }
-    .srv-title h1 { font-size: 30px; }
-    .srv-pager { margin-top: 12px; }
-  }
-  @media (max-height: 580px) {
-    .srv-window { --card-h: 62px; }
-    .srv-card-title { font-size: 16px; }
-    .srv-card { gap: 3px; }
-    .srv-dash { margin-top: -10px; gap: 7px; }
-    .srv-stats { height: 38px; }
-    .srv-btn { height: 40px; }
-    .srv-share { width: 84%; }
-    .srv-share-ico { width: 26px; height: 26px; }
-    .srv-title { margin-top: 12px; }
-    .srv-title h1 { font-size: 26px; }
-    .srv-title p { font-size: 8.5px; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .srv-dash, .srv-title, .srv-card, .srv-empty i, .srv-grid.is-turning { animation: none !important; }
-    .srv-card, .srv-dot i, .srv-dot i::after { transition: none !important; }
-  }
-`;
-
-/* ══════════════════════════════════════════════════════════════════ */
 export default function SavedReadingsView({ embedded = false }: SavedReadingsViewProps) {
   const router = useRouter();
   const [readings, setReadings] = useState<SavedReadingRecord[]>([]);
   const [access, setAccess] = useState<AccessSummary | null>(null);
-  const [referralCode, setReferralCode] = useState("");
-  const [referralState, setReferralState] = useState<ReferralState>("loading");
-  const [shareDone, setShareDone] = useState<"" | "Shared" | "Link copied">("");
   const [currentPage, setCurrentPage] = useState(0);
-  const [turn, setTurn] = useState({ key: 0, dir: 1 });
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
-  const [removingId, setRemovingId] = useState<string | null>(null);
-  const [goneId, setGoneId] = useState<string | null>(null);
-  const [pressingId, setPressingId] = useState<string | null>(null);
-  const [veilText, setVeilText] = useState(FALLBACK_VEIL);
-  const [now, setNow] = useState(0); // set on the client, for the "new" dot
+  const [selectedReadingId, setSelectedReadingId] = useState<string | null>(null); // held for deletion
+  const [shownReadingId, setShownReadingId] = useState<string | null>(null);       // open in the container
+  const [today, setToday] = useState<Date | null>(null);                           // set on the client
+  const [calOffset, setCalOffset] = useState(0);                                   // months ahead of this one
+  const [flashing, setFlashing] = useState<"prev" | "next" | null>(null);
+  const [engaged, setEngaged] = useState({ prev: false, next: false });   // arrows in focus (they rest faded)
+  const engageTimersRef = useRef<Record<"prev" | "next", ReturnType<typeof setTimeout> | undefined>>({ prev: undefined, next: undefined });
+  const [isPwa, setIsPwa] = useState(false);
 
   const rootRef = useRef<HTMLElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const pagerRef = useRef<HTMLElement | null>(null);
-  const bottomVeilRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
-  const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True when a tap only put a held reading back, so that tap doesn't also open a reading or turn a page.
+  const dismissTapRef = useRef(false);
+  const selectedRef = useRef<string | null>(null);
+  selectedRef.current = selectedReadingId;
+  const shownRef = useRef<string | null>(null);
+  shownRef.current = shownReadingId;
 
-  /* ── Data ── */
   const refresh = useCallback(async () => {
     try {
       setReadings(await listSavedReadings());
       setError(null);
     } catch {
       setError("Your saved readings could not be opened on this device.");
-    }
-  }, []);
-
-  const loadReferralCode = useCallback(async () => {
-    setReferralState("loading");
-    try {
-      const response = await fetch("/api/user/referral-code", { cache: "no-store" });
-      const data = response.ok ? ((await response.json()) as { code?: string }) : null;
-      const code = data?.code?.trim() ?? "";
-      if (!code) throw new Error("Referral code unavailable");
-      setReferralCode(code);
-      setReferralState("ready");
-    } catch {
-      setReferralCode("");
-      setReferralState("error");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    setNow(Date.now());
-    setVeilText(todaysVeilText());
     setLimitNotice(new URLSearchParams(window.location.search).get("limit") === "1");
-
-    // Last balance seen on this device first, then the live one.
-    const cached = readCachedAccess();
-    if (cached) setAccess(cached);
+    const now = new Date();
+    setToday(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+    const nav = navigator as Navigator & { standalone?: boolean };
+    setIsPwa(nav.standalone === true || window.matchMedia?.("(display-mode: standalone)").matches === true);
     void refresh();
+    // Membership only decides how many spaces there are (8, 16 or 24).
     void fetch("/api/user/credits", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: AccessSummary | null) => {
-        if (!data) return;
-        setAccess(data);
-        try { window.localStorage.setItem(DASHBOARD_KEY, JSON.stringify({ access: data, at: new Date().toISOString() })); } catch { /* storage unavailable */ }
-      })
-      .catch(() => { /* keep the cached balance */ });
-
-    void loadReferralCode();
-  }, [loadReferralCode, refresh]);
+      .then((data: AccessSummary | null) => setAccess(data))
+      .catch(() => setAccess(null));
+  }, [refresh]);
 
   useEffect(() => () => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
   }, []);
 
   const capacity = getSavedReadingCapacity(access);
   const pageStart = currentPage * READINGS_PER_PAGE;
-  // Every page always has 8 places: readings first, then open spaces, so nothing moves between pages.
   const pageSlots = useMemo(
     () => Array.from({ length: READINGS_PER_PAGE }, (_, index) => readings[pageStart + index] ?? null),
     [pageStart, readings],
   );
 
-  /* ── Balance ── */
-  const plan = access?.effectiveMembershipPlan ?? access?.membershipPlan ?? null;
-  const isMember = access?.membershipStatus === "active" || access?.isSubscribed === true;
-  const readingAllowance = access?.membershipEntitlements?.readingsPerMonth ?? null;
-  const jxlAllowance = access?.membershipEntitlements?.jxlPerMonth ?? null;
-  const readingRemaining = readingAllowance === null ? null : Math.max(0, readingAllowance - Number(access?.membershipReadingsUsed ?? 0));
-  const jxlRemaining = jxlAllowance === null ? null : Math.max(0, jxlAllowance - Number(access?.membershipJxlUsed ?? 0));
-
-  const balance: { value: string; of?: number; label: string }[] = [
-    isMember
-      ? readingAllowance === null
-        ? { value: "∞", label: "Readings" }
-        : { value: String(readingRemaining), of: readingAllowance, label: "Readings" }
-      : { value: String(access?.credits ?? 0), label: "Readings" },
-    isMember
-      ? jxlAllowance === null
-        ? { value: "∞", label: "Ask Anything" }
-        : { value: String(jxlRemaining), of: jxlAllowance, label: "Ask Anything" }
-      : { value: String(access?.jxlCredits ?? 0), label: "Ask Anything" },
-    { value: String(access?.replyCredits ?? 0), label: "Replies" },
-  ];
-  const balanceLabel = `${isMember && plan === "plus" ? "This cycle" : "Balance"}: ${balance
-    .map((b) => `${b.value}${b.of != null ? ` of ${b.of}` : ""} ${b.label}`)
-    .join(", ")}`;
-
-  /* ── Share a discount ── */
-  const shareReferral = async () => {
-    if (referralState === "error") { void loadReferralCode(); return; }
-    if (!referralCode) return;
-    const referralUrl = `${window.location.origin}/api/referral/capture?code=${encodeURIComponent(referralCode)}`;
-    const shareData = {
-      title: "AstroProXL",
-      text: "Use my ASTROSHARE link for 15% off your first eligible AstroProXL purchase.",
-      url: referralUrl,
-    };
+  /* ── Tap to show in the container · press and hold to delete ── */
+  const removeReading = async (id: string) => {
     try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-        setShareDone("Shared");
-      } else {
-        await navigator.clipboard.writeText(referralUrl);
-        setShareDone("Link copied");
-      }
-      if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
-      shareTimerRef.current = setTimeout(() => setShareDone(""), 1600);
+      await deleteSavedReading(id);
+      setSelectedReadingId(null);
+      setShownReadingId((shown) => (shown === id ? null : shown));
+      try { navigator.vibrate?.([8, 30, 8]); } catch { /* haptics are optional */ }
+      await refresh();
+      setLimitNotice(false);
     } catch {
-      // Closing the native share sheet is not an error the page needs to surface.
+      setError("That reading could not be removed. Please try again.");
     }
   };
-  const shareLine =
-    shareDone ||
-    (referralState === "loading" ? "Getting your link…" : referralState === "error" ? "Tap to try again" : "Friends get 15% off their first purchase");
 
-  /* ── Tap to open · press and hold to remove ── */
   const clearLongPressTimer = () => {
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    if (!longPressTimerRef.current) return;
+    clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = null;
-    setPressingId(null);
   };
 
   const beginLongPress = (id: string) => {
     clearLongPressTimer();
     longPressTriggeredRef.current = false;
-    setPressingId(id);
     longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
-      setPressingId(null);
-      setRemovingId(id);
+      setSelectedReadingId(id);
       try { navigator.vibrate?.(12); } catch { /* haptics are optional */ }
     }, LONG_PRESS_MS);
   };
 
   const handleReadingClick = (reading: SavedReadingRecord) => {
     if (longPressTriggeredRef.current) { longPressTriggeredRef.current = false; return; }
-    if (removingId) { setRemovingId(null); return; }
-    router.push(`/reading/results?saved=${encodeURIComponent(reading.id)}`);
-  };
-
-  const removeReading = async (id: string) => {
-    setGoneId(id);
-    await new Promise((resolve) => setTimeout(resolve, 320));
-    try {
-      await deleteSavedReading(id);
-      setRemovingId(null);
-      await refresh();
-      setLimitNotice(false);
-    } catch {
-      setError("That reading could not be removed. Please try again.");
-    } finally {
-      setGoneId(null);
-    }
-  };
-
-  // A tap anywhere else, Escape, or turning the page puts a card back.
-  useEffect(() => {
-    if (!removingId) return;
-    const onDown = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement | null)?.closest?.(".srv-slot.is-removing, .srv-settings")) setRemovingId(null);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setRemovingId(null); };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [removingId]);
-
-  /* ── Pages ── */
-  const setPage = (nextPage: number) => {
-    const next = Math.max(0, Math.min(PAGE_COUNT - 1, nextPage));
-    if (next === currentPage) return;
-    setRemovingId(null);
-    setTurn((t) => ({ key: t.key + 1, dir: next > currentPage ? 1 : -1 }));
-    setCurrentPage(next);
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    if (dismissTapRef.current) { dismissTapRef.current = false; return; }
+    if (selectedReadingId) { setSelectedReadingId(null); return; }
+    setShownReadingId(reading.id);
     try { navigator.vibrate?.(5); } catch { /* haptics are optional */ }
   };
 
-  /* ── Layout: whole-row fade on short screens, and the bottom veil under the page circles ── */
-  const updateFades = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const max = el.scrollHeight - el.clientHeight;
-    el.classList.toggle("more-above", el.scrollTop > 4);
-    el.classList.toggle("more-below", el.scrollTop < max - 4);
-    // Fade from the bottom of the last row that's fully in view, so a part-shown row never peeks past the edge.
-    const box = el.getBoundingClientRect();
-    let cut = 0;
-    el.querySelectorAll(".srv-grid > *").forEach((item) => {
-      const r = item.getBoundingClientRect();
-      if (r.bottom <= box.bottom + 0.5 && r.bottom > box.top) cut = Math.max(cut, r.bottom - box.top);
-    });
-    el.style.setProperty("--cut", cut ? `${Math.round(cut)}px` : "");
-  }, []);
+  const openReading = (id: string) => router.push(`/reading/results?saved=${encodeURIComponent(id)}`);
 
-  const placeBottomVeil = useCallback(() => {
-    const root = rootRef.current, pager = pagerRef.current, veil = bottomVeilRef.current;
-    if (!root || !pager || !veil) return;
-    const from = pager.offsetTop + pager.offsetHeight - 6;
-    veil.style.top = `${from}px`;
-    veil.style.height = `${Math.max(0, root.clientHeight - from)}px`;
-  }, []);
-
+  // A tap outside puts things back (and does nothing else): while a reading is held, anywhere but it or the
+  // trash can keeps it; while one is open in the container, anywhere outside the container closes it. Escape too.
   useEffect(() => {
-    const onResize = () => { updateFades(); placeBottomVeil(); };
-    onResize();
-    const ro = new ResizeObserver(onResize);
-    if (rootRef.current) ro.observe(rootRef.current);
-    if (scrollRef.current) ro.observe(scrollRef.current);
-    return () => ro.disconnect();
-  }, [updateFades, placeBottomVeil]);
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      dismissTapRef.current = false;
+      if (selectedRef.current) {
+        if (target?.closest?.("[data-delete-zone]")) return;
+        dismissTapRef.current = true;
+        setSelectedReadingId(null);
+      } else if (shownRef.current && !target?.closest?.("[data-reading-viewer]")) {
+        dismissTapRef.current = true;
+        setShownReadingId(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (selectedRef.current) setSelectedReadingId(null);
+      else if (shownRef.current) setShownReadingId(null);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
-  useEffect(() => { updateFades(); }, [pageSlots, updateFades]);
+  /* ── Pages ── */
+  // Pages wrap around, so both arrows always work.
+  // Touching an arrow brings it into focus; it settles back 2s after the last touch.
+  const engage = useCallback((side: "prev" | "next") => {
+    setEngaged((e) => (e[side] ? e : { ...e, [side]: true }));
+    clearTimeout(engageTimersRef.current[side]);
+    engageTimersRef.current[side] = setTimeout(() => setEngaged((e) => ({ ...e, [side]: false })), 2000);
+  }, []);
+  useEffect(() => {
+    const timers = engageTimersRef.current;
+    return () => { clearTimeout(timers.prev); clearTimeout(timers.next); };
+  }, []);
 
-  // In the pager: same as Your Day — the pager owns scrolling; hide only this panel's scrollbar and let it fill the slot.
+  const setPage = (nextPage: number, side: "prev" | "next") => {
+    if (dismissTapRef.current) { dismissTapRef.current = false; return; }
+    setFlashing(null);
+    requestAnimationFrame(() => setFlashing(side)); // restart the pulse on quick repeat taps
+    try { navigator.vibrate?.(6); } catch { /* haptics are optional */ }
+    setSelectedReadingId(null);
+    setCurrentPage((nextPage + PAGE_COUNT) % PAGE_COUNT);
+  };
+
+  const held = readings.find((r) => r.id === selectedReadingId) ?? null;
+  const shown = (readings.find((r) => r.id === shownReadingId) ?? null) as ReadingPreview | null;
+  // The container's preview: the reading's headline and "The First Glimpse", straight from the reading.
+  const shownPreview = useMemo(() => (shown ? getReadingPreview(readingContent(shown)) : null), [shown]);
+  const shownLine = (shownPreview?.focus || shown?.question || "").trim();
+  const shownBody = (shownPreview?.glimpse || shown?.summary || shown?.excerpt || "").trim();
+
+  /* ── Calendar: the last three readings' key dates ── */
+  const recent = useMemo(() => readings.slice(0, 3) as ReadingPreview[], [readings]);
+  const keyDays = useMemo(() => {
+    const map = new Map<string, ReadingPreview[]>();
+    recent.forEach((r) => {
+      // The same dates the results page puts on "Your Calendar" ("When It Unfolds" and "Your Move").
+      const days = new Set(getReadingKeyDays(readingContent(r), r.savedAt));
+      (r.keyDates ?? []).forEach((v) => { const k = toDayKey(v); if (k) days.add(k); });
+      days.forEach((k) => map.set(k, [...(map.get(k) ?? []), r]));
+    });
+    return map;
+  }, [recent]);
+
+  const renderCalendar = () => {
+    if (!today) return null;
+    const first = new Date(today.getFullYear(), today.getMonth() + calOffset, 1);
+    const daysIn = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    const month = first.toLocaleDateString("en-US", { month: "long" });
+    const todayKey = dayKey(today);
+    return (
+      <div className="cal">
+        <div className="cal-head">
+          <p className="cal-title">{month}<small>{first.getFullYear()}</small></p>
+          <div className="cal-nav">
+            <button type="button" data-no-swipe aria-label="Previous month" disabled={calOffset <= 0} onClick={() => setCalOffset((o) => Math.max(0, o - 1))}>
+              <ChevronLeft aria-hidden="true" />
+            </button>
+            <button type="button" data-no-swipe aria-label="Next month" disabled={calOffset >= CAL_MONTHS_AHEAD} onClick={() => setCalOffset((o) => Math.min(CAL_MONTHS_AHEAD, o + 1))}>
+              <ChevronRight aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div className="cal-week" aria-hidden="true">
+          {WEEKDAYS.map((w, i) => <span key={i}>{w}</span>)}
+        </div>
+        <div className="cal-grid">
+          {Array.from({ length: first.getDay() }, (_, i) => <span key={`pad-${i}`} className="cal-day" aria-hidden="true" />)}
+          {Array.from({ length: daysIn }, (_, i) => {
+            const d = i + 1;
+            const k = dayKey(new Date(first.getFullYear(), first.getMonth(), d));
+            const hits = keyDays.get(k);
+            const cls = `cal-day${k < todayKey ? " is-past" : ""}${k === todayKey ? " is-today" : ""}${hits ? " is-key" : ""}`;
+            if (!hits) return <span key={k} className={cls}><span className="n">{d}</span></span>;
+            const label = hits.map((h) => titleCase(formatTopic(h.topic))).join(" and ");
+            return (
+              <button
+                key={k}
+                type="button"
+                data-no-swipe
+                className={cls}
+                style={{ "--c": topicColor(hits[0].topic), "--c2": topicColor((hits[1] ?? hits[0]).topic), "--kd": `${-(d % 5) * 0.6}s` } as CSSProperties}
+                aria-label={`${month} ${d}: a key date in your ${label} reading`}
+                onClick={() => setShownReadingId(hits[0].id)}
+              >
+                <span className="n">{d}</span>
+              </button>
+            );
+          })}
+        </div>
+        {recent.length > 0 && (
+          <div className="cal-legend">
+            {recent.map((r) => (
+              <button key={r.id} type="button" data-no-swipe style={{ "--c": topicColor(r.topic) } as CSSProperties} onClick={() => setShownReadingId(r.id)}>
+                <i aria-hidden="true" />{titleCase(formatTopic(r.topic))}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const onNext = () => {
+    if (held) {   // the red trash can
+      if (dismissTapRef.current) { dismissTapRef.current = false; return; }
+      setFlashing("next");
+      void removeReading(held.id);
+      return;
+    }
+    setPage(currentPage + 1, "next");
+  };
+
+  // In the pager: hide only this panel's scrollbar and let it fill the slot (same as Your Day).
   useEffect(() => {
     if (!embedded) return;
     const panel = rootRef.current?.closest<HTMLElement>("[data-pager-panel]");
@@ -585,155 +386,383 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
     };
   }, [embedded]);
 
-  /* ══════════════════════════ Render ══════════════════════════ */
   return (
-    <main
-      ref={rootRef}
-      className={`srv${embedded ? " embedded" : ""}`}
-      style={{ "--sun-bar": DASH_GLOW } as CSSProperties}
-      aria-label="Your dashboard and saved readings"
+    <main ref={rootRef} className={`dashboard-page${embedded ? " embedded" : ""}${isPwa ? " is-pwa" : ""}${shown ? " is-viewing" : ""}`}
+      style={shown ? ({ "--rc": topicColor(shown.topic) } as CSSProperties) : undefined}
+      aria-label="Saved readings"
     >
-      <style dangerouslySetInnerHTML={{ __html: CSS }} />
-
       {!embedded && (
-        <button type="button" className="srv-back" onClick={() => router.back()} aria-label="Go back">
+        <button type="button" className="back" onClick={() => router.back()} aria-label="Go back">
           <ChevronLeft aria-hidden="true" />
         </button>
       )}
 
-      {/* Blurred text behind the bottom edge (placed under the page circles by placeBottomVeil). */}
-      <div ref={bottomVeilRef} className="srv-veil is-bottom" aria-hidden="true"><p>{veilText}</p></div>
-
-      {/* ── Your Dashboard ── */}
-      <section className="srv-dash" aria-labelledby="srv-dash-title" data-no-swipe>
-        <p className="srv-eyebrow" id="srv-dash-title">Your Dashboard</p>
-        <div className="srv-stats" role="group" aria-label={balanceLabel}>
-          {balance.map((b) => (
-            <div key={b.label} aria-hidden="true">
-              <strong>
-                {b.value === "∞" ? <span className="srv-inf">∞</span> : b.value}
-                {b.of != null && <small> / {b.of}</small>}
-              </strong>
-              <span>{b.label}</span>
+      {/* The container: shows the tapped reading, glowing in its color. */}
+      <section className="dashboard-card" aria-label="Reading viewer" data-reading-viewer>
+        <div className="card-view" aria-live="polite">
+          {shown ? (
+            <div key={shown.id} className="cv">
+              <p className="cv-date">{formatSavedDate(shown.savedAt)}</p>
+              <p className="cv-title">{titleCase(formatTopic(shown.topic))}</p>
+              {shownLine && <p className="cv-q">{shownLine}</p>}
+              {shownBody ? <p className="cv-body">{shownBody}</p> : <span className="cv-spacer" />}
+              <button type="button" className="cv-open" data-no-swipe onClick={() => openReading(shown.id)}>
+                Open reading <ChevronRight aria-hidden="true" />
+              </button>
             </div>
-          ))}
+          ) : (
+            renderCalendar()
+          )}
         </div>
-        <button
-          type="button"
-          className="srv-btn srv-share"
-          onClick={() => void shareReferral()}
-          disabled={referralState === "loading"}
-          aria-label={referralState === "error" ? "Retry referral link" : "Share your referral link. Friends get 15% off their first purchase."}
-        >
-          <span className="srv-share-ico">{shareDone ? <Check aria-hidden="true" /> : <Share aria-hidden="true" />}</span>
-          <span className="srv-share-text">
-            <b>Share</b>
-            <small aria-live="polite">{shareLine}</small>
-          </span>
-        </button>
       </section>
 
-      {/* ── The hero ── */}
-      <header className="srv-title">
-        <div className="srv-veil" aria-hidden="true"><p>{veilText}</p></div>
-        <h1>Saved Readings</h1>
-        <p>Revisit Your Readings</p>
-      </header>
+      {(limitNotice || error) && (
+        <p className={`notice ${error ? "error" : ""}`} role={error ? "alert" : "status"}>
+          {error ?? `All ${capacity} available spaces are filled. Remove one reading to save another.`}
+        </p>
+      )}
 
-      {/* ── Readings ── */}
-      <div className="srv-window">
-        <div ref={scrollRef} className="srv-scroll" data-no-swipe tabIndex={-1} onScroll={() => { updateFades(); if (removingId) setRemovingId(null); }}>
-          <div
-            key={`${currentPage}-${turn.key}`}
-            className={`srv-grid${turn.key ? " is-turning" : ""}`}
-            style={{ "--pg-dir": turn.dir } as CSSProperties}
-            role="list"
-            aria-label={`Page ${currentPage + 1} of ${PAGE_COUNT}. ${Math.min(readings.length, capacity)} of ${capacity} reading spaces used.`}
-          >
-            {pageSlots.map((reading, index) => {
-              if (!reading) {
-                return (
-                  <div key={`empty-${pageStart + index}`} className="srv-empty" role="listitem" aria-label="Open space" style={{ "--i": index } as CSSProperties}>
-                    <i />
-                  </div>
-                );
-              }
-              const kind = KINDS[reading.topic];
-              const color = kind?.color ?? "#C4B5FD";
-              const title = formatTopic(reading.topic);
-              const date = formatSavedDate(reading.savedAt);
-              const isNew = now > 0 && now - new Date(reading.savedAt).getTime() < NEW_DAYS * 864e5;
-              const isRemoving = removingId === reading.id;
+      <section className="readings-section" aria-label="Saved readings">
+        <div className="readings-head">
+          <h2 className="rh-title">My Readings</h2>
+          {currentPage > 0 && <Crown className="page-crown" aria-label="Astro Plus spaces" />}
+        </div>
+
+        <div className="reading-grid">
+          {pageSlots.map((reading, index) => {
+            const globalIndex = pageStart + index;
+            const isLocked = globalIndex >= capacity && !reading;
+
+            if (reading) {
+              const isHeld = selectedReadingId === reading.id;
+              const isShown = shownReadingId === reading.id;
               return (
-                <div
-                  key={reading.id}
-                  role="listitem"
-                  className={`srv-slot${isRemoving ? " is-removing" : ""}${goneId === reading.id ? " is-gone" : ""}`}
-                >
+                <div className={`reading-slot${isHeld ? " is-held" : ""}`} key={reading.id} data-delete-zone={isHeld ? "" : undefined}>
                   <button
                     type="button"
                     data-no-swipe
-                    className={`srv-card${isNew ? " is-new" : ""}${pressingId === reading.id ? " is-pressing" : ""}`}
-                    style={{ "--t": color, "--i": index } as CSSProperties}
+                    className="reading-tile"
+                    style={{ "--t": topicColor(reading.topic), "--i": index } as CSSProperties}
                     onPointerDown={() => beginLongPress(reading.id)}
                     onPointerUp={clearLongPressTimer}
                     onPointerCancel={clearLongPressTimer}
                     onPointerLeave={clearLongPressTimer}
                     onContextMenu={(e) => e.preventDefault()}
                     onClick={() => handleReadingClick(reading)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); setRemovingId(reading.id); }
-                    }}
-                    aria-label={`${title} reading from ${date}${isNew ? ", new" : ""}. Press and hold to remove.`}
+                    aria-pressed={isShown}
+                    aria-label={isHeld ? `${formatTopic(reading.topic)} held for deletion` : `Show the ${formatTopic(reading.topic)} reading from ${formatSavedDate(reading.savedAt)}. Press and hold to delete.`}
                   >
-                    <span className="srv-card-title">{title}</span>
-                    <span className="srv-card-date">{date}</span>
+                    <span className="tile-topic">{formatTopic(reading.topic)}</span>
+                    <span className="tile-date">{formatSavedDate(reading.savedAt)}</span>
                   </button>
                 </div>
               );
-            })}
-          </div>
+            }
+
+            return (
+              <div className={`empty-slot ${isLocked ? "locked" : "available"}`} key={`empty-${globalIndex}`} style={{ "--ed": `${-(index * 0.45)}s` } as CSSProperties} aria-label={isLocked ? "Membership saved reading space" : "Available saved reading space"}>
+                <span />
+              </div>
+            );
+          })}
         </div>
-      </div>
 
-      {/* ── Pages ── */}
-      <nav ref={pagerRef} className="srv-pager" aria-label="Pages of readings" data-no-swipe>
-        {Array.from({ length: PAGE_COUNT }, (_, i) => {
-          const n = readings.slice(i * READINGS_PER_PAGE, (i + 1) * READINGS_PER_PAGE).length;
-          return (
-            <button
-              key={i}
-              type="button"
-              className={`srv-dot${i === currentPage ? " on" : ""}`}
-              onClick={() => setPage(i)}
-              aria-label={`Page ${i + 1}, ${n} reading${n === 1 ? "" : "s"}`}
-              aria-current={i === currentPage ? "page" : undefined}
-            >
-              <i />
-            </button>
-          );
-        })}
-      </nav>
+        {!loading && readings.length === 0 && !error && currentPage === 0 && (
+          <p className="empty-copy">Saved readings will appear among the stars.</p>
+        )}
 
-      {/* ── Settings ── */}
-      <div className="srv-foot">
-        {/* While a reading is held, Settings becomes Delete for it. */}
-        <button
-          type="button"
-          className={`srv-btn srv-settings${removingId ? " is-delete" : ""}`}
-          data-no-swipe
-          onClick={() => (removingId ? void removeReading(removingId) : router.push("/chart-data?recalculate=true"))}
-          aria-label={removingId ? `Delete the selected ${formatTopic(readings.find((r) => r.id === removingId)?.topic ?? "")} reading` : "Settings"}
-        >
-          <b>{removingId ? "Delete" : "Settings"}</b>
-        </button>
-      </div>
+        <nav className="page-navigation" aria-label="Reading pages">
+          <button
+            type="button"
+            data-no-swipe
+            className={`pg-arrow prev${engaged.prev ? " is-engaged" : ""}${flashing === "prev" ? " flash" : ""}`}
+            onPointerDown={() => engage("prev")}
+            onFocus={() => engage("prev")}
+            onAnimationEnd={(e) => { if (e.pseudoElement === "::before") setFlashing(null); }}
+            onClick={() => { engage("prev"); setPage(currentPage - 1, "prev"); }}
+            aria-label="Previous readings page"
+          >
+            <ChevronLeft strokeWidth={1.7} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            data-no-swipe
+            className={`pg-arrow next${held ? " is-trash" : ""}${engaged.next ? " is-engaged" : ""}${flashing === "next" ? " flash" : ""}`}
+            data-delete-zone
+            onPointerDown={() => engage("next")}
+            onFocus={() => engage("next")}
+            onAnimationEnd={(e) => { if (e.pseudoElement === "::before") setFlashing(null); }}
+            onClick={() => { engage("next"); onNext(); }}
+            aria-label={held ? `Delete the ${formatTopic(held.topic)} reading from ${formatSavedDate(held.savedAt)}` : "Next readings page"}
+          >
+            {held ? <Trash2 key="trash" strokeWidth={1.7} aria-hidden="true" /> : <ChevronRight key="next" strokeWidth={1.7} aria-hidden="true" />}
+          </button>
+        </nav>
+      </section>
 
-      {(limitNotice || error) && (
-        <p className={`srv-notice${error ? " error" : ""}`} role={error ? "alert" : "status"}>
-          {error ?? `All ${capacity} available spaces are filled. Remove one reading to save another.`}
-        </p>
-      )}
+      <style jsx global>{`
+        .srv-panel-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .srv-panel-no-scrollbar::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+        /* The container's drifting outline (global so @property passes straight through). */
+        @property --ol-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+        @keyframes srvOlOrbit { to { --ol-angle: 360deg; } }
+      `}</style>
+
+      <style jsx>{`
+        * { box-sizing: border-box; }
+
+        /* Same frame as Your Day (DailyPanel): the container's top lines up with the profection card. */
+        .dashboard-page {
+          --swipe-h: 32px;
+          --display: var(--font-display, "Cormorant Garamond"), "Cormorant Garamond", Georgia, serif;
+          --caps: var(--font-caps, Cinzel), Cinzel, Georgia, serif;
+          position: relative;
+          height: 100svh;
+          height: 100dvh;
+          width: 100%;
+          max-width: 430px;
+          margin: 0 auto;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;   /* same gap as Your Day */
+          padding:
+            calc(env(safe-area-inset-top) + 6px + var(--swipe-h))
+            clamp(12px, 4vw, 16px)
+            calc(env(safe-area-inset-bottom) + 2px);   /* browser: the readings sit right at the bottom */
+          background: #000;
+          color: #f8fafc;
+          font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+        }
+        /* Inside the pager: fill the slot and let the pager's sky show through. */
+        .dashboard-page.embedded { height: 100%; background: transparent; }
+        /* Installed app (PWA): a little room above the home indicator. */
+        .dashboard-page { --cap-mt: 14px; }
+        @media (display-mode: standalone) { .dashboard-page { padding-bottom: calc(env(safe-area-inset-bottom) + var(--cap-mt)); } }
+        .dashboard-page.is-pwa { padding-bottom: calc(env(safe-area-inset-bottom) + var(--cap-mt)); }
+        @media (max-height: 870px) { .dashboard-page { --swipe-h: 28px; --cap-mt: 12px; } }
+        @media (max-height: 680px) { .dashboard-page { --cap-mt: 10px; } }
+        @media (max-height: 560px) { .dashboard-page { --swipe-h: 26px; } }
+
+        h2, p { margin: 0; }
+        button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+        .back { position: absolute; z-index: 6; left: 6px; top: calc(env(safe-area-inset-top) + 2px); width: 42px; height: 42px;
+          display: grid; place-items: center; border: 0; background: transparent; color: rgba(226,232,240,.72); }
+        .back :global(svg) { width: 21px; height: 21px; }
+
+        /* ── The container: Profection fill (Your Day's hero card) ── */
+        .dashboard-card {
+          position: relative; z-index: 1; width: 100%; transition: border-color .5s ease, box-shadow .5s ease;
+          flex: 1 1 auto; min-height: 120px; max-height: 414px;   /* takes the room that's left; never forces a scroll */
+          overflow: hidden; border-radius: 28px;
+          border: 1px solid transparent;   /* the edge is the drifting ring below */
+          --ol-c: #fff;
+          background:
+            radial-gradient(90% 70% at 0% 0%, rgba(218,183,104,.20), transparent 60%),
+            linear-gradient(170deg, rgba(10,13,28,.97), rgba(5,8,20,.97));
+          box-shadow: -16px 20px 46px rgba(249,115,22,.16), 16px 24px 52px rgba(125,211,252,.13), 0 38px 84px rgba(96,165,250,.14);
+        }
+
+        /* Drifting Light outline: a ring of light slowly travels the container's edge (one lap every 14s).
+           When a reading is open it takes on that reading's color. */
+        .dashboard-card::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; padding: 1px; pointer-events: none;
+          background: conic-gradient(from var(--ol-angle),
+            color-mix(in srgb, var(--ol-c) 75%, transparent), color-mix(in srgb, var(--ol-c) 12%, transparent) 90deg,
+            color-mix(in srgb, var(--ol-c) 8%, transparent) 180deg, color-mix(in srgb, var(--ol-c) 40%, transparent) 270deg,
+            color-mix(in srgb, var(--ol-c) 75%, transparent));
+          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+          animation: srvOlOrbit 14s linear infinite; }
+
+        .notice { position: fixed; z-index: 20; left: 50%; top: max(58px, calc(env(safe-area-inset-top) + 48px)); transform: translateX(-50%); margin: 0;
+          padding: 9px 16px; border-radius: 999px; background: rgba(12,14,22,.94); color: #d8caaa; font-size: 11px; text-align: center; }
+        .notice.error { color: #fda4af; }
+
+        /* ── My Readings ── */
+        .readings-section { position: relative; z-index: 1; flex: 0 0 auto; width: 100%; display: flex; flex-direction: column; gap: 8px; }
+        /* "My Readings" as the section's hero: a deep shadow lifts it off the page, a soft silver glow sits behind it,
+           and fine lines fade out on either side (like "Select Reading" on Your Day, in white). */
+        .readings-head { position: relative; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 2px 30px; isolation: isolate; }
+        .readings-head::before { content: ""; position: absolute; left: 50%; top: 50%; width: 220px; height: 56px; transform: translate(-50%, -50%); z-index: -1; pointer-events: none;
+          border-radius: 50%; background: radial-gradient(closest-side, rgba(220,230,255,.13), rgba(220,230,255,.05) 55%, transparent); filter: blur(6px); }
+        .readings-head::after { content: none; }
+        .rh-title { margin: 0; font-family: var(--display); font-size: 28px; font-weight: 500; line-height: 1.05; letter-spacing: .015em; text-transform: none; color: #fff;
+          display: flex; align-items: center; gap: 14px; white-space: nowrap;
+          text-shadow: 0 1px 0 rgba(255,255,255,.12), 0 2px 4px rgba(0,0,0,.95), 0 6px 16px rgba(0,0,0,.85), 0 12px 30px rgba(0,0,0,.6),
+            0 0 22px rgba(215,228,255,.32), 0 0 46px rgba(215,228,255,.14); }
+        .rh-title::before, .rh-title::after { content: ""; width: 38px; height: 1px; flex: none;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.6)); box-shadow: 0 0 6px rgba(255,255,255,.35); }
+        .rh-title::after { transform: scaleX(-1); }
+        .readings-head :global(.page-crown) { position: absolute; right: 4px; top: 50%; width: 16px; height: 16px; margin-top: -8px;
+          color: #d9c795; filter: drop-shadow(0 0 7px rgba(221,199,143,.22)); }
+        .reading-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 72px; gap: clamp(7px, 2vw, 11px); }
+        .reading-slot, .empty-slot { position: relative; min-height: 0; }
+        /* Readings: no box at all — just the name and date over a soft glow of the reading's own color (--t) that breathes
+           slowly, like the calendar's key dates. Each one breathes on its own beat (--i). */
+        .reading-tile { position: relative; width: 100%; height: 100%; min-height: 0; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+          border: 0; border-radius: 18px; background: none; box-shadow: none; overflow: visible;
+          color: rgba(248,250,252,.95); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
+          transition: transform 200ms ease, filter 180ms ease; }
+        .reading-tile::before { content: ""; position: absolute; left: 50%; top: 50%; width: 92%; height: 82%; border-radius: 50%; z-index: 0; pointer-events: none;
+          background: radial-gradient(closest-side, color-mix(in srgb, var(--t, #fff) 44%, transparent), color-mix(in srgb, var(--t, #fff) 15%, transparent) 58%, transparent);
+          filter: blur(9px) saturate(1.35); animation: tileBreath 3.6s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -.45s); transition: background .4s ease; }
+        @keyframes tileBreath { 0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.9); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } }
+        .reading-tile > * { position: relative; z-index: 1; }
+        .reading-tile:active { transform: scale(.95); }
+        .tile-topic { max-width: 100%; font-family: var(--display); font-size: clamp(9px, 2.5vw, 11.5px); font-weight: 600; line-height: 1.15; letter-spacing: .08em; text-align: center; text-transform: uppercase; overflow-wrap: anywhere;
+          color: color-mix(in srgb, var(--t, #fff) 40%, #fff); text-shadow: 0 0 10px color-mix(in srgb, var(--t, #fff) 60%, transparent), 0 1px 3px rgba(0,0,0,.6); }
+        .tile-date { color: rgba(203,213,225,.62); font-size: clamp(7px, 1.9vw, 9px); letter-spacing: .05em; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+        /* An open space: a faint thin circle with a small soft-glowing dot in the middle that breathes gently, like the
+           readings. Spaces beyond the membership are dimmer. */
+        .empty-slot { display: grid; place-items: center; }
+        .empty-slot span { position: relative; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+          border: 1px solid rgba(255,255,255,.14); box-shadow: 0 0 12px rgba(210,225,255,.06), inset 0 0 8px rgba(210,225,255,.05); }
+        .empty-slot span::after { content: ""; width: 4px; height: 4px; border-radius: 50%; background: #fff;
+          box-shadow: 0 0 5px rgba(255,255,255,.9), 0 0 12px rgba(210,225,255,.55); animation: emptyBreath 3.6s ease-in-out infinite; animation-delay: var(--ed, 0s); }
+        @keyframes emptyBreath { 0%, 100% { opacity: .45; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
+        .empty-slot.locked span { border-color: rgba(255,255,255,.06); box-shadow: none; }
+        .empty-slot.locked span::after { width: 3px; height: 3px; opacity: .35; animation: none; box-shadow: 0 0 6px rgba(255,255,255,.3); }
+        .empty-copy { margin: 0; color: rgba(148,163,184,.48); font-family: var(--display); font-size: 10px; letter-spacing: .05em; text-align: center; }
+        /* Two halves with the tiles' gap: each arrow sits centered under a pair of tiles (between 1–2 and between 3–4). */
+        .page-navigation { position: relative; height: 42px; display: grid; grid-template-columns: 1fr 1fr; column-gap: clamp(7px, 2vw, 11px); align-items: center; justify-items: center; }
+        .page-navigation > :first-child { grid-column: 1; grid-row: 1; }
+        .page-navigation > :last-child { grid-column: 2; grid-row: 1; }
+
+        /* ── Page arrows: 42px circles, the container's face, glowing white. A soft ring pulses out on every press. ── */
+        .pg-arrow {
+          position: relative;
+          width: 42px; height: 42px; padding: 0; border-radius: 50%;
+          opacity: .38; filter: blur(1px);
+          display: grid; place-items: center; color: #fff; touch-action: manipulation;
+          border: 1px solid rgba(255,255,255,.55);
+          background:
+            radial-gradient(100% 80% at 0% 0%, rgba(218,183,104,.26), transparent 62%),
+            linear-gradient(170deg, rgba(10,13,28,.97), rgba(5,8,20,.97));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 0 14px rgba(255,255,255,.3), 0 0 34px rgba(210,225,255,.16), 0 10px 26px rgba(0,0,0,.5);
+          transition: opacity .9s cubic-bezier(.4,0,.2,1), filter .9s cubic-bezier(.4,0,.2,1), transform .35s cubic-bezier(.22,1,.36,1), box-shadow .35s ease;
+        }
+        /* At rest the arrows sit faded and softly blurred (like Your Day's); the one being touched comes into focus,
+           then settles back 2s after the last touch. The red trash can always stays in focus. */
+        .pg-arrow.is-engaged, .pg-arrow.is-trash, .pg-arrow:focus-visible { opacity: 1; filter: none; transition-duration: .25s, .25s, .35s, .35s; }
+        .pg-arrow :global(svg) { width: 22px; height: 22px; filter: drop-shadow(0 0 4px rgba(255,255,255,.75)) drop-shadow(0 0 10px rgba(210,225,255,.4)); }
+        .pg-arrow.prev :global(svg) { margin-right: 2px; }
+        .pg-arrow.next :global(svg) { margin-left: 2px; }
+        .pg-arrow:active { transform: scale(.93); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 0 20px rgba(255,255,255,.45), 0 0 44px rgba(210,225,255,.22), 0 10px 26px rgba(0,0,0,.5); }
+        .pg-arrow:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 22px rgba(255,255,255,.4), 0 10px 26px rgba(0,0,0,.5); }
+        /* The press: a slow, soft ripple — one faint ring drifts outward and fades, a fainter one follows. */
+        .pg-arrow::before, .pg-arrow::after { content: ""; position: absolute; inset: -1px; border-radius: 50%; pointer-events: none; opacity: 0;
+          border: 1px solid rgba(255,255,255,.55); box-shadow: 0 0 12px rgba(255,255,255,.2); }
+        @keyframes pgRipple { from { opacity: .42; transform: scale(1); } to { opacity: 0; transform: scale(1.85); } }
+        @keyframes pgRipple2 { from { opacity: .24; transform: scale(1); } to { opacity: 0; transform: scale(1.7); } }
+        .pg-arrow.flash::after { animation: pgRipple 2.4s cubic-bezier(.3,.55,.4,1) forwards; }
+        .pg-arrow.flash::before { animation: pgRipple2 2.6s cubic-bezier(.3,.55,.4,1) .45s forwards; }
+
+        /* ── The container's reading view ── */
+        .card-view { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; padding: 22px 20px 18px; transition: opacity .45s ease, filter .45s ease; }
+        /* ── Minimal calendar: no boxes, just the month, the weekday letters and the dates. Key dates from the
+           last three readings glow softly in each reading's color (--c, and --c2 when two share a day). ── */
+        .cal { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: cvIn .5s cubic-bezier(.22,1,.36,1); }
+        .cal-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+        .cal-title { font-family: var(--display); font-size: 24px; font-weight: 500; line-height: 1; color: #fff; }
+        .cal-title small { margin-left: 8px; font-family: var(--caps); font-size: 8.5px; font-weight: 600; letter-spacing: .22em; color: rgba(148,163,184,.7); vertical-align: middle; }
+        .cal-nav { display: flex; gap: 2px; }
+        .cal-nav button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: rgba(255,255,255,.6); transition: background .2s; }
+        .cal-nav button:active { background: rgba(255,255,255,.08); }
+        .cal-nav button:disabled { opacity: .2; pointer-events: none; }
+        .cal-nav :global(svg) { width: 16px; height: 16px; }
+        .cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+        .cal-week { margin-top: 12px; }
+        .cal-week span { text-align: center; font-family: var(--caps); font-size: 7.5px; font-weight: 600; letter-spacing: .18em; color: rgba(148,163,184,.55); }
+        .cal-grid { flex: 1; min-height: 0; margin-top: 4px; grid-auto-rows: minmax(0, 1fr); }
+        .cal-day { position: relative; min-height: 0; display: grid; place-items: center; padding: 0; border: 0; background: none;
+          font-family: var(--display); font-size: 17px; font-weight: 400; color: rgba(226,232,240,.85); font-variant-numeric: lining-nums tabular-nums; }
+        .cal-day .n { position: relative; z-index: 1; width: 30px; height: 30px; max-height: 100%; display: grid; place-items: center; border-radius: 50%; line-height: 1; transition: transform .2s ease; }
+        .cal-day.is-past { color: rgba(148,163,184,.35); }
+        .cal-day.is-today .n { color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,.75), 0 0 10px rgba(255,255,255,.25); }
+        .cal-day.is-key .n { color: var(--c); font-weight: 600; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 70%, transparent); }
+        .cal-day.is-key:active .n { transform: scale(.92); }
+        .cal-day.is-key::before { content: ""; position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; max-height: 120%; border-radius: 50%; pointer-events: none;
+          background:
+            radial-gradient(circle at 38% 50%, color-mix(in srgb, var(--c) 48%, transparent), transparent 62%),
+            radial-gradient(circle at 62% 50%, color-mix(in srgb, var(--c2, var(--c)) 48%, transparent), transparent 62%);
+          filter: blur(5px) saturate(1.3); animation: keyBreath 3.6s ease-in-out infinite; animation-delay: var(--kd, 0s); }
+        @keyframes keyBreath { 0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.9); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } }
+        .cal-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
+        .cal-legend button { display: flex; align-items: center; gap: 7px; padding: 4px 2px; border: 0; background: none;
+          font-family: var(--caps); font-size: 7.5px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: rgba(203,213,225,.7); }
+        .cal-legend i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c), 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
+        .cv { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: cvIn .5s cubic-bezier(.22,1,.36,1); }
+        @keyframes cvIn { from { opacity: 0; transform: translateY(6px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+        .cv-date { font-family: var(--caps); font-size: 8.5px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: rgba(241,214,148,.9); }
+        .cv-title { margin-top: 6px; font-family: var(--display); font-size: 30px; font-weight: 500; line-height: 1.05; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+        .cv-q { margin-top: 6px; font-family: var(--display); font-style: italic; font-size: 14.5px; line-height: 1.3; color: rgba(203,213,225,.7); }
+        .cv-body { margin-top: 12px; flex: 1; min-height: 0; overflow: hidden; font-family: var(--display); font-size: 16.5px; line-height: 1.42; color: #e2e8f0;
+          -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+        .cv-spacer { flex: 1; }
+        .cv-open { align-self: center; margin-top: 10px; display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px;
+          border: 1px solid rgba(241,214,148,.35); background: rgba(241,214,148,.05); color: #F6E3B4;
+          font-family: var(--caps); font-size: 9px; font-weight: 600; letter-spacing: .26em; text-transform: uppercase; transition: background .3s, transform .2s; }
+        .cv-open:active { transform: scale(.96); background: rgba(241,214,148,.12); }
+        .cv-open :global(svg) { width: 12px; height: 12px; }
+
+        /* ── Tap a reading: everything but the container blurs away, and the container glows softly in the
+           reading's own color (--rc), like Your Day's element bar. ── */
+        .readings-head, .reading-slot, .empty-slot, .page-navigation { transition: filter .6s ease, opacity .6s ease; }
+        /* Everything else sinks into the dark (dim, darkened, lightly blurred), so no white competes with the open reading. */
+        .is-viewing .readings-head, .is-viewing .reading-slot, .is-viewing .empty-slot, .is-viewing .page-navigation, .is-viewing .back { filter: blur(3px) brightness(.45) saturate(.6); opacity: .14; }
+        .dashboard-card::before { content: ""; position: absolute; inset: -18%; z-index: 0; pointer-events: none; opacity: 0;
+          background:
+            radial-gradient(55% 45% at 50% 55%, color-mix(in srgb, var(--rc, #fff) 42%, transparent), color-mix(in srgb, var(--rc, #fff) 16%, transparent) 50%, transparent 74%),
+            radial-gradient(38% 34% at 28% 30%, color-mix(in srgb, var(--rc, #fff) 30%, transparent), transparent 72%),
+            radial-gradient(40% 36% at 74% 74%, color-mix(in srgb, var(--rc, #fff) 34%, transparent), transparent 72%);
+          filter: blur(20px) saturate(1.35); transition: opacity .6s ease; }
+        .is-viewing .dashboard-card::before { opacity: 1; animation: rcBreath 3.6s ease-in-out infinite; }
+        @keyframes rcBreath { 0%, 100% { opacity: .6; transform: scale(.96); } 50% { opacity: 1; transform: scale(1.06); } }
+        .is-viewing .dashboard-card { --ol-c: var(--rc);
+          box-shadow: 0 0 26px color-mix(in srgb, var(--rc) 22%, transparent), 0 0 70px color-mix(in srgb, var(--rc) 12%, transparent), 0 20px 50px rgba(0,0,0,.4); }
+        .is-viewing .cv-date { color: var(--rc); }
+        .is-viewing .cv-title { color: var(--rc); text-shadow: 0 0 18px color-mix(in srgb, var(--rc) 40%, transparent), 0 2px 10px rgba(0,0,0,.6); }
+        .is-viewing .cv-open { border-color: color-mix(in srgb, var(--rc) 45%, transparent); background: color-mix(in srgb, var(--rc) 8%, transparent); color: var(--rc); }
+
+        /* ── Press and hold a reading: it turns red, and the right arrow becomes a red trash can. ── */
+        /* Held for deletion: the glow turns red and quickens. */
+        .reading-slot.is-held .reading-tile::before { background: radial-gradient(closest-side, rgba(239,68,68,.62), rgba(220,38,38,.22) 58%, transparent); animation-duration: 2.4s; }
+        .reading-slot.is-held .tile-topic { color: #fecaca; text-shadow: 0 0 12px rgba(239,68,68,.8), 0 1px 3px rgba(0,0,0,.6); }
+        .reading-slot.is-held .tile-date { color: rgba(254,202,202,.85); }
+        @keyframes heldBreath { 0%, 100% { box-shadow: 0 0 14px rgba(239,68,68,.4), 0 0 32px rgba(220,38,38,.18); } 50% { box-shadow: 0 0 22px rgba(239,68,68,.6), 0 0 50px rgba(220,38,38,.3); } }
+        .pg-arrow.is-trash { color: #fee2e2; border-color: rgba(248,113,113,.75);
+          background: radial-gradient(90% 90% at 50% 110%, rgba(248,113,113,.45), transparent 70%), linear-gradient(155deg, rgba(127,29,29,.85), rgba(60,8,12,.95));
+          animation: trashBreath 2.4s ease-in-out infinite; }
+        .pg-arrow.is-trash :global(svg) { width: 19px; height: 19px; margin: 0; filter: drop-shadow(0 0 4px rgba(254,202,202,.7)) drop-shadow(0 0 10px rgba(239,68,68,.5)); animation: trashIn .45s cubic-bezier(.22,1,.36,1); }
+        .pg-arrow.is-trash::after, .pg-arrow.is-trash::before { border-color: rgba(248,113,113,.65); box-shadow: 0 0 12px rgba(239,68,68,.3); }
+        @keyframes trashBreath { 0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 0 14px rgba(239,68,68,.45), 0 0 34px rgba(220,38,38,.2), 0 10px 26px rgba(0,0,0,.5); }
+          50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 0 22px rgba(239,68,68,.65), 0 0 50px rgba(220,38,38,.32), 0 10px 26px rgba(0,0,0,.5); } }
+        @keyframes trashIn { from { opacity: 0; transform: scale(.6) rotate(-12deg); } to { opacity: 1; transform: none; } }
+
+        /* Shorter views (Safari's bars, smaller phones): the container gives up room first, then the tiles tighten. */
+        @media (max-height: 740px) {
+          .reading-grid { grid-auto-rows: 64px; }
+        }
+        @media (max-height: 620px) {
+          .dashboard-page { gap: 10px; }
+          .readings-section { gap: 6px; }
+          .reading-grid { grid-auto-rows: 56px; }
+          .page-navigation { height: 36px; }
+          .pg-arrow { width: 36px; height: 36px; }
+          .pg-arrow :global(svg) { width: 19px; height: 19px; }
+          .cal-title { font-size: 20px; }
+          .cal-week { margin-top: 8px; }
+          .cal-day { font-size: 15px; }
+          .cal-day .n { width: 26px; height: 26px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .reading-tile::before { animation: none; transform: translate(-50%, -50%); }
+          .empty-slot span::after { animation: none; }
+          .reading-tile, .pg-arrow, .readings-head, .reading-slot, .empty-slot, .page-navigation, .card-view { transition: none; }
+          .pg-arrow.flash::after, .pg-arrow.flash::before, .dashboard-card::after, .cv, .cal, .cal-day.is-key::before, .reading-slot.is-held .reading-tile, .is-viewing .dashboard-card::before,
+          .pg-arrow.is-trash, .pg-arrow.is-trash :global(svg) { animation: none; }
+        }
+      `}</style>
     </main>
   );
 }
