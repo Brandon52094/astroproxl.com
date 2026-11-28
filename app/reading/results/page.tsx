@@ -12,13 +12,6 @@ import {
   getSavedReading,
   saveReadingLocally,
 } from "@/lib/savedReadingsStore";
-import {
-  extractCalendarHighlights,
-  parseReadingSections,
-  type DirectiveSection,
-  type ParsedSection,
-  type TimingSection,
-} from "@/lib/readingSections";
 
 const stripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
@@ -42,6 +35,28 @@ interface UserCredits {
  * dated context, follow-ups, sources, saved-reading behavior, and checkout behavior.
  */
 
+type ParsedSection =
+  | { kind: "confirmation"; body: string }
+  | { kind: "focus"; body: string }
+  | { kind: "prediction"; body: string }
+  | { kind: "currentState"; body: string }
+  | { kind: "whyNow"; body: string }
+  | { kind: "next"; body: string }
+  | { kind: "prose"; body: string }
+  | {
+      kind: "window";
+      date: string | null;
+      note: string | null;
+      body: string;
+    }
+  | {
+      kind: "directive";
+      directive: "GENERAL" | "DROP" | "EXECUTE" | "LOCK";
+      label: string;
+      date: string | null;
+      body: string;
+    }
+  | { kind: "closing"; body: string };
 
 function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -233,12 +248,201 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
   return <canvas ref={canvasRef} aria-hidden="true" className="results-starfield" />;
 }
 
+// Parse the streamlined eight-part engine contract while remaining compatible with saved legacy readings.
+const HUMAN_HEADERS = [
+  "Confirmation",
+  "The Prediction",
+  "Where You Are Now",
+  "Why This Is Happening",
+  "Why This Is Active Now",
+  "Why This Is Active",
+  "What Happens Next",
+  "How This Is Most Likely To Show Up",
+  "Dated Windows",
+  "Timing",
+  "The Directive",
+  "Your Move",
+  "Bottom Line",
+] as const;
+const DATE_LEAD_RE = /^\s*\[\[DATE:\s*([^\]]+)\]\]\s*[—–-]?\s*/i;
+const FOCUS_RE = /^\s*FOCUS\s*:\s*(.+)$/i;
+const DROP_RE = /^\s*DROP\s*:\s*/i;
+const EXECUTE_RE = /^\s*EXECUTE\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[^:\n]+)\s*:\s*/i;
+const LOCK_RE = /^\s*LOCK\s+IN\s+BY\s+(\[\[DATE:\s*[^\]]+\]\]|[^:\n]+)\s*:\s*/i;
+
 function hashKey(s: string): string {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
   return h.toString(36);
 }
 
+function extractDateText(raw: string): string {
+  return (raw.match(/\[\[DATE:\s*([^\]]+)\]\]/i)?.[1] ?? raw).trim();
+}
+
+function splitHumanHeader(paragraph: string): { label: string | null; body: string } {
+  const cleaned = paragraph
+    .trim()
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/\*\*/g, "")
+    .replace(/^Part\s*\d+\s*[:—–-]\s*/i, "");
+
+  for (const header of HUMAN_HEADERS) {
+    const match = cleaned.match(
+      new RegExp(`^${header}(?:\\s*[:—–-]\\s*|\\s*\\n+|\\s*$)([\\s\\S]*)$`, "i"),
+    );
+    if (match) return { label: header, body: match[1].trim() };
+  }
+
+  return { label: null, body: paragraph.trim() };
+}
+
+function parseReadingSections(content: string): ParsedSection[] | null {
+  const normalized = content
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => (splitHumanHeader(line).label ? `\n${line}\n` : line))
+    .join("\n");
+
+  const paragraphs = normalized
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const sections: ParsedSection[] = [];
+  let phase: "opening" | "windows" | "directives" | "closing" = "opening";
+  let activeLabel = "";
+  let sawHeader = false;
+
+  for (const paragraph of paragraphs) {
+    const { label, body } = splitHumanHeader(paragraph);
+
+    if (label) {
+      sawHeader = true;
+      activeLabel = label;
+      phase =
+        label === "Bottom Line"
+          ? "closing"
+          : label === "Dated Windows" || label === "Timing"
+            ? "windows"
+            : label === "The Directive" || label === "Your Move"
+              ? "directives"
+              : "opening";
+    }
+
+    if (!body) continue;
+
+    if (phase === "closing") {
+      sections.push({ kind: "closing", body });
+      continue;
+    }
+
+    if (activeLabel === "Confirmation" || !activeLabel) {
+      const focusLine = body
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => FOCUS_RE.test(line));
+
+      if (focusLine) {
+        const focus = focusLine.match(FOCUS_RE);
+        const confirmationBody = body
+          .split("\n")
+          .filter((line) => !FOCUS_RE.test(line.trim()))
+          .join("\n")
+          .trim();
+
+        if (confirmationBody) {
+          sections.push({ kind: "confirmation", body: confirmationBody });
+        }
+        if (focus?.[1]) {
+          sections.push({ kind: "focus", body: focus[1].trim() });
+        }
+        continue;
+      }
+    }
+
+    const execute = body.match(EXECUTE_RE);
+    const lock = body.match(LOCK_RE);
+    if (DROP_RE.test(body) || execute || lock) {
+      phase = "directives";
+      const directive = execute ? "EXECUTE" : lock ? "LOCK" : "DROP";
+      sections.push({
+        kind: "directive",
+        directive,
+        label: execute ? "Execute by" : lock ? "Lock in by" : "Drop",
+        date: execute || lock ? extractDateText((execute ?? lock)![1]) : null,
+        body: body.replace(execute ? EXECUTE_RE : lock ? LOCK_RE : DROP_RE, "").trim(),
+      });
+      continue;
+    }
+
+    if (phase === "directives") {
+      const items = body
+        .split(/\n+/)
+        .map((item) => item.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, "").trim())
+        .filter(Boolean);
+
+      for (const item of items.length ? items : [body]) {
+        const date = item.match(DATE_LEAD_RE);
+        sections.push({
+          kind: "directive",
+          directive: "GENERAL",
+          label: "Your Move",
+          date: date?.[1].trim() ?? null,
+          body: date ? item.slice(date[0].length).trim() : item,
+        });
+      }
+      continue;
+    }
+
+    if (phase === "windows" || (!activeLabel && DATE_LEAD_RE.test(body))) {
+      phase = "windows";
+      const lines = body
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      const markerLines = lines.filter((line) => DATE_LEAD_RE.test(line));
+      if (markerLines.length > 1) {
+        for (const line of markerLines) {
+          const date = line.match(DATE_LEAD_RE);
+          const rest = date ? line.slice(date[0].length).trim() : line;
+          sections.push({
+            kind: "window",
+            date: date?.[1].trim() ?? null,
+            note: null,
+            body: rest,
+          });
+        }
+      } else {
+        const date = body.match(DATE_LEAD_RE);
+        const rest = date ? body.slice(date[0].length).trim() : body;
+        sections.push({ kind: "window", date: date?.[1].trim() ?? null, note: null, body: rest });
+      }
+      continue;
+    }
+
+    const kind: ParsedSection["kind"] =
+      activeLabel === "Confirmation"
+        ? "confirmation"
+        : activeLabel === "Where You Are Now"
+          ? "currentState"
+          : activeLabel === "Why This Is Happening" ||
+              activeLabel === "Why This Is Active" ||
+              activeLabel === "Why This Is Active Now"
+            ? "whyNow"
+            : activeLabel === "What Happens Next" ||
+                activeLabel === "How This Is Most Likely To Show Up"
+              ? "next"
+              : activeLabel === "The Prediction" || (!activeLabel && sections.length === 0)
+                ? "prediction"
+                : "prose";
+
+    sections.push({ kind, body } as ParsedSection);
+  }
+
+  return sawHeader && sections.length ? sections : null;
+}
 
 function renderWithDates(content: string): React.ReactNode {
   return content.split(/(\[\[DATE:\s*[^\]]+\]\])/gi).map((part, i) => {
@@ -253,6 +457,94 @@ function renderWithDates(content: string): React.ReactNode {
   });
 }
 
+type TimingSection = Extract<ParsedSection, { kind: "window" }>;
+type DirectiveSection = Extract<ParsedSection, { kind: "directive" }>;
+
+type CalendarHighlight = {
+  year: number;
+  month: number;
+  day: number;
+  label: string;
+};
+
+const CALENDAR_MONTHS: Record<string, number> = {
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
+  may: 4,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11,
+};
+
+function extractCalendarHighlights(labels: string[]): CalendarHighlight[] {
+  const fallbackYear = new Date().getFullYear();
+  const monthPattern =
+    "January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec";
+  const pattern = new RegExp(
+    `\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*(?:-|–|—|to|through)\\s*(?:(?:(${monthPattern})\\.?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?))?(?:,?\\s+(\\d{4}))?`,
+    "gi",
+  );
+  const highlights: CalendarHighlight[] = [];
+
+  for (const label of labels.filter(Boolean)) {
+    for (const match of label.matchAll(pattern)) {
+      const startMonth = CALENDAR_MONTHS[match[1].toLowerCase().replace(".", "")];
+      const startDay = Number(match[2]);
+      const endMonth = match[3]
+        ? CALENDAR_MONTHS[match[3].toLowerCase().replace(".", "")]
+        : startMonth;
+      const endDay = match[4] ? Number(match[4]) : startDay;
+      const year = match[5] ? Number(match[5]) : fallbackYear;
+      const start = new Date(year, startMonth, startDay);
+      const end = new Date(year + (endMonth < startMonth ? 1 : 0), endMonth, endDay);
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) continue;
+
+      const cursor = new Date(start);
+      let guard = 0;
+      while (cursor <= end && guard < 62) {
+        highlights.push({
+          year: cursor.getFullYear(),
+          month: cursor.getMonth(),
+          day: cursor.getDate(),
+          label,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+        guard++;
+      }
+    }
+  }
+
+  return Array.from(
+    new Map(
+      highlights.map((highlight) => [
+        `${highlight.year}-${highlight.month}-${highlight.day}`,
+        highlight,
+      ]),
+    ).values(),
+  ).sort((a, b) =>
+    new Date(a.year, a.month, a.day).getTime() -
+    new Date(b.year, b.month, b.day).getTime(),
+  );
+}
 
 function ReadingCalendar({ labels }: { labels: string[] }) {
   const highlights = useMemo(() => extractCalendarHighlights(labels), [labels]);
