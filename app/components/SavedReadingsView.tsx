@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Crown, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -16,14 +16,17 @@ import { getReadingKeyDays, getReadingPreview } from "@/lib/readingSections";
 /**
  * SAVED READINGS
  *
- *   [ container ]          (Profection fill, Drifting Light outline. Before a reading is open: a minimal calendar — month, weekday letters,
- *                           dates, no boxes — where the key dates from the last three readings glow in each
- *                           reading's color; tap one to open that reading. Tap a reading and it opens here: date,
+ *   [ container ]          (Profection fill, Drifting Light outline. Before a reading is open: a minimal calendar — month, weekday letters
+ *                           (weeks start on Monday), dates, no boxes. Today and the 13 days after it lie in a soft mist of
+ *                           each of the last four readings' colors, wherever that reading's window (its first key date to
+ *                           its last) runs through them; a key date deepens into a richer patch of its color, and tapping
+ *                           it opens that reading. Every other date is plain. Tap a reading and it opens here: date,
  *                           title, the question, the start of the reading, and "Open reading" for the full page.)
  *   — My Readings —        (right under the container; 28px Cormorant with a deep shadow, a soft silver glow and fine side lines)
- *   [ 4 × 2 readings ]     (no boxes: each reading's symbol and date sit over a soft glow of its color that breathes)
+ *   [ 4 × 2 readings ]     (no boxes: each reading's symbol and date sit over the same soft mist of its color as the calendar)
  *   ━━━━─────────────      (the page slider: one fine line as wide as "My Readings"; a glowing segment marks the page.
- *                           Tap a third of the line or drag the segment; it sheds a comet of stardust as it moves.)
+ *                           Tap a third of the line or drag the segment; it sheds a comet of stardust as it moves, and
+ *                           the readings glide with it: they drift and blur out one way as the next page's slide in.)
  *
  * Key dates and the container preview come from the saved reading itself, via @/lib/readingSections — the same
  * code the results page uses, so the calendar here always matches the reading's own "Your Calendar".
@@ -142,7 +145,22 @@ function readingContent(r: SavedReadingRecord): string {
 }
 
 const CAL_MONTHS_AHEAD = 2;
-const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];   // weeks start on Monday
+/** How many readings the calendar follows (the newest first). */
+const CAL_READINGS = 4;
+/** The lit stretch: today and this many days after it. */
+const CAL_SPAN_DAYS = 13;
+
+/* Turning the page: the readings drift and blur out one way while the next page's slide in from the other. Each
+   column follows a beat behind the one ahead of it, so the row moves like a wave. */
+const SLIDE_PX = 30;
+const SLIDE_OUT_MS = 260;
+const SLIDE_IN_MS = 520;
+const SLIDE_COL_STAGGER = 45;
+const PAGE_TURN_ID = "srv-page-turn";
+const colOrder = (i: number, dir: number) => (dir > 0 ? i % 4 : 3 - (i % 4));   // the leading column goes first
+
+const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
 function dayKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -199,6 +217,10 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
   const rootRef = useRef<HTMLElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const sliderRef = useRef<HTMLDivElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const pageTargetRef = useRef(0);   // the page being turned to (ahead of currentPage while the old page slides out)
+  const pageTurnRef = useRef(0);     // the latest page turn (a newer one takes over from an older one)
+  const turnDirRef = useRef(0);      // the direction to slide the new page in from (0: no slide)
   const thumbRef = useRef<HTMLSpanElement | null>(null);
   const sparksRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<{ x: number; moved: boolean } | null>(null);
@@ -348,13 +370,53 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
   const setPage = (nextPage: number) => {
     const next = Math.max(0, Math.min(PAGE_COUNT - 1, nextPage));
     setSelectedReadingId(null);
-    placeThumb(next);
-    if (next === currentPage) return;
+    placeThumb(next);   // the segment starts moving right away; the readings follow
+    if (next === pageTargetRef.current) return;
+    const dir = next > pageTargetRef.current ? 1 : -1;
+    pageTargetRef.current = next;
     setSliderFlash(false);
     requestAnimationFrame(() => setSliderFlash(true));   // restart the glow on quick repeat changes
     try { navigator.vibrate?.(6); } catch { /* haptics are optional */ }
-    setCurrentPage(next);
+
+    const grid = gridRef.current;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!grid || reduceMotion || typeof grid.animate !== "function") { setCurrentPage(next); return; }
+    // This page's readings drift away (and blur) in the direction of travel; then the next page slides in.
+    const turn = ++pageTurnRef.current;
+    grid.style.pointerEvents = "none";
+    const outs = Array.from(grid.children).map((el, i) => {
+      const a = el.animate(
+        [{ transform: "translateX(0)", filter: "blur(0px)", opacity: 1 },
+         { transform: `translateX(${-dir * SLIDE_PX}px)`, filter: "blur(6px)", opacity: 0 }],
+        { duration: SLIDE_OUT_MS, delay: colOrder(i, dir) * SLIDE_COL_STAGGER * 0.6, easing: "cubic-bezier(.4,0,.7,.4)", fill: "forwards" });
+      a.id = PAGE_TURN_ID;
+      return a.finished.catch(() => undefined);
+    });
+    void Promise.all(outs).then(() => {
+      if (turn !== pageTurnRef.current) return;   // a newer turn took over
+      turnDirRef.current = dir;
+      setCurrentPage(next);
+    });
   };
+
+  // The new page's readings slide in from the other side and come into focus, column by column.
+  useLayoutEffect(() => {
+    const grid = gridRef.current, dir = turnDirRef.current;
+    if (!grid || typeof grid.getAnimations !== "function") return;
+    grid.getAnimations({ subtree: true }).forEach((a) => { if (a.id === PAGE_TURN_ID) a.cancel(); });
+    if (!dir) { grid.style.pointerEvents = ""; return; }
+    turnDirRef.current = 0;
+    const turn = pageTurnRef.current;
+    const ins = Array.from(grid.children).map((el, i) => {
+      const a = el.animate(
+        [{ transform: `translateX(${dir * SLIDE_PX}px)`, filter: "blur(6px)", opacity: 0 },
+         { transform: "translateX(0)", filter: "blur(0px)", opacity: 1 }],
+        { duration: SLIDE_IN_MS, delay: colOrder(i, dir) * SLIDE_COL_STAGGER, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+      a.id = PAGE_TURN_ID;
+      return a.finished.catch(() => undefined);
+    });
+    void Promise.all(ins).then(() => { if (turn === pageTurnRef.current) grid.style.pointerEvents = ""; });
+  }, [currentPage]);
 
   // Tap a third of the line to jump there, or drag the glowing segment; it snaps to the nearest page.
   const fractionAt = (clientX: number) => {
@@ -384,10 +446,10 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
     engageSlider();
     setPage(target);
   };
-  const onSliderCancel = () => { dragRef.current = null; setDragging(false); placeThumb(currentPage); };
+  const onSliderCancel = () => { dragRef.current = null; setDragging(false); placeThumb(pageTargetRef.current); };
   const onSliderKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); engageSlider(); setPage(currentPage + 1); }
-    if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); engageSlider(); setPage(currentPage - 1); }
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); engageSlider(); setPage(pageTargetRef.current + 1); }
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); engageSlider(); setPage(pageTargetRef.current - 1); }
   };
 
   // The slider is exactly as wide as the "My Readings" title with its side lines.
@@ -483,24 +545,66 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
   const shownLine = (shownPreview?.focus || shown?.question || "").trim();
   const shownBody = (shownPreview?.glimpse || shown?.summary || shown?.excerpt || "").trim();
 
-  /* ── Calendar: the last three readings' key dates ── */
-  const recent = useMemo(() => readings.slice(0, 3) as ReadingPreview[], [readings]);
-  const keyDays = useMemo(() => {
-    const map = new Map<string, ReadingPreview[]>();
-    recent.forEach((r) => {
-      // The same dates the results page puts on "Your Calendar" ("When It Unfolds" and "Your Move").
-      const days = new Set(getReadingKeyDays(readingContent(r), r.savedAt));
-      (r.keyDates ?? []).forEach((v) => { const k = toDayKey(v); if (k) days.add(k); });
-      days.forEach((k) => map.set(k, [...(map.get(k) ?? []), r]));
-    });
-    return map;
-  }, [recent]);
+  /* ── Calendar: the next two weeks, misted in the last four readings' colors ── */
+  const recent = useMemo(() => readings.slice(0, CAL_READINGS) as ReadingPreview[], [readings]);
+  // Each reading's key dates (the same dates the results page puts on "Your Calendar": "When It Unfolds" and
+  // "Your Move"), and its window: from its earliest key date to its latest.
+  const windows = useMemo(() => recent.map((r) => {
+    const days = new Set(getReadingKeyDays(readingContent(r), r.savedAt));
+    (r.keyDates ?? []).forEach((v) => { const k = toDayKey(v); if (k) days.add(k); });
+    const ks = [...days].sort();
+    return { r, ks, lo: ks[0] ?? "", hi: ks[ks.length - 1] ?? "" };
+  }).filter((w) => w.ks.length > 0), [recent]);
+  const coverOf = (k: string) => windows.find((w) => w.lo <= k && k <= w.hi);   // the newest reading whose window holds this day
+  const keyOf = (k: string) => windows.find((w) => w.ks.includes(k));          // a reading with a key date on this day
 
   // The calendar's month (its markup sits in the main return below, so the scoped styles reach it).
   const calFirst = today ? new Date(today.getFullYear(), today.getMonth() + calOffset, 1) : null;
   const calDaysIn = calFirst ? new Date(calFirst.getFullYear(), calFirst.getMonth() + 1, 0).getDate() : 0;
   const calMonth = calFirst ? calFirst.toLocaleDateString("en-US", { month: "long" }) : "";
   const calTodayKey = today ? dayKey(today) : "";
+  const calSpanEnd = today ? dayKey(addDays(today, CAL_SPAN_DAYS)) : "";
+  const calPad = calFirst ? (calFirst.getDay() + 6) % 7 : 0;   // Monday first
+  const calRows = Math.ceil((calPad + calDaysIn) / 7);
+  const inSpan = (k: string) => k >= calTodayKey && k <= calSpanEnd;
+
+  // The mist: wherever a reading's window runs through the next two weeks, those days lie in a soft mist of its
+  // color (nothing where no reading reaches). Consecutive days on one row share one band; a key date deepens into a
+  // richer patch of its color on its day. A band fades off an edge wherever the mist carries on (to the next row,
+  // the next month, or past the two weeks).
+  const calTrails = (() => {
+    if (!calFirst) return [];
+    const monthFirstKey = dayKey(calFirst), monthLastKey = dayKey(new Date(calFirst.getFullYear(), calFirst.getMonth(), calDaysIn));
+    const covered = (k: string) => inSpan(k) && !!coverOf(k);
+    type Day = { d: number; k: string; cover: NonNullable<ReturnType<typeof coverOf>>; key: ReturnType<typeof keyOf> };
+    const runs: Array<{ row: number; col: number; days: Day[] }> = [];
+    for (let d = 1; d <= calDaysIn; d++) {
+      const k = dayKey(new Date(calFirst.getFullYear(), calFirst.getMonth(), d));
+      const cover = inSpan(k) ? coverOf(k) : undefined;
+      if (!cover) continue;
+      const idx = calPad + d - 1, row = Math.floor(idx / 7), prev = runs[runs.length - 1];
+      const day: Day = { d, k, cover, key: keyOf(k) };
+      if (prev && prev.row === row && prev.days[prev.days.length - 1].d === d - 1) prev.days.push(day);
+      else runs.push({ row, col: idx % 7, days: [day] });
+    }
+    return runs.map((run, ri) => {
+      const n = run.days.length, at = (i: number) => ((i + 0.5) / n * 100).toFixed(1);
+      const firstDay = run.days[0], lastDay = run.days[n - 1];
+      const before = dayKey(addDays(new Date(calFirst.getFullYear(), calFirst.getMonth(), firstDay.d), -1));
+      const after = dayKey(addDays(new Date(calFirst.getFullYear(), calFirst.getMonth(), lastDay.d), 1));
+      const openL = covered(before) || firstDay.cover.lo < firstDay.k || firstDay.k === monthFirstKey;
+      const openR = covered(after) || lastDay.cover.hi > lastDay.k || lastDay.k === monthLastKey;
+      const base = `linear-gradient(90deg, ${run.days.map((w, i) => `color-mix(in srgb, ${topicColor(w.cover.r.topic)} 34%, transparent) ${at(i)}%`).join(", ")})`;
+      const patches = run.days.flatMap((w, i) => (w.key
+        ? [`radial-gradient(${(80 / n).toFixed(1)}% 115% at ${at(i)}% 50%, color-mix(in srgb, ${topicColor(w.key.r.topic)} 62%, transparent), color-mix(in srgb, ${topicColor(w.key.r.topic)} 22%, transparent) 62%, transparent)`]
+        : []));
+      return {
+        id: `${run.row}-${run.col}`,
+        className: `cal-trail${openL ? " open-l" : ""}${openR ? " open-r" : ""}`,
+        style: { gridRow: run.row + 1, gridColumn: `${run.col + 1} / ${run.col + 1 + n}`, "--band": [...patches, base].join(", "), "--md": `${(-ri * 1.7).toFixed(1)}s` } as CSSProperties,
+      };
+    });
+  })();
 
   const onTrash = () => {
     if (dismissTapRef.current) { dismissTapRef.current = false; return; }
@@ -560,29 +664,34 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
               <div className="cal-week" aria-hidden="true">
                 {WEEKDAYS.map((w, i) => <span key={i}>{w}</span>)}
               </div>
-              <div className="cal-grid">
-                {Array.from({ length: calFirst.getDay() }, (_, i) => <span key={`pad-${i}`} className="cal-day" aria-hidden="true" />)}
-                {Array.from({ length: calDaysIn }, (_, i) => {
-                  const d = i + 1;
-                  const k = dayKey(new Date(calFirst.getFullYear(), calFirst.getMonth(), d));
-                  const hits = keyDays.get(k);
-                  const cls = `cal-day${k < calTodayKey ? " is-past" : ""}${k === calTodayKey ? " is-today" : ""}${hits ? " is-key" : ""}`;
-                  if (!hits) return <span key={k} className={cls}><span className="n">{d}</span></span>;
-                  const label = hits.map((h) => titleCase(formatTopic(h.topic))).join(" and ");
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      data-no-swipe
-                      className={cls}
-                      style={{ "--c": topicColor(hits[0].topic), "--c2": topicColor((hits[1] ?? hits[0]).topic), "--kd": `${-(d % 5) * 0.6}s` } as CSSProperties}
-                      aria-label={`${calMonth} ${d}: a key date in your ${label} reading`}
-                      onClick={() => setShownReadingId(hits[0].id)}
-                    >
-                      <span className="n">{d}</span>
-                    </button>
-                  );
-                })}
+              <div className="cal-body" style={{ "--rows": calRows } as CSSProperties}>
+                <div className="cal-mist" aria-hidden="true">
+                  {calTrails.map((t) => <span key={t.id} className={t.className} style={t.style} />)}
+                </div>
+                <div className="cal-grid">
+                  {Array.from({ length: calPad }, (_, i) => <span key={`pad-${i}`} className="cal-day" aria-hidden="true" />)}
+                  {Array.from({ length: calDaysIn }, (_, i) => {
+                    const d = i + 1;
+                    const k = dayKey(new Date(calFirst.getFullYear(), calFirst.getMonth(), d));
+                    const lit = inSpan(k);
+                    const key = lit ? keyOf(k) : undefined;   // only the next two weeks' key dates show (and open their reading)
+                    const cls = `cal-day${k < calTodayKey ? " is-past" : ""}${lit ? " in-span" : ""}${key ? " is-key" : ""}`;
+                    if (!key) return <span key={k} className={cls}><span className="n">{d}</span></span>;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        data-no-swipe
+                        className={cls}
+                        style={{ "--c": topicColor(key.r.topic) } as CSSProperties}
+                        aria-label={`${calMonth} ${d}: a key date in your ${titleCase(formatTopic(key.r.topic))} reading`}
+                        onClick={() => setShownReadingId(key.r.id)}
+                      >
+                        <span className="n">{d}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {recent.length > 0 && (
                 <div className="cal-legend">
@@ -610,7 +719,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
           {currentPage > 0 && <Crown className="page-crown" aria-label="Astro Plus spaces" />}
         </div>
 
-        <div className="reading-grid">
+        <div ref={gridRef} className="reading-grid">
           {pageSlots.map((reading, index) => {
             const globalIndex = pageStart + index;
             const isLocked = globalIndex >= capacity && !reading;
@@ -719,7 +828,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
           height: 100svh;
           height: 100dvh;
           width: 100%;
-          max-width: 430px;
+          max-width: 480px;   /* wide enough for the 440pt Pro Max; centered beyond that */
           margin: 0 auto;
           overflow: hidden;
           display: flex;
@@ -753,7 +862,7 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         /* ── The container: Profection fill (Your Day's hero card) ── */
         .dashboard-card {
           position: relative; z-index: 1; width: 100%; transition: border-color .5s ease, box-shadow .5s ease;
-          flex: 1 1 auto; min-height: 120px; max-height: 414px;   /* takes the room that's left; never forces a scroll */
+          flex: 1 1 auto; min-height: 120px; max-height: 600px;   /* takes the room that's left (up to 600px on the tallest phones); never forces a scroll */
           overflow: hidden; border-radius: 28px;
           border: 1px solid transparent;   /* the edge is the drifting ring below */
           --ol-c: #fff;
@@ -796,22 +905,24 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
           color: #d9c795; filter: drop-shadow(0 0 7px rgba(221,199,143,.22)); }
         .reading-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 84px; gap: clamp(7px, 2vw, 11px); }
         .reading-slot, .empty-slot { position: relative; min-height: 0; }
-        /* Readings: no box at all — just the name and date over a soft glow of the reading's own color (--t) that breathes
-           slowly, like the calendar's key dates. Each one breathes on its own beat (--i). */
+        /* Readings: no box at all — just the symbol and date over a soft mist of the reading's own color (--t), like the
+           calendar's. Each one drifts on its own beat (--i). */
         .reading-tile { position: relative; width: 100%; height: 100%; min-height: 0; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
           border: 0; border-radius: 18px; background: none; box-shadow: none; overflow: visible;
           color: rgba(248,250,252,.95); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
           transition: transform 200ms ease, filter 180ms ease; }
         .reading-tile::before { content: ""; position: absolute; left: 50%; top: 50%; width: 92%; height: 82%; border-radius: 50%; z-index: 0; pointer-events: none;
-          background: radial-gradient(closest-side, color-mix(in srgb, var(--t, #fff) 44%, transparent), color-mix(in srgb, var(--t, #fff) 15%, transparent) 58%, transparent);
-          filter: blur(9px) saturate(1.35); animation: tileBreath 3.6s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -.45s); transition: background .4s ease; }
-        @keyframes tileBreath { 0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.9); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } }
+          background: radial-gradient(closest-side, color-mix(in srgb, var(--t, #fff) 56%, transparent), color-mix(in srgb, var(--t, #fff) 20%, transparent) 60%, transparent);
+          filter: blur(11px) saturate(1.25); opacity: .9; transform: translate(-50%, -50%);
+          animation: tileMist 9s ease-in-out infinite alternate; animation-delay: calc(var(--i, 0) * -1.7s); transition: background .4s ease; }
+        /* The same faint drift and swell as the calendar's mist (no breathing). */
+        @keyframes tileMist { from { transform: translate(calc(-50% - 3px), -50%) scaleY(.96); } to { transform: translate(calc(-50% + 3px), -50%) scaleY(1.04); } }
         .reading-tile > * { position: relative; z-index: 1; }
         .reading-tile:active { transform: scale(.95); }
         /* The reading's symbol, in its color, with a soft glow of its own. */
         .tile-icon { position: relative; display: grid; place-items: center; color: color-mix(in srgb, var(--t, #fff) 78%, #fff); }
         .tile-icon > :global(svg) { width: 30px; height: 30px; transition: opacity .6s ease;
-          filter: drop-shadow(0 0 6px color-mix(in srgb, var(--t, #fff) 80%, transparent)) drop-shadow(0 0 14px color-mix(in srgb, var(--t, #fff) 45%, transparent)); }
+          filter: drop-shadow(0 0 5px color-mix(in srgb, var(--t, #fff) 35%, transparent)); }
         .tile-icon.is-orb > :global(svg) { width: 34px; height: 34px; margin: -2px 0; }
         .tile-date { color: rgba(226,232,240,.78); font-size: clamp(8px, 2.1vw, 10px); font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
           text-shadow: 0 1px 3px rgba(0,0,0,.6); transition: opacity .6s ease; }
@@ -883,8 +994,8 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
 
         /* ── The container's reading view ── */
         .card-view { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; padding: 22px 20px 18px; transition: opacity .45s ease, filter .45s ease; }
-        /* ── Minimal calendar: no boxes, just the month, the weekday letters and the dates. Key dates from the
-           last three readings glow softly in each reading's color (--c, and --c2 when two share a day). ── */
+        /* ── Minimal calendar: no boxes, just the month, the weekday letters and the dates. Today and the next 13 days
+           lie in a soft mist of the last four readings' colors (see .cal-trail); every other date is plain. ── */
         .cal { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: cvIn .5s cubic-bezier(.22,1,.36,1); }
         .cal-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
         .cal-title { font-family: var(--display); font-size: 24px; font-weight: 500; line-height: 1; color: #fff; }
@@ -897,20 +1008,32 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
         .cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
         .cal-week { margin-top: 12px; }
         .cal-week span { text-align: center; font-family: var(--caps); font-size: 7.5px; font-weight: 600; letter-spacing: .18em; color: rgba(148,163,184,.55); }
-        .cal-grid { flex: 1; min-height: 0; margin-top: 4px; grid-auto-rows: minmax(0, 1fr); }
+        .cal-body { position: relative; flex: 1; min-height: 0; margin-top: 4px; display: flex; }
+        .cal-grid { position: relative; z-index: 1; flex: 1; min-height: 0; grid-template-rows: repeat(var(--rows, 6), minmax(0, 1fr)); }
+        /* The mist sits under the dates, on its own grid laid exactly over the calendar's. */
+        .cal-mist { position: absolute; inset: 0; z-index: 0; pointer-events: none; display: grid;
+          grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows, 6), minmax(0, 1fr)); }
+        /* A band of color inside a taller, wider box, so its blur has room to soften on every side. */
+        .cal-trail { position: relative; align-self: center; height: 84px; margin: 0 -12px; }
+        .cal-trail::before { content: ""; position: absolute; top: 27px; bottom: 27px; left: 18px; right: 18px; border-radius: 999px;
+          background: var(--band); filter: blur(11px) saturate(1.25); opacity: .9;
+          animation: trailDrift 9s ease-in-out infinite alternate; animation-delay: var(--md, 0s); }
+        /* The mist barely drifts and swells, so it feels alive without pulsing. */
+        @keyframes trailDrift { from { transform: translateX(-3px) scaleY(.96); } to { transform: translateX(3px) scaleY(1.04); } }
+        /* Where the mist carries on, the band fades off that edge instead of ending. */
+        .cal-trail.open-l::before { left: -6px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+        .cal-trail.open-r::before { right: -6px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .cal-trail.open-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px); mask-image: linear-gradient(90deg, transparent, #000 40px); }
+        .cal-trail.open-r { -webkit-mask-image: linear-gradient(270deg, transparent, #000 40px); mask-image: linear-gradient(270deg, transparent, #000 40px); }
+        .cal-trail.open-l.open-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
         .cal-day { position: relative; min-height: 0; display: grid; place-items: center; padding: 0; border: 0; background: none;
           font-family: var(--display); font-size: 17px; font-weight: 400; color: rgba(226,232,240,.85); font-variant-numeric: lining-nums tabular-nums; }
         .cal-day .n { position: relative; z-index: 1; width: 30px; height: 30px; max-height: 100%; display: grid; place-items: center; border-radius: 50%; line-height: 1; transition: transform .2s ease; }
         .cal-day.is-past { color: rgba(148,163,184,.35); }
-        .cal-day.is-today .n { color: #fff; box-shadow: 0 0 0 1px rgba(255,255,255,.75), 0 0 10px rgba(255,255,255,.25); }
-        .cal-day.is-key .n { color: var(--c); font-weight: 600; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 70%, transparent); }
+        .cal-day.in-span { color: rgba(248,250,252,.95); }   /* today and the next 13 days */
+        .cal-day.is-key .n { color: color-mix(in srgb, var(--c) 50%, #fff); font-weight: 600; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 35%, transparent), 0 1px 3px rgba(0,0,0,.5); }
         .cal-day.is-key:active .n { transform: scale(.92); }
-        .cal-day.is-key::before { content: ""; position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; max-height: 120%; border-radius: 50%; pointer-events: none;
-          background:
-            radial-gradient(circle at 38% 50%, color-mix(in srgb, var(--c) 48%, transparent), transparent 62%),
-            radial-gradient(circle at 62% 50%, color-mix(in srgb, var(--c2, var(--c)) 48%, transparent), transparent 62%);
-          filter: blur(5px) saturate(1.3); animation: keyBreath 3.6s ease-in-out infinite; animation-delay: var(--kd, 0s); }
-        @keyframes keyBreath { 0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.9); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } }
         .cal-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
         .cal-legend button { display: flex; align-items: center; gap: 7px; padding: 4px 2px; border: 0; background: none;
           font-family: var(--caps); font-size: 7.5px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: rgba(203,213,225,.7); }
@@ -958,6 +1081,13 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
           50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 0 22px rgba(239,68,68,.65), 0 0 50px rgba(220,38,38,.32), 0 10px 26px rgba(0,0,0,.5); } }
         @keyframes trashIn { from { opacity: 0; transform: scale(.6) rotate(-12deg); } to { opacity: 1; transform: none; } }
 
+        /* Tall phones (iPhone Pro Max / Plus): the readings get a little more room and larger symbols, and the
+           container grows into the rest, so nothing is left empty under the slider. */
+        @media (min-height: 860px) {
+          .reading-grid { grid-auto-rows: 94px; }
+          .tile-icon > :global(svg) { width: 34px; height: 34px; }
+          .tile-icon.is-orb > :global(svg) { width: 38px; height: 38px; }
+        }
         /* Shorter views (Safari's bars, smaller phones): the container gives up room first, then the tiles tighten. */
         @media (max-height: 740px) {
           .reading-grid { grid-auto-rows: 74px; }
@@ -974,13 +1104,14 @@ export default function SavedReadingsView({ embedded = false }: SavedReadingsVie
           .cal-week { margin-top: 8px; }
           .cal-day { font-size: 15px; }
           .cal-day .n { width: 26px; height: 26px; }
+          .cal-trail::before { top: 29px; bottom: 29px; }
         }
         @media (prefers-reduced-motion: reduce) {
           .reading-tile::before { animation: none; transform: translate(-50%, -50%); }
           .empty-slot span::after { animation: none; }
           .reading-tile, .readings-head, .reading-slot, .empty-slot, .page-navigation, .card-view, .pg-thumb, .pg-trash { transition: none; }
           .tile-ripple, .pg-sparks { display: none; }
-          .dashboard-card::after, .cv, .cal, .cal-day.is-key::before, .is-viewing .dashboard-card::before, .pg-slider.flash .pg-thumb,
+          .dashboard-card::after, .cv, .cal, .cal-trail::before, .is-viewing .dashboard-card::before, .pg-slider.flash .pg-thumb,
           .reading-slot.is-opening .tile-icon > :global(svg), .reading-slot.is-opening .reading-tile::before,
           .is-holding .pg-trash, .pg-trash :global(svg) { animation: none; }
         }
