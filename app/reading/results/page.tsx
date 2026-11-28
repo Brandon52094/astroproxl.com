@@ -23,6 +23,16 @@ interface FollowupEntry {
   content: string;
 }
 
+// Per-reading accent colors. Keys must match TopicId values; unknown topics fall back to the app gold.
+const READING_ACCENTS: Record<string, { label: string; hex: string }> = {
+  love: { label: "Love", hex: "#FDA4AF" },
+  money: { label: "Money", hex: "#86EFAC" },
+  career: { label: "Career", hex: "#93C5FD" },
+  "whats-coming": { label: "What's Coming", hex: "#C4B5FD" },
+  "ask-anything": { label: "Ask Anything", hex: "#F1D694" },
+};
+const DEFAULT_ACCENT = "#d9c59a";
+
 interface UserCredits {
   credits: number;
   isSubscribed: boolean;
@@ -250,6 +260,12 @@ function ResultsStarfield({ reduceMotion = false }: { reduceMotion?: boolean }) 
 
 // Parse the streamlined eight-part engine contract while remaining compatible with saved legacy readings.
 const HUMAN_HEADERS = [
+  // Current five-part engine contract
+  "The First Glimpse",
+  "When It Unfolds",
+  "The Turning Point",
+  "Turning Point",
+  // Legacy headers (saved readings)
   "Confirmation",
   "The Prediction",
   "Where You Are Now",
@@ -323,7 +339,7 @@ function parseReadingSections(content: string): ParsedSection[] | null {
       phase =
         label === "Bottom Line"
           ? "closing"
-          : label === "Dated Windows" || label === "Timing"
+          : label === "Dated Windows" || label === "Timing" || label === "When It Unfolds"
             ? "windows"
             : label === "The Directive" || label === "Your Move"
               ? "directives"
@@ -337,7 +353,7 @@ function parseReadingSections(content: string): ParsedSection[] | null {
       continue;
     }
 
-    if (activeLabel === "Confirmation" || !activeLabel) {
+    if (activeLabel === "The First Glimpse" || activeLabel === "Confirmation" || !activeLabel) {
       const focusLine = body
         .split("\n")
         .map((line) => line.trim())
@@ -352,7 +368,11 @@ function parseReadingSections(content: string): ParsedSection[] | null {
           .trim();
 
         if (confirmationBody) {
-          sections.push({ kind: "confirmation", body: confirmationBody });
+          // In the five-part contract the text beside FOCUS is the verdict itself.
+          sections.push({
+            kind: activeLabel === "Confirmation" ? "confirmation" : "prediction",
+            body: confirmationBody,
+          });
         }
         if (focus?.[1]) {
           sections.push({ kind: "focus", body: focus[1].trim() });
@@ -431,10 +451,14 @@ function parseReadingSections(content: string): ParsedSection[] | null {
               activeLabel === "Why This Is Active" ||
               activeLabel === "Why This Is Active Now"
             ? "whyNow"
-            : activeLabel === "What Happens Next" ||
+            : activeLabel === "Turning Point" ||
+                activeLabel === "The Turning Point" ||
+                activeLabel === "What Happens Next" ||
                 activeLabel === "How This Is Most Likely To Show Up"
               ? "next"
-              : activeLabel === "The Prediction" || (!activeLabel && sections.length === 0)
+              : activeLabel === "The First Glimpse" ||
+                  activeLabel === "The Prediction" ||
+                  (!activeLabel && sections.length === 0)
                 ? "prediction"
                 : "prose";
 
@@ -766,6 +790,7 @@ function ReadingDeck({
       className={`reading-results scroll-root ${checkoutOpen ? "checkout-open" : ""} ${bottomLineFocused ? "bottom-line-focus" : ""}`}
       ref={viewportRef}
       aria-label="Your reading"
+      style={{ "--accent": READING_ACCENTS[topic]?.hex ?? DEFAULT_ACCENT } as React.CSSProperties}
     >
       <style>{css}</style>
       <div
@@ -779,7 +804,7 @@ function ReadingDeck({
         <main className="reading-flow">
           <section className={`reading-hero ${mounted ? "in" : ""}`} aria-label="Reading overview">
             <div className="hero-topic">
-              <span className="hero-topic-text">{topic || "Your Reading"}</span>
+              <span className="hero-topic-text">{READING_ACCENTS[topic]?.label ?? (topic || "Your Reading")}</span>
             </div>
             <h1 className="focus-heading">{groups.focus || "What the chart is showing now"}</h1>
             {groups.prediction && (
@@ -791,10 +816,10 @@ function ReadingDeck({
           </section>
 
           <div className="celestial-reading">
+            {/* Legacy chapters — only present in readings saved before the five-part contract. */}
             {[
               { id: "recognition", kicker: "The present", title: "Where You Stand", body: groups.where },
               { id: "truth", kicker: "Beneath the surface", title: "What Needs Your Attention", body: groups.why },
-              { id: "shift", kicker: "The shift", title: "The Turning Point", body: groups.next },
             ].filter((chapter) => chapter.body).map((chapter) => (
               <section key={chapter.id} className={`celestial-chapter chapter-${chapter.id}`} aria-labelledby={`chapter-${chapter.id}`}>
                 <div className="chapter-content">
@@ -838,6 +863,19 @@ function ReadingDeck({
           )}
           {groups.timing.length === 0 && groups.calendarLabels.length > 0 && (
             <section className="cosmic-calendar standalone-calendar"><ReadingCalendar labels={groups.calendarLabels} /></section>
+          )}
+
+          {/* Part 3 — Turning Point (engine order: glimpse → timing → turning point → move → bottom line) */}
+          {groups.next && (
+            <div className="celestial-reading">
+              <section className="celestial-chapter chapter-shift" aria-labelledby="chapter-shift">
+                <div className="chapter-content">
+                  <h2 id="chapter-shift" className="chapter-title">The Turning Point</h2>
+                  <p className="section-subtitle">The shift</p>
+                  <div className="chapter-prose">{renderWithDates(groups.next)}</div>
+                </div>
+              </section>
+            </div>
           )}
 
           {groups.directives.length > 0 && (
@@ -1425,7 +1463,7 @@ export default function ReadingResultsPage() {
           <section className="mt-10">
             <div className="mb-4 flex items-center gap-3">
               <div className="h-px flex-1 bg-white/[0.07]" />
-              <span className="text-[11px] uppercase tracking-[0.24em] text-teal-300/90">
+              <span className="text-[11px] uppercase tracking-[0.24em]" style={{ color: "var(--accent)" }}>
                 Want More Context?
               </span>
               <div className="h-px flex-1 bg-white/[0.07]" />
@@ -1505,7 +1543,7 @@ export default function ReadingResultsPage() {
                   type="button"
                   onClick={handleFollowup}
                   disabled={isGeneratingFollowup || !followupQuestion.trim()}
-                  className="mt-3 h-12 w-full rounded-2xl border border-teal-400/30 bg-teal-400/[0.08] text-[14px] font-semibold text-teal-200 transition disabled:opacity-40"
+                  className="followup-ask mt-3 h-12 w-full rounded-2xl text-[14px] font-semibold transition disabled:opacity-40"
                 >
                   {isGeneratingFollowup ? "Reading the sky…" : "Ask"}
                 </button>
@@ -2795,6 +2833,52 @@ const css = `
   @media(prefers-reduced-motion:reduce) {
     .reading-results .reading-hero { opacity:1;transform:none; }
   }
+
+  /* ── Per-reading accent (set inline as --accent on .reading-results) ── */
+  .reading-results {
+    --accent-soft: color-mix(in srgb, var(--accent, #d9c59a) 14%, transparent);
+    --accent-line: color-mix(in srgb, var(--accent, #d9c59a) 30%, transparent);
+    --accent-glow: color-mix(in srgb, var(--accent, #d9c59a) 22%, transparent);
+  }
+  .reading-results .scroll-content {
+    background:
+      radial-gradient(ellipse 80% 14% at 50% 2%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 80%),
+      radial-gradient(ellipse 80% 12% at 50% 3%, rgba(42,71,117,.27), transparent 80%),
+      linear-gradient(180deg, #080f25, #070c1c 31%, #060918 62%, #020309);
+  }
+  .reading-results .hero-topic { color: var(--accent); text-shadow: 0 0 22px var(--accent-glow); }
+  .reading-results .prediction-block {
+    border-color: var(--accent-line);
+    background:
+      radial-gradient(circle at 0 0, var(--accent-soft), transparent 55%),
+      linear-gradient(145deg, rgba(33,45,75,.52), rgba(12,21,41,.52));
+  }
+  .reading-results .prediction-block .reading-section-label,
+  .reading-results .window-date,
+  .reading-results .action-date { color: var(--accent); }
+  .reading-results .date-badge {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+    color: color-mix(in srgb, var(--accent) 70%, #fff);
+    box-shadow: none;
+  }
+  .reading-results .calendar-day.highlighted {
+    border-color: color-mix(in srgb, var(--accent) 75%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    box-shadow: inset 0 0 10px var(--accent-soft), 0 0 14px var(--accent-glow);
+  }
+  .reading-results .followup-input { border-color: var(--accent-line); }
+  .reading-results .followup-ask {
+    border: 1px solid var(--accent-line);
+    background: var(--accent-soft);
+    color: color-mix(in srgb, var(--accent) 80%, #fff);
+  }
+  .reading-results .followup-input:focus {
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    box-shadow: 0 0 30px var(--accent-soft);
+  }
+  .reading-results button:focus-visible,
+  .reading-results textarea:focus-visible { outline-color: var(--accent); }
 `;
 
 

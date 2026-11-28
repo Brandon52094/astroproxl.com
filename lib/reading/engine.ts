@@ -348,7 +348,7 @@ function buildEvidenceInventory(body: ReadingRequestBody, aspects: TransitAspect
 // Contract preserved:
 //   buildReadingPrompt(body, topic, validatedAspects)
 //   { pages: [{ pageNumber: 1, title, content, sources }] }
-//   eight exact Part headers, FOCUS line, [[DATE: ...]] markers,
+//   five exact Part headers, FOCUS line, [[DATE: ...]] markers,
 //   and FORWARD_WINDOW_DAYS used by validateReadingDates.ts.
 // ============================================================
 
@@ -474,7 +474,7 @@ export function buildReadingPrompt(
     "",
 
     "Part 1: The First Glimpse",
-    "First, include ONE contextual heading on its own line beginning exactly with FOCUS: followed by a short situation-specific title.",
+    "First, include ONE contextual heading on its own line beginning exactly with FOCUS: followed by a short situation-specific title of no more than 8 words and 55 characters (it is displayed as a large headline on phones).",
     'Example: "FOCUS: Clearing Delays and Choosing Your Next Direction". Do not copy an example unless it truly matches the question.',
     "Then deliver the direct predictive verdict in 2-3 vivid, grounded sentences. Acknowledge the core situation and state the specific real-life outcome without dumping the exact dates reserved for Part 2.",
     "Do not begin with chart terminology, assume unspoken feelings, hedge, or tease a withheld answer.",
@@ -534,9 +534,9 @@ export function buildReadingPrompt(
     "    {",
     '      "pageNumber": 1,',
     '      "title": "Your Reading",',
-    '      "content": "Part 1: Confirmation\\n...\\nFOCUS: ...\\n\\nPart 2: The Prediction\\n...\\n\\nPart 3: Where You Are Now\\n...\\n\\nPart 4: Why This Is Happening\\n...\\n\\nPart 5: What Happens Next\\n...\\n\\nPart 6: Dated Windows\\n...\\n\\nPart 7: Your Move\\n...\\n\\nPart 8: Bottom Line\\n...",',
+    '      "content": "Part 1: The First Glimpse\\nFOCUS: ...\\n...\\n\\nPart 2: When It Unfolds\\n[[DATE: Month D, YYYY]] — ...\\n[[DATE: Month D-D, YYYY]] — ...\\n\\nPart 3: Turning Point\\n...\\n\\nPart 4: Your Move\\n...\\n...\\n\\nPart 5: Bottom Line\\n...",',
     '      "sources": [',
-    '        { "section": "Part 4 — Why This Is Happening", "placements": "<actual supplied placement or calculation>" }',
+    '        { "section": "Part 3 — Turning Point", "placements": "<actual supplied placement or calculation>" }',
     "      ]",
     "    }",
     "  ]",
