@@ -4,34 +4,34 @@ export interface SignVoice {
    * This is not "how the user sounds"; it is how AstroPro should approach them.
    */
   rhythm: string;
-
-  /** Overall presence across the full reading. */
   presence: string;
-
-  /** How the reading should enter and establish contact. */
   opening: string;
-
-  /** How emotionally charged material should be handled. */
   emotional: string;
-
-  /** Sentence construction, pacing, density, and explanation style. */
   sentence: string;
-
-  /** How warmth, reassurance, and the closing should feel. */
   warmth: string;
-
-  /** Communication styles that weaken compatibility with this voice. */
   forbidden: string;
-
-  /** One-sentence rhythmic target for the LLM to mirror (never copy content). */
   cadenceSample: string;
-
-  /**
-   * Legacy field kept for compatibility with any existing imports.
-   * It is NO LONGER injected into the reading as a content beat.
-   */
   counterweight?: string;
 }
+
+export interface VoicePlanet {
+  name: string;
+  sign: string;
+}
+
+export interface VoiceChart {
+  planets: VoicePlanet[];
+  houseSigns?: Partial<Record<number, string>>;
+}
+
+type VoiceTopic = "love" | "career" | "money" | "general";
+
+type CalibrationLane =
+  | "presence"
+  | "opening"
+  | "emotional"
+  | "sentence"
+  | "warmth";
 
 export const SIGN_VOICE: Record<string, SignVoice> = {
   aries: {
@@ -307,3 +307,269 @@ export const DEFAULT_SIGN_VOICE: SignVoice = {
   counterweight:
     "Legacy only: preserve balance without adding new interpretive content.",
 };
+
+export function getSignVoice(sign: string | undefined): SignVoice {
+  if (!sign) return DEFAULT_SIGN_VOICE;
+  return SIGN_VOICE[sign.toLowerCase()] ?? DEFAULT_SIGN_VOICE;
+}
+
+export const COMPATIBILITY_AXIS: Record<string, string> = {
+  aries: "libra",
+  libra: "aries",
+  taurus: "scorpio",
+  scorpio: "taurus",
+  gemini: "sagittarius",
+  sagittarius: "gemini",
+  cancer: "capricorn",
+  capricorn: "cancer",
+  leo: "aquarius",
+  aquarius: "leo",
+  virgo: "pisces",
+  pisces: "virgo",
+};
+
+export function getCompatibleSign(sign: string | undefined): string | null {
+  if (!sign) return null;
+  return COMPATIBILITY_AXIS[sign.toLowerCase()] ?? null;
+}
+
+export const PLACEMENT_DOMAIN: Record<string, string> = {
+  sun: "overall presence and how identity-level directives land",
+  moon: "emotional handling and sensitivity",
+  rising: "opening energy and first-contact style",
+  mercury: "sentence rhythm, explanation density, and directness",
+  venus: "warmth, rapport, reassurance, and closing tone",
+};
+
+type AnchorCandidate =
+  | { kind: "house"; house: number; label: string }
+  | { kind: "placement"; name: string; label: string };
+
+const ANCHOR_BY_TOPIC: Record<VoiceTopic, AnchorCandidate[]> = {
+  love: [
+    { kind: "house", house: 7, label: "7th house" },
+    { kind: "placement", name: "Descendant", label: "Descendant" },
+    { kind: "placement", name: "Venus", label: "Venus" },
+    { kind: "house", house: 5, label: "5th house" },
+    { kind: "placement", name: "Moon", label: "Moon" },
+    { kind: "house", house: 8, label: "8th house" },
+    { kind: "placement", name: "Mars", label: "Mars" },
+  ],
+  career: [
+    { kind: "house", house: 10, label: "10th house" },
+    { kind: "placement", name: "Midheaven", label: "Midheaven" },
+    { kind: "placement", name: "Saturn", label: "Saturn" },
+    { kind: "placement", name: "Sun", label: "Sun" },
+    { kind: "house", house: 6, label: "6th house" },
+    { kind: "house", house: 2, label: "2nd house" },
+    { kind: "placement", name: "Mars", label: "Mars" },
+  ],
+  money: [
+    { kind: "house", house: 2, label: "2nd house" },
+    { kind: "placement", name: "Venus", label: "Venus" },
+    { kind: "house", house: 8, label: "8th house" },
+    { kind: "placement", name: "Jupiter", label: "Jupiter" },
+    { kind: "placement", name: "Saturn", label: "Saturn" },
+    { kind: "house", house: 10, label: "10th house" },
+    { kind: "placement", name: "Midheaven", label: "Midheaven" },
+    { kind: "house", house: 11, label: "11th house" },
+  ],
+  general: [
+    { kind: "placement", name: "Ascendant", label: "Ascendant" },
+    { kind: "placement", name: "Mercury", label: "Mercury" },
+    { kind: "placement", name: "Moon", label: "Moon" },
+    { kind: "placement", name: "Sun", label: "Sun" },
+    { kind: "house", house: 1, label: "1st house" },
+    { kind: "placement", name: "Midheaven", label: "Midheaven" },
+  ],
+};
+
+interface VoiceAnchor {
+  kind: "house" | "placement";
+  label: string;
+  sign: string;
+  placementName?: string;
+  house?: number;
+}
+
+function normalizeTopic(topic: string): VoiceTopic {
+  if (topic === "love" || topic === "career" || topic === "money") return topic;
+  return "general";
+}
+
+function normalizeChart(input: VoiceChart | VoicePlanet[]): VoiceChart {
+  return Array.isArray(input) ? { planets: input } : input;
+}
+
+function findPlacementSign(planets: VoicePlanet[], name: string): string | undefined {
+  return planets.find((p) => p.name === name)?.sign;
+}
+
+function resolveVoiceAnchor(
+  topic: VoiceTopic,
+  chart: VoiceChart
+): VoiceAnchor | null {
+  const candidates = ANCHOR_BY_TOPIC[topic];
+
+  for (const candidate of candidates) {
+    if (candidate.kind === "house") {
+      const sign = chart.houseSigns?.[candidate.house];
+      if (sign) {
+        return {
+          kind: "house",
+          label: candidate.label,
+          sign,
+          house: candidate.house,
+        };
+      }
+      continue;
+    }
+
+    const sign = findPlacementSign(chart.planets, candidate.name);
+    if (sign) {
+      return {
+        kind: "placement",
+        label: candidate.label,
+        sign,
+        placementName: candidate.name,
+      };
+    }
+  }
+
+  return null;
+}
+
+const PERSONAL_CALIBRATION: Array<{
+  placementName: string;
+  label: string;
+  lane: CalibrationLane;
+}> = [
+  { placementName: "Moon", label: "Moon", lane: "emotional" },
+  { placementName: "Mercury", label: "Mercury", lane: "sentence" },
+];
+
+function laneLabel(lane: CalibrationLane): string {
+  switch (lane) {
+    case "presence":
+      return "presence";
+    case "opening":
+      return "opening";
+    case "emotional":
+      return "emotional handling";
+    case "sentence":
+      return "sentence rhythm";
+    case "warmth":
+      return "warmth";
+  }
+}
+
+function buildPersonalCalibrationLines(
+  anchor: VoiceAnchor | null,
+  chart: VoiceChart
+): string[] {
+  const lines: string[] = [];
+
+  for (const item of PERSONAL_CALIBRATION) {
+    if (
+      anchor?.kind === "placement" &&
+      anchor.placementName === item.placementName
+    ) {
+      continue;
+    }
+
+    const natalSign = findPlacementSign(chart.planets, item.placementName);
+    if (!natalSign) continue;
+
+    const compatibleSign = getCompatibleSign(natalSign);
+    if (!compatibleSign) continue;
+
+    const compatibleVoice = getSignVoice(compatibleSign);
+    const instruction = compatibleVoice[item.lane];
+
+    lines.push(
+      `${item.label} in ${natalSign} → ${compatibleSign} compatibility adjusts ${laneLabel(
+        item.lane
+      )}: ${instruction}`
+    );
+  }
+
+  return lines;
+}
+
+export function buildVoiceCalibrationBlock(
+  topicInput: string,
+  chartInput: VoiceChart | VoicePlanet[]
+): string {
+  const topic = normalizeTopic(topicInput);
+  const chart = normalizeChart(chartInput);
+  const anchor = resolveVoiceAnchor(topic, chart);
+
+  if (!anchor) {
+    const calibrationLines = buildPersonalCalibrationLines(null, chart);
+
+    const parts = [
+      "",
+      "VOICE CALIBRATION — topic-compatible delivery for the full reading.",
+      `TOPIC: ${topic.toUpperCase()}`,
+      "",
+      "COMPATIBLE SIGN: unresolved — no usable topic anchor was available.",
+      `PRIMARY VOICE: ${DEFAULT_SIGN_VOICE.rhythm}`,
+      `CADENCE TARGET (match this rhythm and tone, never copy the content): "${DEFAULT_SIGN_VOICE.cadenceSample}"`,
+      `Avoid: ${DEFAULT_SIGN_VOICE.forbidden}`,
+      "",
+      "VOICE ANCHOR: none available; use the neutral primary voice.",
+    ];
+
+    if (calibrationLines.length > 0) {
+      parts.push(
+        "",
+        "PERSONAL CALIBRATION — light adjustments only; these never replace the primary voice:",
+        ...calibrationLines
+      );
+    }
+
+    parts.push(
+      "",
+      "FULL READING RULE: Keep one coherent voice from The First Glimpse through Bottom Line. Personal calibration may adjust delivery dimensions, but must never create section-by-section voice changes.",
+      "VOICE BOUNDARY: This changes HOW the resolved reading is communicated. It must never change the astrology, confidence, timing, prediction, or evidence.",
+      ""
+    );
+
+    return parts.join("\n");
+  }
+
+  const compatibleSign = getCompatibleSign(anchor.sign) ?? anchor.sign;
+  const primaryVoice = getSignVoice(compatibleSign);
+  const calibrationLines = buildPersonalCalibrationLines(anchor, chart);
+
+  const parts: string[] = [
+    "",
+    "VOICE CALIBRATION — topic-compatible delivery for the full reading.",
+    `TOPIC: ${topic.toUpperCase()}`,
+    "",
+    `COMPATIBLE SIGN: ${compatibleSign} — use this communication energy consistently across the reading.`,
+    `PRIMARY VOICE: ${primaryVoice.rhythm}`,
+    `CADENCE TARGET (match this rhythm and tone, never copy the content): "${primaryVoice.cadenceSample}"`,
+    `Primary presence: ${primaryVoice.presence}`,
+    `Avoid: ${primaryVoice.forbidden}`,
+    "",
+    `VOICE ANCHOR: ${anchor.label} in ${anchor.sign}. This anchor selected the compatible sign; do not mention the anchor or compatibility framework to the user.`,
+  ];
+
+  if (calibrationLines.length > 0) {
+    parts.push(
+      "",
+      "PERSONAL CALIBRATION — subordinate adjustments only; none may introduce a competing primary voice:",
+      ...calibrationLines
+    );
+  }
+
+  parts.push(
+    "",
+    "FULL READING RULE: Keep this one primary voice active from The First Glimpse through Bottom Line. Do not change personalities by section. Personal calibration only modifies emotional handling or sentence rhythm inside the same primary voice.",
+    "VOICE BOUNDARY: SignVoice controls delivery only. It must never alter the resolved astrology, evidence hierarchy, confidence, timing, prediction, or directive.",
+    ""
+  );
+
+  return parts.join("\n");
+}
